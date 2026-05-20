@@ -23,13 +23,15 @@ import java.util.*;
  * In-process compilation of Java sources via the JDK Java Compiler API.
  *
  * <p>
- * Sources are passed as strings; emitted bytecode is captured in memory by {@link InMemoryJavaFileManager}. The compile-time classpath is
- * supplied by {@link ClassPathIndex} as a list of on-disk paths and bound to the standard file manager via
+ * Sources are passed as strings; emitted bytecode is captured in memory by
+ * {@link InMemoryJavaFileManager}. The compile-time classpath is supplied by {@link ClassPathIndex}
+ * as a list of on-disk paths and bound to the standard file manager via
  * {@link StandardJavaFileManager#setLocationFromPaths setLocationFromPaths(CLASS_PATH, ...)}.
  *
  * <p>
- * The {@link #compileBatch(List)} entry point exists because Dirigible's single shared {@code ClientClassLoader} compiles every client
- * source in a single {@code javac} task so cross-file references inside user code resolve naturally.
+ * The {@link #compileBatch(List)} entry point exists because Dirigible's single shared
+ * {@code ClientClassLoader} compiles every client source in a single {@code javac} task so
+ * cross-file references inside user code resolve naturally.
  */
 @Component
 public class JavaSourceCompiler {
@@ -59,8 +61,8 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that throws on any failure to keep its existing
-     * call-sites stable.
+     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that throws on
+     * any failure to keep its existing call-sites stable.
      *
      * @param fqn fully-qualified binary class name (e.g. {@code com.example.HelloHandler})
      * @param source the source text
@@ -82,12 +84,14 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once; per-source diagnostics are sorted
-     * into {@link BatchResult#failures()}, successful bytecode into {@link BatchResult#bytecode()}.
+     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once;
+     * per-source diagnostics are sorted into {@link BatchResult#failures()}, successful bytecode into
+     * {@link BatchResult#bytecode()}.
      *
      * <p>
-     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit. If a single unit fails its own
-     * type-check, only that unit is reported as failed; the others remain in {@link BatchResult#bytecode()}.
+     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit.
+     * If a single unit fails its own type-check, only that unit is reported as failed; the others
+     * remain in {@link BatchResult#bytecode()}.
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
@@ -140,9 +144,10 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Log every diagnostic the compiler produced, one line each. Errors are logged at {@code ERROR}, warnings at {@code WARN}, notes/other
-     * at {@code DEBUG}. This guarantees that diagnostics which {@link #bucketDiagnostics} can't tie back to a source unit (e.g. a missing
-     * classpath entry, which javac reports with no {@code source}) still surface in the log.
+     * Log every diagnostic the compiler produced, one line each. Errors are logged at {@code ERROR},
+     * warnings at {@code WARN}, notes/other at {@code DEBUG}. This guarantees that diagnostics which
+     * {@link #bucketDiagnostics} can't tie back to a source unit (e.g. a missing classpath entry, which
+     * javac reports with no {@code source}) still surface in the log.
      */
     private static void logDiagnostics(DiagnosticCollector<JavaFileObject> diagnostics) {
         for (Diagnostic<? extends JavaFileObject> d : diagnostics.getDiagnostics()) {
@@ -158,9 +163,10 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A unit is considered failed if it
-     * produced no class file <em>or</em> if any error-level diagnostic in the batch references its source file (by simple-name match —
-     * javac doesn't give us back the original {@code JavaFileObject} we passed in for every diagnostic).
+     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A
+     * unit is considered failed if it produced no class file <em>or</em> if any error-level diagnostic
+     * in the batch references its source file (by simple-name match — javac doesn't give us back the
+     * original {@code JavaFileObject} we passed in for every diagnostic).
      */
     private static Map<String, String> bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
             DiagnosticCollector<JavaFileObject> diagnostics) {
