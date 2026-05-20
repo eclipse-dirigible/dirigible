@@ -9,45 +9,27 @@
  */
 package org.eclipse.dirigible.engine.java.runtime;
 
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-
-import javax.tools.Diagnostic;
-import javax.tools.DiagnosticCollector;
-import javax.tools.JavaCompiler;
-import javax.tools.JavaFileObject;
-import javax.tools.StandardJavaFileManager;
-import javax.tools.StandardLocation;
-import javax.tools.ToolProvider;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+import javax.tools.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.*;
+
 /**
  * In-process compilation of Java sources via the JDK Java Compiler API.
  *
  * <p>
- * Sources are passed as strings; emitted bytecode is captured in memory by
- * {@link InMemoryJavaFileManager}. The compile-time classpath is supplied by {@link ClassPathIndex}
- * as a list of on-disk paths and bound to the standard file manager via
+ * Sources are passed as strings; emitted bytecode is captured in memory by {@link InMemoryJavaFileManager}. The compile-time classpath is
+ * supplied by {@link ClassPathIndex} as a list of on-disk paths and bound to the standard file manager via
  * {@link StandardJavaFileManager#setLocationFromPaths setLocationFromPaths(CLASS_PATH, ...)}.
  *
  * <p>
- * The {@link #compileBatch(List)} entry point exists because Dirigible's single shared
- * {@code ClientClassLoader} compiles every client source in a single {@code javac} task so
- * cross-file references inside user code resolve naturally.
+ * The {@link #compileBatch(List)} entry point exists because Dirigible's single shared {@code ClientClassLoader} compiles every client
+ * source in a single {@code javac} task so cross-file references inside user code resolve naturally.
  */
 @Component
 public class JavaSourceCompiler {
@@ -56,19 +38,29 @@ public class JavaSourceCompiler {
 
     private final ClassPathIndex classPathIndex;
 
-    @Autowired
-    public JavaSourceCompiler(ClassPathIndex classPathIndex) {
-        this.classPathIndex = classPathIndex;
-    }
-
     /** Test-only convenience: uses an empty classpath index (relies on {@code java.class.path}). */
     public JavaSourceCompiler() {
         this(new ClassPathIndex());
     }
 
+    @Autowired
+    public JavaSourceCompiler(ClassPathIndex classPathIndex) {
+        this.classPathIndex = classPathIndex;
+    }
+
+
+    /** A Java source as input to {@link #compileBatch(List)}. */
+    public record SourceUnit(String fqn, String source) {
+    }
+
+
+    /** Result of a batch compilation. */
+    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures) {
+    }
+
     /**
-     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that throws on
-     * any failure to keep its existing call-sites stable.
+     * Compile a single Java source. Convenience wrapper over {@link #compileBatch(List)} that throws on any failure to keep its existing
+     * call-sites stable.
      *
      * @param fqn fully-qualified binary class name (e.g. {@code com.example.HelloHandler})
      * @param source the source text
@@ -90,14 +82,12 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once;
-     * per-source diagnostics are sorted into {@link BatchResult#failures()}, successful bytecode into
-     * {@link BatchResult#bytecode()}.
+     * Compile multiple sources together so cross-file references resolve. The compiler is invoked once; per-source diagnostics are sorted
+     * into {@link BatchResult#failures()}, successful bytecode into {@link BatchResult#bytecode()}.
      *
      * <p>
-     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit.
-     * If a single unit fails its own type-check, only that unit is reported as failed; the others
-     * remain in {@link BatchResult#bytecode()}.
+     * Note: {@code javac} may still produce class files for units that don't depend on a broken unit. If a single unit fails its own
+     * type-check, only that unit is reported as failed; the others remain in {@link BatchResult#bytecode()}.
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
@@ -127,9 +117,20 @@ public class JavaSourceCompiler {
             task.call();
 
             Map<String, byte[]> bytecode = fileManager.compiledClasses();
+
+            // Log every diagnostic javac emitted — including warnings and any error that can't be
+            // attributed to a specific source unit (classpath / option errors carry no source) — so
+            // no compilation error is lost between here and the per-FQN bucketing below.
+            logDiagnostics(diagnostics);
+
             Map<String, String> failures = bucketDiagnostics(units, bytecode, diagnostics);
 
-            LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), [{}] failure(s)", units.size(), bytecode.size(), failures.size());
+            if (failures.isEmpty()) {
+                LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
+            } else {
+                LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units.size(),
+                        bytecode.size(), failures.size(), failures.keySet());
+            }
 
             return new BatchResult(bytecode, failures);
 
@@ -139,10 +140,27 @@ public class JavaSourceCompiler {
     }
 
     /**
-     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A
-     * unit is considered failed if it produced no class file <em>or</em> if any error-level diagnostic
-     * in the batch references its source file (by simple-name match — javac doesn't give us back the
-     * original {@code JavaFileObject} we passed in for every diagnostic).
+     * Log every diagnostic the compiler produced, one line each. Errors are logged at {@code ERROR}, warnings at {@code WARN}, notes/other
+     * at {@code DEBUG}. This guarantees that diagnostics which {@link #bucketDiagnostics} can't tie back to a source unit (e.g. a missing
+     * classpath entry, which javac reports with no {@code source}) still surface in the log.
+     */
+    private static void logDiagnostics(DiagnosticCollector<JavaFileObject> diagnostics) {
+        for (Diagnostic<? extends JavaFileObject> d : diagnostics.getDiagnostics()) {
+            JavaFileObject source = d.getSource();
+            String where = source != null ? source.getName() + ":" + d.getLineNumber() + ":" + d.getColumnNumber() : "<no source>";
+            String message = d.getMessage(Locale.ROOT);
+            switch (d.getKind()) {
+                case ERROR -> LOGGER.error("javac error at {}: {}", where, message);
+                case WARNING, MANDATORY_WARNING -> LOGGER.warn("javac warning at {}: {}", where, message);
+                default -> LOGGER.debug("javac {} at {}: {}", d.getKind(), where, message);
+            }
+        }
+    }
+
+    /**
+     * Build a {@code Map<FQN, message>} of compilation failures keyed by the source's top-level FQN. A unit is considered failed if it
+     * produced no class file <em>or</em> if any error-level diagnostic in the batch references its source file (by simple-name match —
+     * javac doesn't give us back the original {@code JavaFileObject} we passed in for every diagnostic).
      */
     private static Map<String, String> bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
             DiagnosticCollector<JavaFileObject> diagnostics) {
@@ -207,14 +225,6 @@ public class JavaSourceCompiler {
               .append(d.getMessage(Locale.ROOT));
         }
         return sb.toString();
-    }
-
-    /** A Java source as input to {@link #compileBatch(List)}. */
-    public record SourceUnit(String fqn, String source) {
-    }
-
-    /** Result of a batch compilation. */
-    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures) {
     }
 
 }
