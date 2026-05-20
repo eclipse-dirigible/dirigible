@@ -46,7 +46,7 @@
         <!-- Engine-java: annotations + the JavaClassConsumer SPI -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-engine-java</artifactId>
+            <artifactId>dirigible-components-engine-java</artifactId>
         </dependency>
 
         <!-- Test -->

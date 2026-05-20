@@ -54,6 +54,7 @@
         <module>data/data-processes</module>
 
         <!-- Engines -->
+        <module>engine/engine-java</module>
         <module>engine/engine-javascript</module>
         <module>engine/engine-typescript</module>
         <module>engine/engine-proxy</module>

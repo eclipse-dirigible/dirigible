@@ -289,7 +289,7 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-engine-java</artifactId>
+                <artifactId>dirigible-components-engine-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

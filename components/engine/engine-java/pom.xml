@@ -4,15 +4,15 @@
 
     <parent>
         <groupId>org.eclipse.dirigible</groupId>
-        <artifactId>dirigible-engine-parent</artifactId>
+        <artifactId>dirigible-components-parent</artifactId>
         <version>13.0.0-SNAPSHOT</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <modelVersion>4.0.0</modelVersion>
-    <artifactId>dirigible-engine-java</artifactId>
+    <artifactId>dirigible-components-engine-java</artifactId>
     <packaging>jar</packaging>
-    <name>Engine - Java</name>
+    <name>Components - Engine - Java</name>
     <description>
         Runtime engine for client-supplied Java sources under the Dirigible registry.
         Discovers *.java files via a dedicated synchronizer, compiles them in-process
