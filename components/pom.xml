@@ -239,6 +239,7 @@
         <module>template/template-application-angular</module>
         <module>template/template-application-angular-v2</module>
         <module>template/template-application-dao</module>
+        <module>template/template-application-dao-java</module>
         <module>template/template-application-dao-v2</module>
         <module>template/template-application-data</module>
         <module>template/template-application-data-v2</module>
@@ -246,6 +247,7 @@
         <module>template/template-application-feed-v2</module>
         <module>template/template-application-odata</module>
         <module>template/template-application-rest</module>
+        <module>template/template-application-rest-java</module>
         <module>template/template-application-rest-v2</module>
         <module>template/template-application-schema</module>
         <module>template/template-application-ui-angular</module>
@@ -1372,6 +1374,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-dao-java</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-dao-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1403,6 +1410,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-rest</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-rest-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

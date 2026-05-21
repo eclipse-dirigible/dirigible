@@ -14,6 +14,8 @@ import { Base64 } from "@aerokit/sdk/utils";
 import { Bytes } from "@aerokit/sdk/io";
 
 export function process(model, parameters) {
+    parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
+
     model.entities.forEach(e => {
         if (parameters.dataSource && !e.dataSource) {
             e.dataSource = parameters.dataSource;
@@ -22,6 +24,7 @@ export function process(model, parameters) {
             e.dataSource = defaultDataSourceName;
             parameters.dataSource = defaultDataSourceName;
         }
+        e.javaPerspectiveName = sanitizeJavaIdentifier(e.perspectiveName);
         let tablePrefix = parameters.tablePrefix ? parameters.tablePrefix : '';
         if (tablePrefix !== '' && !tablePrefix.endsWith("_")) {
             tablePrefix = `${tablePrefix}_`;
@@ -74,6 +77,7 @@ export function process(model, parameters) {
             const parsedDataType = parseDataTypes(p.dataType);
             p.dataTypeJava = parsedDataType.java;
             p.dataTypeTypescript = parsedDataType.ts;
+            p.dataTypeJavaClass = resolveJavaClass(parsedDataType.javaClass, p.auditType);
 
             if (p.dataPrimaryKey) {
                 if (e.primaryKeys === undefined) {
@@ -222,7 +226,8 @@ export function getUniqueParameters(...parameters) {
 export function parseDataTypes(dataType) {
     const parsedDataType = {
         java: '',
-        ts: ''
+        ts: '',
+        javaClass: 'Object'
     };
     switch (dataType.toUpperCase()) {
         case "TINYINT":
@@ -232,6 +237,7 @@ export function parseDataTypes(dataType) {
         case "SMALLSERIAL":
             parsedDataType.java = "short";
             parsedDataType.ts = "number";
+            parsedDataType.javaClass = "Short";
             break;
         case "MEDIUMINT":
         case "INT3":
@@ -241,27 +247,35 @@ export function parseDataTypes(dataType) {
         case "SERIAL":
             parsedDataType.java = "int";
             parsedDataType.ts = "number";
+            parsedDataType.javaClass = "Integer";
             break;
         case "BIGINT":
         case "INT8":
         case "BIGSERIAL":
             parsedDataType.java = "long";
             parsedDataType.ts = "number";
+            parsedDataType.javaClass = "Long";
             break;
         case "DECIMAL":
         case "DEC":
         case "NUMERIC":
         case "FIXED":
+            parsedDataType.java = "double";
+            parsedDataType.ts = "number";
+            parsedDataType.javaClass = "java.math.BigDecimal";
+            break;
         case "DOUBLE":
         case "DOUBLE PRECISION":
         case "REAL":
             parsedDataType.java = "double";
             parsedDataType.ts = "number";
+            parsedDataType.javaClass = "Double";
             break;
         case "FLOAT":
         case "MONEY":
             parsedDataType.java = "float";
             parsedDataType.ts = "number";
+            parsedDataType.javaClass = "Float";
             break;
         case "CHAR":
         case "ENUM":
@@ -276,36 +290,78 @@ export function parseDataTypes(dataType) {
         case "CHARACTER VARYING":
         case "CHARACTER":
         case "BPCHAR":
+        case "CLOB":
             parsedDataType.java = "string";
             parsedDataType.ts = "string";
+            parsedDataType.javaClass = "String";
             break;
         case "DATE":
             parsedDataType.java = "date";
             parsedDataType.ts = "Date";
+            parsedDataType.javaClass = "java.time.LocalDate";
             break;
         case "TIME":
         case "TIME WITH TIME ZONE":
             parsedDataType.java = "time";
             parsedDataType.ts = "string";
+            parsedDataType.javaClass = "java.time.LocalTime";
             break;
         case "DATETIME":
         case "TIMESTAMP":
         case "TIMESTAMP WITH TIME ZONE":
             parsedDataType.java = "timestamp";
             parsedDataType.ts = "Date";
+            parsedDataType.javaClass = "java.time.Instant";
             break;
         case "BOOLEAN":
         case "BIT":
             parsedDataType.java = "boolean";
             parsedDataType.ts = "boolean";
+            parsedDataType.javaClass = "Boolean";
+            break;
+        case "BLOB":
+            parsedDataType.java = "blob";
+            parsedDataType.ts = "string";
+            parsedDataType.javaClass = "byte[]";
             break;
         case "NULL":
             parsedDataType.java = "null";
             parsedDataType.ts = "null";
+            parsedDataType.javaClass = "Object";
             break;
         default:
             parsedDataType.ts = "unknown";
+            parsedDataType.javaClass = "Object";
     }
 
     return parsedDataType;
+}
+
+/**
+ * Resolves the Java class name to emit for a property, applying the audit-field overrides demanded
+ * by org.eclipse.dirigible.engine.java.annotations.{CreatedAt,UpdatedAt,CreatedBy,UpdatedBy}.
+ */
+export function resolveJavaClass(baseJavaClass, auditType) {
+    if (auditType === "CREATED_AT" || auditType === "UPDATED_AT") {
+        return "java.time.Instant";
+    }
+    if (auditType === "CREATED_BY" || auditType === "UPDATED_BY") {
+        return "String";
+    }
+    return baseJavaClass || "Object";
+}
+
+/**
+ * Sanitises an arbitrary name (perspective, model folder) into a lower-case Java identifier safe
+ * for use both as a path segment and a package fragment.
+ */
+export function sanitizeJavaIdentifier(name) {
+    if (name === undefined || name === null || name === "") {
+        return "_";
+    }
+    let s = String(name).toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    if (/^[0-9]/.test(s)) {
+        s = '_' + s;
+    }
+    return s === "" ? "_" : s;
 }

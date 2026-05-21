@@ -1,0 +1,5 @@
+{
+    "module": "template-application-dao-java/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "Application Template - DAO - Java"
+}

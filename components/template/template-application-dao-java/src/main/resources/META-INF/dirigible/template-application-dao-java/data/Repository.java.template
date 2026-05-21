@@ -1,0 +1,12 @@
+package gen.${javaGenFolderName}.data.${javaPerspectiveName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
+import org.eclipse.dirigible.engine.java.annotations.Repository;
+
+@Repository
+public class ${name}Repository extends JavaRepository<${name}Entity> {
+
+    public ${name}Repository() {
+        super(${name}Entity.class);
+    }
+}

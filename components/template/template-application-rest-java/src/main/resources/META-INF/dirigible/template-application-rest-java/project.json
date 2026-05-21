@@ -1,0 +1,9 @@
+{
+    "guid": "template-application-rest-java",
+    "dependencies": [
+        {
+            "guid": "template-application-dao-java"
+        }
+    ],
+    "actions": []
+}

@@ -1,0 +1,94 @@
+package gen.${javaGenFolderName}.api.${javaPerspectiveName};
+
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
+
+import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.Inject;
+import org.eclipse.dirigible.engine.java.annotations.http.Body;
+import org.eclipse.dirigible.engine.java.annotations.http.Controller;
+import org.eclipse.dirigible.engine.java.annotations.http.Delete;
+import org.eclipse.dirigible.engine.java.annotations.http.Get;
+import org.eclipse.dirigible.engine.java.annotations.http.PathParam;
+import org.eclipse.dirigible.engine.java.annotations.http.Post;
+import org.eclipse.dirigible.engine.java.annotations.http.Put;
+import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.List;
+import java.util.Map;
+
+@Controller
+@Documentation("${projectName} - ${name} Controller")
+public class ${name}Controller {
+
+    @Inject
+    private ${name}Repository repository;
+
+    @Get
+    @Documentation("List ${name}")
+    public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
+                                      @QueryParam("$offset") Integer offset) {
+        int actualLimit = limit != null ? limit.intValue() : 20;
+        int actualOffset = offset != null ? offset.intValue() : 0;
+        return repository.findAll(actualLimit, actualOffset);
+    }
+
+    @Get("/count")
+    @Documentation("Count ${name}")
+    public Map<String, Long> count() {
+        return Map.of("count", repository.count());
+    }
+
+    @Get("/{id}")
+    @Documentation("Get ${name} by id")
+    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        return repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+    }
+
+    @Post
+    @Documentation("Create ${name}")
+    public ${name}Entity create(@Body ${name}Entity entity) {
+        validate(entity);
+        return repository.save(entity);
+    }
+
+    @Put("/{id}")
+    @Documentation("Update ${name} by id")
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+        entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
+        validate(entity);
+        return repository.update(entity);
+    }
+
+    @Delete("/{id}")
+    @Documentation("Delete ${name} by id")
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        if (repository.findOne(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
+        }
+        repository.deleteById(id);
+    }
+
+    private static void validate(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.isRequiredProperty)
+        if (entity.${property.name} == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
+        if (entity.${property.name} != null && entity.${property.name}.length() > ${property.dataLength}) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' exceeds the maximum length of ${property.dataLength}");
+        }
+#end
+#if($property.widgetPattern && $property.widgetPattern != "")
+        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPattern}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPattern}'");
+        }
+#end
+#end
+    }
+}
