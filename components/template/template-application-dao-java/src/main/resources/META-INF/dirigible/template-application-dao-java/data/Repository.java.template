@@ -3,10 +3,42 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.engine.java.annotations.Repository;
 
+#foreach ($property in $properties)
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        #set($haveCalculatedPropertyOnCreate = "true")
+    #end
+    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        #set($haveCalculatedPropertyOnUpdate = "true")
+    #end
+#end
 @Repository
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     public ${name}Repository() {
         super(${name}Entity.class);
     }
+#if($haveCalculatedPropertyOnCreate)
+
+    @Override
+    public ${name}Entity save(${name}Entity entity) {
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+#end
+#end
+        return super.save(entity);
+    }
+#end
+#if($haveCalculatedPropertyOnUpdate)
+
+    @Override
+    public ${name}Entity update(${name}Entity entity) {
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+#end
+#end
+        return super.update(entity);
+    }
+#end
 }

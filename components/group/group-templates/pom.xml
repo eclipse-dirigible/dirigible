@@ -21,6 +21,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-angular-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-template-application-angular-v2</artifactId>
         </dependency>
         <dependency>
@@ -74,6 +78,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-template-application-ui-angular</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-ui-angular-java</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

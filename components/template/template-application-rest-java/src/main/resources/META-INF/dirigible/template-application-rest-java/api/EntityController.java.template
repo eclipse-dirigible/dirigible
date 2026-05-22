@@ -1,11 +1,21 @@
 package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 
+#foreach ($property in $properties)
+#if($property.roleRead || $property.roleWrite)
+#set($isEntityPropertySecurityEnabled = "true")
+#end
+#end
+#set($needsRoles = false)
+#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
+#set($needsRoles = true)
+#end
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
 import org.eclipse.dirigible.engine.java.annotations.Documentation;
 import org.eclipse.dirigible.engine.java.annotations.Inject;
 import org.eclipse.dirigible.engine.java.annotations.http.Body;
+import org.eclipse.dirigible.engine.java.annotations.http.Context;
 import org.eclipse.dirigible.engine.java.annotations.http.Controller;
 import org.eclipse.dirigible.engine.java.annotations.http.Delete;
 import org.eclipse.dirigible.engine.java.annotations.http.Get;
@@ -16,12 +26,18 @@ import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
 
+import jakarta.servlet.http.HttpServletRequest;
+
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Controller
 @Documentation("${projectName} - ${name} Controller")
 public class ${name}Controller {
+
+    private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
 
     @Inject
     private ${name}Repository repository;
@@ -29,48 +45,195 @@ public class ${name}Controller {
     @Get
     @Documentation("List ${name}")
     public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
-                                      @QueryParam("$offset") Integer offset) {
+                                      @QueryParam("$offset") Integer offset#if($needsRoles),
+                                      @Context HttpServletRequest request#end#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
+                                      @QueryParam("${masterEntityId}") String ${masterEntityId}#end) {
+#if($needsRoles)
+        checkPermissions("read", request);
+#end
         int actualLimit = limit != null ? limit.intValue() : 20;
         int actualOffset = offset != null ? offset.intValue() : 0;
-        return repository.findAll(actualLimit, actualOffset);
+#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
+        List<${name}Entity> result;
+        if (${masterEntityId} != null) {
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("${masterEntityId}", ${masterEntityId});
+            result = repository.query("from ${name}Entity e where e.${masterEntityId} = :${masterEntityId}", params);
+        } else {
+            result = repository.findAll(actualLimit, actualOffset);
+        }
+#else
+        List<${name}Entity> result = repository.findAll(actualLimit, actualOffset);
+#end
+#if($isEntityPropertySecurityEnabled)
+        result.forEach(e -> redactRead(e, request));
+#end
+        return result;
     }
 
     @Get("/count")
     @Documentation("Count ${name}")
-    public Map<String, Long> count() {
+    public Map<String, Long> count(#if($needsRoles)@Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("read", request);
+#end
         return Map.of("count", repository.count());
+    }
+
+    @Post("/count")
+    @Documentation("Count ${name} with filter")
+    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("read", request);
+#end
+        return Map.of("count", (long) runFilter(filter).size());
+    }
+
+    @Post("/search")
+    @Documentation("Search ${name}")
+    public List<${name}Entity> search(@Body Map<String, Object> filter#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("read", request);
+#end
+        List<${name}Entity> result = runFilter(filter);
+#if($isEntityPropertySecurityEnabled)
+        result.forEach(e -> redactRead(e, request));
+#end
+        return result;
     }
 
     @Get("/{id}")
     @Documentation("Get ${name} by id")
-    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
-        return repository.findOne(id)
+    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("read", request);
+#end
+        ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+#if($isEntityPropertySecurityEnabled)
+        redactRead(entity, request);
+#end
+        return entity;
     }
 
     @Post
     @Documentation("Create ${name}")
-    public ${name}Entity create(@Body ${name}Entity entity) {
+    public ${name}Entity create(@Body ${name}Entity entity#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("write", request);
+#end
+#if($isEntityPropertySecurityEnabled)
+        applyOnCreate(entity, request);
+#end
         validate(entity);
         return repository.save(entity);
     }
 
     @Put("/{id}")
     @Documentation("Update ${name} by id")
-    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("write", request);
+#end
+#if($isEntityPropertySecurityEnabled)
+        ${name}Entity existing = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        mergeWritable(existing, entity, request);
+        validate(existing);
+        return repository.update(existing);
+#else
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
         validate(entity);
         return repository.update(entity);
+#end
     }
 
     @Delete("/{id}")
     @Documentation("Delete ${name} by id")
-    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id#if($needsRoles), @Context HttpServletRequest request#end) {
+#if($needsRoles)
+        checkPermissions("write", request);
+#end
         if (repository.findOne(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
         }
         repository.deleteById(id);
     }
+
+    private List<${name}Entity> runFilter(Map<String, Object> filter) {
+        StringBuilder hql = new StringBuilder("from ${name}Entity e");
+        Map<String, Object> params = new LinkedHashMap<>();
+        if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : equals.entrySet()) {
+                String field = String.valueOf(entry.getKey());
+                if (!FILTER_FIELDS.contains(field)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
+                }
+                String paramName = "p" + params.size();
+                hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
+                params.put(paramName, entry.getValue());
+                first = false;
+            }
+        }
+        return repository.query(hql.toString(), params);
+    }
+#if($needsRoles)
+
+    private void checkPermissions(String op, HttpServletRequest request) {
+#if($perspectiveRole)
+        if (!request.isUserInRole("${perspectiveRole}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+#if($roleRead)
+        if ("read".equals(op) && !(request.isUserInRole("${roleRead}")#if($roleWrite) || request.isUserInRole("${roleWrite}")#end)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+#if($roleWrite)
+        if ("write".equals(op) && !request.isUserInRole("${roleWrite}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+    }
+#end
+#if($isEntityPropertySecurityEnabled)
+
+    private void redactRead(${name}Entity entity, HttpServletRequest request) {
+#foreach ($property in $properties)
+#if($property.roleRead)
+        if (!request.isUserInRole("${property.roleRead}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
+    }
+
+    private void mergeWritable(${name}Entity target, ${name}Entity input, HttpServletRequest request) {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey)
+#if($property.roleWrite)
+        if (request.isUserInRole("${property.roleWrite}")) {
+            target.${property.name} = input.${property.name};
+        }
+#else
+        target.${property.name} = input.${property.name};
+#end
+#end
+#end
+    }
+
+    private void applyOnCreate(${name}Entity entity, HttpServletRequest request) {
+#foreach ($property in $properties)
+#if($property.roleWrite)
+        if (!request.isUserInRole("${property.roleWrite}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
+    }
+#end
 
     private static void validate(${name}Entity entity) {
 #foreach($property in $properties)

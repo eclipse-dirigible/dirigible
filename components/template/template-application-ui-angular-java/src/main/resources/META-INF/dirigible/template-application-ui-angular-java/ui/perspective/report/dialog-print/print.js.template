@@ -1,0 +1,15 @@
+const viewData = {
+    id: '{{projectName}}-Reports-{{name}}-print',
+    label: 'Print',
+    translation: {
+        key: '$projectName:${tprefix}.defaults.print',
+    },
+    path: '/services/web/{{projectName}}/gen/{{genFolderName}}/ui/Reports/{{name}}/dialog-print/index.html',
+    perspective: 'Reports',
+    view: '{{name}}',
+    type: 'page',
+    order: 10
+};
+if (typeof exports !== 'undefined') {
+    exports.getView = () => viewData;
+}

@@ -116,12 +116,16 @@ class JavaTemplateIT extends IntegrationTest {
             import org.springframework.http.HttpStatus;
             import org.springframework.web.server.ResponseStatusException;
 
+            import java.util.LinkedHashMap;
             import java.util.List;
             import java.util.Map;
+            import java.util.Set;
 
             @Controller
             @Documentation("java-template-it - Book Controller")
             public class BookController {
+
+                private static final Set<String> FILTER_FIELDS = Set.of("id", "title");
 
                 @Inject
                 private BookRepository repository;
@@ -139,6 +143,18 @@ class JavaTemplateIT extends IntegrationTest {
                 @Documentation("Count Book")
                 public Map<String, Long> count() {
                     return Map.of("count", repository.count());
+                }
+
+                @Post("/count")
+                @Documentation("Count Book with filter")
+                public Map<String, Long> countWithFilter(@Body Map<String, Object> filter) {
+                    return Map.of("count", (long) runFilter(filter).size());
+                }
+
+                @Post("/search")
+                @Documentation("Search Book")
+                public List<BookEntity> search(@Body Map<String, Object> filter) {
+                    return runFilter(filter);
                 }
 
                 @Get("/{id}")
@@ -168,6 +184,25 @@ class JavaTemplateIT extends IntegrationTest {
                         throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Book not found");
                     }
                     repository.deleteById(id);
+                }
+
+                private List<BookEntity> runFilter(Map<String, Object> filter) {
+                    StringBuilder hql = new StringBuilder("from BookEntity e");
+                    Map<String, Object> params = new LinkedHashMap<>();
+                    if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {
+                        boolean first = true;
+                        for (Map.Entry<?, ?> entry : equals.entrySet()) {
+                            String field = String.valueOf(entry.getKey());
+                            if (!FILTER_FIELDS.contains(field)) {
+                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
+                            }
+                            String paramName = "p" + params.size();
+                            hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
+                            params.put(paramName, entry.getValue());
+                            first = false;
+                        }
+                    }
+                    return repository.query(hql.toString(), params);
                 }
             }
             """;
@@ -232,6 +267,35 @@ class JavaTemplateIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body(containsString("count")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /search with a known field returns the matching row.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"equals\":{\"title\":\"Dune Messiah\"}}")
+                                                 .post(CONTROLLER_BASE + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("Dune Messiah")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /count with the same filter returns at least 1.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"equals\":{\"title\":\"Dune Messiah\"}}")
+                                                 .post(CONTROLLER_BASE + "/count")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("count")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /search with an unknown field is rejected by the SQL-injection allow-list.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"equals\":{\"nope\":\"x\"}}")
+                                                 .post(CONTROLLER_BASE + "/search")
+                                                 .then()
+                                                 .statusCode(400),
                 ASSERTION_TIMEOUT_SECONDS);
 
         // DELETE removes the row; subsequent GET returns 404.

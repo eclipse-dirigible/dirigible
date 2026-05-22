@@ -1,0 +1,18 @@
+{
+    "guid": "template-application-angular-java",
+    "dependencies": [
+        {
+            "guid": "template-application-schema"
+        },
+        {
+            "guid": "template-application-dao-java"
+        },
+        {
+            "guid": "template-application-rest-java"
+        },
+        {
+            "guid": "template-application-ui-angular-java"
+        }
+    ],
+    "actions": []
+}

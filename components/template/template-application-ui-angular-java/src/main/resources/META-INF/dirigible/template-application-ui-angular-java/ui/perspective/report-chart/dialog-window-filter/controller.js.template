@@ -1,0 +1,51 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters) => {
+	const Dialogs = new DialogHub();
+	$scope.forms = {
+		details: {},
+	};
+
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+#foreach ($property in $filter.properties)
+#if($property.isDateType)
+			if (params?.filter?.${property.name}) {
+				params.filter.${property.name} = new Date(params.filter.${property.name});
+			}
+#end
+#end
+			$scope.entity = params.filter ?? {};
+#foreach ($property in $filter.properties)
+#if($property.widgetType == "DROPDOWN")
+			$scope.options${property.name} = params.options${property.name};
+#if($property.widgetDropDownMultiSelect)
+			if (${dollar}scope.entity.${property.name}) {
+				${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+			}
+#end
+#end
+#end
+	}
+
+	$scope.filter = () => {
+		const filter = {
+			...$scope.entity
+		};
+#foreach ($property in $filter.properties)
+#if($property.isDateType)
+		filter.${property.name} = filter.${property.name}?.getTime();
+#end
+#end
+		Dialogs.postMessage({ topic: '${projectName}.${perspectiveName}.${name}.filter', data: filter });
+		$scope.cancel();
+	};
+
+	$scope.resetFilter = () => {
+		$scope.entity = {};
+		$scope.filter();
+	};
+
+	$scope.cancel = () => {
+		Dialogs.closeWindow({ id: '${name}-details-filter' });
+	};
+});
