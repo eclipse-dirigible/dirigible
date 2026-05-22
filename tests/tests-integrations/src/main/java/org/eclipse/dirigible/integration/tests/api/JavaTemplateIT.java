@@ -116,8 +116,10 @@ class JavaTemplateIT extends IntegrationTest {
             import org.springframework.http.HttpStatus;
             import org.springframework.web.server.ResponseStatusException;
 
+            import java.util.Collection;
             import java.util.LinkedHashMap;
             import java.util.List;
+            import java.util.Locale;
             import java.util.Map;
             import java.util.Set;
 
@@ -189,20 +191,50 @@ class JavaTemplateIT extends IntegrationTest {
                 private List<BookEntity> runFilter(Map<String, Object> filter) {
                     StringBuilder hql = new StringBuilder("from BookEntity e");
                     Map<String, Object> params = new LinkedHashMap<>();
+                    boolean first = true;
                     if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {
-                        boolean first = true;
                         for (Map.Entry<?, ?> entry : equals.entrySet()) {
-                            String field = String.valueOf(entry.getKey());
-                            if (!FILTER_FIELDS.contains(field)) {
-                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
-                            }
+                            String field = requireKnownField(String.valueOf(entry.getKey()));
                             String paramName = "p" + params.size();
                             hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
                             params.put(paramName, entry.getValue());
                             first = false;
                         }
                     }
+                    if (filter != null && filter.get("conditions") instanceof List<?> conditions) {
+                        for (Object raw : conditions) {
+                            if (!(raw instanceof Map<?, ?> condition)) {
+                                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter condition");
+                            }
+                            String field = requireKnownField(String.valueOf(condition.get("propertyName")));
+                            String operator = String.valueOf(condition.get("operator")).toUpperCase(Locale.ROOT);
+                            Object value = condition.get("value");
+                            String paramName = "p" + params.size();
+                            String clause = switch (operator) {
+                                case "EQ" -> "e." + field + " = :" + paramName;
+                                case "IN" -> {
+                                    if (!(value instanceof Collection<?>)) {
+                                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                                "IN value must be a list for field: " + field);
+                                    }
+                                    yield "e." + field + " in (:" + paramName + ")";
+                                }
+                                case "LIKE" -> "e." + field + " like :" + paramName;
+                                default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
+                            };
+                            hql.append(first ? " where " : " and ").append(clause);
+                            params.put(paramName, value);
+                            first = false;
+                        }
+                    }
                     return repository.query(hql.toString(), params);
+                }
+
+                private static String requireKnownField(String field) {
+                    if (!FILTER_FIELDS.contains(field)) {
+                        throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
+                    }
+                    return field;
                 }
             }
             """;
@@ -293,6 +325,35 @@ class JavaTemplateIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().when()
                                                  .contentType(ContentType.JSON)
                                                  .body("{\"equals\":{\"nope\":\"x\"}}")
+                                                 .post(CONTROLLER_BASE + "/search")
+                                                 .then()
+                                                 .statusCode(400),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /search with the conditions shape the dropdown widget sends (IN with a list).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"conditions\":[{\"propertyName\":\"title\",\"operator\":\"IN\",\"value\":[\"Dune Messiah\",\"Foundation\"]}]}")
+                                                 .post(CONTROLLER_BASE + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("Dune Messiah")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /search with a LIKE condition matches the row by pattern.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"conditions\":[{\"propertyName\":\"title\",\"operator\":\"LIKE\",\"value\":\"Dune%\"}]}")
+                                                 .post(CONTROLLER_BASE + "/search")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("Dune Messiah")),
+                ASSERTION_TIMEOUT_SECONDS);
+
+        // POST /search with an unsupported operator is rejected.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .contentType(ContentType.JSON)
+                                                 .body("{\"conditions\":[{\"propertyName\":\"title\",\"operator\":\"REGEX\",\"value\":\".*\"}]}")
                                                  .post(CONTROLLER_BASE + "/search")
                                                  .then()
                                                  .statusCode(400),

@@ -11,6 +11,7 @@ import * as parameterUtils from "service-generate/template/parameterUtils";
 export function generate(model, parameters) {
     model = JSON.parse(model).model;
     let templateSources = getTemplate(parameters).sources;
+    parameters.javaRuntime = true;
     parameterUtils.process(model, parameters)
     return generateUtils.generateFiles(model, parameters, templateSources);
 };

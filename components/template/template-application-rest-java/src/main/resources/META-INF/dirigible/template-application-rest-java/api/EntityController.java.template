@@ -28,8 +28,10 @@ import org.springframework.web.server.ResponseStatusException;
 
 import jakarta.servlet.http.HttpServletRequest;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -163,20 +165,50 @@ public class ${name}Controller {
     private List<${name}Entity> runFilter(Map<String, Object> filter) {
         StringBuilder hql = new StringBuilder("from ${name}Entity e");
         Map<String, Object> params = new LinkedHashMap<>();
+        boolean first = true;
         if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {
-            boolean first = true;
             for (Map.Entry<?, ?> entry : equals.entrySet()) {
-                String field = String.valueOf(entry.getKey());
-                if (!FILTER_FIELDS.contains(field)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
-                }
+                String field = requireKnownField(String.valueOf(entry.getKey()));
                 String paramName = "p" + params.size();
                 hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
                 params.put(paramName, entry.getValue());
                 first = false;
             }
         }
+        if (filter != null && filter.get("conditions") instanceof List<?> conditions) {
+            for (Object raw : conditions) {
+                if (!(raw instanceof Map<?, ?> condition)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter condition");
+                }
+                String field = requireKnownField(String.valueOf(condition.get("propertyName")));
+                String operator = String.valueOf(condition.get("operator")).toUpperCase(Locale.ROOT);
+                Object value = condition.get("value");
+                String paramName = "p" + params.size();
+                String clause = switch (operator) {
+                    case "EQ" -> "e." + field + " = :" + paramName;
+                    case "IN" -> {
+                        if (!(value instanceof Collection<?>)) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                                    "IN value must be a list for field: " + field);
+                        }
+                        yield "e." + field + " in (:" + paramName + ")";
+                    }
+                    case "LIKE" -> "e." + field + " like :" + paramName;
+                    default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
+                };
+                hql.append(first ? " where " : " and ").append(clause);
+                params.put(paramName, value);
+                first = false;
+            }
+        }
         return repository.query(hql.toString(), params);
+    }
+
+    private static String requireKnownField(String field) {
+        if (!FILTER_FIELDS.contains(field)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
+        }
+        return field;
     }
 #if($needsRoles)
 

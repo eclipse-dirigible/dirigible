@@ -136,27 +136,27 @@ export function process(model, parameters) {
             })
 
             if (p.widgetType == "DROPDOWN") {
-                let projectNameString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
-                let projectNameControllerString = `/services/ts/${parameters.projectName}/gen/${parameters.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
-
                 e.hasDropdowns = true;
 
+                let targetProject = parameters.projectName;
+                let targetGenFolder = parameters.genFolderName;
                 if (e.referencedProjections.length !== 0) {
-                    let foundReferenceProjection = false;
-                    e.referencedProjections.forEach(referencedProjection => {
-                        if (referencedProjection.name === p.relationshipEntityName && !foundReferenceProjection) {
-                            p.widgetDropdownUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
-                            p.widgetDropdownControllerUrl = `/services/ts/${referencedProjection.project}/gen/${referencedProjection.genFolderName}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
-                            foundReferenceProjection = true;
-                        }
-                    });
-                    if (!foundReferenceProjection) {
-                        p.widgetDropdownUrl = projectNameString;
-                        p.widgetDropdownControllerUrl = projectNameControllerString;
+                    const referencedProjection = e.referencedProjections.find(rp => rp.name === p.relationshipEntityName);
+                    if (referencedProjection) {
+                        targetProject = referencedProjection.project;
+                        targetGenFolder = referencedProjection.genFolderName;
                     }
+                }
+
+                if (parameters.javaRuntime) {
+                    const javaGen = sanitizeJavaIdentifier(targetGenFolder);
+                    const javaPerspective = sanitizeJavaIdentifier(p.relationshipEntityPerspectiveName);
+                    const javaUrl = `/services/java/${targetProject}/gen/${javaGen}/api/${javaPerspective}/${p.relationshipEntityName}Controller`;
+                    p.widgetDropdownUrl = javaUrl;
+                    p.widgetDropdownControllerUrl = javaUrl;
                 } else {
-                    p.widgetDropdownUrl = projectNameString;
-                    p.widgetDropdownControllerUrl = projectNameControllerString;
+                    p.widgetDropdownUrl = `/services/ts/${targetProject}/gen/${targetGenFolder}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
+                    p.widgetDropdownControllerUrl = `/services/ts/${targetProject}/gen/${targetGenFolder}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
                 }
             }
         });
