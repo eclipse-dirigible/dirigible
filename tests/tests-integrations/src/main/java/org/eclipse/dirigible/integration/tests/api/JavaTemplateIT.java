@@ -43,6 +43,8 @@ class JavaTemplateIT extends IntegrationTest {
 
     private static final String PROJECT = "java-template-it";
 
+    private static final String TABLE_PATH =
+            IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/gen/sample/data/books/Book.table";
     private static final String ENTITY_PATH =
             IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/gen/sample/data/books/BookEntity.java";
     private static final String REPOSITORY_PATH =
@@ -53,6 +55,28 @@ class JavaTemplateIT extends IntegrationTest {
     private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/gen/sample/api/books/BookController";
 
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
+
+    private static final String TABLE_SOURCE = """
+            {
+                "name": "JAVATEMPLATEIT_BOOK",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "nullable": false,
+                        "name": "BOOK_ID"
+                    },
+                    {
+                        "type": "VARCHAR",
+                        "length": 40,
+                        "nullable": false,
+                        "name": "BOOK_TITLE"
+                    }
+                ]
+            }
+            """;
 
     private static final String ENTITY_SOURCE = """
             package gen.sample.data.books;
@@ -382,19 +406,22 @@ class JavaTemplateIT extends IntegrationTest {
     }
 
     private void writeAll() {
-        write(ENTITY_PATH, ENTITY_SOURCE);
-        write(REPOSITORY_PATH, REPOSITORY_SOURCE);
-        write(CONTROLLER_PATH, CONTROLLER_SOURCE);
+        // .table artefact first so TableSynchronizer materialises JAVATEMPLATEIT_BOOK
+        // (with IDENTITY on BOOK_ID) before the Java entity is registered against it.
+        write(TABLE_PATH, TABLE_SOURCE, "application/json");
+        write(ENTITY_PATH, ENTITY_SOURCE, "text/x-java");
+        write(REPOSITORY_PATH, REPOSITORY_SOURCE, "text/x-java");
+        write(CONTROLLER_PATH, CONTROLLER_SOURCE, "text/x-java");
         synchronizationProcessor.forceProcessSynchronizers();
     }
 
-    private void write(String path, String source) {
-        repository.createResource(path, source.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+    private void write(String path, String source, String contentType) {
+        repository.createResource(path, source.getBytes(StandardCharsets.UTF_8), false, contentType, true);
     }
 
     @AfterEach
     void cleanup() {
-        for (String path : List.of(ENTITY_PATH, REPOSITORY_PATH, CONTROLLER_PATH)) {
+        for (String path : List.of(TABLE_PATH, ENTITY_PATH, REPOSITORY_PATH, CONTROLLER_PATH)) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
             }

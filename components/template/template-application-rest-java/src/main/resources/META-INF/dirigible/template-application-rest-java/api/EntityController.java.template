@@ -12,10 +12,10 @@ package gen.${javaGenFolderName}.api.${javaPerspectiveName};
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.engine.java.annotations.Documentation;
 import org.eclipse.dirigible.engine.java.annotations.Inject;
 import org.eclipse.dirigible.engine.java.annotations.http.Body;
-import org.eclipse.dirigible.engine.java.annotations.http.Context;
 import org.eclipse.dirigible.engine.java.annotations.http.Controller;
 import org.eclipse.dirigible.engine.java.annotations.http.Delete;
 import org.eclipse.dirigible.engine.java.annotations.http.Get;
@@ -25,8 +25,6 @@ import org.eclipse.dirigible.engine.java.annotations.http.Put;
 import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.server.ResponseStatusException;
-
-import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.Collection;
 import java.util.LinkedHashMap;
@@ -47,11 +45,10 @@ public class ${name}Controller {
     @Get
     @Documentation("List ${name}")
     public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
-                                      @QueryParam("$offset") Integer offset#if($needsRoles),
-                                      @Context HttpServletRequest request#end#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
+                                      @QueryParam("$offset") Integer offset#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
                                       @QueryParam("${masterEntityId}") String ${masterEntityId}#end) {
 #if($needsRoles)
-        checkPermissions("read", request);
+        checkPermissions("read");
 #end
         int actualLimit = limit != null ? limit.intValue() : 20;
         int actualOffset = offset != null ? offset.intValue() : 0;
@@ -68,64 +65,64 @@ public class ${name}Controller {
         List<${name}Entity> result = repository.findAll(actualLimit, actualOffset);
 #end
 #if($isEntityPropertySecurityEnabled)
-        result.forEach(e -> redactRead(e, request));
+        result.forEach(this::redactRead);
 #end
         return result;
     }
 
     @Get("/count")
     @Documentation("Count ${name}")
-    public Map<String, Long> count(#if($needsRoles)@Context HttpServletRequest request#end) {
+    public Map<String, Long> count() {
 #if($needsRoles)
-        checkPermissions("read", request);
+        checkPermissions("read");
 #end
         return Map.of("count", repository.count());
     }
 
     @Post("/count")
     @Documentation("Count ${name} with filter")
-    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter#if($needsRoles), @Context HttpServletRequest request#end) {
+    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter) {
 #if($needsRoles)
-        checkPermissions("read", request);
+        checkPermissions("read");
 #end
         return Map.of("count", (long) runFilter(filter).size());
     }
 
     @Post("/search")
     @Documentation("Search ${name}")
-    public List<${name}Entity> search(@Body Map<String, Object> filter#if($needsRoles), @Context HttpServletRequest request#end) {
+    public List<${name}Entity> search(@Body Map<String, Object> filter) {
 #if($needsRoles)
-        checkPermissions("read", request);
+        checkPermissions("read");
 #end
         List<${name}Entity> result = runFilter(filter);
 #if($isEntityPropertySecurityEnabled)
-        result.forEach(e -> redactRead(e, request));
+        result.forEach(this::redactRead);
 #end
         return result;
     }
 
     @Get("/{id}")
     @Documentation("Get ${name} by id")
-    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id#if($needsRoles), @Context HttpServletRequest request#end) {
+    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
 #if($needsRoles)
-        checkPermissions("read", request);
+        checkPermissions("read");
 #end
         ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
 #if($isEntityPropertySecurityEnabled)
-        redactRead(entity, request);
+        redactRead(entity);
 #end
         return entity;
     }
 
     @Post
     @Documentation("Create ${name}")
-    public ${name}Entity create(@Body ${name}Entity entity#if($needsRoles), @Context HttpServletRequest request#end) {
+    public ${name}Entity create(@Body ${name}Entity entity) {
 #if($needsRoles)
-        checkPermissions("write", request);
+        checkPermissions("write");
 #end
 #if($isEntityPropertySecurityEnabled)
-        applyOnCreate(entity, request);
+        applyOnCreate(entity);
 #end
         validate(entity);
         return repository.save(entity);
@@ -133,14 +130,14 @@ public class ${name}Controller {
 
     @Put("/{id}")
     @Documentation("Update ${name} by id")
-    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity#if($needsRoles), @Context HttpServletRequest request#end) {
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
 #if($needsRoles)
-        checkPermissions("write", request);
+        checkPermissions("write");
 #end
 #if($isEntityPropertySecurityEnabled)
         ${name}Entity existing = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
-        mergeWritable(existing, entity, request);
+        mergeWritable(existing, entity);
         validate(existing);
         return repository.update(existing);
 #else
@@ -152,9 +149,9 @@ public class ${name}Controller {
 
     @Delete("/{id}")
     @Documentation("Delete ${name} by id")
-    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id#if($needsRoles), @Context HttpServletRequest request#end) {
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
 #if($needsRoles)
-        checkPermissions("write", request);
+        checkPermissions("write");
 #end
         if (repository.findOne(id).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
@@ -188,8 +185,7 @@ public class ${name}Controller {
                     case "EQ" -> "e." + field + " = :" + paramName;
                     case "IN" -> {
                         if (!(value instanceof Collection<?>)) {
-                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
-                                    "IN value must be a list for field: " + field);
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "IN value must be a list for field: " + field);
                         }
                         yield "e." + field + " in (:" + paramName + ")";
                     }
@@ -212,19 +208,19 @@ public class ${name}Controller {
     }
 #if($needsRoles)
 
-    private void checkPermissions(String op, HttpServletRequest request) {
+    private void checkPermissions(String op) {
 #if($perspectiveRole)
-        if (!request.isUserInRole("${perspectiveRole}")) {
+        if (!UserFacade.isInRole("${perspectiveRole}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($roleRead)
-        if ("read".equals(op) && !(request.isUserInRole("${roleRead}")#if($roleWrite) || request.isUserInRole("${roleWrite}")#end)) {
+        if ("read".equals(op) && !(UserFacade.isInRole("${roleRead}")#if($roleWrite) || UserFacade.isInRole("${roleWrite}")#end)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
 #if($roleWrite)
-        if ("write".equals(op) && !request.isUserInRole("${roleWrite}")) {
+        if ("write".equals(op) && !UserFacade.isInRole("${roleWrite}")) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN);
         }
 #end
@@ -232,21 +228,21 @@ public class ${name}Controller {
 #end
 #if($isEntityPropertySecurityEnabled)
 
-    private void redactRead(${name}Entity entity, HttpServletRequest request) {
+    private void redactRead(${name}Entity entity) {
 #foreach ($property in $properties)
 #if($property.roleRead)
-        if (!request.isUserInRole("${property.roleRead}")) {
+        if (!UserFacade.isInRole("${property.roleRead}")) {
             entity.${property.name} = null;
         }
 #end
 #end
     }
 
-    private void mergeWritable(${name}Entity target, ${name}Entity input, HttpServletRequest request) {
+    private void mergeWritable(${name}Entity target, ${name}Entity input) {
 #foreach ($property in $properties)
 #if(!$property.dataPrimaryKey)
 #if($property.roleWrite)
-        if (request.isUserInRole("${property.roleWrite}")) {
+        if (UserFacade.isInRole("${property.roleWrite}")) {
             target.${property.name} = input.${property.name};
         }
 #else
@@ -256,10 +252,10 @@ public class ${name}Controller {
 #end
     }
 
-    private void applyOnCreate(${name}Entity entity, HttpServletRequest request) {
+    private void applyOnCreate(${name}Entity entity) {
 #foreach ($property in $properties)
 #if($property.roleWrite)
-        if (!request.isUserInRole("${property.roleWrite}")) {
+        if (!UserFacade.isInRole("${property.roleWrite}")) {
             entity.${property.name} = null;
         }
 #end

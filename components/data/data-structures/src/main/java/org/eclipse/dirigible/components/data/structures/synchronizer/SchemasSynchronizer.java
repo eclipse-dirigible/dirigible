@@ -339,6 +339,15 @@ public class SchemasSynchronizer extends MultitenantBaseSynchronizer<Schema, Lon
                 && column.get("nullable")
                          .getAsBoolean());
 
+        // The .table parser deserialises this field via Gson's @SerializedName(value="autoincrement",
+        // alternate={"identity"}); the .schema parser is hand-rolled and needs to honour both
+        // spellings explicitly. "identity" is the canonical name in every existing .schema fixture.
+        JsonElement identityElement = column.get("identity");
+        if (identityElement == null || identityElement.isJsonNull()) {
+            identityElement = column.get("autoincrement");
+        }
+        columnModel.setAutoincrement(identityElement != null && !identityElement.isJsonNull() && identityElement.getAsBoolean());
+
         String defaultValue = getJsonElementValue(column, "defaultValue", null);
         columnModel.setDefaultValue(defaultValue);
 
