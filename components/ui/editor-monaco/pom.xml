@@ -25,6 +25,58 @@
         </dependency>
     </dependencies>
 
+    <profiles>
+        <profile>
+            <id>Windows</id>
+            <activation>
+                <os><family>Windows</family></os>
+            </activation>
+            <properties>
+                <script.extension>.bat</script.extension>
+            </properties>
+        </profile>
+        <profile>
+            <id>unix</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <script.extension>.sh</script.extension>
+            </properties>
+        </profile>
+    </profiles>
+
+    <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <excludes>
+                    <!-- Build-time source directory; only the compiled js/java-lsp-client.js is needed at runtime -->
+                    <exclude>META-INF/dirigible/editor-monaco/js/lsp/**</exclude>
+                </excludes>
+            </resource>
+        </resources>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>build-java-lsp-client</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <configuration>
+                            <executable>${basedir}/src/main/resources/META-INF/dirigible/editor-monaco/js/lsp/build-source${script.extension}</executable>
+                            <workingDirectory>${basedir}/src/main/resources/META-INF/dirigible/editor-monaco/js/lsp</workingDirectory>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
     <properties>
         <license.header.location>../../../licensing-header.txt</license.header.location>
         <parent.pom.folder>../../../</parent.pom.folder>

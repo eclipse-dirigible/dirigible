@@ -101,6 +101,8 @@ require.config({
 
 // @ts-ignore
 require(['vs/editor/editor.main', 'parser/acorn-loose'], async function (monaco, acornLoose) {
+    // Expose Monaco globally so the java-lsp-client IIFE bundle can access it via window.monaco.
+    window.monaco = monaco;
     try {
         const fileIO = new FileIO();
         const fileName = fileIO.resolveResourcePath();
@@ -113,6 +115,11 @@ require(['vs/editor/editor.main', 'parser/acorn-loose'], async function (monaco,
         await dirigibleEditor.init();
         dirigibleEditor.configureMonaco();
         dirigibleEditor.subscribeEvents();
+
+        if (fileType === 'java') {
+            JavaLspClientLib.connect(editorParameters.resourcePath)
+                .catch(e => console.warn('[java-lsp] Connection failed (falling back to basic support):', e.message));
+        }
 
     } catch (e) {
         console.error(e);
@@ -606,7 +613,11 @@ class DirigibleEditor {
             TypeScriptUtils.loadImportedFiles(this.monaco, this.fileObject.importedFilesNames);
         }
 
-        const mainFileUri = new this.monaco.Uri().with({ path: this.fileName });
+        // Java models use a file:// URI so monaco-languageclient auto-tracks them via
+        // DidOpenTextDocumentFeature. Other languages keep the plain path URI.
+        const mainFileUri = this.fileType === 'java'
+            ? this.monaco.Uri.parse('file:///workspace' + this.fileName)
+            : new this.monaco.Uri().with({ path: this.fileName });
         const model = this.monaco.editor.createModel(this.fileObject.modified, this.fileType || 'text', mainFileUri);
         DirigibleEditor.lastSavedVersionId = model.getAlternativeVersionId();
 
@@ -905,6 +916,138 @@ class DirigibleEditor {
                 }
             }
         });
+
+        this.monaco.languages.registerCompletionItemProvider('java', {
+            triggerCharacters: ['@', '.'],
+            provideCompletionItems: (model, position) => {
+                const word = model.getWordUntilPosition(position);
+                const range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn,
+                };
+                const linePrefix = model.getLineContent(position.lineNumber).substring(0, position.column - 1);
+                const isAfterAt = /@\w*$/.test(linePrefix);
+
+                const CK = this.monaco.languages.CompletionItemKind;
+
+                const annotationSuggestions = [
+                    { label: '@Controller', detail: 'Dirigible REST controller', insertText: 'Controller', kind: CK.Class },
+                    { label: '@Get', detail: 'HTTP GET mapping', insertText: 'Get("${1:/path}")', insertTextRules: 4, kind: CK.Method },
+                    { label: '@Post', detail: 'HTTP POST mapping', insertText: 'Post("${1:/path}")', insertTextRules: 4, kind: CK.Method },
+                    { label: '@Put', detail: 'HTTP PUT mapping', insertText: 'Put("${1:/path}")', insertTextRules: 4, kind: CK.Method },
+                    { label: '@Patch', detail: 'HTTP PATCH mapping', insertText: 'Patch("${1:/path}")', insertTextRules: 4, kind: CK.Method },
+                    { label: '@Delete', detail: 'HTTP DELETE mapping', insertText: 'Delete("${1:/path}")', insertTextRules: 4, kind: CK.Method },
+                    { label: '@PathParam', detail: 'Bind path placeholder to parameter', insertText: 'PathParam("${1:name}")', insertTextRules: 4, kind: CK.Property },
+                    { label: '@QueryParam', detail: 'Bind query parameter', insertText: 'QueryParam("${1:name}")', insertTextRules: 4, kind: CK.Property },
+                    { label: '@Body', detail: 'Bind request body to parameter', insertText: 'Body', kind: CK.Property },
+                    { label: '@Context', detail: 'Inject HttpServletRequest/Response', insertText: 'Context', kind: CK.Property },
+                    { label: '@Roles', detail: 'Restrict access by role', insertText: 'Roles({"${1:role}"})', insertTextRules: 4, kind: CK.Class },
+                    { label: '@Entity', detail: 'Dirigible entity annotation', insertText: 'Entity', kind: CK.Class },
+                    { label: '@Table', detail: 'Override physical table name', insertText: 'Table(name = "${1:TABLE_NAME}")', insertTextRules: 4, kind: CK.Class },
+                    { label: '@Id', detail: 'Primary key field', insertText: 'Id', kind: CK.Property },
+                    { label: '@GeneratedValue', detail: 'Auto-generated primary key', insertText: 'GeneratedValue(strategy = GenerationType.${1|AUTO,SEQUENCE,IDENTITY|})', insertTextRules: 4, kind: CK.Property },
+                    { label: '@Column', detail: 'Map field to a DB column', insertText: 'Column(name = "${1:COLUMN_NAME}")', insertTextRules: 4, kind: CK.Property },
+                    { label: '@Transient', detail: 'Exclude field from persistence', insertText: 'Transient', kind: CK.Property },
+                    { label: '@CreatedAt', detail: 'Auto-populate creation timestamp', insertText: 'CreatedAt', kind: CK.Property },
+                    { label: '@UpdatedAt', detail: 'Auto-populate update timestamp', insertText: 'UpdatedAt', kind: CK.Property },
+                    { label: '@CreatedBy', detail: 'Auto-populate creator username', insertText: 'CreatedBy', kind: CK.Property },
+                    { label: '@UpdatedBy', detail: 'Auto-populate updater username', insertText: 'UpdatedBy', kind: CK.Property },
+                    { label: '@Documentation', detail: 'OpenAPI summary/description', insertText: 'Documentation("${1:description}")', insertTextRules: 4, kind: CK.Property },
+                    { label: '@Repository', detail: 'Dirigible repository class', insertText: 'Repository', kind: CK.Class },
+                    { label: '@Inject', detail: 'Inject a @Repository dependency', insertText: 'Inject', kind: CK.Property },
+                ].map(s => ({ ...s, range }));
+
+                const snippetSuggestions = [
+                    {
+                        label: 'controller-class',
+                        detail: 'Dirigible @Controller class template',
+                        kind: CK.Snippet,
+                        insertTextRules: 4,
+                        insertText: [
+                            'import org.eclipse.dirigible.engine.java.annotations.http.*;',
+                            '',
+                            '@Controller',
+                            'public class ${1:MyController} {',
+                            '',
+                            '\t@Get("/${2:list}")',
+                            '\tpublic Object ${3:list}() {',
+                            '\t\t${4:// TODO}',
+                            '\t\treturn null;',
+                            '\t}',
+                            '}',
+                        ].join('\n'),
+                        range,
+                    },
+                    {
+                        label: 'entity-class',
+                        detail: 'Dirigible @Entity class template',
+                        kind: CK.Snippet,
+                        insertTextRules: 4,
+                        insertText: [
+                            'import org.eclipse.dirigible.engine.java.annotations.*;',
+                            '',
+                            '@Entity',
+                            '@Table(name = "${1:MY_TABLE}")',
+                            'public class ${2:MyEntity} {',
+                            '',
+                            '\t@Id',
+                            '\t@GeneratedValue(strategy = GenerationType.AUTO)',
+                            '\tprivate Long id;',
+                            '',
+                            '\t@Column(name = "${3:NAME}")',
+                            '\tprivate String ${4:name};',
+                            '}',
+                        ].join('\n'),
+                        range,
+                    },
+                    {
+                        label: 'repository-class',
+                        detail: 'Dirigible @Repository class template',
+                        kind: CK.Snippet,
+                        insertTextRules: 4,
+                        insertText: [
+                            'import org.eclipse.dirigible.engine.java.annotations.Repository;',
+                            'import org.eclipse.dirigible.components.data.store.java.JavaEntityStore;',
+                            'import org.eclipse.dirigible.components.api.platform.BeanProvider;',
+                            '',
+                            '@Repository',
+                            'public class ${1:MyRepository} {',
+                            '',
+                            '\tprivate final JavaEntityStore store = BeanProvider.getBean(JavaEntityStore.class);',
+                            '',
+                            '\tpublic java.util.List<java.util.Map<String, Object>> findAll() {',
+                            '\t\treturn store.findAll("${2:MyEntity}");',
+                            '\t}',
+                            '}',
+                        ].join('\n'),
+                        range,
+                    },
+                    {
+                        label: 'get-method',
+                        detail: '@Get handler method',
+                        kind: CK.Snippet,
+                        insertTextRules: 4,
+                        insertText: '@Get("/${1:path}")\npublic Object ${2:handle}() {\n\t${3:// TODO}\n\treturn null;\n}',
+                        range,
+                    },
+                    {
+                        label: 'post-method',
+                        detail: '@Post handler method',
+                        kind: CK.Snippet,
+                        insertTextRules: 4,
+                        insertText: '@Post("/${1:path}")\npublic Object ${2:handle}(@Body ${3:Object} ${4:body}) {\n\t${5:// TODO}\n\treturn null;\n}',
+                        range,
+                    },
+                ];
+
+                if (isAfterAt) {
+                    return { suggestions: annotationSuggestions };
+                }
+                return { suggestions: snippetSuggestions };
+            }
+        });
     }
 
     subscribeEvents() {
@@ -1121,3 +1264,4 @@ class TypeScriptUtils {
         }
     }
 }
+
