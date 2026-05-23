@@ -236,6 +236,13 @@ public class CsvimProcessor {
                 updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName, csvFile);
             }
             updateSequence(csvFile, connection, countAll);
+            if (countAll > 0) {
+                // CSV inserts always carry an explicit PK value; the DB's IDENTITY counter is therefore
+                // not advanced by the load. Bump it to MAX(col)+1 so a subsequent INSERT … DEFAULT
+                // (e.g. from a Hibernate @GeneratedValue(IDENTITY) entity) doesn't collide on the seeded
+                // rows.
+                restartIdentityColumns(dataSource, connection, targetSchema, tableName);
+            }
         }
     }
 
@@ -279,6 +286,96 @@ public class CsvimProcessor {
                 }
             }
         }
+    }
+
+    /**
+     * Walks JDBC metadata for the freshly-loaded table, finds every {@code IS_AUTOINCREMENT == YES}
+     * column, and advances its internal counter to {@code MAX(col) + 1}. Most engines (H2, PostgreSQL,
+     * MSSQL, MySQL) do not auto-advance an identity counter when the INSERT supplies an explicit value,
+     * which leaves the next "generate-me-one" INSERT colliding with the seeded rows on PK = 1.
+     *
+     * <p>
+     * Failures here are logged and swallowed — the CSV data is already persisted, and not every dialect
+     * supports identity restart in a portable way. Production traffic will surface the same collision
+     * the user already saw if the restart fails, but at least the seeded rows survive.
+     */
+    private void restartIdentityColumns(DirigibleDataSource dataSource, Connection connection, String schema, String tableName) {
+        try (ResultSet cols = connection.getMetaData()
+                                        .getColumns(connection.getCatalog(), schema, tableName, "%")) {
+            while (cols.next()) {
+                if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
+                    continue;
+                }
+                String column = cols.getString("COLUMN_NAME");
+                try {
+                    long next = computeNextValue(connection, schema, tableName, column);
+                    executeIdentityRestart(dataSource, connection, schema, tableName, column, next);
+                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", schema, tableName, column, next);
+                } catch (SQLException restartError) {
+                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", schema, tableName, column,
+                            restartError.getMessage());
+                }
+            }
+        } catch (SQLException metadataError) {
+            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", schema, tableName, metadataError.getMessage());
+        }
+    }
+
+    /**
+     * Computes the next value to seed an identity counter with: {@code MAX(col) + 1}. The caller only
+     * invokes this after at least one row has been inserted, so {@code MAX} is guaranteed non-null.
+     */
+    private long computeNextValue(Connection connection, String schema, String tableName, String column) throws SQLException {
+        String sql = "SELECT MAX(" + quote(connection, column) + ") FROM " + qualifiedTable(connection, schema, tableName);
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                long current = rs.getLong(1);
+                return rs.wasNull() ? 1L : current + 1L;
+            }
+        }
+        return 1L;
+    }
+
+    /**
+     * Emits dialect-specific DDL to advance an identity counter past {@code next}. Unknown dialects are
+     * skipped with an info-level log — better than throwing and aborting the whole CSVIM cycle.
+     */
+    private void executeIdentityRestart(DirigibleDataSource dataSource, Connection connection, String schema, String tableName,
+            String column, long next) throws SQLException {
+        String sql;
+        if (dataSource.isOfType(DatabaseSystem.H2)) {
+            sql = "ALTER TABLE " + qualifiedTable(connection, schema, tableName) + " ALTER COLUMN " + quote(connection, column)
+                    + " RESTART WITH " + next;
+        } else if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            // setval(seq, n, false) -> next nextval() returns exactly n.
+            sql = "SELECT setval(pg_get_serial_sequence('" + schema + "." + tableName + "', '" + column + "'), " + next + ", false)";
+        } else if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
+            // RESEED stores the *current* identity, so the next assigned id is current + increment.
+            sql = "DBCC CHECKIDENT('" + schema + "." + tableName + "', RESEED, " + (next - 1) + ")";
+        } else if (dataSource.isOfType(DatabaseSystem.MYSQL) || dataSource.isOfType(DatabaseSystem.MARIADB)) {
+            sql = "ALTER TABLE `" + schema + "`.`" + tableName + "` AUTO_INCREMENT = " + next;
+        } else {
+            logger.info("IDENTITY restart not implemented for dialect [{}] — skipping [{}.{}.{}]", dataSource.getDatabaseSystem(), schema,
+                    tableName, column);
+            return;
+        }
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.execute();
+        }
+    }
+
+    /** Returns the schema-qualified, dialect-quoted table identifier. */
+    private static String qualifiedTable(Connection connection, String schema, String tableName) throws SQLException {
+        String q = connection.getMetaData()
+                             .getIdentifierQuoteString();
+        return q + schema + q + "." + q + tableName + q;
+    }
+
+    /** Returns a dialect-quoted identifier. */
+    private static String quote(Connection connection, String identifier) throws SQLException {
+        String q = connection.getMetaData()
+                             .getIdentifierQuoteString();
+        return q + identifier + q;
     }
 
     private boolean isDefaultDataSource(String dataSourceName) {
