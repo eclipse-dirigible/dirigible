@@ -214,14 +214,20 @@ public final class JavaEntityToHbmMapper {
         if (javaType == java.sql.Time.class) {
             return "time";
         }
-        if (javaType == java.sql.Timestamp.class || javaType == Date.class || javaType == LocalDateTime.class) {
+        if (javaType == java.sql.Timestamp.class || javaType == Date.class) {
             return "timestamp";
         }
+        // java.time.* types need their FQN in HBM XML — Hibernate's basic-type registry resolves them
+        // by class name, but the short names ("Instant" / "LocalDate" / "LocalDateTime") aren't
+        // registered and Hibernate falls back to Class.forName("Instant"), which throws.
+        if (javaType == LocalDateTime.class) {
+            return "java.time.LocalDateTime";
+        }
         if (javaType == Instant.class) {
-            return "Instant";
+            return "java.time.Instant";
         }
         if (javaType == LocalDate.class) {
-            return "LocalDate";
+            return "java.time.LocalDate";
         }
         if (javaType == UUID.class) {
             return "uuid";
