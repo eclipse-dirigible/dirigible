@@ -1,0 +1,373 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials are made available under the
+ * terms of the Eclipse Public License v2.0 which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
+ */
+package org.eclipse.dirigible.integration.tests.api;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletResponse;
+import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.web.server.LocalServerPort;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.WebSocket;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Base64;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.CompletionStage;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+import static java.util.concurrent.TimeUnit.MILLISECONDS;
+import static java.util.concurrent.TimeUnit.SECONDS;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/**
+ * End-to-end test for the JDT Language Server integration.
+ *
+ * <p>
+ * Boots the full Spring application, writes the {@code hello-java} project into the user workspace,
+ * connects to the {@code /websockets/ide/java-lsp} endpoint, runs the LSP handshake, and asserts
+ * that {@code textDocument/completion} at {@code resp.getWriter().} returns at least one
+ * {@code println} suggestion — confirming that JDT.LS resolves {@code PrintWriter} via the servlet
+ * API JAR found on the test classpath.
+ */
+class JavaLspIT extends IntegrationTest {
+
+    // -------------------------------------------------------------------------
+    // Project fixture
+    // -------------------------------------------------------------------------
+
+    private static final String PROJECT = "hello-java";
+    private static final String WORKSPACE = "workspace";
+    private static final String USERNAME = "admin";
+
+    /** IRepository paths for workspace files. */
+    private static final String REPO_BASE = "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT;
+    private static final String HELLO_JAVA_REPO = REPO_BASE + "/demo/Hello.java";
+    private static final String CLASSPATH_REPO = REPO_BASE + "/.classpath";
+    private static final String PROJECT_FILE_REPO = REPO_BASE + "/.project";
+
+    // Virtual URIs seen by the browser side (workspace part doubled because the
+    // resourcePath parameter is /workspace/<project>/... and the client prepends
+    // "file:///workspace" to it — this is intentional and consistent on both sides).
+    private static final String VIRTUAL_ROOT = "file:///workspace/" + WORKSPACE + "/" + PROJECT + "/";
+    private static final String VIRTUAL_FILE_URI = VIRTUAL_ROOT + "demo/Hello.java";
+
+    // Completion position: line 9, character 25 = start of "println" in
+    //   "        resp.getWriter().println("Hello World!");"
+    private static final int COMPLETION_LINE = 9;
+    private static final int COMPLETION_CHARACTER = 25;
+
+    private static final String HELLO_JAVA = """
+            package demo;
+
+            import jakarta.servlet.http.HttpServletRequest;
+            import jakarta.servlet.http.HttpServletResponse;
+            import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+
+            public class Hello implements JavaHandler {
+
+                public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+                    resp.getWriter().println("Hello World!");
+                }
+            }
+            """;
+
+    private static final String PROJECT_XML = """
+            <?xml version="1.0" encoding="UTF-8"?>
+            <projectDescription>
+                <name>hello-java</name>
+                <natures>
+                    <nature>org.eclipse.jdt.core.javanature</nature>
+                </natures>
+                <buildSpec>
+                    <buildCommand>
+                        <name>org.eclipse.jdt.core.javabuilder</name>
+                    </buildCommand>
+                </buildSpec>
+            </projectDescription>
+            """;
+
+    // -------------------------------------------------------------------------
+    // Spring beans
+    // -------------------------------------------------------------------------
+
+    @LocalServerPort
+    private int port;
+
+    @Autowired
+    private IRepository repository;
+
+    // -------------------------------------------------------------------------
+    // Per-test state for the WebSocket conversation
+    // -------------------------------------------------------------------------
+
+    private final LinkedBlockingQueue<String> inbox = new LinkedBlockingQueue<>();
+    private final List<String> buffer = new ArrayList<>();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final AtomicInteger seq = new AtomicInteger(1);
+
+    // -------------------------------------------------------------------------
+    // Test
+    // -------------------------------------------------------------------------
+
+    @Test
+    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    void completion_suggests_println_for_PrintWriter_via_resp_getWriter() throws Exception {
+        writeProjectFiles();
+
+        WebSocket ws = connectWebSocket();
+        try {
+            // Initialize JDT.LS
+            int initId = seq.getAndIncrement();
+            ws.sendText(initRequest(initId), true).join();
+            assertNotNull(awaitResponse(initId, 120, SECONDS),
+                    "JDT.LS did not respond to 'initialize' within 120 s — check server logs for startup errors");
+
+            ws.sendText(notification("initialized", "{}"), true).join();
+            ws.sendText(notification("workspace/didChangeConfiguration",
+                    "{\"settings\":" + jdtlsSettings() + "}"), true).join();
+            ws.sendText(didOpenNotification(), true).join();
+
+            // Wait until JDT.LS has analysed the file (diagnostics notification is the signal)
+            assertTrue(awaitDiagnosticsFor(VIRTUAL_FILE_URI, 90, SECONDS),
+                    "JDT.LS did not publish diagnostics for the open file within 90 s");
+
+            // Request completion at resp.getWriter().|
+            int completionId = seq.getAndIncrement();
+            ws.sendText(completionRequest(completionId), true).join();
+            String result = awaitResponse(completionId, 30, SECONDS);
+            assertNotNull(result, "JDT.LS did not respond to 'textDocument/completion' within 30 s");
+
+            List<String> labels = completionLabels(result);
+            assertTrue(labels.stream().anyMatch(l -> l.startsWith("println")),
+                    "Expected a 'println' completion from PrintWriter but got: " + labels);
+        } finally {
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "test finished").get(5, SECONDS);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — project setup
+    // -------------------------------------------------------------------------
+
+    private void writeProjectFiles() {
+        repository.createResource(HELLO_JAVA_REPO,
+                HELLO_JAVA.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        repository.createResource(CLASSPATH_REPO,
+                buildClasspathXml().getBytes(StandardCharsets.UTF_8), false, "text/xml", true);
+        repository.createResource(PROJECT_FILE_REPO,
+                PROJECT_XML.getBytes(StandardCharsets.UTF_8), false, "text/xml", true);
+    }
+
+    private static String buildClasspathXml() {
+        // Locate JARs that the hello-java source depends on; they are guaranteed to
+        // be on the test classpath since the IT boots the full Dirigible application.
+        String servletJar = findJarOnClasspath("jakarta.servlet-api", "tomcat-embed-core");
+        String engineJavaJar = findJarOnClasspath("dirigible-components-engine-java");
+
+        StringBuilder libs = new StringBuilder();
+        if (servletJar != null) {
+            libs.append("    <classpathentry kind=\"lib\" path=\"").append(servletJar).append("\"/>\n");
+        }
+        if (engineJavaJar != null) {
+            libs.append("    <classpathentry kind=\"lib\" path=\"").append(engineJavaJar).append("\"/>\n");
+        }
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<classpath>\n"
+                + "    <classpathentry kind=\"src\" path=\"\"/>\n"
+                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n"
+                + libs
+                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n"
+                + "</classpath>\n";
+    }
+
+    private static String findJarOnClasspath(String... fragments) {
+        return Arrays.stream(System.getProperty("java.class.path", "").split(java.io.File.pathSeparator))
+                     .filter(e -> Arrays.stream(fragments).anyMatch(e::contains))
+                     .findFirst()
+                     .orElse(null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — WebSocket connection
+    // -------------------------------------------------------------------------
+
+    private WebSocket connectWebSocket() throws Exception {
+        String credentials = Base64.getEncoder()
+                                   .encodeToString((USERNAME + ":admin").getBytes(StandardCharsets.UTF_8));
+        URI uri = URI.create("ws://localhost:" + port + "/websockets/ide/java-lsp"
+                + "?workspace=" + WORKSPACE + "&project=" + PROJECT);
+
+        return HttpClient.newHttpClient()
+                         .newWebSocketBuilder()
+                         .header("Authorization", "Basic " + credentials)
+                         .buildAsync(uri, new Listener())
+                         .get(10, SECONDS);
+    }
+
+    private class Listener implements WebSocket.Listener {
+        private final StringBuilder partial = new StringBuilder();
+
+        @Override
+        public void onOpen(WebSocket ws) {
+            ws.request(1);
+        }
+
+        @Override
+        public CompletionStage<?> onText(WebSocket ws, CharSequence data, boolean last) {
+            partial.append(data);
+            if (last) {
+                inbox.add(partial.toString());
+                partial.setLength(0);
+            }
+            ws.request(1);
+            return null;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — LSP message routing
+    // -------------------------------------------------------------------------
+
+    /** Returns the first response with the given {@code id}, buffering all other messages. */
+    private String awaitResponse(int id, long timeout, TimeUnit unit) throws Exception {
+        long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
+
+        for (Iterator<String> it = buffer.iterator(); it.hasNext();) {
+            JsonNode n = mapper.readTree(it.next());
+            if (n.has("id") && n.get("id").asInt() == id) {
+                it.remove();
+                return n.toString();
+            }
+        }
+
+        while (System.currentTimeMillis() < deadline) {
+            long remaining = Math.max(100, deadline - System.currentTimeMillis());
+            String msg = inbox.poll(Math.min(remaining, 2_000), MILLISECONDS);
+            if (msg == null) continue;
+            JsonNode n = mapper.readTree(msg);
+            if (n.has("id") && n.get("id").asInt() == id) {
+                return n.toString();
+            }
+            buffer.add(msg);
+        }
+        return null;
+    }
+
+    /**
+     * Returns {@code true} when a {@code textDocument/publishDiagnostics} notification arrives for
+     * the given URI; all other messages are buffered.
+     */
+    private boolean awaitDiagnosticsFor(String uri, long timeout, TimeUnit unit) throws Exception {
+        long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
+
+        for (String msg : buffer) {
+            if (isDiagnosticsFor(msg, uri)) return true;
+        }
+
+        while (System.currentTimeMillis() < deadline) {
+            long remaining = Math.max(100, deadline - System.currentTimeMillis());
+            String msg = inbox.poll(Math.min(remaining, 2_000), MILLISECONDS);
+            if (msg == null) continue;
+            if (isDiagnosticsFor(msg, uri)) return true;
+            buffer.add(msg);
+        }
+        return false;
+    }
+
+    private boolean isDiagnosticsFor(String msg, String uri) throws Exception {
+        JsonNode n = mapper.readTree(msg);
+        return "textDocument/publishDiagnostics".equals(n.path("method").asText())
+                && uri.equals(n.path("params").path("uri").asText());
+    }
+
+    private List<String> completionLabels(String responseJson) throws Exception {
+        JsonNode result = mapper.readTree(responseJson).path("result");
+        JsonNode items = result.isArray() ? result : result.path("items");
+        List<String> labels = new ArrayList<>();
+        if (items.isArray()) {
+            for (JsonNode item : items) {
+                labels.add(item.path("label").asText());
+            }
+        }
+        return labels;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers — LSP message builders
+    // -------------------------------------------------------------------------
+
+    private String initRequest(int id) {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"initialize\",\"params\":{"
+                + "\"processId\":null,"
+                + "\"rootUri\":\"" + VIRTUAL_ROOT + "\","
+                + "\"workspaceFolders\":[{\"uri\":\"" + VIRTUAL_ROOT + "\",\"name\":\"" + PROJECT + "\"}],"
+                + "\"capabilities\":{"
+                + "\"textDocument\":{"
+                + "\"synchronization\":{\"dynamicRegistration\":true},"
+                + "\"completion\":{\"dynamicRegistration\":true,"
+                + "\"completionItem\":{\"snippetSupport\":true},\"contextSupport\":true},"
+                + "\"hover\":{\"dynamicRegistration\":true},"
+                + "\"publishDiagnostics\":{\"relatedInformation\":true}},"
+                + "\"workspace\":{\"configuration\":true,"
+                + "\"didChangeConfiguration\":{\"dynamicRegistration\":true}}}}}";
+    }
+
+    private String didOpenNotification() throws Exception {
+        String escapedText = mapper.writeValueAsString(HELLO_JAVA);
+        return notification("textDocument/didOpen",
+                "{\"textDocument\":{\"uri\":\"" + VIRTUAL_FILE_URI + "\","
+                        + "\"languageId\":\"java\",\"version\":1,\"text\":" + escapedText + "}}");
+    }
+
+    private String completionRequest(int id) {
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"textDocument/completion\","
+                + "\"params\":{\"textDocument\":{\"uri\":\"" + VIRTUAL_FILE_URI + "\"},"
+                + "\"position\":{\"line\":" + COMPLETION_LINE + ",\"character\":" + COMPLETION_CHARACTER + "},"
+                + "\"context\":{\"triggerKind\":1}}}";
+    }
+
+    private static String notification(String method, String paramsJson) {
+        return "{\"jsonrpc\":\"2.0\",\"method\":\"" + method + "\",\"params\":" + paramsJson + "}";
+    }
+
+    private static String jdtlsSettings() {
+        return "{\"java\":{\"import\":{\"maven\":{\"enabled\":false},\"gradle\":{\"enabled\":false}},"
+                + "\"autobuild\":{\"enabled\":true},"
+                + "\"completion\":{\"overwrite\":true,\"guessMethodArguments\":false},"
+                + "\"signatureHelp\":{\"enabled\":true}}}";
+    }
+
+    // -------------------------------------------------------------------------
+    // Cleanup
+    // -------------------------------------------------------------------------
+
+    @AfterEach
+    void removeWorkspaceFiles() {
+        for (String path : List.of(HELLO_JAVA_REPO, CLASSPATH_REPO, PROJECT_FILE_REPO)) {
+            if (repository.hasResource(path)) {
+                repository.removeResource(path);
+            }
+        }
+    }
+}

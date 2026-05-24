@@ -93,8 +93,11 @@ public class JdtLsManager implements DisposableBean {
     // -------------------------------------------------------------------------
 
     private JdtLsInstance startInstance(String username, String workspace, String project) throws Exception {
+        // IRepository (FileSystemRepository) stores files at:
+        //   <repoRoot>/dirigible/repository/root/users/<username>/<workspace>/<project>
+        // Mirror that layout so JDT.LS analyses the same files the user edits in the IDE.
         String repoRoot = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue();
-        Path projectRoot = Paths.get(repoRoot, "users", username, workspace, project)
+        Path projectRoot = Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace, project)
                                 .toAbsolutePath()
                                 .normalize();
         Files.createDirectories(projectRoot);
