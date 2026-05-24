@@ -390,7 +390,8 @@ public class CsvimProcessor {
     /**
      * MSSQL refuses to insert an explicit value into an IDENTITY column unless
      * {@code SET IDENTITY_INSERT
-     * <table>
+     *
+    <table>
      *  ON} is in effect. We only need to toggle the flag when the target table has an IDENTITY column
      * AND the CSV headers actually supply a value for it.
      */
@@ -421,7 +422,8 @@ public class CsvimProcessor {
 
     /**
      * Toggle MSSQL {@code SET IDENTITY_INSERT
-     * <table>
+     *
+    <table>
      *  ON|OFF} around an explicit-id batch insert.
      */
     private void setMssqlIdentityInsert(Connection connection, String schema, String tableName, boolean on) {
