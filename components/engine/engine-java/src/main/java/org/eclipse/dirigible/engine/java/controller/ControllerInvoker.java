@@ -67,6 +67,14 @@ public class ControllerInvoker {
         try {
             args = bindParameters(route, match.pathParameters(), request, response);
         } catch (BindingException e) {
+            // Spring Boot 4 strips ResponseStatusException.getReason() from the JSON response body, so
+            // without this log line the caller sees a bare 400 with no clue what failed (e.g. a
+            // mistyped JSON field that Jackson couldn't coerce into the target Java type).
+            LOGGER.warn("Bad request binding for [{}#{}]: {}", match.entry()
+                                                                    .fqn(),
+                    route.method()
+                         .getName(),
+                    e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
 
