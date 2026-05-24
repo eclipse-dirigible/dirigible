@@ -109,7 +109,10 @@ public class ControllerClassConsumer implements JavaClassConsumer {
             if (openApiPublisher != null) {
                 openApiPublisher.publish(entry);
             }
-        } catch (RuntimeException e) {
+        } catch (Exception | LinkageError e) {
+            // Includes LinkageError so a controller whose @Inject field references a class that failed
+            // to compile (NoClassDefFoundError on getDeclaredFields) doesn't abort the rebuild and take
+            // every other previously-registered controller with it.
             LOGGER.error("Failed to register controller [{}]: {}", info.fqn(), e.getMessage(), e);
         }
     }

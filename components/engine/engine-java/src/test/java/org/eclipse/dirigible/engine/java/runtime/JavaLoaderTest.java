@@ -121,6 +121,26 @@ class JavaLoaderTest {
     }
 
     @Test
+    void consumer_throwing_linkage_error_does_not_abort_rebuild_for_other_classes() {
+        // Reproduces the bug: ControllerClassConsumer.injectDependencies() walks getDeclaredFields()
+        // on a controller whose @Inject field type failed to compile, the JVM throws
+        // NoClassDefFoundError, and *without* this fix the whole rebuild aborts — every other
+        // already-rebuilt controller stays unregistered. With the fix in place, the throwing consumer
+        // is logged and skipped, and the recording consumer still observes the second class.
+        ThrowingConsumer throwingConsumer = new ThrowingConsumer("client.Bomb");
+        ClientClassLoaderHolder freshHolder = new ClientClassLoaderHolder();
+        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording));
+
+        localLoader.rebuild(List.of(handlerSource("client.Bomb", "boom"), handlerSource("client.Bystander", "fine")));
+
+        // Both classes compiled — proven by the recording consumer observing them.
+        assertEquals(2, recording.loaded.size(), "recording consumer must still see every class after a sibling throws LinkageError");
+        assertTrue(recording.loaded.stream()
+                                   .anyMatch(c -> c.fqn()
+                                                   .equals("client.Bystander")));
+    }
+
+    @Test
     void compile_error_is_isolated_to_the_offending_unit() {
         JavaLoader.RebuildResult result =
                 loader.rebuild(List.of(handlerSource("client.Good", "ok"), new JavaLoader.ClientSource(PROJECT, "client.Broken", """
@@ -153,6 +173,35 @@ class JavaLoaderTest {
                     }
                 }
                 """.formatted(pkg, simple, body));
+    }
+
+    /**
+     * Test consumer that throws {@link NoClassDefFoundError} on {@code onClassLoaded} for one named
+     * FQN, accepts every class. Mirrors the production failure mode where
+     * {@code ControllerClassConsumer.injectDependencies}'s {@code getDeclaredFields()} fails because a
+     * field type wasn't compiled.
+     */
+    private static final class ThrowingConsumer implements JavaClassConsumer {
+        private final String poisonFqn;
+
+        ThrowingConsumer(String poisonFqn) {
+            this.poisonFqn = poisonFqn;
+        }
+
+        @Override
+        public boolean accepts(Class<?> clazz) {
+            return true;
+        }
+
+        @Override
+        public void onClassLoaded(LoadedClass info) {
+            if (poisonFqn.equals(info.fqn())) {
+                throw new NoClassDefFoundError("simulated missing dep on " + info.fqn());
+            }
+        }
+
+        @Override
+        public void onClassUnloaded(LoadedClass info) {}
     }
 
     /** Test consumer that records every load/unload — accepts every class. */

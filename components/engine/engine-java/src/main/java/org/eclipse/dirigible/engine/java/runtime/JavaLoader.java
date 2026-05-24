@@ -161,7 +161,11 @@ public class JavaLoader {
                             consumer.onClassUnloaded(info);
                         }
                     }
-                } catch (RuntimeException e) {
+                } catch (Exception | LinkageError e) {
+                    // LinkageError (NoClassDefFoundError / ClassFormatError / …) is recoverable in a
+                    // hot-reload context — a controller whose @Inject field-type failed to compile must
+                    // not abort the whole rebuild and unregister every other working controller.
+                    // VirtualMachineError / ThreadDeath still propagate.
                     LOGGER.error("Consumer [{}] threw on {} for [{}]: {}", consumer.getClass()
                                                                                    .getSimpleName(),
                             loaded ? "onClassLoaded" : "onClassUnloaded", info.fqn(), e.getMessage(), e);
