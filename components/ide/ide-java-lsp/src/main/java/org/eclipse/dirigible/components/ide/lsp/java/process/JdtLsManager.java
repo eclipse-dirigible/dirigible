@@ -237,13 +237,16 @@ public class JdtLsManager implements DisposableBean {
     private String resolveConfigDir() {
         String os = System.getProperty("os.name", "")
                           .toLowerCase();
+        String arch = System.getProperty("os.arch", "")
+                            .toLowerCase();
+        boolean arm = arch.contains("aarch64") || arch.contains("arm");
         String name;
         if (os.contains("win"))
             name = "config_win";
         else if (os.contains("mac"))
-            name = "config_mac";
+            name = arm ? "config_mac_arm" : "config_mac";
         else
-            name = "config_linux";
+            name = arm ? "config_linux_arm" : "config_linux";
         return jdtlsHome.resolve(name)
                         .toString();
     }

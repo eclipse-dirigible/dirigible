@@ -14,8 +14,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
@@ -120,12 +122,15 @@ public class JdtLsInstance {
 
     private void startStderrDrain() {
         Thread t = new Thread(() -> {
-            try (InputStream err = process.getErrorStream()) {
-                byte[] buf = new byte[1024];
-                while (err.read(buf) != -1) {
-                    // JDT.LS writes its own log to stderr; drain silently
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    logger.debug("[java-lsp] JDT.LS stderr: {}", line);
                 }
             } catch (IOException ignored) {
+            }
+            if (!process.isAlive()) {
+                logger.warn("[java-lsp] JDT.LS process exited with code {}", process.exitValue());
             }
         }, "jdtls-stderr-drain");
         t.setDaemon(true);
