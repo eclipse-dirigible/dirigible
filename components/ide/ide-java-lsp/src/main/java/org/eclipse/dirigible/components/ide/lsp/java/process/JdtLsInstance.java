@@ -162,7 +162,11 @@ public class JdtLsInstance {
                     logger.error("[java-lsp] Error reading JDT.LS stdout", e);
                 }
             }
-            logger.info("[java-lsp] Stdout reader exited");
+            if (!process.isAlive()) {
+                logger.warn("[java-lsp] Stdout reader exited — JDT.LS process terminated with code {}", process.exitValue());
+            } else {
+                logger.info("[java-lsp] Stdout reader exited (process still alive)");
+            }
         }, "jdtls-stdout-reader");
         t.setDaemon(true);
         t.start();
@@ -173,12 +177,9 @@ public class JdtLsInstance {
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getErrorStream(), StandardCharsets.UTF_8))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    logger.debug("[java-lsp] JDT.LS stderr: {}", line);
+                    logger.info("[java-lsp] {}", line);
                 }
             } catch (IOException ignored) {
-            }
-            if (!process.isAlive()) {
-                logger.warn("[java-lsp] JDT.LS process exited with code {}", process.exitValue());
             }
         }, "jdtls-stderr-drain");
         t.setDaemon(true);
