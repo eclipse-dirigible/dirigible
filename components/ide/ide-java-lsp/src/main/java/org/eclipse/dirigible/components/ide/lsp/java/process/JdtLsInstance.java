@@ -20,7 +20,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -90,6 +92,48 @@ public class JdtLsInstance {
 
     void destroy() {
         process.destroyForcibly();
+    }
+
+    /**
+     * Notifies JDT.LS that class files in the compiled output directory have changed. Sends
+     * {@code workspace/didChangeWatchedFiles} for all affected class file URIs so that JDT.LS
+     * re-indexes the compiled output without requiring a restart.
+     *
+     * @param compiledOutputDir on-disk directory where compiled {@code .class} files reside
+     * @param changedFqns FQNs whose {@code .class} files were created or updated
+     * @param deletedFqns FQNs whose {@code .class} files were deleted
+     */
+    public void notifyCompiledOutputChanged(Path compiledOutputDir, Set<String> changedFqns, Set<String> deletedFqns) {
+        if (!process.isAlive()) {
+            return;
+        }
+        StringBuilder changes = new StringBuilder();
+        boolean first = true;
+        for (String fqn : changedFqns) {
+            if (!first) {
+                changes.append(',');
+            }
+            first = false;
+            String classFileUri = compiledOutputDir.resolve(fqn.replace('.', '/') + ".class")
+                                                   .toUri()
+                                                   .toString();
+            changes.append("{\"uri\":\"").append(classFileUri).append("\",\"type\":1}");
+        }
+        for (String fqn : deletedFqns) {
+            if (!first) {
+                changes.append(',');
+            }
+            first = false;
+            String classFileUri = compiledOutputDir.resolve(fqn.replace('.', '/') + ".class")
+                                                   .toUri()
+                                                   .toString();
+            changes.append("{\"uri\":\"").append(classFileUri).append("\",\"type\":3}");
+        }
+        if (changes.length() == 0) {
+            return;
+        }
+        sendToProcess("{\"jsonrpc\":\"2.0\",\"method\":\"workspace/didChangeWatchedFiles\","
+                + "\"params\":{\"changes\":[" + changes + "]}}");
     }
 
     // -------------------------------------------------------------------------

@@ -11,11 +11,15 @@ package org.eclipse.dirigible.components.ide.lsp.java.process;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.engine.java.runtime.ClassPathIndex;
+import org.eclipse.dirigible.engine.java.runtime.JavaCompiledEvent;
+import org.eclipse.dirigible.engine.java.runtime.JavaCompiledOutputDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -25,32 +29,49 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
- * Manages JDT Language Server processes — one per {@code username/workspace/project} triple.
+ * Manages JDT Language Server processes — one per {@code username/workspace} pair.
  *
  * <p>
- * Instances are created lazily on the first WebSocket connection and destroyed when the Spring
- * context shuts down. If the JDT.LS distribution is not yet present at the configured install
- * directory, it is downloaded automatically from {@code DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL}.
+ * A single JDT.LS instance covers the entire workspace so that sibling projects can resolve
+ * cross-project references. Instances are created lazily on the first WebSocket connection and
+ * destroyed when the Spring context shuts down. If the JDT.LS distribution is not yet present at
+ * the configured install directory, it is downloaded automatically from
+ * {@code DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL}.
+ *
+ * <p>
+ * When a new {@link JavaCompiledEvent} arrives (fired by {@code JavaLoader} after each rebuild),
+ * all live instances are notified via {@code workspace/didChangeWatchedFiles} so that JDT.LS
+ * re-indexes the compiled output directory without requiring a restart.
  */
 @Component
 @ConditionalOnProperty(name = "java.lsp.enabled", havingValue = "true", matchIfMissing = true)
-public class JdtLsManager implements DisposableBean {
+public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCompiledEvent> {
 
     private static final Logger logger = LoggerFactory.getLogger(JdtLsManager.class);
 
-    /** key = "username/workspace/project" → running instance */
+    /** key = "username/workspace" → running instance */
     private final Map<String, JdtLsInstance> instances = new ConcurrentHashMap<>();
 
     private final ClassPathIndex classPathIndex;
 
+    /**
+     * On-disk directory for compiled user {@code .class} files. {@code null} when {@code engine-java}
+     * is not active (defensive; in practice both modules are always co-deployed).
+     */
+    private final Path compiledOutputDir;
+
     private volatile Path jdtlsHome;
     private volatile boolean installChecked = false;
 
-    public JdtLsManager(ClassPathIndex classPathIndex) {
+    public JdtLsManager(ClassPathIndex classPathIndex, Optional<JavaCompiledOutputDirectory> compiledOutputDirectory) {
         this.classPathIndex = classPathIndex;
+        this.compiledOutputDir = compiledOutputDirectory.map(JavaCompiledOutputDirectory::get)
+                                                        .orElse(null);
     }
 
     // -------------------------------------------------------------------------
@@ -58,22 +79,25 @@ public class JdtLsManager implements DisposableBean {
     // -------------------------------------------------------------------------
 
     /**
-     * Returns (and lazily starts) the JDT.LS instance for the given project. Thread-safe; at most one
-     * process is ever started per key.
+     * Returns (and lazily starts) the JDT.LS instance for the given workspace. Also ensures Eclipse
+     * project metadata files exist for every Java project currently in the workspace. Thread-safe; at
+     * most one process is ever started per key.
      */
-    public JdtLsInstance getOrStart(String username, String workspace, String project) throws Exception {
+    public JdtLsInstance getOrStart(String username, String workspace) throws Exception {
         ensureInstalled();
-        String key = username + "/" + workspace + "/" + project;
+        String key = username + "/" + workspace;
         JdtLsInstance existing = instances.get(key);
         if (existing != null && existing.isAlive()) {
+            ensureEclipseProjectFilesForWorkspace(workspaceRoot(username, workspace));
             return existing;
         }
         synchronized (this) {
             existing = instances.get(key);
             if (existing != null && existing.isAlive()) {
+                ensureEclipseProjectFilesForWorkspace(workspaceRoot(username, workspace));
                 return existing;
             }
-            JdtLsInstance fresh = startInstance(username, workspace, project);
+            JdtLsInstance fresh = startInstance(username, workspace);
             instances.put(key, fresh);
             return fresh;
         }
@@ -96,42 +120,92 @@ public class JdtLsManager implements DisposableBean {
         instances.clear();
     }
 
+    /**
+     * Notifies all live JDT.LS instances that compiled class files have changed so they can
+     * re-index without a restart.
+     */
+    @Override
+    public void onApplicationEvent(JavaCompiledEvent event) {
+        if (compiledOutputDir == null) {
+            return;
+        }
+        for (JdtLsInstance inst : instances.values()) {
+            if (inst.isAlive()) {
+                inst.notifyCompiledOutputChanged(compiledOutputDir, event.getCompiledFqns(), event.getRemovedFqns());
+            }
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Process startup
     // -------------------------------------------------------------------------
 
-    private JdtLsInstance startInstance(String username, String workspace, String project) throws Exception {
-        // IRepository (FileSystemRepository) stores files at:
-        //   <repoRoot>/dirigible/repository/root/users/<username>/<workspace>/<project>
-        // Mirror that layout so JDT.LS analyses the same files the user edits in the IDE.
-        String repoRoot = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue();
-        Path projectRoot = Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace, project)
-                                .toAbsolutePath()
-                                .normalize();
-        Files.createDirectories(projectRoot);
-        ensureEclipseProjectFiles(projectRoot, project);
+    private JdtLsInstance startInstance(String username, String workspace) throws Exception {
+        Path workspaceRootPath = workspaceRoot(username, workspace);
+        Files.createDirectories(workspaceRootPath);
+        ensureEclipseProjectFilesForWorkspace(workspaceRootPath);
 
         Path dataDir = jdtlsHome.resolve("data")
                                 .resolve(username)
-                                .resolve(workspace)
-                                .resolve(project);
+                                .resolve(workspace);
         Files.createDirectories(dataDir);
 
         String launcherJar = findLauncherJar();
         String configDir = resolveConfigDir();
 
         // Virtual URI root the browser uses; real URI root JDT.LS sees on disk.
-        String virtualRoot = "file:///workspace/" + workspace + "/" + project + "/";
-        String realRoot = projectRoot.toUri()
-                                     .toString();
-        if (!realRoot.endsWith("/"))
+        String virtualRoot = "file:///workspace/" + workspace + "/";
+        String realRoot = workspaceRootPath.toUri()
+                                           .toString();
+        if (!realRoot.endsWith("/")) {
             realRoot += "/";
+        }
 
         List<String> cmd = buildCommand(launcherJar, configDir, dataDir.toString());
-        logger.info("[java-lsp] Starting JDT.LS for {}/{}/{} → {}", username, workspace, project, projectRoot);
+        logger.info("[java-lsp] Starting JDT.LS for {}/{} → {}", username, workspace, workspaceRootPath);
 
         Process process = new ProcessBuilder(cmd).start();
         return new JdtLsInstance(process, virtualRoot, realRoot);
+    }
+
+    /**
+     * Ensures Eclipse project descriptor files ({@code .project}, {@code .classpath}) exist for
+     * every direct sub-directory of {@code workspaceRoot} that contains at least one
+     * {@code .java} file.
+     */
+    private void ensureEclipseProjectFilesForWorkspace(Path workspaceRoot) {
+        if (!Files.isDirectory(workspaceRoot)) {
+            return;
+        }
+        try (Stream<Path> children = Files.list(workspaceRoot)) {
+            children.filter(Files::isDirectory)
+                    .filter(this::containsJavaFile)
+                    .forEach(projectDir -> {
+                        try {
+                            ensureEclipseProjectFiles(projectDir, projectDir.getFileName()
+                                                                             .toString());
+                        } catch (IOException e) {
+                            logger.warn("[java-lsp] Could not create Eclipse project files in {}: {}", projectDir,
+                                    e.getMessage(), e);
+                        }
+                    });
+        } catch (IOException e) {
+            logger.warn("[java-lsp] Could not list workspace directory {}: {}", workspaceRoot, e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Returns {@code true} if the given directory contains at least one {@code .java} file within
+     * the first five levels of nesting.
+     */
+    private boolean containsJavaFile(Path dir) {
+        try (Stream<Path> walk = Files.walk(dir, 5)) {
+            return walk.anyMatch(p -> !Files.isDirectory(p) && p.getFileName()
+                                                                 .toString()
+                                                                 .endsWith(".java"));
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     /**
@@ -178,6 +252,11 @@ public class JdtLsManager implements DisposableBean {
                 .append(entry.toString())
                 .append("\"/>\n");
         }
+        if (compiledOutputDir != null) {
+            libs.append("    <classpathentry kind=\"lib\" path=\"")
+                .append(compiledOutputDir.toString())
+                .append("\"/>\n");
+        }
         return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
                 + "<classpath>\n"
                 + "    <classpathentry kind=\"src\" path=\"\"/>\n"
@@ -212,6 +291,22 @@ public class JdtLsManager implements DisposableBean {
         cmd.add("-data");
         cmd.add(dataDir);
         return cmd;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Resolves the on-disk workspace root for the given user and workspace name, mirroring the layout
+     * used by {@code FileSystemRepository}:
+     * {@code <repoRoot>/dirigible/repository/root/users/<username>/<workspace>}
+     */
+    private static Path workspaceRoot(String username, String workspace) {
+        String repoRoot = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue();
+        return Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace)
+                    .toAbsolutePath()
+                    .normalize();
     }
 
     // -------------------------------------------------------------------------

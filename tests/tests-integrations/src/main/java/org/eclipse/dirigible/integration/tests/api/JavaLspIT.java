@@ -49,6 +49,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * {@code textDocument/completion} at {@code resp.getWriter().} returns at least one {@code println}
  * suggestion — confirming that JDT.LS resolves {@code PrintWriter} via the platform JARs supplied
  * by {@code ClassPathIndex}.
+ *
+ * <p>
+ * The WebSocket connects at the workspace level (not per-project), matching the per-workspace
+ * JDT.LS model introduced in Phase 1.
  */
 class JavaLspIT extends IntegrationTest {
 
@@ -64,11 +68,11 @@ class JavaLspIT extends IntegrationTest {
     private static final String HELLO_JAVA_REPO =
             "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT + "/demo/Hello.java";
 
-    // Virtual URIs seen by the browser side (workspace part doubled because the
-    // resourcePath parameter is /workspace/<project>/... and the client prepends
-    // "file:///workspace" to it — this is intentional and consistent on both sides).
-    private static final String VIRTUAL_ROOT = "file:///workspace/" + WORKSPACE + "/" + PROJECT + "/";
-    private static final String VIRTUAL_FILE_URI = VIRTUAL_ROOT + "demo/Hello.java";
+    /** Virtual workspace root URI used in LSP initialize and workspaceFolders. */
+    private static final String VIRTUAL_WORKSPACE_ROOT = "file:///workspace/" + WORKSPACE + "/";
+
+    /** Virtual file URI for Hello.java, scoped inside the workspace root. */
+    private static final String VIRTUAL_FILE_URI = VIRTUAL_WORKSPACE_ROOT + PROJECT + "/demo/Hello.java";
 
     // Completion position: line 9, character 25 = start of "println" in
     //   "        resp.getWriter().println("Hello World!");"
@@ -166,7 +170,7 @@ class JavaLspIT extends IntegrationTest {
         String credentials = Base64.getEncoder()
                                    .encodeToString((USERNAME + ":admin").getBytes(StandardCharsets.UTF_8));
         URI uri = URI.create("ws://localhost:" + port + "/websockets/ide/java-lsp"
-                + "?workspace=" + WORKSPACE + "&project=" + PROJECT);
+                + "?workspace=" + WORKSPACE);
 
         return HttpClient.newHttpClient()
                          .newWebSocketBuilder()
@@ -270,8 +274,8 @@ class JavaLspIT extends IntegrationTest {
     private String initRequest(int id) {
         return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"initialize\",\"params\":{"
                 + "\"processId\":null,"
-                + "\"rootUri\":\"" + VIRTUAL_ROOT + "\","
-                + "\"workspaceFolders\":[{\"uri\":\"" + VIRTUAL_ROOT + "\",\"name\":\"" + PROJECT + "\"}],"
+                + "\"rootUri\":\"" + VIRTUAL_WORKSPACE_ROOT + "\","
+                + "\"workspaceFolders\":[{\"uri\":\"" + VIRTUAL_WORKSPACE_ROOT + "\",\"name\":\"" + WORKSPACE + "\"}],"
                 + "\"capabilities\":{"
                 + "\"textDocument\":{"
                 + "\"synchronization\":{\"dynamicRegistration\":true},"

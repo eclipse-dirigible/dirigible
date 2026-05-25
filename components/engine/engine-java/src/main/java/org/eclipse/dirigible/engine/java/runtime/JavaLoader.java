@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.engine.java.runtime;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -24,6 +27,7 @@ import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 
 /**
@@ -40,6 +44,8 @@ import org.springframework.stereotype.Component;
  * <li>Compute the delta against the previous generation and notify every registered
  * {@link JavaClassConsumer}: {@code onClassUnloaded} for FQNs that disappeared or are being
  * replaced, then {@code onClassLoaded} for FQNs in the new generation.</li>
+ * <li>Write compiled {@code .class} files to the {@link JavaCompiledOutputDirectory} and delete
+ * stale ones; publish a {@link JavaCompiledEvent} so listeners (e.g. JDT.LS) can react.</li>
  * </ol>
  * No state from the previous generation survives in the active loader — the prior
  * {@link ClassLoader} becomes unreachable as soon as in-flight code releases its references.
@@ -52,15 +58,20 @@ public class JavaLoader {
     private final JavaSourceCompiler compiler;
     private final ClientClassLoaderHolder loaderHolder;
     private final List<JavaClassConsumer> consumers;
+    private final JavaCompiledOutputDirectory outputDirectory;
+    private final ApplicationEventPublisher eventPublisher;
 
     /** FQN → {@link LoadedClass} record for the currently-installed generation. */
     private final Map<String, LoadedClass> currentGeneration = new HashMap<>();
 
     @Autowired
-    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, List<JavaClassConsumer> consumers) {
+    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, List<JavaClassConsumer> consumers,
+            JavaCompiledOutputDirectory outputDirectory, ApplicationEventPublisher eventPublisher) {
         this.compiler = compiler;
         this.loaderHolder = loaderHolder;
         this.consumers = consumers;
+        this.outputDirectory = outputDirectory;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -138,8 +149,44 @@ public class JavaLoader {
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
 
-        return new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed));
+        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()),
+                Collections.unmodifiableMap(failures), Collections.unmodifiableSet(removed));
+
+        writeClassFiles(batch, result.unloadedFqns());
+        eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
+
+        return result;
+    }
+
+    /**
+     * Writes newly compiled {@code .class} files to the output directory and deletes files for FQNs
+     * that were removed. Each file operation is guarded independently so a single failure does not
+     * abort the rest.
+     */
+    private void writeClassFiles(JavaSourceCompiler.BatchResult batch, Set<String> unloadedFqns) {
+        Path outDir = outputDirectory.get();
+
+        for (Map.Entry<String, byte[]> entry : batch.bytecode()
+                                                    .entrySet()) {
+            String fqn = entry.getKey();
+            // fqn may be a nested type (Outer$Inner) — convert dots to slashes but keep '$' intact.
+            Path classFile = outDir.resolve(fqn.replace('.', '/') + ".class");
+            try {
+                Files.createDirectories(classFile.getParent());
+                Files.write(classFile, entry.getValue());
+            } catch (IOException e) {
+                LOGGER.error("[java-lsp] Failed to write class file for [{}]: {}", fqn, e.getMessage(), e);
+            }
+        }
+
+        for (String fqn : unloadedFqns) {
+            Path classFile = outDir.resolve(fqn.replace('.', '/') + ".class");
+            try {
+                Files.deleteIfExists(classFile);
+            } catch (IOException e) {
+                LOGGER.warn("[java-lsp] Failed to delete stale class file for [{}]: {}", fqn, e.getMessage(), e);
+            }
+        }
     }
 
     /**
