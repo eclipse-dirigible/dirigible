@@ -16,6 +16,8 @@ import org.eclipse.dirigible.engine.java.runtime.JavaCompiledOutputDirectory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
@@ -38,10 +40,14 @@ import java.util.stream.Stream;
  *
  * <p>
  * A single JDT.LS instance covers the entire workspace so that sibling projects can resolve
- * cross-project references. Instances are created lazily on the first WebSocket connection and
- * destroyed when the Spring context shuts down. If the JDT.LS distribution is not yet present at
- * the configured install directory, it is downloaded automatically from
- * {@code DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL}.
+ * cross-project references. Instances are created on first WebSocket connection and destroyed when
+ * the Spring context shuts down.
+ *
+ * <p>
+ * At application startup ({@link #run(ApplicationArguments)}), the bundled {@code jdtls.tar.gz}
+ * resource (downloaded during the Maven build and packed into the application JAR) is extracted to
+ * the configured install directory in a background thread. No network access is performed at
+ * runtime; if the bundled resource is absent (e.g. quick-build), JDT.LS is simply disabled.
  *
  * <p>
  * When a new {@link JavaCompiledEvent} arrives (fired by {@code JavaLoader} after each rebuild),
@@ -50,7 +56,7 @@ import java.util.stream.Stream;
  */
 @Component
 @ConditionalOnProperty(name = "java.lsp.enabled", havingValue = "true", matchIfMissing = true)
-public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCompiledEvent> {
+public class JdtLsManager implements DisposableBean, ApplicationRunner, ApplicationListener<JavaCompiledEvent> {
 
     private static final Logger logger = LoggerFactory.getLogger(JdtLsManager.class);
 
@@ -68,10 +74,42 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
     private volatile Path jdtlsHome;
     private volatile boolean installChecked = false;
 
+    /**
+     * Set to {@code true} once the JDT.LS distribution has been verified (or extracted) at startup.
+     * {@code false} means JDT.LS is either still being prepared or was not found in the bundled
+     * resources (e.g. quick-build). All {@link #getOrStart} calls are rejected until this is
+     * {@code true}.
+     */
+    private volatile boolean available = false;
+
     public JdtLsManager(ClassPathIndex classPathIndex, Optional<JavaCompiledOutputDirectory> compiledOutputDirectory) {
         this.classPathIndex = classPathIndex;
         this.compiledOutputDir = compiledOutputDirectory.map(JavaCompiledOutputDirectory::get)
                                                         .orElse(null);
+    }
+
+    // -------------------------------------------------------------------------
+    // ApplicationRunner — eager startup
+    // -------------------------------------------------------------------------
+
+    /**
+     * Called by Spring after the application context is fully started. Extracts the bundled JDT.LS
+     * distribution (if not already present on disk) in a virtual background thread so that the first
+     * WebSocket connection does not pay the extraction cost.
+     */
+    @Override
+    public void run(ApplicationArguments args) {
+        Thread.ofVirtual()
+              .name("jdtls-install")
+              .start(() -> {
+                  try {
+                      ensureInstalled();
+                      available = true;
+                      logger.info("[java-lsp] JDT.LS is ready at {}", jdtlsHome);
+                  } catch (Exception e) {
+                      logger.warn("[java-lsp] JDT.LS is not available: {}. Java language support will be disabled.", e.getMessage());
+                  }
+              });
     }
 
     // -------------------------------------------------------------------------
@@ -82,9 +120,14 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
      * Returns (and lazily starts) the JDT.LS instance for the given workspace. Also ensures Eclipse
      * project metadata files exist for every Java project currently in the workspace. Thread-safe; at
      * most one process is ever started per key.
+     *
+     * @throws IllegalStateException if JDT.LS has not finished initializing or is not available
      */
     public JdtLsInstance getOrStart(String username, String workspace) throws Exception {
-        ensureInstalled();
+        if (!available) {
+            throw new IllegalStateException(
+                    "[java-lsp] JDT.LS is not yet available — still starting up or not bundled in this build. Try again in a moment.");
+        }
         String key = username + "/" + workspace;
         JdtLsInstance existing = instances.get(key);
         if (existing != null && existing.isAlive()) {
@@ -305,13 +348,10 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
         jdtlsHome = resolveInstallDir();
         if (!isInstalled()) {
             if (!extractBundled()) {
-                try {
-                    download();
-                } catch (Exception e) {
-                    Path archive = jdtlsHome.resolve("jdtls.tar.gz");
-                    Files.deleteIfExists(archive);
-                    throw e;
-                }
+                throw new IOException(
+                        "[java-lsp] JDT.LS is not installed at " + jdtlsHome + " and no bundled archive was found in this build. "
+                                + "Run a full Maven build (without -P quick-build) to download and bundle JDT.LS, "
+                                + "or pre-extract a JDT.LS release to that directory.");
             }
         }
         installChecked = true;
@@ -326,7 +366,7 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
         try (InputStream bundled = getClass().getClassLoader()
                                              .getResourceAsStream("jdtls/jdtls.tar.gz")) {
             if (bundled == null) {
-                logger.debug("[java-lsp] No bundled JDT.LS resource found, will attempt download");
+                logger.debug("[java-lsp] No bundled JDT.LS resource found in this build");
                 return false;
             }
             logger.info("[java-lsp] Extracting bundled JDT.LS to {} ...", jdtlsHome);
@@ -397,39 +437,4 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
                         .toString();
     }
 
-    private void download() throws Exception {
-        String url = DirigibleConfig.JAVA_LSP_DOWNLOAD_URL.getStringValue();
-        if (url == null || url.isBlank()) {
-            throw new Exception("[java-lsp] JDT.LS is not installed at " + jdtlsHome + " and DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL is not set. "
-                    + "Extract a JDT.LS release to that directory or set the download URL.");
-        }
-        logger.info("[java-lsp] Downloading JDT.LS from {} ...", url);
-        Files.createDirectories(jdtlsHome);
-        Path archive = jdtlsHome.resolve("jdtls.tar.gz");
-
-        // curl handles GitHub's multi-hop redirects (github.com → objects.githubusercontent.com)
-        // reliably; Java's HttpClient can fail on the second hop with some JDK versions.
-        int curlRc = new ProcessBuilder("curl", "-fsSL", "--retry", "3", "--output", archive.toString(), url).redirectErrorStream(true)
-                                                                                                             .start()
-                                                                                                             .waitFor();
-        if (curlRc != 0) {
-            throw new Exception("[java-lsp] curl download failed (exit " + curlRc + "). Check that " + url + " is reachable.");
-        }
-
-        long size = Files.size(archive);
-        if (size < 1024 * 1024) {
-            throw new Exception("[java-lsp] Downloaded archive is too small (" + size
-                    + " bytes) — the URL may be wrong or the server returned an error page. URL: " + url);
-        }
-
-        logger.info("[java-lsp] Extracting JDT.LS ({} MB) to {} ...", size / (1024 * 1024), jdtlsHome);
-        int tarRc = new ProcessBuilder("tar", "xzf", archive.toString(), "-C", jdtlsHome.toString()).inheritIO()
-                                                                                                    .start()
-                                                                                                    .waitFor();
-        if (tarRc != 0) {
-            throw new Exception("[java-lsp] tar extraction failed with exit code " + tarRc);
-        }
-        Files.deleteIfExists(archive);
-        logger.info("[java-lsp] JDT.LS installed at {}", jdtlsHome);
-    }
 }
