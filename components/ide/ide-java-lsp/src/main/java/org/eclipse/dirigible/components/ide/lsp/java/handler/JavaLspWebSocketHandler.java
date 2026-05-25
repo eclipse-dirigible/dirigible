@@ -59,14 +59,15 @@ public class JavaLspWebSocketHandler extends TextWebSocketHandler {
         }
 
         if (project != null) {
-            logger.debug("[java-lsp] Session {} opened for workspace={} project={}", session.getId(), workspace, project);
+            logger.debug("[java-lsp] Session {} opened for workspace={} project={}", session.getId(), sanitize(workspace),
+                    sanitize(project));
         }
 
         try {
             JdtLsInstance instance = manager.getOrStart(username, workspace);
             instance.addSession(session);
         } catch (Exception e) {
-            logger.error("[java-lsp] Failed to get/start JDT.LS instance for {}/{}", username, workspace, e);
+            logger.error("[java-lsp] Failed to get/start JDT.LS instance for {}/{}", sanitize(username), sanitize(workspace), e);
             closeQuietly(session);
         }
     }
@@ -103,6 +104,10 @@ public class JavaLspWebSocketHandler extends TextWebSocketHandler {
                           .getName();
         }
         return "anonymous";
+    }
+
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     private static String queryParam(WebSocketSession session, String name) {

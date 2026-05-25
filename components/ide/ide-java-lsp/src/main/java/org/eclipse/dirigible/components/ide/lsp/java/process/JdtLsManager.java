@@ -212,7 +212,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         }
 
         List<String> cmd = buildCommand(launcherJar, configDir, dataDir.toString());
-        logger.info("[java-lsp] Starting JDT.LS for {}/{} → {}", username, workspace, workspaceRootPath);
+        logger.info("[java-lsp] Starting JDT.LS for {}/{} → {}", sanitize(username), sanitize(workspace), workspaceRootPath);
 
         Process process = new ProcessBuilder(cmd).start();
         return new JdtLsInstance(process, virtualRoot, realRoot);
@@ -234,11 +234,12 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                             ensureEclipseProjectFiles(projectDir, projectDir.getFileName()
                                                                             .toString());
                         } catch (IOException e) {
-                            logger.warn("[java-lsp] Could not create Eclipse project files in {}: {}", projectDir, e.getMessage(), e);
+                            logger.warn("[java-lsp] Could not create Eclipse project files in {}: {}", sanitize(projectDir.toString()),
+                                    e.getMessage(), e);
                         }
                     });
         } catch (IOException e) {
-            logger.warn("[java-lsp] Could not list workspace directory {}: {}", workspaceRoot, e.getMessage(), e);
+            logger.warn("[java-lsp] Could not list workspace directory {}: {}", sanitize(workspaceRoot.toString()), e.getMessage(), e);
         }
     }
 
@@ -268,11 +269,15 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     private void ensureEclipseProjectFiles(Path projectRoot, String project) throws IOException {
         Path dotProject = projectRoot.resolve(".project");
         Files.writeString(dotProject, buildProjectXml(project), StandardCharsets.UTF_8);
-        logger.debug("[java-lsp] Wrote .project for {}", project);
+        logger.debug("[java-lsp] Wrote .project for {}", sanitize(project));
 
         Path dotClasspath = projectRoot.resolve(".classpath");
         Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
-        logger.debug("[java-lsp] Wrote .classpath for {}", project);
+        logger.debug("[java-lsp] Wrote .classpath for {}", sanitize(project));
+    }
+
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     private static String buildProjectXml(String project) {

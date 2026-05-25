@@ -43,7 +43,11 @@ public class JavaCompiledOutputDirectory {
                               .toAbsolutePath()
                               .normalize();
         Files.createDirectories(this.directory);
-        logger.info("[java-lsp] Compiled output directory: {}", this.directory);
+        logger.info("[java-lsp] Compiled output directory: {}", sanitize(this.directory.toString()));
+    }
+
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     /** Returns the on-disk output directory for compiled user class files. */

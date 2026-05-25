@@ -197,11 +197,11 @@ class JavaLspIT extends IntegrationTest {
         return HttpClient.newHttpClient()
                          .newWebSocketBuilder()
                          .header("Authorization", "Basic " + credentials)
-                         .buildAsync(uri, new Listener())
+                         .buildAsync(uri, new LspListener())
                          .get(10, SECONDS);
     }
 
-    private class Listener implements WebSocket.Listener {
+    private class LspListener implements WebSocket.Listener {
         private final StringBuilder partial = new StringBuilder();
 
         @Override

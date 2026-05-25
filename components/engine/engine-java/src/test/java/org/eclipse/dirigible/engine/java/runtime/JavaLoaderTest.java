@@ -55,7 +55,7 @@ class JavaLoaderTest {
         recording = new RecordingConsumer();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        ApplicationEventPublisher noopPublisher = event -> {
+        ApplicationEventPublisher noopPublisher = (Object ignored) -> {
         };
         loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording), outputDirectory, noopPublisher);
     }
