@@ -121,8 +121,8 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
     }
 
     /**
-     * Notifies all live JDT.LS instances that compiled class files have changed so they can
-     * re-index without a restart.
+     * Notifies all live JDT.LS instances that compiled class files have changed so they can re-index
+     * without a restart.
      */
     @Override
     public void onApplicationEvent(JavaCompiledEvent event) {
@@ -169,9 +169,8 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
     }
 
     /**
-     * Ensures Eclipse project descriptor files ({@code .project}, {@code .classpath}) exist for
-     * every direct sub-directory of {@code workspaceRoot} that contains at least one
-     * {@code .java} file.
+     * Ensures Eclipse project descriptor files ({@code .project}, {@code .classpath}) exist for every
+     * direct sub-directory of {@code workspaceRoot} that contains at least one {@code .java} file.
      */
     private void ensureEclipseProjectFilesForWorkspace(Path workspaceRoot) {
         if (!Files.isDirectory(workspaceRoot)) {
@@ -183,10 +182,9 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
                     .forEach(projectDir -> {
                         try {
                             ensureEclipseProjectFiles(projectDir, projectDir.getFileName()
-                                                                             .toString());
+                                                                            .toString());
                         } catch (IOException e) {
-                            logger.warn("[java-lsp] Could not create Eclipse project files in {}: {}", projectDir,
-                                    e.getMessage(), e);
+                            logger.warn("[java-lsp] Could not create Eclipse project files in {}: {}", projectDir, e.getMessage(), e);
                         }
                     });
         } catch (IOException e) {
@@ -195,14 +193,14 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
     }
 
     /**
-     * Returns {@code true} if the given directory contains at least one {@code .java} file within
-     * the first five levels of nesting.
+     * Returns {@code true} if the given directory contains at least one {@code .java} file within the
+     * first five levels of nesting.
      */
     private boolean containsJavaFile(Path dir) {
         try (Stream<Path> walk = Files.walk(dir, 5)) {
             return walk.anyMatch(p -> !Files.isDirectory(p) && p.getFileName()
-                                                                 .toString()
-                                                                 .endsWith(".java"));
+                                                                .toString()
+                                                                .endsWith(".java"));
         } catch (IOException e) {
             return false;
         }
@@ -213,9 +211,9 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
      *
      * <p>
      * JDT.LS requires these two Eclipse project descriptor files to recognise a directory as a Java
-     * project and activate type resolution, completion, and diagnostics. Dirigible does not create
-     * them when a user creates a new Java project through the IDE, so we generate them here on first
-     * LSP connection.
+     * project and activate type resolution, completion, and diagnostics. Dirigible does not create them
+     * when a user creates a new Java project through the IDE, so we generate them here on first LSP
+     * connection.
      */
     private void ensureEclipseProjectFiles(Path projectRoot, String project) throws IOException {
         Path dotProject = projectRoot.resolve(".project");
@@ -231,18 +229,10 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
     }
 
     private static String buildProjectXml(String project) {
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<projectDescription>\n"
-                + "    <name>" + project + "</name>\n"
-                + "    <natures>\n"
-                + "        <nature>org.eclipse.jdt.core.javanature</nature>\n"
-                + "    </natures>\n"
-                + "    <buildSpec>\n"
-                + "        <buildCommand>\n"
-                + "            <name>org.eclipse.jdt.core.javabuilder</name>\n"
-                + "        </buildCommand>\n"
-                + "    </buildSpec>\n"
-                + "</projectDescription>\n";
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<projectDescription>\n" + "    <name>" + project + "</name>\n"
+                + "    <natures>\n" + "        <nature>org.eclipse.jdt.core.javanature</nature>\n" + "    </natures>\n"
+                + "    <buildSpec>\n" + "        <buildCommand>\n" + "            <name>org.eclipse.jdt.core.javabuilder</name>\n"
+                + "        </buildCommand>\n" + "    </buildSpec>\n" + "</projectDescription>\n";
     }
 
     private String buildClasspathXml() {
@@ -257,13 +247,9 @@ public class JdtLsManager implements DisposableBean, ApplicationListener<JavaCom
                 .append(compiledOutputDir.toString())
                 .append("\"/>\n");
         }
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<classpath>\n"
-                + "    <classpathentry kind=\"src\" path=\"\"/>\n"
-                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n"
-                + libs
-                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n"
-                + "</classpath>\n";
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<classpath>\n" + "    <classpathentry kind=\"src\" path=\"\"/>\n"
+                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n" + libs
+                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n" + "</classpath>\n";
     }
 
     private List<String> buildCommand(String launcherJar, String configDir, String dataDir) {

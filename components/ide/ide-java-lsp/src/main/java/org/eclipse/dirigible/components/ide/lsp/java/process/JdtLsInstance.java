@@ -117,7 +117,9 @@ public class JdtLsInstance {
             String classFileUri = compiledOutputDir.resolve(fqn.replace('.', '/') + ".class")
                                                    .toUri()
                                                    .toString();
-            changes.append("{\"uri\":\"").append(classFileUri).append("\",\"type\":1}");
+            changes.append("{\"uri\":\"")
+                   .append(classFileUri)
+                   .append("\",\"type\":1}");
         }
         for (String fqn : deletedFqns) {
             if (!first) {
@@ -127,13 +129,15 @@ public class JdtLsInstance {
             String classFileUri = compiledOutputDir.resolve(fqn.replace('.', '/') + ".class")
                                                    .toUri()
                                                    .toString();
-            changes.append("{\"uri\":\"").append(classFileUri).append("\",\"type\":3}");
+            changes.append("{\"uri\":\"")
+                   .append(classFileUri)
+                   .append("\",\"type\":3}");
         }
         if (changes.length() == 0) {
             return;
         }
-        sendToProcess("{\"jsonrpc\":\"2.0\",\"method\":\"workspace/didChangeWatchedFiles\","
-                + "\"params\":{\"changes\":[" + changes + "]}}");
+        sendToProcess(
+                "{\"jsonrpc\":\"2.0\",\"method\":\"workspace/didChangeWatchedFiles\"," + "\"params\":{\"changes\":[" + changes + "]}}");
     }
 
     // -------------------------------------------------------------------------

@@ -65,8 +65,7 @@ class JavaLspIT extends IntegrationTest {
     private static final String USERNAME = "admin";
 
     /** IRepository path for the Hello.java source file. */
-    private static final String HELLO_JAVA_REPO =
-            "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT + "/demo/Hello.java";
+    private static final String HELLO_JAVA_REPO = "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT + "/demo/Hello.java";
 
     /** Virtual workspace root URI used in LSP initialize and workspaceFolders. */
     private static final String VIRTUAL_WORKSPACE_ROOT = "file:///workspace/" + WORKSPACE + "/";
@@ -75,7 +74,7 @@ class JavaLspIT extends IntegrationTest {
     private static final String VIRTUAL_FILE_URI = VIRTUAL_WORKSPACE_ROOT + PROJECT + "/demo/Hello.java";
 
     // Completion position: line 9, character 25 = start of "println" in
-    //   "        resp.getWriter().println("Hello World!");"
+    // " resp.getWriter().println("Hello World!");"
     private static final int COMPLETION_LINE = 9;
     private static final int COMPLETION_CHARACTER = 25;
 
@@ -126,14 +125,17 @@ class JavaLspIT extends IntegrationTest {
         try {
             // Initialize JDT.LS
             int initId = seq.getAndIncrement();
-            ws.sendText(initRequest(initId), true).join();
+            ws.sendText(initRequest(initId), true)
+              .join();
             assertNotNull(awaitResponse(initId, 120, SECONDS),
                     "JDT.LS did not respond to 'initialize' within 120 s — check server logs for startup errors");
 
-            ws.sendText(notification("initialized", "{}"), true).join();
-            ws.sendText(notification("workspace/didChangeConfiguration",
-                    "{\"settings\":" + jdtlsSettings() + "}"), true).join();
-            ws.sendText(didOpenNotification(), true).join();
+            ws.sendText(notification("initialized", "{}"), true)
+              .join();
+            ws.sendText(notification("workspace/didChangeConfiguration", "{\"settings\":" + jdtlsSettings() + "}"), true)
+              .join();
+            ws.sendText(didOpenNotification(), true)
+              .join();
 
             // Wait until JDT.LS has analysed the file (diagnostics notification is the signal)
             assertTrue(awaitDiagnosticsFor(VIRTUAL_FILE_URI, 90, SECONDS),
@@ -141,15 +143,18 @@ class JavaLspIT extends IntegrationTest {
 
             // Request completion at resp.getWriter().|
             int completionId = seq.getAndIncrement();
-            ws.sendText(completionRequest(completionId), true).join();
+            ws.sendText(completionRequest(completionId), true)
+              .join();
             String result = awaitResponse(completionId, 30, SECONDS);
             assertNotNull(result, "JDT.LS did not respond to 'textDocument/completion' within 30 s");
 
             List<String> labels = completionLabels(result);
-            assertTrue(labels.stream().anyMatch(l -> l.startsWith("println")),
+            assertTrue(labels.stream()
+                             .anyMatch(l -> l.startsWith("println")),
                     "Expected a 'println' completion from PrintWriter but got: " + labels);
         } finally {
-            ws.sendClose(WebSocket.NORMAL_CLOSURE, "test finished").get(5, SECONDS);
+            ws.sendClose(WebSocket.NORMAL_CLOSURE, "test finished")
+              .get(5, SECONDS);
         }
     }
 
@@ -158,8 +163,7 @@ class JavaLspIT extends IntegrationTest {
     // -------------------------------------------------------------------------
 
     private void writeProjectFiles() {
-        repository.createResource(HELLO_JAVA_REPO,
-                HELLO_JAVA.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        repository.createResource(HELLO_JAVA_REPO, HELLO_JAVA.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
     }
 
     // -------------------------------------------------------------------------
@@ -169,8 +173,7 @@ class JavaLspIT extends IntegrationTest {
     private WebSocket connectWebSocket() throws Exception {
         String credentials = Base64.getEncoder()
                                    .encodeToString((USERNAME + ":admin").getBytes(StandardCharsets.UTF_8));
-        URI uri = URI.create("ws://localhost:" + port + "/websockets/ide/java-lsp"
-                + "?workspace=" + WORKSPACE);
+        URI uri = URI.create("ws://localhost:" + port + "/websockets/ide/java-lsp" + "?workspace=" + WORKSPACE);
 
         return HttpClient.newHttpClient()
                          .newWebSocketBuilder()
@@ -209,7 +212,8 @@ class JavaLspIT extends IntegrationTest {
 
         for (Iterator<String> it = buffer.iterator(); it.hasNext();) {
             JsonNode n = mapper.readTree(it.next());
-            if (n.has("id") && n.get("id").asInt() == id) {
+            if (n.has("id") && n.get("id")
+                                .asInt() == id) {
                 it.remove();
                 return n.toString();
             }
@@ -218,9 +222,11 @@ class JavaLspIT extends IntegrationTest {
         while (System.currentTimeMillis() < deadline) {
             long remaining = Math.max(100, deadline - System.currentTimeMillis());
             String msg = inbox.poll(Math.min(remaining, 2_000), MILLISECONDS);
-            if (msg == null) continue;
+            if (msg == null)
+                continue;
             JsonNode n = mapper.readTree(msg);
-            if (n.has("id") && n.get("id").asInt() == id) {
+            if (n.has("id") && n.get("id")
+                                .asInt() == id) {
                 return n.toString();
             }
             buffer.add(msg);
@@ -229,21 +235,24 @@ class JavaLspIT extends IntegrationTest {
     }
 
     /**
-     * Returns {@code true} when a {@code textDocument/publishDiagnostics} notification arrives for
-     * the given URI; all other messages are buffered.
+     * Returns {@code true} when a {@code textDocument/publishDiagnostics} notification arrives for the
+     * given URI; all other messages are buffered.
      */
     private boolean awaitDiagnosticsFor(String uri, long timeout, TimeUnit unit) throws Exception {
         long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
 
         for (String msg : buffer) {
-            if (isDiagnosticsFor(msg, uri)) return true;
+            if (isDiagnosticsFor(msg, uri))
+                return true;
         }
 
         while (System.currentTimeMillis() < deadline) {
             long remaining = Math.max(100, deadline - System.currentTimeMillis());
             String msg = inbox.poll(Math.min(remaining, 2_000), MILLISECONDS);
-            if (msg == null) continue;
-            if (isDiagnosticsFor(msg, uri)) return true;
+            if (msg == null)
+                continue;
+            if (isDiagnosticsFor(msg, uri))
+                return true;
             buffer.add(msg);
         }
         return false;
@@ -251,17 +260,22 @@ class JavaLspIT extends IntegrationTest {
 
     private boolean isDiagnosticsFor(String msg, String uri) throws Exception {
         JsonNode n = mapper.readTree(msg);
-        return "textDocument/publishDiagnostics".equals(n.path("method").asText())
-                && uri.equals(n.path("params").path("uri").asText());
+        return "textDocument/publishDiagnostics".equals(n.path("method")
+                                                         .asText())
+                && uri.equals(n.path("params")
+                               .path("uri")
+                               .asText());
     }
 
     private List<String> completionLabels(String responseJson) throws Exception {
-        JsonNode result = mapper.readTree(responseJson).path("result");
+        JsonNode result = mapper.readTree(responseJson)
+                                .path("result");
         JsonNode items = result.isArray() ? result : result.path("items");
         List<String> labels = new ArrayList<>();
         if (items.isArray()) {
             for (JsonNode item : items) {
-                labels.add(item.path("label").asText());
+                labels.add(item.path("label")
+                               .asText());
             }
         }
         return labels;
@@ -272,32 +286,23 @@ class JavaLspIT extends IntegrationTest {
     // -------------------------------------------------------------------------
 
     private String initRequest(int id) {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"initialize\",\"params\":{"
-                + "\"processId\":null,"
-                + "\"rootUri\":\"" + VIRTUAL_WORKSPACE_ROOT + "\","
-                + "\"workspaceFolders\":[{\"uri\":\"" + VIRTUAL_WORKSPACE_ROOT + "\",\"name\":\"" + WORKSPACE + "\"}],"
-                + "\"capabilities\":{"
-                + "\"textDocument\":{"
-                + "\"synchronization\":{\"dynamicRegistration\":true},"
-                + "\"completion\":{\"dynamicRegistration\":true,"
-                + "\"completionItem\":{\"snippetSupport\":true},\"contextSupport\":true},"
-                + "\"hover\":{\"dynamicRegistration\":true},"
-                + "\"publishDiagnostics\":{\"relatedInformation\":true}},"
-                + "\"workspace\":{\"configuration\":true,"
-                + "\"didChangeConfiguration\":{\"dynamicRegistration\":true}}}}}";
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"initialize\",\"params\":{" + "\"processId\":null," + "\"rootUri\":\""
+                + VIRTUAL_WORKSPACE_ROOT + "\"," + "\"workspaceFolders\":[{\"uri\":\"" + VIRTUAL_WORKSPACE_ROOT + "\",\"name\":\""
+                + WORKSPACE + "\"}]," + "\"capabilities\":{" + "\"textDocument\":{" + "\"synchronization\":{\"dynamicRegistration\":true},"
+                + "\"completion\":{\"dynamicRegistration\":true," + "\"completionItem\":{\"snippetSupport\":true},\"contextSupport\":true},"
+                + "\"hover\":{\"dynamicRegistration\":true}," + "\"publishDiagnostics\":{\"relatedInformation\":true}},"
+                + "\"workspace\":{\"configuration\":true," + "\"didChangeConfiguration\":{\"dynamicRegistration\":true}}}}}";
     }
 
     private String didOpenNotification() throws Exception {
         String escapedText = mapper.writeValueAsString(HELLO_JAVA);
-        return notification("textDocument/didOpen",
-                "{\"textDocument\":{\"uri\":\"" + VIRTUAL_FILE_URI + "\","
-                        + "\"languageId\":\"java\",\"version\":1,\"text\":" + escapedText + "}}");
+        return notification("textDocument/didOpen", "{\"textDocument\":{\"uri\":\"" + VIRTUAL_FILE_URI + "\","
+                + "\"languageId\":\"java\",\"version\":1,\"text\":" + escapedText + "}}");
     }
 
     private String completionRequest(int id) {
-        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"textDocument/completion\","
-                + "\"params\":{\"textDocument\":{\"uri\":\"" + VIRTUAL_FILE_URI + "\"},"
-                + "\"position\":{\"line\":" + COMPLETION_LINE + ",\"character\":" + COMPLETION_CHARACTER + "},"
+        return "{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"textDocument/completion\"," + "\"params\":{\"textDocument\":{\"uri\":\""
+                + VIRTUAL_FILE_URI + "\"}," + "\"position\":{\"line\":" + COMPLETION_LINE + ",\"character\":" + COMPLETION_CHARACTER + "},"
                 + "\"context\":{\"triggerKind\":1}}}";
     }
 
@@ -306,10 +311,8 @@ class JavaLspIT extends IntegrationTest {
     }
 
     private static String jdtlsSettings() {
-        return "{\"java\":{\"import\":{\"maven\":{\"enabled\":false},\"gradle\":{\"enabled\":false}},"
-                + "\"autobuild\":{\"enabled\":true},"
-                + "\"completion\":{\"overwrite\":true,\"guessMethodArguments\":false},"
-                + "\"signatureHelp\":{\"enabled\":true}}}";
+        return "{\"java\":{\"import\":{\"maven\":{\"enabled\":false},\"gradle\":{\"enabled\":false}}," + "\"autobuild\":{\"enabled\":true},"
+                + "\"completion\":{\"overwrite\":true,\"guessMethodArguments\":false}," + "\"signatureHelp\":{\"enabled\":true}}}";
     }
 
     // -------------------------------------------------------------------------
