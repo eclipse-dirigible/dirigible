@@ -25,9 +25,12 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -191,6 +194,10 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         Path dataDir = jdtlsHome.resolve("data")
                                 .resolve(username)
                                 .resolve(workspace);
+        // Wipe stale workspace index so JDT.LS re-imports projects with the current .classpath.
+        // Without this, a cached Eclipse workspace that references deleted JAR paths (e.g. from
+        // a previous temp-dir extraction) causes unresolved-import errors on every restart.
+        deleteDirectory(dataDir);
         Files.createDirectories(dataDir);
 
         String launcherJar = findLauncherJar();
@@ -260,15 +267,12 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
      */
     private void ensureEclipseProjectFiles(Path projectRoot, String project) throws IOException {
         Path dotProject = projectRoot.resolve(".project");
-        if (!Files.exists(dotProject)) {
-            Files.writeString(dotProject, buildProjectXml(project), StandardCharsets.UTF_8);
-            logger.info("[java-lsp] Created .project for {}", project);
-        }
+        Files.writeString(dotProject, buildProjectXml(project), StandardCharsets.UTF_8);
+        logger.debug("[java-lsp] Wrote .project for {}", project);
+
         Path dotClasspath = projectRoot.resolve(".classpath");
-        if (!Files.exists(dotClasspath)) {
-            Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
-            logger.info("[java-lsp] Created .classpath for {}", project);
-        }
+        Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
+        logger.debug("[java-lsp] Wrote .classpath for {}", project);
     }
 
     private static String buildProjectXml(String project) {
@@ -336,6 +340,27 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         return Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace)
                     .toAbsolutePath()
                     .normalize();
+    }
+
+    private static void deleteDirectory(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path d, IOException exc) throws IOException {
+                if (exc != null)
+                    throw exc;
+                Files.delete(d);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     // -------------------------------------------------------------------------
