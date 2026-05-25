@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.engine.java.runtime;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
@@ -272,21 +273,39 @@ public class ClassPathIndex {
 
     private static List<Path> collectFromUrlClassLoader() {
         URLClassLoader urlcl = findUrlClassLoader(JavaHandler.class.getClassLoader());
-        if (urlcl == null) {
-            LOGGER.warn("No URLClassLoader found in the loader hierarchy; compile classpath will rely on java.class.path only");
+        if (urlcl != null) {
+            List<Path> entries = new ArrayList<>();
+            for (URL url : urlcl.getURLs()) {
+                try {
+                    if (url.getProtocol()
+                           .equals("file")) {
+                        entries.add(Path.of(url.toURI()));
+                    }
+                } catch (URISyntaxException e) {
+                    LOGGER.warn("Skipping unparseable classpath URL [{}]: {}", url, e.getMessage());
+                }
+            }
+            return Collections.unmodifiableList(entries);
+        }
+
+        // Java 9+ replaced AppClassLoader with an internal loader that does not extend
+        // URLClassLoader, so the hierarchy walk above returns null in dev/test mode. Fall back
+        // to java.class.path, which the JVM always populates in non-modular launches (Maven
+        // failsafe, IDE runs, etc.).
+        LOGGER.info("No URLClassLoader in hierarchy; collecting classpath from java.class.path");
+        String rawPath = System.getProperty("java.class.path", "");
+        if (rawPath.isEmpty()) {
+            LOGGER.warn("java.class.path is empty; compile classpath will be empty");
             return List.of();
         }
         List<Path> entries = new ArrayList<>();
-        for (URL url : urlcl.getURLs()) {
-            try {
-                if (url.getProtocol()
-                       .equals("file")) {
-                    entries.add(Path.of(url.toURI()));
-                }
-            } catch (URISyntaxException e) {
-                LOGGER.warn("Skipping unparseable classpath URL [{}]: {}", url, e.getMessage());
+        for (String segment : rawPath.split(File.pathSeparator)) {
+            Path p = Path.of(segment);
+            if (Files.exists(p)) {
+                entries.add(p);
             }
         }
+        LOGGER.info("Collected [{}] classpath entries from java.class.path", entries.size());
         return Collections.unmodifiableList(entries);
     }
 
