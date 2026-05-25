@@ -11,8 +11,6 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.servlet.http.HttpServletResponse;
-import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.junit.jupiter.api.AfterEach;
@@ -26,7 +24,6 @@ import java.net.http.HttpClient;
 import java.net.http.WebSocket;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Base64;
 import java.util.Iterator;
 import java.util.List;
@@ -44,11 +41,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * End-to-end test for the JDT Language Server integration.
  *
  * <p>
- * Boots the full Spring application, writes the {@code hello-java} project into the user workspace,
- * connects to the {@code /websockets/ide/java-lsp} endpoint, runs the LSP handshake, and asserts
- * that {@code textDocument/completion} at {@code resp.getWriter().} returns at least one
- * {@code println} suggestion — confirming that JDT.LS resolves {@code PrintWriter} via the servlet
- * API JAR found on the test classpath.
+ * Boots the full Spring application, writes {@code Hello.java} into the user workspace via
+ * {@link IRepository} (simulating what the IDE does when a user saves a file), then connects to the
+ * {@code /websockets/ide/java-lsp} WebSocket endpoint. {@code JdtLsManager} auto-generates
+ * {@code .project} and {@code .classpath} for the project on first connection, so the test does not
+ * need to create them. The test runs the LSP handshake and asserts that
+ * {@code textDocument/completion} at {@code resp.getWriter().} returns at least one {@code println}
+ * suggestion — confirming that JDT.LS resolves {@code PrintWriter} via the platform JARs supplied
+ * by {@code ClassPathIndex}.
  */
 class JavaLspIT extends IntegrationTest {
 
@@ -60,11 +60,9 @@ class JavaLspIT extends IntegrationTest {
     private static final String WORKSPACE = "workspace";
     private static final String USERNAME = "admin";
 
-    /** IRepository paths for workspace files. */
-    private static final String REPO_BASE = "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT;
-    private static final String HELLO_JAVA_REPO = REPO_BASE + "/demo/Hello.java";
-    private static final String CLASSPATH_REPO = REPO_BASE + "/.classpath";
-    private static final String PROJECT_FILE_REPO = REPO_BASE + "/.project";
+    /** IRepository path for the Hello.java source file. */
+    private static final String HELLO_JAVA_REPO =
+            "/users/" + USERNAME + "/" + WORKSPACE + "/" + PROJECT + "/demo/Hello.java";
 
     // Virtual URIs seen by the browser side (workspace part doubled because the
     // resourcePath parameter is /workspace/<project>/... and the client prepends
@@ -90,21 +88,6 @@ class JavaLspIT extends IntegrationTest {
                     resp.getWriter().println("Hello World!");
                 }
             }
-            """;
-
-    private static final String PROJECT_XML = """
-            <?xml version="1.0" encoding="UTF-8"?>
-            <projectDescription>
-                <name>hello-java</name>
-                <natures>
-                    <nature>org.eclipse.jdt.core.javanature</nature>
-                </natures>
-                <buildSpec>
-                    <buildCommand>
-                        <name>org.eclipse.jdt.core.javabuilder</name>
-                    </buildCommand>
-                </buildSpec>
-            </projectDescription>
             """;
 
     // -------------------------------------------------------------------------
@@ -173,39 +156,6 @@ class JavaLspIT extends IntegrationTest {
     private void writeProjectFiles() {
         repository.createResource(HELLO_JAVA_REPO,
                 HELLO_JAVA.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
-        repository.createResource(CLASSPATH_REPO,
-                buildClasspathXml().getBytes(StandardCharsets.UTF_8), false, "text/xml", true);
-        repository.createResource(PROJECT_FILE_REPO,
-                PROJECT_XML.getBytes(StandardCharsets.UTF_8), false, "text/xml", true);
-    }
-
-    private static String buildClasspathXml() {
-        // Locate JARs that the hello-java source depends on; they are guaranteed to
-        // be on the test classpath since the IT boots the full Dirigible application.
-        String servletJar = findJarOnClasspath("jakarta.servlet-api", "tomcat-embed-core");
-        String engineJavaJar = findJarOnClasspath("dirigible-components-engine-java");
-
-        StringBuilder libs = new StringBuilder();
-        if (servletJar != null) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"").append(servletJar).append("\"/>\n");
-        }
-        if (engineJavaJar != null) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"").append(engineJavaJar).append("\"/>\n");
-        }
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
-                + "<classpath>\n"
-                + "    <classpathentry kind=\"src\" path=\"\"/>\n"
-                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n"
-                + libs
-                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n"
-                + "</classpath>\n";
-    }
-
-    private static String findJarOnClasspath(String... fragments) {
-        return Arrays.stream(System.getProperty("java.class.path", "").split(java.io.File.pathSeparator))
-                     .filter(e -> Arrays.stream(fragments).anyMatch(e::contains))
-                     .findFirst()
-                     .orElse(null);
     }
 
     // -------------------------------------------------------------------------
@@ -364,10 +314,8 @@ class JavaLspIT extends IntegrationTest {
 
     @AfterEach
     void removeWorkspaceFiles() {
-        for (String path : List.of(HELLO_JAVA_REPO, CLASSPATH_REPO, PROJECT_FILE_REPO)) {
-            if (repository.hasResource(path)) {
-                repository.removeResource(path);
-            }
+        if (repository.hasResource(HELLO_JAVA_REPO)) {
+            repository.removeResource(HELLO_JAVA_REPO);
         }
     }
 }

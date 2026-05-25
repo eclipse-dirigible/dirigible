@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.ide.lsp.java.process;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.engine.java.runtime.ClassPathIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
@@ -17,6 +18,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -42,8 +44,14 @@ public class JdtLsManager implements DisposableBean {
     /** key = "username/workspace/project" → running instance */
     private final Map<String, JdtLsInstance> instances = new ConcurrentHashMap<>();
 
+    private final ClassPathIndex classPathIndex;
+
     private volatile Path jdtlsHome;
     private volatile boolean installChecked = false;
+
+    public JdtLsManager(ClassPathIndex classPathIndex) {
+        this.classPathIndex = classPathIndex;
+    }
 
     // -------------------------------------------------------------------------
     // Public API used by the WebSocket handler
@@ -101,6 +109,7 @@ public class JdtLsManager implements DisposableBean {
                                 .toAbsolutePath()
                                 .normalize();
         Files.createDirectories(projectRoot);
+        ensureEclipseProjectFiles(projectRoot, project);
 
         Path dataDir = jdtlsHome.resolve("data")
                                 .resolve(username)
@@ -123,6 +132,59 @@ public class JdtLsManager implements DisposableBean {
 
         Process process = new ProcessBuilder(cmd).start();
         return new JdtLsInstance(process, virtualRoot, realRoot);
+    }
+
+    /**
+     * Writes {@code .project} and {@code .classpath} into {@code projectRoot} when they are absent.
+     *
+     * <p>
+     * JDT.LS requires these two Eclipse project descriptor files to recognise a directory as a Java
+     * project and activate type resolution, completion, and diagnostics. Dirigible does not create
+     * them when a user creates a new Java project through the IDE, so we generate them here on first
+     * LSP connection.
+     */
+    private void ensureEclipseProjectFiles(Path projectRoot, String project) throws IOException {
+        Path dotProject = projectRoot.resolve(".project");
+        if (!Files.exists(dotProject)) {
+            Files.writeString(dotProject, buildProjectXml(project), StandardCharsets.UTF_8);
+            logger.info("[java-lsp] Created .project for {}", project);
+        }
+        Path dotClasspath = projectRoot.resolve(".classpath");
+        if (!Files.exists(dotClasspath)) {
+            Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
+            logger.info("[java-lsp] Created .classpath for {}", project);
+        }
+    }
+
+    private static String buildProjectXml(String project) {
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<projectDescription>\n"
+                + "    <name>" + project + "</name>\n"
+                + "    <natures>\n"
+                + "        <nature>org.eclipse.jdt.core.javanature</nature>\n"
+                + "    </natures>\n"
+                + "    <buildSpec>\n"
+                + "        <buildCommand>\n"
+                + "            <name>org.eclipse.jdt.core.javabuilder</name>\n"
+                + "        </buildCommand>\n"
+                + "    </buildSpec>\n"
+                + "</projectDescription>\n";
+    }
+
+    private String buildClasspathXml() {
+        StringBuilder libs = new StringBuilder();
+        for (Path entry : classPathIndex.classPathEntries()) {
+            libs.append("    <classpathentry kind=\"lib\" path=\"")
+                .append(entry.toString())
+                .append("\"/>\n");
+        }
+        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+                + "<classpath>\n"
+                + "    <classpathentry kind=\"src\" path=\"\"/>\n"
+                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n"
+                + libs
+                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n"
+                + "</classpath>\n";
     }
 
     private List<String> buildCommand(String launcherJar, String configDir, String dataDir) {
