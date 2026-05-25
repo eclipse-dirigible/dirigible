@@ -31,6 +31,8 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -55,6 +57,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  * JDT.LS model introduced in Phase 1.
  */
 class JavaLspIT extends IntegrationTest {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(JavaLspIT.class);
 
     // -------------------------------------------------------------------------
     // Project fixture
@@ -117,7 +121,7 @@ class JavaLspIT extends IntegrationTest {
     // -------------------------------------------------------------------------
 
     @Test
-    @Timeout(value = 300, unit = TimeUnit.SECONDS)
+    @Timeout(value = 600, unit = TimeUnit.SECONDS)
     void completion_suggests_println_for_PrintWriter_via_resp_getWriter() throws Exception {
         writeProjectFiles();
 
@@ -137,18 +141,33 @@ class JavaLspIT extends IntegrationTest {
             ws.sendText(didOpenNotification(), true)
               .join();
 
-            // Wait until JDT.LS has analysed the file (diagnostics notification is the signal)
-            assertTrue(awaitDiagnosticsFor(VIRTUAL_FILE_URI, 90, SECONDS),
-                    "JDT.LS did not publish diagnostics for the open file within 90 s");
+            // Wait until JDT.LS has fully indexed the classpath — signalled by a
+            // publishDiagnostics notification with zero severity-1 (Error) entries.
+            // Early diagnostics arrive before indexing finishes and still carry
+            // "import cannot be resolved" errors; we discard those and keep waiting.
+            assertTrue(awaitCleanDiagnosticsFor(VIRTUAL_FILE_URI, 240, SECONDS),
+                    "JDT.LS did not publish error-free diagnostics for the open file within 240 s — "
+                            + "imports may still be unresolved (check classpath index and JDT.LS logs)");
 
-            // Request completion at resp.getWriter().|
-            int completionId = seq.getAndIncrement();
-            ws.sendText(completionRequest(completionId), true)
-              .join();
-            String result = awaitResponse(completionId, 30, SECONDS);
-            assertNotNull(result, "JDT.LS did not respond to 'textDocument/completion' within 30 s");
-
-            List<String> labels = completionLabels(result);
+            // Request completion at resp.getWriter().| — retry a few times to absorb
+            // any residual timing gap between clean diagnostics and full indexing.
+            List<String> labels = List.of();
+            for (int attempt = 0; attempt < 5; attempt++) {
+                if (attempt > 0) {
+                    LOGGER.info("[java-lsp] Completion attempt {} returned {}; retrying in 3 s", attempt, labels);
+                    Thread.sleep(3_000);
+                }
+                int completionId = seq.getAndIncrement();
+                ws.sendText(completionRequest(completionId), true)
+                  .join();
+                String result = awaitResponse(completionId, 30, SECONDS);
+                assertNotNull(result, "JDT.LS did not respond to 'textDocument/completion' within 30 s");
+                labels = completionLabels(result);
+                if (labels.stream()
+                          .anyMatch(l -> l.startsWith("println"))) {
+                    break;
+                }
+            }
             assertTrue(labels.stream()
                              .anyMatch(l -> l.startsWith("println")),
                     "Expected a 'println' completion from PrintWriter but got: " + labels);
@@ -235,15 +254,24 @@ class JavaLspIT extends IntegrationTest {
     }
 
     /**
-     * Returns {@code true} when a {@code textDocument/publishDiagnostics} notification arrives for the
-     * given URI; all other messages are buffered.
+     * Returns {@code true} once a {@code textDocument/publishDiagnostics} notification arrives for the
+     * given URI that carries <em>no</em> severity-1 (Error) diagnostics. Early notifications that still
+     * contain unresolved-import errors are discarded and the method keeps waiting — JDT.LS publishes
+     * incremental diagnostics updates as it finishes indexing each JAR. All non-diagnostics messages
+     * are buffered for subsequent {@link #awaitResponse} calls.
      */
-    private boolean awaitDiagnosticsFor(String uri, long timeout, TimeUnit unit) throws Exception {
+    private boolean awaitCleanDiagnosticsFor(String uri, long timeout, TimeUnit unit) throws Exception {
         long deadline = System.currentTimeMillis() + unit.toMillis(timeout);
 
-        for (String msg : buffer) {
-            if (isDiagnosticsFor(msg, uri))
-                return true;
+        for (Iterator<String> it = buffer.iterator(); it.hasNext();) {
+            String msg = it.next();
+            if (isDiagnosticsFor(msg, uri)) {
+                it.remove();
+                if (hasNoErrors(msg)) {
+                    return true;
+                }
+                LOGGER.info("[java-lsp] Discarding diagnostics with errors (classpath still indexing)");
+            }
         }
 
         while (System.currentTimeMillis() < deadline) {
@@ -251,9 +279,14 @@ class JavaLspIT extends IntegrationTest {
             String msg = inbox.poll(Math.min(remaining, 2_000), MILLISECONDS);
             if (msg == null)
                 continue;
-            if (isDiagnosticsFor(msg, uri))
-                return true;
-            buffer.add(msg);
+            if (isDiagnosticsFor(msg, uri)) {
+                if (hasNoErrors(msg)) {
+                    return true;
+                }
+                LOGGER.info("[java-lsp] Diagnostics still has errors — waiting for classpath indexing to complete");
+            } else {
+                buffer.add(msg);
+            }
         }
         return false;
     }
@@ -265,6 +298,23 @@ class JavaLspIT extends IntegrationTest {
                 && uri.equals(n.path("params")
                                .path("uri")
                                .asText());
+    }
+
+    /** Returns {@code true} if the diagnostics notification contains no severity-1 (Error) entries. */
+    private boolean hasNoErrors(String diagnosticsMsg) throws Exception {
+        JsonNode diagnostics = mapper.readTree(diagnosticsMsg)
+                                     .path("params")
+                                     .path("diagnostics");
+        if (!diagnostics.isArray()) {
+            return true;
+        }
+        for (JsonNode diag : diagnostics) {
+            if (diag.path("severity")
+                    .asInt() == 1) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private List<String> completionLabels(String responseJson) throws Exception {
