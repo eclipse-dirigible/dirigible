@@ -141,7 +141,12 @@ class JavaLoaderTest {
         // is logged and skipped, and the recording consumer still observes the second class.
         ThrowingConsumer throwingConsumer = new ThrowingConsumer("client.Bomb");
         ClientClassLoaderHolder freshHolder = new ClientClassLoaderHolder();
-        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording));
+        JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
+        when(outputDirectory.get()).thenReturn(tempDir);
+        ApplicationEventPublisher noopPublisher = (Object ignored) -> {
+        };
+        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording), outputDirectory,
+                noopPublisher);
 
         localLoader.rebuild(List.of(handlerSource("client.Bomb", "boom"), handlerSource("client.Bystander", "fine")));
 
