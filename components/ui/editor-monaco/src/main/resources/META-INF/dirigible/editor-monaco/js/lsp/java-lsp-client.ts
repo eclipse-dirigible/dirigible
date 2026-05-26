@@ -15,6 +15,10 @@
  * providers that delegate to JDT.LS. Exposed as global JavaLspClientLib so that
  * editor.js can call JavaLspClientLib.connect(resourcePath).
  *
+ * One JDT.LS process covers the entire workspace, so a single WebSocket connection
+ * is shared across all Java files open in the same browser page. The connection is
+ * established on the first connect() call and reused for all subsequent calls.
+ *
  * editor.js sets window.monaco before calling connect(), so the monaco-shim's lazy
  * Proxies resolve correctly at call time.
  */
@@ -42,8 +46,18 @@ import {
 // Singleton state
 // -------------------------------------------------------------------------
 
+/** Shared connection — one per browser page, covering all projects in the workspace. */
 let _conn: MessageConnection | null = null;
-let _fileUri = '';
+
+/**
+ * Virtual workspace root URI, e.g. {@code file:///workspace/workspace/}.
+ * Set once on first connect(); used to scope Monaco providers to workspace files.
+ */
+let _workspaceRoot = '';
+
+/** URIs for which textDocument/didOpen has already been sent. */
+const _openFiles: Set<string> = new Set();
+
 let _providersRegistered = false;
 
 // -------------------------------------------------------------------------
@@ -52,16 +66,22 @@ let _providersRegistered = false;
 
 /** Called by editor.js when a Java file is opened. Safe to call multiple times. */
 export async function connect(resourcePath: string): Promise<void> {
-    if (_conn) return;
-
     const parts = resourcePath.replace(/^\//, '').split('/');
     const workspace = parts[0];
     const project   = parts[1];
-    _fileUri = `file:///workspace/${workspace}/${project}/${parts.slice(2).join('/')}`;
+    const fileUri = `file:///workspace/${workspace}/${project}/${parts.slice(2).join('/')}`;
+
+    if (_conn) {
+        // Connection already established — just open the new file.
+        openFile(fileUri);
+        return;
+    }
+
+    _workspaceRoot = `file:///workspace/${workspace}/`;
 
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const wsUrl = `${proto}://${location.host}/websockets/ide/java-lsp`
-                + `?workspace=${encodeURIComponent(workspace)}&project=${encodeURIComponent(project)}`;
+                + `?workspace=${encodeURIComponent(workspace)}`;
 
     const ws = new WebSocket(wsUrl);
     await new Promise<void>((resolve, reject) => {
@@ -74,7 +94,7 @@ export async function connect(resourcePath: string): Promise<void> {
     const writer = new WebSocketMessageWriter(socket);
     _conn = createMessageConnection(reader, writer);
 
-    // Diagnostics notification → Monaco markers
+    // Diagnostics notification → Monaco markers (applies to any workspace file)
     _conn.onNotification('textDocument/publishDiagnostics', (params: { uri: string; diagnostics: Diagnostic[] }) => {
         const model = monaco.editor.getModels().find(m => m.uri.toString() === params.uri);
         if (!model) return;
@@ -91,7 +111,7 @@ export async function connect(resourcePath: string): Promise<void> {
 
     _conn.listen();
 
-    const rootUri = `file:///workspace/${workspace}/${project}/`;
+    const rootUri = _workspaceRoot;
     await _conn.sendRequest('initialize', {
         processId: null,
         rootUri,
@@ -104,7 +124,7 @@ export async function connect(resourcePath: string): Promise<void> {
                 inferSelectionSupport:        [],
             },
         },
-        workspaceFolders: [{ uri: rootUri, name: project }],
+        workspaceFolders: [{ uri: rootUri, name: workspace }],
         capabilities: {
             textDocument: {
                 synchronization: { dynamicRegistration: true, willSave: false, didSave: true, willSaveWaitUntil: false },
@@ -124,34 +144,61 @@ export async function connect(resourcePath: string): Promise<void> {
 
     _conn.sendNotification('initialized', {});
     _conn.sendNotification('workspace/didChangeConfiguration', { settings: jdtlsSettings() });
+
+    openFile(fileUri);
+
+    if (!_providersRegistered) {
+        _providersRegistered = true;
+        registerProviders();
+    }
+}
+
+// -------------------------------------------------------------------------
+// File lifecycle
+// -------------------------------------------------------------------------
+
+/**
+ * Sends textDocument/didOpen for the given URI (if not already sent) and registers a debounced
+ * textDocument/didChange listener on the corresponding Monaco model.
+ */
+function openFile(fileUri: string): void {
+    if (_openFiles.has(fileUri) || !_conn) return;
+    _openFiles.add(fileUri);
+
+    const model = monaco.editor.getModels().find(m => m.uri.toString() === fileUri);
     _conn.sendNotification('textDocument/didOpen', {
         textDocument: {
-            uri:        _fileUri,
+            uri:        fileUri,
             languageId: 'java',
             version:    1,
-            text:       monaco.editor.getModels().find(m => m.uri.toString() === _fileUri)?.getValue() ?? '',
+            text:       model?.getValue() ?? '',
         },
     });
 
-    // Track changes with debounce
-    const model = monaco.editor.getModels().find(m => m.uri.toString() === _fileUri);
     if (model) {
         let timer: ReturnType<typeof setTimeout>;
         model.onDidChangeContent(() => {
             clearTimeout(timer);
             timer = setTimeout(() => {
                 _conn?.sendNotification('textDocument/didChange', {
-                    textDocument:  { uri: _fileUri, version: model.getVersionId() },
+                    textDocument:   { uri: fileUri, version: model.getVersionId() },
                     contentChanges: [{ text: model.getValue() }],
                 });
             }, 400);
         });
     }
+}
 
-    if (!_providersRegistered) {
-        _providersRegistered = true;
-        registerProviders();
-    }
+// -------------------------------------------------------------------------
+// Workspace file predicate
+// -------------------------------------------------------------------------
+
+/**
+ * Returns {@code true} when the given model URI belongs to the currently connected workspace. Used
+ * by Monaco providers to skip non-Java-workspace models without an exact-URI comparison.
+ */
+function isWorkspaceFile(uri: string): boolean {
+    return _workspaceRoot !== '' && uri.startsWith(_workspaceRoot);
 }
 
 // -------------------------------------------------------------------------
@@ -163,9 +210,10 @@ function registerProviders(): void {
     monaco.languages.registerCompletionItemProvider('java', {
         triggerCharacters: ['.', '@', '<'],
         provideCompletionItems: async (model, position) => {
-            if (!_conn || model.uri.toString() !== _fileUri) return null;
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const fileUri = model.uri.toString();
             const result: CompletionList | CompletionItem[] | null = await _conn.sendRequest('textDocument/completion', {
-                textDocument: { uri: _fileUri },
+                textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
                 context:      { triggerKind: 1 },
             });
@@ -178,9 +226,10 @@ function registerProviders(): void {
 
     monaco.languages.registerHoverProvider('java', {
         provideHover: async (model, position) => {
-            if (!_conn || model.uri.toString() !== _fileUri) return null;
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const fileUri = model.uri.toString();
             const result: Hover | null = await _conn.sendRequest('textDocument/hover', {
-                textDocument: { uri: _fileUri },
+                textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
             });
             if (!result?.contents) return null;
@@ -198,9 +247,10 @@ function registerProviders(): void {
     monaco.languages.registerSignatureHelpProvider('java', {
         signatureHelpTriggerCharacters: ['(', ','],
         provideSignatureHelp: async (model, position) => {
-            if (!_conn || model.uri.toString() !== _fileUri) return null;
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const fileUri = model.uri.toString();
             const result: SignatureHelp | null = await _conn.sendRequest('textDocument/signatureHelp', {
-                textDocument: { uri: _fileUri },
+                textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
             });
             if (!result) return null;
@@ -224,9 +274,10 @@ function registerProviders(): void {
 
     monaco.languages.registerDefinitionProvider('java', {
         provideDefinition: async (model, position) => {
-            if (!_conn || model.uri.toString() !== _fileUri) return null;
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const fileUri = model.uri.toString();
             const result: Location | Location[] | null = await _conn.sendRequest('textDocument/definition', {
-                textDocument: { uri: _fileUri },
+                textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
             });
             if (!result) return null;

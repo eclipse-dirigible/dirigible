@@ -26,11 +26,16 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Spring WebSocket handler that bridges browser LSP clients to a per-project JDT Language Server
+ * Spring WebSocket handler that bridges browser LSP clients to a per-workspace JDT Language Server
  * process managed by {@link JdtLsManager}.
  *
  * <p>
- * Expected WebSocket URL: {@code /websockets/ide/java-lsp?workspace=<ws>&project=<proj>}
+ * Expected WebSocket URL: {@code /websockets/ide/java-lsp?workspace=<ws>}
+ *
+ * <p>
+ * The {@code project} query parameter is accepted but optional; it is only used for logging. A
+ * single JDT.LS instance covers the entire workspace so that sibling projects can resolve
+ * cross-project references.
  */
 @Component
 @ConditionalOnProperty(name = "java.lsp.enabled", havingValue = "true", matchIfMissing = true)
@@ -47,17 +52,22 @@ public class JavaLspWebSocketHandler extends TextWebSocketHandler {
         String workspace = queryParam(session, "workspace");
         String project = queryParam(session, "project");
 
-        if (workspace == null || project == null) {
-            logger.warn("[java-lsp] Missing workspace/project query params — closing session {}", session.getId());
+        if (workspace == null) {
+            logger.warn("[java-lsp] Missing 'workspace' query param — closing session {}", session.getId());
             closeQuietly(session);
             return;
         }
 
+        if (project != null) {
+            logger.debug("[java-lsp] Session {} opened for workspace={} project={}", session.getId(), sanitize(workspace),
+                    sanitize(project));
+        }
+
         try {
-            JdtLsInstance instance = manager.getOrStart(username, workspace, project);
+            JdtLsInstance instance = manager.getOrStart(username, workspace);
             instance.addSession(session);
         } catch (Exception e) {
-            logger.error("[java-lsp] Failed to get/start JDT.LS instance for {}/{}", workspace, project, e);
+            logger.error("[java-lsp] Failed to get/start JDT.LS instance for {}/{}", sanitize(username), sanitize(workspace), e);
             closeQuietly(session);
         }
     }
@@ -94,6 +104,10 @@ public class JavaLspWebSocketHandler extends TextWebSocketHandler {
                           .getName();
         }
         return "anonymous";
+    }
+
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     private static String queryParam(WebSocketSession session, String name) {

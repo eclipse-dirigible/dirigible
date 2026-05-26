@@ -63,14 +63,14 @@ public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
     }
 
     private void expandSubviews(String schema, DatabasePerspective databasePerspective) {
-        // some time is needed so that the tables is returned by the db metadata
+        // some time is needed so that the table is returned by the db metadata
         // this is applicable for databases like MSSQL
         SleepUtil.sleepSeconds(10);
         databasePerspective.refreshTables();
 
         databasePerspective.expandSubmenu(schema);
 
-        databasePerspective.expandSubmenu("Tables");
+        databasePerspective.expandTablesUntilVisible(TEST_TABLE_NAME);
     }
 
     private void assertAvailabilityOfSubitems(DatabasePerspective databasePerspective) {

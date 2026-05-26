@@ -128,10 +128,10 @@
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
 
         <!-- JDT Language Server bundled at build time -->
-        <jdtls.version>1.38.0</jdtls.version>
-        <jdtls.build.timestamp>202408011337</jdtls.build.timestamp>
+        <jdtls.version>1.47.0</jdtls.version>
+        <jdtls.build.timestamp>202505151856</jdtls.build.timestamp>
         <jdtls.download.url>https://download.eclipse.org/jdtls/milestones/${jdtls.version}/jdt-language-server-${jdtls.version}-${jdtls.build.timestamp}.tar.gz</jdtls.download.url>
-        <jdtls.sha256>ba697788a19f2ba57b16302aba6b343c649928c95f76b0d170494ac12d17ac78</jdtls.sha256>
+        <jdtls.sha256>354242694936016cd48635967cb28cd4b0735779dafe963077139d2823ccda3a</jdtls.sha256>
         <jdtls.download.skip>false</jdtls.download.skip>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 

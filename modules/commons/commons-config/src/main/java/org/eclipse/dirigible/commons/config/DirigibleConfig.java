@@ -123,12 +123,8 @@ public enum DirigibleConfig {
     /** Whether the Java LSP (JDT.LS) integration is enabled. */
     JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
 
-    /** Directory where the JDT Language Server is installed (or will be downloaded to). */
-    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
-
-    /** URL of the JDT Language Server tar.gz archive to download when not already installed. */
-    JAVA_LSP_DOWNLOAD_URL("DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL",
-            "https://download.eclipse.org/jdtls/milestones/1.38.0/jdt-language-server-1.38.0-202408011337.tar.gz");
+    /** Directory where the JDT Language Server is installed (or will be extracted to). */
+    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null);
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
