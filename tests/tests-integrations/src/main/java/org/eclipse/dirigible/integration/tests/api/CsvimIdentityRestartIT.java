@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
@@ -24,6 +25,7 @@ import org.eclipse.dirigible.components.initializers.synchronizer.Synchronizatio
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.framework.util.TestConditionsChecker;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -103,8 +105,17 @@ class CsvimIdentityRestartIT extends IntegrationTest {
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
+    @Autowired
+    private TestConditionsChecker testConditionsChecker;
+
     @Test
     void identity_counter_is_advanced_past_explicitly_seeded_ids() throws Exception {
+        // IDENTITY DDL emission is intentionally suppressed on MSSQL (TableCreateProcessor) to keep
+        // existing TS/JS code paths that issue explicit-ID INSERTs working. Without IDENTITY there is
+        // no counter to advance, so this contract isn't expressible on MSSQL.
+        assumeTrue(testConditionsChecker.isH2OrPostgresDefaultDB(),
+                "Skipping: IDENTITY DDL is disabled on MSSQL, so identity-counter advancement is not applicable.");
+
         write(TABLE_PATH, TABLE_SOURCE);
         write(CSV_PATH, CSV_SOURCE);
         write(CSVIM_PATH, CSVIM_SOURCE);

@@ -28,6 +28,7 @@ import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.context.ApplicationEvent;
 import org.springframework.context.ApplicationEventPublisher;
 
 import jakarta.servlet.http.HttpServletRequest;
@@ -37,6 +38,24 @@ class JavaLoaderTest {
 
     private static final String PROJECT = "sample-project";
     private static final String FQN = "client.SampleHandler";
+
+    /**
+     * Shared no-op publisher. Implements both {@code publishEvent} overloads explicitly so call sites
+     * with a static {@code ApplicationEvent} type resolve unambiguously — the lambda form
+     * {@code (Object o) -> {}} is flagged by CodeQL's {@code java/confusing-method-signature} because
+     * the {@code publishEvent(ApplicationEvent)} default would otherwise be the more specific match.
+     */
+    private static final ApplicationEventPublisher NOOP_PUBLISHER = new ApplicationEventPublisher() {
+        @Override
+        public void publishEvent(ApplicationEvent event) {
+            // intentionally empty
+        }
+
+        @Override
+        public void publishEvent(Object event) {
+            // intentionally empty
+        }
+    };
 
     @TempDir
     Path tempDir;
@@ -55,9 +74,7 @@ class JavaLoaderTest {
         recording = new RecordingConsumer();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        ApplicationEventPublisher noopPublisher = (Object ignored) -> {
-        };
-        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording), outputDirectory, noopPublisher);
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording), outputDirectory, NOOP_PUBLISHER);
     }
 
     @Test
@@ -143,10 +160,8 @@ class JavaLoaderTest {
         ClientClassLoaderHolder freshHolder = new ClientClassLoaderHolder();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        ApplicationEventPublisher noopPublisher = (Object ignored) -> {
-        };
-        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording), outputDirectory,
-                noopPublisher);
+        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording),
+                outputDirectory, NOOP_PUBLISHER);
 
         localLoader.rebuild(List.of(handlerSource("client.Bomb", "boom"), handlerSource("client.Bystander", "fine")));
 

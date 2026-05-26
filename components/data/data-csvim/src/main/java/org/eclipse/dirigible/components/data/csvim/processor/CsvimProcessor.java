@@ -48,6 +48,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
@@ -301,55 +302,61 @@ public class CsvimProcessor {
      * the user already saw if the restart fails, but at least the seeded rows survive.
      */
     private void restartIdentityColumns(DirigibleDataSource dataSource, Connection connection, String schema, String tableName) {
-        String safeSchema;
-        String safeTable;
-        try {
-            safeSchema = requireSafeIdentifier(schema);
-            safeTable = requireSafeIdentifier(tableName);
-        } catch (IllegalArgumentException badIdent) {
-            logger.warn("Skipping IDENTITY restart — schema/table name not a safe SQL identifier: {}",
-                    sanitizeForLog(badIdent.getMessage()));
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping IDENTITY restart — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
             return;
         }
         try (ResultSet cols = connection.getMetaData()
-                                        .getColumns(connection.getCatalog(), safeSchema, safeTable, "%")) {
+                                        .getColumns(connection.getCatalog(), schema, tableName, "%")) {
             while (cols.next()) {
                 if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
                     continue;
                 }
-                String safeColumn;
-                try {
-                    safeColumn = requireSafeIdentifier(cols.getString("COLUMN_NAME"));
-                } catch (IllegalArgumentException badColumn) {
-                    logger.warn("Skipping IDENTITY restart on [{}.{}] — column name not a safe SQL identifier: {}",
-                            sanitizeForLog(safeSchema), sanitizeForLog(safeTable), sanitizeForLog(badColumn.getMessage()));
+                String column = cols.getString("COLUMN_NAME");
+                if (column == null || !SAFE_IDENTIFIER.matcher(column)
+                                                      .matches()) {
+                    logger.warn("Skipping IDENTITY restart on [{}.{}] — column name not a safe SQL identifier: [{}]", sanitize(schema),
+                            sanitize(tableName), sanitize(column));
                     continue;
                 }
                 try {
-                    long next = computeNextValue(connection, safeSchema, safeTable, safeColumn);
-                    executeIdentityRestart(dataSource, connection, safeSchema, safeTable, safeColumn, next);
-                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", sanitizeForLog(safeSchema), sanitizeForLog(safeTable),
-                            sanitizeForLog(safeColumn), next);
+                    long next = computeNextValue(connection, schema, tableName, column);
+                    executeIdentityRestart(dataSource, connection, schema, tableName, column, next);
+                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", sanitize(schema), sanitize(tableName), sanitize(column),
+                            next);
                 } catch (SQLException restartError) {
-                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", sanitizeForLog(safeSchema),
-                            sanitizeForLog(safeTable), sanitizeForLog(safeColumn), restartError.getMessage());
+                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", sanitize(schema), sanitize(tableName),
+                            sanitize(column), sanitize(restartError.getMessage()));
                 }
             }
         } catch (SQLException metadataError) {
-            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", sanitizeForLog(safeSchema), sanitizeForLog(safeTable),
-                    metadataError.getMessage());
+            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", sanitize(schema), sanitize(tableName),
+                    sanitize(metadataError.getMessage()));
         }
     }
 
     /**
-     * Computes the next value to seed an identity counter with: {@code MAX(col) + 1}. Inputs are
-     * pre-validated by {@link #requireSafeIdentifier} so concatenating them into the SQL string is
-     * safe.
+     * Computes the next value to seed an identity counter with: {@code MAX(col) + 1}. Both
+     * {@code schema}, {@code table} and {@code column} MUST already be {@link #SAFE_IDENTIFIER}-matched
+     * by the caller; this method re-validates inline to make the whitelist barrier visible at the
+     * concatenation sink.
      */
-    private long computeNextValue(Connection connection, String safeSchema, String safeTable, String safeColumn) throws SQLException {
-        String sql = "SELECT MAX(" + quote(connection, safeColumn) + ") FROM " + qualifiedTable(connection, safeSchema, safeTable);
-        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
-        // parameter binding exists for DDL/identifier positions.
+    private long computeNextValue(Connection connection, String schema, String table, String column) throws SQLException {
+        if (!SAFE_IDENTIFIER.matcher(schema)
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(table)
+                                   .matches()
+                || !SAFE_IDENTIFIER.matcher(column)
+                                   .matches()) {
+            throw new IllegalArgumentException("identifier not whitelisted");
+        }
+        String q = connection.getMetaData()
+                             .getIdentifierQuoteString();
+        String sql = "SELECT MAX(" + q + column + q + ") FROM " + q + schema + q + "." + q + table + q;
         try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 long current = rs.getLong(1);
@@ -361,34 +368,41 @@ public class CsvimProcessor {
 
     /**
      * Emits dialect-specific DDL to advance an identity counter past {@code next}. Unknown dialects are
-     * skipped with an info-level log — better than throwing and aborting the whole CSVIM cycle. Inputs
-     * are pre-validated by {@link #requireSafeIdentifier} so direct string-concatenation is safe.
+     * skipped with an info-level log — better than throwing and aborting the whole CSVIM cycle.
+     * Identifiers are re-validated inline so the whitelist barrier is visible at the SQL concatenation
+     * sink.
      */
-    private void executeIdentityRestart(DirigibleDataSource dataSource, Connection connection, String safeSchema, String safeTable,
-            String safeColumn, long next) throws SQLException {
+    private void executeIdentityRestart(DirigibleDataSource dataSource, Connection connection, String schema, String table, String column,
+            long next) throws SQLException {
+        if (!SAFE_IDENTIFIER.matcher(schema)
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(table)
+                                   .matches()
+                || !SAFE_IDENTIFIER.matcher(column)
+                                   .matches()) {
+            throw new IllegalArgumentException("identifier not whitelisted");
+        }
         String sql;
         if (dataSource.isOfType(DatabaseSystem.H2)) {
-            sql = "ALTER TABLE " + qualifiedTable(connection, safeSchema, safeTable) + " ALTER COLUMN " + quote(connection, safeColumn)
-                    + " RESTART WITH " + next;
+            String q = connection.getMetaData()
+                                 .getIdentifierQuoteString();
+            sql = "ALTER TABLE " + q + schema + q + "." + q + table + q + " ALTER COLUMN " + q + column + q + " RESTART WITH " + next;
         } else if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
             // pg_get_serial_sequence case-folds its first argument unless inner double-quotes preserve
             // the original casing. We must pass "<schema>"."<table>" (with the quotes inside the SQL
             // string literal) or PG will look up a lower-cased table that doesn't exist.
             // setval(seq, n, false) -> next nextval() returns exactly n.
-            sql = "SELECT setval(pg_get_serial_sequence('\"" + safeSchema + "\".\"" + safeTable + "\"', '" + safeColumn + "'), " + next
-                    + ", false)";
+            sql = "SELECT setval(pg_get_serial_sequence('\"" + schema + "\".\"" + table + "\"', '" + column + "'), " + next + ", false)";
         } else if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
             // RESEED stores the *current* identity, so the next assigned id is current + increment.
-            sql = "DBCC CHECKIDENT('" + safeSchema + "." + safeTable + "', RESEED, " + (next - 1) + ")";
+            sql = "DBCC CHECKIDENT('" + schema + "." + table + "', RESEED, " + (next - 1) + ")";
         } else if (dataSource.isOfType(DatabaseSystem.MYSQL) || dataSource.isOfType(DatabaseSystem.MARIADB)) {
-            sql = "ALTER TABLE `" + safeSchema + "`.`" + safeTable + "` AUTO_INCREMENT = " + next;
+            sql = "ALTER TABLE `" + schema + "`.`" + table + "` AUTO_INCREMENT = " + next;
         } else {
             logger.info("IDENTITY restart not implemented for dialect [{}] — skipping [{}.{}.{}]", dataSource.getDatabaseSystem(),
-                    sanitizeForLog(safeSchema), sanitizeForLog(safeTable), sanitizeForLog(safeColumn));
+                    sanitize(schema), sanitize(table), sanitize(column));
             return;
         }
-        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
-        // parameter binding exists for DDL/identifier positions.
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.execute();
         }
@@ -397,102 +411,75 @@ public class CsvimProcessor {
     /**
      * MSSQL refuses to insert an explicit value into an IDENTITY column unless
      * {@code SET IDENTITY_INSERT
-     *
-    <table>
+     * <table>
      *  ON} is in effect. We only need to toggle the flag when the target table has an IDENTITY column
      * AND the CSV headers actually supply a value for it.
      */
     private boolean csvSuppliesIdentityColumn(Connection connection, String schema, String tableName, List<String> headerNames) {
-        try {
-            String safeSchema = requireSafeIdentifier(schema);
-            String safeTable = requireSafeIdentifier(tableName);
-            try (ResultSet cols = connection.getMetaData()
-                                            .getColumns(connection.getCatalog(), safeSchema, safeTable, "%")) {
-                while (cols.next()) {
-                    if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
-                        continue;
-                    }
-                    String column = cols.getString("COLUMN_NAME");
-                    for (String header : headerNames) {
-                        if (header != null && header.equalsIgnoreCase(column)) {
-                            return true;
-                        }
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping IDENTITY_INSERT probe — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
+            return false;
+        }
+        try (ResultSet cols = connection.getMetaData()
+                                        .getColumns(connection.getCatalog(), schema, tableName, "%")) {
+            while (cols.next()) {
+                if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
+                    continue;
+                }
+                String column = cols.getString("COLUMN_NAME");
+                for (String header : headerNames) {
+                    if (header != null && header.equalsIgnoreCase(column)) {
+                        return true;
                     }
                 }
             }
-        } catch (SQLException | IllegalArgumentException probeError) {
-            logger.warn("Could not probe IDENTITY columns on [{}.{}] for IDENTITY_INSERT toggle: {}", sanitizeForLog(schema),
-                    sanitizeForLog(tableName), probeError.getMessage());
+        } catch (SQLException probeError) {
+            logger.warn("Could not probe IDENTITY columns on [{}.{}] for IDENTITY_INSERT toggle: {}", sanitize(schema), sanitize(tableName),
+                    sanitize(probeError.getMessage()));
         }
         return false;
     }
 
     /**
      * Toggle MSSQL {@code SET IDENTITY_INSERT
-     *
-    <table>
+     * <table>
      *  ON|OFF} around an explicit-id batch insert.
      */
     private void setMssqlIdentityInsert(Connection connection, String schema, String tableName, boolean on) {
-        String safeSchema;
-        String safeTable;
-        try {
-            safeSchema = requireSafeIdentifier(schema);
-            safeTable = requireSafeIdentifier(tableName);
-        } catch (IllegalArgumentException badIdent) {
-            logger.warn("Skipping SET IDENTITY_INSERT — schema/table name not a safe SQL identifier: {}",
-                    sanitizeForLog(badIdent.getMessage()));
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping SET IDENTITY_INSERT — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
             return;
         }
-        String sql = "SET IDENTITY_INSERT [" + safeSchema + "].[" + safeTable + "] " + (on ? "ON" : "OFF");
-        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
-        // parameter binding exists for DDL/identifier positions.
+        String sql = "SET IDENTITY_INSERT [" + schema + "].[" + tableName + "] " + (on ? "ON" : "OFF");
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.execute();
         } catch (SQLException e) {
-            logger.warn("Failed to {} IDENTITY_INSERT on [{}.{}]: {}", on ? "enable" : "disable", sanitizeForLog(safeSchema),
-                    sanitizeForLog(safeTable), e.getMessage());
+            logger.warn("Failed to {} IDENTITY_INSERT on [{}.{}]: {}", on ? "enable" : "disable", sanitize(schema), sanitize(tableName),
+                    sanitize(e.getMessage()));
         }
     }
 
-    /** Returns the schema-qualified, dialect-quoted table identifier. */
-    private static String qualifiedTable(Connection connection, String schema, String tableName) throws SQLException {
-        String q = connection.getMetaData()
-                             .getIdentifierQuoteString();
-        return q + schema + q + "." + q + tableName + q;
-    }
-
-    /** Returns a dialect-quoted identifier. */
-    private static String quote(Connection connection, String identifier) throws SQLException {
-        String q = connection.getMetaData()
-                             .getIdentifierQuoteString();
-        return q + identifier + q;
-    }
-
-    private static final java.util.regex.Pattern SAFE_IDENTIFIER = java.util.regex.Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+    /**
+     * SQL-identifier allow-list. Matches the canonical unquoted identifier form (letter/underscore
+     * start, letters/digits/underscores after) — narrower than the SQL standard so the same value is
+     * safe to log and to concatenate into DDL where no parameter binding exists.
+     */
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     /**
-     * Whitelist-validates a SQL identifier (schema/table/column name) coming from JDBC catalog metadata
-     * or {@link CsvFile} config. Lets callers concatenate the value into SQL string literals or DDL
-     * without parameter binding (which is not available for DDL identifiers anyway). Names that don't
-     * fit {@code [A-Za-z_][A-Za-z0-9_]*} are rejected — this is intentionally narrower than the SQL
-     * standard so the same value is also safe to log.
+     * Strip CR / LF / TAB so a (still user-influenced) value can be passed to {@code logger.*} without
+     * splitting / spoofing the log structure.
      */
-    private static String requireSafeIdentifier(String value) {
-        if (value == null || !SAFE_IDENTIFIER.matcher(value)
-                                             .matches()) {
-            throw new IllegalArgumentException("not a safe SQL identifier: [" + value + "]");
-        }
-        return value;
-    }
-
-    /**
-     * Replaces CR / LF / TAB with {@code _} so a (still user-influenced) identifier or message can be
-     * passed to {@code logger.*} without splitting / spoofing the log structure. CodeQL recognises this
-     * pattern as a sanitiser for {@code java/log-injection}.
-     */
-    private static String sanitizeForLog(String value) {
-        return value == null ? "null" : value.replaceAll("[\\r\\n\\t]", "_");
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     private boolean isDefaultDataSource(String dataSourceName) {

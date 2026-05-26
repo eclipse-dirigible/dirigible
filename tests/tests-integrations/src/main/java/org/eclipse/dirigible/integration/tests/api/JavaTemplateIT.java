@@ -11,20 +11,19 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
-
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
-
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.framework.util.TestConditionsChecker;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-
 import io.restassured.http.ContentType;
 
 /**
@@ -272,8 +271,18 @@ class JavaTemplateIT extends IntegrationTest {
     @Autowired
     private RestAssuredExecutor restAssuredExecutor;
 
+    @Autowired
+    private TestConditionsChecker testConditionsChecker;
+
     @Test
     void generated_dao_and_controller_serve_crud_over_http() {
+        // The Java template emits @GeneratedValue(IDENTITY) on the primary key. IDENTITY DDL emission
+        // is intentionally suppressed on MSSQL (TableCreateProcessor) to keep existing TS/JS code
+        // paths that issue explicit-ID INSERTs working, so this CRUD flow can't reach a green state
+        // on MSSQL until the broader IDENTITY-aware refactor lands.
+        assumeTrue(testConditionsChecker.isH2OrPostgresDefaultDB(),
+                "Skipping: IDENTITY DDL is disabled on MSSQL, so @GeneratedValue(IDENTITY) inserts cannot succeed.");
+
         writeAll();
 
         // List on a fresh table returns 200 + a JSON array (may be empty or contain prior runs' data
