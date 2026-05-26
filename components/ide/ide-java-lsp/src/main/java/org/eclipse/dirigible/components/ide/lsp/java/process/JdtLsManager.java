@@ -30,12 +30,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
@@ -389,11 +391,11 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     }
 
     /**
-     * Copies the bundled {@code com.microsoft.java.debug.plugin.jar} into the JDT.LS
-     * {@code plugins/} directory if a newer or different version is not already present.
-     * The JAR is downloaded at build time by {@code download-maven-plugin} and packed as
-     * {@code jdtls-debug/com.microsoft.java.debug.plugin.jar} inside the application JAR.
-     * A no-op when the bundled resource is absent (e.g. quick-build without the download).
+     * Copies the bundled {@code com.microsoft.java.debug.plugin.jar} into the JDT.LS {@code plugins/}
+     * directory if a newer or different version is not already present. The JAR is downloaded at build
+     * time by {@code download-maven-plugin} and packed as
+     * {@code jdtls-debug/com.microsoft.java.debug.plugin.jar} inside the application JAR. A no-op when
+     * the bundled resource is absent (e.g. quick-build without the download).
      */
     private void installDebugPlugin() {
         try (InputStream bundled = getClass().getClassLoader()
@@ -403,6 +405,26 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                 return;
             }
             Path pluginsDir = jdtlsHome.resolve("plugins");
+
+            // Stage to a temp file so we can read the Bundle-Version before committing the final name.
+            // OSGi/Equinox requires the naming convention <symbolicname>_<version>.jar; without the
+            // version suffix Equinox does not recognise the JAR as an installable bundle.
+            Path staging = pluginsDir.resolve(".debug-plugin-staging.jar");
+            Files.copy(bundled, staging, StandardCopyOption.REPLACE_EXISTING);
+
+            String bundleVersion = "0.0.0";
+            try (JarFile jar = new JarFile(staging.toFile())) {
+                java.util.jar.Manifest mf = jar.getManifest();
+                if (mf != null) {
+                    String v = mf.getMainAttributes()
+                                 .getValue("Bundle-Version");
+                    if (v != null && !v.isBlank()) {
+                        bundleVersion = v.trim();
+                    }
+                }
+            }
+
+            // Remove any pre-existing debug plugin JARs (the staging file is excluded by its '.' prefix).
             try (Stream<Path> existing = Files.list(pluginsDir)) {
                 existing.filter(p -> p.getFileName()
                                       .toString()
@@ -414,8 +436,9 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                             }
                         });
             }
-            Path target = pluginsDir.resolve("com.microsoft.java.debug.plugin.jar");
-            Files.copy(bundled, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+
+            Path target = pluginsDir.resolve("com.microsoft.java.debug.plugin_" + bundleVersion + ".jar");
+            Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING);
             logger.info("[java-lsp] Installed debug plugin at {}", target);
         } catch (Exception e) {
             logger.warn("[java-lsp] Could not install debug plugin: {}", e.getMessage());

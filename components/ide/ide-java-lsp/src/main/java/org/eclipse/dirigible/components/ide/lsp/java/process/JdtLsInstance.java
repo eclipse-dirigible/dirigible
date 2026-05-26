@@ -54,6 +54,19 @@ public class JdtLsInstance {
     private final AtomicInteger serverRequestCounter = new AtomicInteger(-1);
     private final ObjectMapper jsonMapper = new ObjectMapper();
 
+    /**
+     * Set to {@code true} once JDT.LS has completed the LSP initialize handshake (either via a browser
+     * client or the server-side initialization triggered by {@link #ensureInitialized}).
+     */
+    private volatile boolean lspInitialized = false;
+
+    /**
+     * Cached JDT.LS capabilities JSON (the {@code result} of the {@code initialize} response). Used to
+     * synthesize a fake-but-real-capabilities response for browser clients that connect after the
+     * server-side initialization has already completed.
+     */
+    private volatile String cachedCapabilitiesJson = null;
+
     JdtLsInstance(Process process, String virtualRoot, String realRoot) {
         this.process = process;
         this.stdin = process.getOutputStream();
@@ -86,6 +99,40 @@ public class JdtLsInstance {
             logger.warn("[java-lsp] Process is dead, dropping message");
             return;
         }
+        // Track browser-initiated LSP initialization: when the browser sends the `initialized`
+        // notification (no id, no response expected), JDT.LS has been fully initialized by the editor.
+        // Mark it here so that ensureInitialized() becomes a no-op.
+        try {
+            JsonNode msg = jsonMapper.readTree(json);
+            String method = msg.path("method")
+                               .asText("");
+            if ("initialized".equals(method) && !msg.has("id")) {
+                lspInitialized = true;
+                logger.debug("[java-lsp] JDT.LS initialized by browser LSP client");
+            }
+        } catch (Exception ignored) {
+        }
+
+        // When JDT.LS was already initialized server-side, a browser that subsequently connects will
+        // send an `initialize` request. JDT.LS would reject it with -32600 (server already initialized).
+        // Instead, intercept it here and send back the real cached capabilities so the browser proceeds
+        // normally without re-initializing JDT.LS.
+        if (lspInitialized && cachedCapabilitiesJson != null) {
+            try {
+                JsonNode msg = jsonMapper.readTree(json);
+                if ("initialize".equals(msg.path("method")
+                                           .asText())
+                        && msg.has("id")) {
+                    int browserId = msg.get("id")
+                                       .asInt();
+                    String fakeResponse = "{\"jsonrpc\":\"2.0\",\"id\":" + browserId + ",\"result\":" + cachedCapabilitiesJson + "}";
+                    broadcast(fakeResponse);
+                    logger.debug("[java-lsp] Intercepted browser initialize (already initialized) — sent cached capabilities");
+                    return;
+                }
+            } catch (Exception ignored) {
+            }
+        }
         try {
             String translated = json.replace(virtualRoot, realRoot);
             byte[] body = translated.getBytes(StandardCharsets.UTF_8);
@@ -100,10 +147,10 @@ public class JdtLsInstance {
 
     /**
      * Sends a server-initiated JSON-RPC request to the JDT.LS process and returns a future that
-     * completes with the response. Uses negative IDs to avoid collision with browser-originated
-     * request IDs (which are positive integers assigned by the LSP client).
+     * completes with the response. Uses negative IDs to avoid collision with browser-originated request
+     * IDs (which are positive integers assigned by the LSP client).
      *
-     * @param method    LSP method name, e.g. {@code workspace/executeCommand}
+     * @param method LSP method name, e.g. {@code workspace/executeCommand}
      * @param paramsJson JSON object for the {@code params} field
      */
     public CompletableFuture<JsonNode> sendRequest(String method, String paramsJson) {
@@ -112,6 +159,56 @@ public class JdtLsInstance {
         pendingRequests.put(id, future);
         sendToProcess("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"" + method + "\",\"params\":" + paramsJson + "}");
         return future;
+    }
+
+    /**
+     * Ensures JDT.LS has completed the LSP initialize handshake before workspace commands can be sent.
+     *
+     * <p>
+     * JDT.LS buffers (and never processes) {@code workspace/*} requests that arrive before it receives
+     * the {@code initialize} + {@code initialized} pair from an LSP client. This method performs that
+     * handshake from the server side so that workspace commands work even when no browser editor
+     * session has connected yet. If JDT.LS was already initialized (e.g. by a browser), this is a
+     * no-op.
+     *
+     * <p>
+     * When a browser subsequently connects and sends {@code initialize}, the request is intercepted in
+     * {@link #sendToProcess} and a fake-but-real-capabilities response is returned so the browser LSP
+     * client continues normally without JDT.LS rejecting a duplicate initialization.
+     *
+     * @param workspaceUri real {@code file://} URI of the workspace root directory
+     * @return a future that completes when JDT.LS is in the initialized state
+     */
+    public synchronized CompletableFuture<Void> ensureInitialized(String workspaceUri) {
+        if (lspInitialized) {
+            return CompletableFuture.completedFuture(null);
+        }
+        long pid = ProcessHandle.current()
+                                .pid();
+        String escapedUri = workspaceUri.replace("\\", "\\\\")
+                                        .replace("\"", "\\\"");
+        String initParams = "{\"processId\":" + pid + "," + "\"clientInfo\":{\"name\":\"dirigible-java-debug\"}," + "\"rootUri\":\""
+                + escapedUri + "\"," + "\"workspaceFolders\":[{\"uri\":\"" + escapedUri + "\",\"name\":\"workspace\"}],"
+                + "\"capabilities\":{\"workspace\":{\"executeCommand\":{\"dynamicRegistration\":false}}},"
+                + "\"initializationOptions\":{}}";
+
+        CompletableFuture<JsonNode> initResponse = sendRequest("initialize", initParams);
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        initResponse.whenComplete((node, ex) -> {
+            if (ex != null) {
+                result.completeExceptionally(ex);
+                return;
+            }
+            // Cache capabilities so we can replay them to browser clients that connect later.
+            cachedCapabilitiesJson = node.path("result")
+                                         .toString();
+            // Send the 'initialized' notification — JDT.LS transitions to initialized state here.
+            sendToProcess("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}");
+            lspInitialized = true;
+            logger.info("[java-lsp] JDT.LS initialized from server side for workspace {}", workspaceUri);
+            result.complete(null);
+        });
+        return result;
     }
 
     void destroy() {
@@ -172,7 +269,8 @@ public class JdtLsInstance {
             if (!node.has("id") || node.has("method")) {
                 return false;
             }
-            int responseId = node.get("id").asInt(Integer.MIN_VALUE);
+            int responseId = node.get("id")
+                                 .asInt(Integer.MIN_VALUE);
             CompletableFuture<JsonNode> future = pendingRequests.remove(responseId);
             if (future == null) {
                 return false;
