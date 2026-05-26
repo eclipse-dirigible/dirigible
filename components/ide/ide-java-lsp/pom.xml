@@ -59,19 +59,29 @@
                             <readTimeOut>300000</readTimeOut>
                         </configuration>
                     </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
                     <execution>
-                        <id>download-java-debug-plugin</id>
+                        <id>copy-java-debug-plugin</id>
                         <phase>generate-resources</phase>
                         <goals>
-                            <goal>wget</goal>
+                            <goal>copy</goal>
                         </goals>
                         <configuration>
                             <skip>${java.debug.plugin.download.skip}</skip>
-                            <url>${java.debug.plugin.download.url}</url>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>com.microsoft.java</groupId>
+                                    <artifactId>com.microsoft.java.debug.plugin</artifactId>
+                                    <version>${java.debug.plugin.version}</version>
+                                    <destFileName>com.microsoft.java.debug.plugin.jar</destFileName>
+                                </artifactItem>
+                            </artifactItems>
                             <outputDirectory>${project.build.directory}/jdtls-debug-plugin</outputDirectory>
-                            <outputFileName>com.microsoft.java.debug.plugin.jar</outputFileName>
-                            <cacheDirectory>${settings.localRepository}/java-debug-cache</cacheDirectory>
-                            <readTimeOut>300000</readTimeOut>
                         </configuration>
                     </execution>
                 </executions>
