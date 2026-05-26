@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.ide.lsp.java.process;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
@@ -23,7 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Wraps a single running JDT Language Server OS process and the WebSocket sessions it serves.
@@ -45,6 +49,10 @@ public class JdtLsInstance {
     private final String virtualRoot;
     /** Real filesystem URI root used by JDT.LS, e.g. {@code file:///home/user/.../proj1/}. */
     private final String realRoot;
+
+    private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
+    private final AtomicInteger serverRequestCounter = new AtomicInteger(-1);
+    private final ObjectMapper jsonMapper = new ObjectMapper();
 
     JdtLsInstance(Process process, String virtualRoot, String realRoot) {
         this.process = process;
@@ -88,6 +96,22 @@ public class JdtLsInstance {
         } catch (IOException e) {
             logger.error("[java-lsp] Error writing to JDT.LS stdin", e);
         }
+    }
+
+    /**
+     * Sends a server-initiated JSON-RPC request to the JDT.LS process and returns a future that
+     * completes with the response. Uses negative IDs to avoid collision with browser-originated
+     * request IDs (which are positive integers assigned by the LSP client).
+     *
+     * @param method    LSP method name, e.g. {@code workspace/executeCommand}
+     * @param paramsJson JSON object for the {@code params} field
+     */
+    public CompletableFuture<JsonNode> sendRequest(String method, String paramsJson) {
+        int id = serverRequestCounter.getAndDecrement();
+        CompletableFuture<JsonNode> future = new CompletableFuture<>();
+        pendingRequests.put(id, future);
+        sendToProcess("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"" + method + "\",\"params\":" + paramsJson + "}");
+        return future;
     }
 
     void destroy() {
@@ -142,6 +166,29 @@ public class JdtLsInstance {
 
     // -------------------------------------------------------------------------
 
+    private boolean routeToServerRequest(String json) {
+        try {
+            JsonNode node = jsonMapper.readTree(json);
+            if (!node.has("id") || node.has("method")) {
+                return false;
+            }
+            int responseId = node.get("id").asInt(Integer.MIN_VALUE);
+            CompletableFuture<JsonNode> future = pendingRequests.remove(responseId);
+            if (future == null) {
+                return false;
+            }
+            if (node.has("error")) {
+                future.completeExceptionally(new RuntimeException("[java-lsp] Request " + responseId + " failed: " + node.get("error")));
+            } else {
+                future.complete(node);
+            }
+            return true;
+        } catch (Exception e) {
+            logger.warn("[java-lsp] Could not route server request response", e);
+            return false;
+        }
+    }
+
     private void startStdoutReader() {
         Thread t = new Thread(() -> {
             try {
@@ -155,7 +202,9 @@ public class JdtLsInstance {
                         break;
                     String json = new String(body, StandardCharsets.UTF_8);
                     String translated = json.replace(realRoot, virtualRoot);
-                    broadcast(translated);
+                    if (!routeToServerRequest(translated)) {
+                        broadcast(translated);
+                    }
                 }
             } catch (IOException e) {
                 if (process.isAlive()) {

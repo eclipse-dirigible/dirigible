@@ -91,6 +91,7 @@
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
         <module>ide/ide-java-lsp</module>
+        <module>ide/ide-java-debug</module>
         <module>ide/ide-problems</module>
         <module>ide/ide-logs</module>
 
@@ -155,6 +156,7 @@
         <module>ui/view-git</module>
         <module>ui/view-terminal</module>
         <module>ui/view-debugger</module>
+        <module>ui/view-java-debug</module>
         <module>ui/view-databases</module>
         <module>ui/view-sql</module>
         <module>ui/view-swagger</module>
@@ -766,6 +768,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-java-debug</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-logs</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -897,6 +904,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-debugger</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-java-debug</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

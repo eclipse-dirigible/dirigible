@@ -1,0 +1,153 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="javaDebug" ng-controller="JavaDebugController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-java-debug/configs/debug-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <script type="text/javascript" src="js/debug.js"></script>
+        <style>
+            .debug-panel {
+                flex: 1;
+                overflow: hidden;
+                display: flex;
+                flex-direction: column;
+                border-right: 1px solid var(--sapList_BorderColor, #e5e5e5);
+            }
+            .debug-panel:last-child {
+                border-right: none;
+            }
+            .debug-panel-title {
+                font-size: 11px;
+                font-weight: bold;
+                text-transform: uppercase;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                padding: 4px 8px;
+                border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                flex-shrink: 0;
+            }
+            .debug-panels {
+                display: flex;
+                flex-direction: row;
+                flex: 1;
+                overflow: hidden;
+            }
+            .attach-form {
+                display: flex;
+                align-items: center;
+                gap: 4px;
+                padding: 4px 8px;
+            }
+            .attach-label {
+                font-size: 12px;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                white-space: nowrap;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar type="solid">
+            <div class="attach-form">
+                <span class="attach-label">Workspace:</span>
+                <bk-input style="width:100px" ng-model="config.workspace" placeholder="workspace"></bk-input>
+                <span class="attach-label">Host:</span>
+                <bk-input style="width:110px" ng-model="config.host" placeholder="localhost"></bk-input>
+                <span class="attach-label">JDWP Port:</span>
+                <bk-input style="width:70px" ng-model="config.port" placeholder="8000"></bk-input>
+            </div>
+            <bk-button glyph="sap-icon--connected" state="transparent" title="Attach debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected'">Attach</bk-button>
+            <bk-button glyph="sap-icon--disconnected" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected'">Disconnect</bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button glyph="sap-icon--media-play" state="transparent" title="Continue (F5)" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--step-next" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--pushpin-off" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--undo" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--stop" state="transparent" title="Stop" aria-label="Stop" ng-click="dapStop()" ng-disabled="status !== 'connected'"></bk-button>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span style="font-size:11px;padding-right:8px;" ng-class="{'sap-icon--status-positive': status === 'connected', 'sap-icon--status-negative': status === 'error'}">{{statusLabel()}}</span>
+        </bk-toolbar>
+        <div class="debug-panels bk-full-height">
+            <!-- Call Stack -->
+            <div class="debug-panel">
+                <div class="debug-panel-title">Call Stack</div>
+                <bk-scrollbar class="bk-full-height">
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <tbody bk-table-body>
+                            <tr bk-table-row ng-repeat="frame in callStack track by $index" hoverable="true" activable="true" ng-click="selectFrame(frame)" selected="frame === selectedFrame">
+                                <td bk-table-cell>
+                                    <span style="font-family:monospace;font-size:11px">{{frame.name}}</span>
+                                    <span style="font-size:10px;color:var(--sapContent_LabelColor)"> {{frame.source && frame.source.name ? frame.source.name : ''}}{{frame.line ? ':' + frame.line : ''}}</span>
+                                </td>
+                            </tr>
+                            <tr ng-if="callStack.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">{{status === 'connected' ? 'Running...' : 'Not connected'}}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </div>
+            <!-- Variables -->
+            <div class="debug-panel">
+                <div class="debug-panel-title">Variables</div>
+                <bk-scrollbar class="bk-full-height">
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <tbody bk-table-body>
+                            <tr bk-table-row ng-repeat="v in variables track by $index" hoverable="true">
+                                <td bk-table-cell style="width:40%">
+                                    <span style="font-family:monospace;font-size:11px;font-weight:600">{{v.name}}</span>
+                                </td>
+                                <td bk-table-cell>
+                                    <span style="font-family:monospace;font-size:11px">{{v.value}}</span>
+                                    <span ng-if="v.type" style="font-size:10px;color:var(--sapContent_LabelColor)"> : {{v.type}}</span>
+                                </td>
+                            </tr>
+                            <tr ng-if="variables.length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">{{isPaused() ? 'Select a frame' : 'Not paused'}}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </div>
+            <!-- Breakpoints -->
+            <div class="debug-panel">
+                <div class="debug-panel-title">Breakpoints</div>
+                <bk-scrollbar class="bk-full-height">
+                    <table bk-table display-mode="compact" outer-borders="none">
+                        <tbody bk-table-body>
+                            <tr bk-table-row ng-repeat="bp in breakpointList() track by $index" hoverable="true">
+                                <td bk-table-cell>
+                                    <span style="font-size:11px">{{bp.file}}:{{bp.line}}</span>
+                                </td>
+                                <td bk-table-cell fit-content="true" activable="true">
+                                    <bk-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" aria-label="Remove breakpoint"></bk-button>
+                                </td>
+                            </tr>
+                            <tr ng-if="breakpointList().length === 0" bk-table-row>
+                                <td bk-table-cell no-data="true">No breakpoints set</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </bk-scrollbar>
+            </div>
+        </div>
+        <theme></theme>
+    </body>
+
+</html>
