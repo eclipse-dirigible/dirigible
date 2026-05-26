@@ -77,10 +77,7 @@ public class JavaDebugWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         logger.debug("[java-debug] Session {} closed: {}", session.getId(), status);
-        JavaDebugBridge bridge = manager.findForSession(session.getId());
-        if (bridge != null) {
-            bridge.removeSession(session.getId());
-        }
+        manager.removeSession(session.getId());
     }
 
     // -------------------------------------------------------------------------

@@ -766,7 +766,7 @@ class DirigibleEditor {
         themingHub.addMessageListener({
             topic: 'java.debug.highlight',
             handler: (msg) => {
-                const { filePath, lineNumber } = msg.data || {};
+                const { filePath, lineNumber } = msg || {};
                 const myPath = editorParameters.resourcePath;
                 if (filePath && myPath && (filePath.endsWith(myPath) || myPath.endsWith(filePath.replace(/^file:\/\//, ''))) && lineNumber > 0) {
                     editor.revealLineInCenter(lineNumber);

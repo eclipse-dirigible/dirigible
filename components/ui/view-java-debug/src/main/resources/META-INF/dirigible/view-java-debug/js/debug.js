@@ -259,7 +259,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
     themingHub.addMessageListener({
         topic: 'java.debug.breakpoints.changed',
         handler: (msg) => {
-            const { filePath, lines } = msg.data;
+            const { filePath, lines } = msg;
             if (lines && lines.length > 0) {
                 breakpoints[filePath] = lines;
             } else {

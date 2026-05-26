@@ -86,6 +86,28 @@ public class JavaDebugManager implements DisposableBean {
         return null;
     }
 
+    /**
+     * Removes the session from its bridge. If the bridge has no remaining sessions after removal, the
+     * bridge is destroyed and its entry removed from the map so the DAP socket (and the JDWP connection
+     * it holds) are released immediately.
+     */
+    public void removeSession(String sessionId) {
+        bridges.entrySet()
+               .removeIf(entry -> {
+                   JavaDebugBridge bridge = entry.getValue();
+                   if (!bridge.hasSession(sessionId)) {
+                       return false;
+                   }
+                   bridge.removeSession(sessionId);
+                   if (!bridge.hasSessions()) {
+                       bridge.destroy();
+                       logger.info("[java-debug] Last session disconnected — bridge {} destroyed", entry.getKey());
+                       return true;
+                   }
+                   return false;
+               });
+    }
+
     @Override
     public void destroy() {
         logger.info("[java-debug] Shutting down {} bridge(s)", bridges.size());
@@ -108,7 +130,7 @@ public class JavaDebugManager implements DisposableBean {
 
         JsonNode response =
                 lspInstance.sendRequest("workspace/executeCommand", "{\"command\":\"vscode.java.startDebugSession\",\"arguments\":[]}")
-                           .get(30, TimeUnit.SECONDS);
+                           .get(90, TimeUnit.SECONDS);
 
         // vscode.java.startDebugSession returns the port as a direct integer: {"result": 59683}
         // not as a nested object {"result": {"port": 59683}}.

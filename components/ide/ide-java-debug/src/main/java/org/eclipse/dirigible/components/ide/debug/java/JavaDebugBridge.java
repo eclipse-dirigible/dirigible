@@ -59,6 +59,10 @@ public class JavaDebugBridge {
         return sessions.containsKey(sessionId);
     }
 
+    public boolean hasSessions() {
+        return !sessions.isEmpty();
+    }
+
     public boolean isAlive() {
         return !dapSocket.isClosed() && dapSocket.isConnected();
     }
