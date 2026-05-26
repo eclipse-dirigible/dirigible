@@ -9,15 +9,19 @@
  */
 package org.eclipse.dirigible.engine.java.runtime;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Enumeration;
@@ -29,7 +33,6 @@ import java.util.jar.JarFile;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
 import org.springframework.stereotype.Component;
 
 /**
@@ -47,55 +50,57 @@ import org.springframework.stereotype.Component;
  * <p>
  * To avoid this, we crack the outer fat jar directly via {@link java.util.jar.JarFile} (which
  * bypasses Spring Boot's loader entirely) and extract every {@code BOOT-INF/lib/} entry plus the
- * {@code BOOT-INF/classes/} tree to a temp directory under
- * {@code $TMPDIR/dirigible-engine-java/<pid>/}. The extraction is one-shot per JVM and is cleaned
- * up on shutdown.
+ * {@code BOOT-INF/classes/} tree to a stable cache directory at
+ * {@code $HOME/.dirigible/engine-java-classpath/}. Extraction is skipped on subsequent starts when
+ * the fat jar's last-modified timestamp matches the stored stamp, so restarting the application
+ * does not re-extract gigabytes of JARs. When the fat jar is rebuilt (its mtime changes) the cache
+ * is invalidated and re-extracted automatically.
  *
  * <p>
  * For development / test runs the application is launched from a plain {@link URLClassLoader}, not
- * a fat jar. In that case we simply collect the loader's URLs — they're already on disk.
+ * a fat jar. In that case we simply collect the loader's URLs — they're already on disk and no
+ * extraction is needed.
  */
 @Component
-public class ClassPathIndex implements DisposableBean {
+public class ClassPathIndex {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ClassPathIndex.class);
 
-    private final AtomicReference<Snapshot> snapshotRef = new AtomicReference<>();
+    /** Subdirectory under {@code $HOME} where extracted JARs are cached. */
+    private static final String CACHE_SUBDIR = ".dirigible/engine-java-classpath";
+
+    /** Stamp file recording the fat-jar mtime at the time of last extraction. */
+    private static final String STAMP_FILENAME = "extracted.stamp";
+
+    private final AtomicReference<List<Path>> entriesRef = new AtomicReference<>();
 
     /** Disk paths that should be passed to {@code javac} via {@code --class-path}. */
     public List<Path> classPathEntries() {
-        return snapshot().entries;
-    }
-
-    private Snapshot snapshot() {
-        Snapshot s = snapshotRef.get();
-        if (s != null) {
-            return s;
+        List<Path> cached = entriesRef.get();
+        if (cached != null) {
+            return cached;
         }
-        synchronized (snapshotRef) {
-            s = snapshotRef.get();
-            if (s != null) {
-                return s;
+        synchronized (entriesRef) {
+            cached = entriesRef.get();
+            if (cached != null) {
+                return cached;
             }
             long start = System.currentTimeMillis();
-            s = build();
-            snapshotRef.set(s);
-            LOGGER.info("Materialised compile-time classpath: [{}] entries, root [{}], took [{}] ms", s.entries.size(), s.extractionRoot,
+            cached = build();
+            entriesRef.set(cached);
+            LOGGER.info("Materialised compile-time classpath: [{}] entries, took [{}] ms", cached.size(),
                     System.currentTimeMillis() - start);
-            return s;
+            return cached;
         }
     }
 
-    private static Snapshot build() {
-        // Locate the JAR (or directory) that contains JavaHandler — that's our anchor: if it's a
-        // fat jar, we know we're in fat-jar mode and the nested layout convention applies.
+    private static List<Path> build() {
         Path anchor = locateAnchorOnDisk();
         if (anchor != null && anchor.toString()
                                     .endsWith(".jar")
                 && isFatJar(anchor)) {
             return extractFatJar(anchor);
         }
-        // Dev/test: classpath is already on disk via URLClassLoader URLs.
         return collectFromUrlClassLoader();
     }
 
@@ -108,8 +113,6 @@ public class ClassPathIndex implements DisposableBean {
                 return null;
             }
             URI uri = location.toURI();
-            // For Spring Boot 3 fat jars this comes back as jar:nested:/...!BOOT-INF/lib/...
-            // The "outermost" path before the first '!' is the actual on-disk fat jar.
             String s = uri.toString();
             if (s.startsWith("jar:nested:")) {
                 String trimmed = s.substring("jar:nested:".length());
@@ -120,7 +123,6 @@ public class ClassPathIndex implements DisposableBean {
                 return Path.of(trimmed);
             }
             if (s.endsWith("/")) {
-                // file: directory — anchor is the directory itself
                 return Path.of(uri);
             }
             return Path.of(uri);
@@ -138,18 +140,29 @@ public class ClassPathIndex implements DisposableBean {
         }
     }
 
-    private static Snapshot extractFatJar(Path fatJar) {
-        Path root;
-        try {
-            root = Files.createTempDirectory("dirigible-engine-java-");
-        } catch (IOException e) {
-            throw new IllegalStateException("Cannot create temp directory for classpath extraction", e);
-        }
-        Path libDir = root.resolve("lib");
-        Path classesDir = root.resolve("classes");
-        List<Path> entries = new ArrayList<>();
+    private static List<Path> extractFatJar(Path fatJar) {
+        Path cacheRoot = Path.of(System.getProperty("user.home"))
+                             .resolve(CACHE_SUBDIR);
+        Path libDir = cacheRoot.resolve("lib");
+        Path classesDir = cacheRoot.resolve("classes");
+        Path stampFile = cacheRoot.resolve(STAMP_FILENAME);
 
-        try (JarFile jar = new JarFile(fatJar.toFile())) {
+        try {
+            String currentStamp = String.valueOf(Files.getLastModifiedTime(fatJar)
+                                                      .toMillis());
+
+            if (isCacheValid(stampFile, currentStamp, libDir)) {
+                List<Path> entries = collectExistingEntries(libDir, classesDir);
+                if (!entries.isEmpty()) {
+                    LOGGER.info("Reusing stable classpath cache at [{}]: [{}] entries", cacheRoot, entries.size());
+                    return Collections.unmodifiableList(entries);
+                }
+                LOGGER.warn("Classpath cache at [{}] has valid stamp but no entries; re-extracting", cacheRoot);
+            }
+
+            LOGGER.info("Extracting platform classpath from [{}] to [{}]", fatJar, cacheRoot);
+            deleteDirectory(libDir);
+            deleteDirectory(classesDir);
             Files.createDirectories(libDir);
             Files.createDirectories(classesDir);
 
@@ -157,42 +170,97 @@ public class ClassPathIndex implements DisposableBean {
                                  .normalize();
             Path classesBase = classesDir.toAbsolutePath()
                                          .normalize();
-            Enumeration<JarEntry> es = jar.entries();
-            while (es.hasMoreElements()) {
-                JarEntry entry = es.nextElement();
-                String name = entry.getName();
-                if (name.startsWith("BOOT-INF/lib/") && name.endsWith(".jar") && !entry.isDirectory()) {
-                    String jarName = name.substring("BOOT-INF/lib/".length());
-                    Path target = safeResolve(libBase, jarName);
-                    try (InputStream in = jar.getInputStream(entry)) {
-                        Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
-                    }
-                    entries.add(target);
-                } else if (name.startsWith("BOOT-INF/classes/") && !entry.isDirectory()) {
-                    String relative = name.substring("BOOT-INF/classes/".length());
-                    Path target = safeResolve(classesBase, relative);
-                    Files.createDirectories(target.getParent());
-                    try (InputStream in = jar.getInputStream(entry)) {
-                        Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+            List<Path> entries = new ArrayList<>();
+
+            try (JarFile jar = new JarFile(fatJar.toFile())) {
+                Enumeration<JarEntry> es = jar.entries();
+                while (es.hasMoreElements()) {
+                    JarEntry entry = es.nextElement();
+                    String name = entry.getName();
+                    if (name.startsWith("BOOT-INF/lib/") && name.endsWith(".jar") && !entry.isDirectory()) {
+                        String jarName = name.substring("BOOT-INF/lib/".length());
+                        Path target = safeResolve(libBase, jarName);
+                        try (InputStream in = jar.getInputStream(entry)) {
+                            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                        }
+                        entries.add(target);
+                    } else if (name.startsWith("BOOT-INF/classes/") && !entry.isDirectory()) {
+                        String relative = name.substring("BOOT-INF/classes/".length());
+                        Path target = safeResolve(classesBase, relative);
+                        Files.createDirectories(target.getParent());
+                        try (InputStream in = jar.getInputStream(entry)) {
+                            Files.copy(in, target, StandardCopyOption.REPLACE_EXISTING);
+                        }
                     }
                 }
             }
-            // The BOOT-INF/classes tree (Spring Boot's location for the app's own classes) goes
-            // on the classpath as a directory.
+
             if (Files.exists(classesDir)) {
                 entries.add(classesDir);
             }
+
+            // Write stamp only after successful extraction so a partial extraction is re-tried.
+            Files.writeString(stampFile, currentStamp);
+            LOGGER.info("Classpath extraction complete: [{}] entries cached at [{}]", entries.size(), cacheRoot);
+            return Collections.unmodifiableList(entries);
+
         } catch (IOException e) {
             throw new IllegalStateException("Failed to extract classpath from " + fatJar + ": " + e.getMessage(), e);
         }
-        return new Snapshot(Collections.unmodifiableList(entries), root);
+    }
+
+    private static boolean isCacheValid(Path stampFile, String expectedStamp, Path libDir) {
+        if (!Files.isRegularFile(stampFile) || !Files.isDirectory(libDir)) {
+            return false;
+        }
+        try {
+            return expectedStamp.equals(Files.readString(stampFile)
+                                             .trim());
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static List<Path> collectExistingEntries(Path libDir, Path classesDir) throws IOException {
+        List<Path> entries = new ArrayList<>();
+        if (Files.isDirectory(libDir)) {
+            try (var stream = Files.list(libDir)) {
+                stream.filter(p -> p.toString()
+                                    .endsWith(".jar"))
+                      .forEach(entries::add);
+            }
+        }
+        if (Files.isDirectory(classesDir)) {
+            entries.add(classesDir);
+        }
+        return entries;
+    }
+
+    private static void deleteDirectory(Path dir) throws IOException {
+        if (!Files.exists(dir)) {
+            return;
+        }
+        Files.walkFileTree(dir, new SimpleFileVisitor<>() {
+            @Override
+            public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
+                Files.delete(file);
+                return FileVisitResult.CONTINUE;
+            }
+
+            @Override
+            public FileVisitResult postVisitDirectory(Path d, IOException exc) throws IOException {
+                if (exc != null) {
+                    throw exc;
+                }
+                Files.delete(d);
+                return FileVisitResult.CONTINUE;
+            }
+        });
     }
 
     /**
      * Resolve a jar entry's relative path against the extraction base directory while guarding against
-     * zip-slip: a malicious entry named {@code ../../etc/passwd} would otherwise escape the temp dir
-     * and overwrite arbitrary files. Throws {@link IOException} when the resolved target does not stay
-     * under {@code base}.
+     * zip-slip.
      */
     private static Path safeResolve(Path base, String relative) throws IOException {
         Path target = base.resolve(relative)
@@ -203,24 +271,42 @@ public class ClassPathIndex implements DisposableBean {
         return target;
     }
 
-    private static Snapshot collectFromUrlClassLoader() {
+    private static List<Path> collectFromUrlClassLoader() {
         URLClassLoader urlcl = findUrlClassLoader(JavaHandler.class.getClassLoader());
-        if (urlcl == null) {
-            LOGGER.warn("No URLClassLoader found in the loader hierarchy; compile classpath will rely on java.class.path only");
-            return new Snapshot(List.of(), null);
+        if (urlcl != null) {
+            List<Path> entries = new ArrayList<>();
+            for (URL url : urlcl.getURLs()) {
+                try {
+                    if (url.getProtocol()
+                           .equals("file")) {
+                        entries.add(Path.of(url.toURI()));
+                    }
+                } catch (URISyntaxException e) {
+                    LOGGER.warn("Skipping unparseable classpath URL [{}]: {}", url, e.getMessage());
+                }
+            }
+            return Collections.unmodifiableList(entries);
+        }
+
+        // Java 9+ replaced AppClassLoader with an internal loader that does not extend
+        // URLClassLoader, so the hierarchy walk above returns null in dev/test mode. Fall back
+        // to java.class.path, which the JVM always populates in non-modular launches (Maven
+        // failsafe, IDE runs, etc.).
+        LOGGER.info("No URLClassLoader in hierarchy; collecting classpath from java.class.path");
+        String rawPath = System.getProperty("java.class.path", "");
+        if (rawPath.isEmpty()) {
+            LOGGER.warn("java.class.path is empty; compile classpath will be empty");
+            return List.of();
         }
         List<Path> entries = new ArrayList<>();
-        for (URL url : urlcl.getURLs()) {
-            try {
-                if (url.getProtocol()
-                       .equals("file")) {
-                    entries.add(Path.of(url.toURI()));
-                }
-            } catch (URISyntaxException e) {
-                LOGGER.warn("Skipping unparseable classpath URL [{}]: {}", url, e.getMessage());
+        for (String segment : rawPath.split(File.pathSeparator)) {
+            Path p = Path.of(segment);
+            if (Files.exists(p)) {
+                entries.add(p);
             }
         }
-        return new Snapshot(Collections.unmodifiableList(entries), null);
+        LOGGER.info("Collected [{}] classpath entries from java.class.path", entries.size());
+        return Collections.unmodifiableList(entries);
     }
 
     private static URLClassLoader findUrlClassLoader(ClassLoader cl) {
@@ -233,28 +319,4 @@ public class ClassPathIndex implements DisposableBean {
         }
         return null;
     }
-
-    @Override
-    public void destroy() {
-        Snapshot s = snapshotRef.getAndSet(null);
-        if (s == null || s.extractionRoot == null) {
-            return;
-        }
-        try (var stream = Files.walk(s.extractionRoot)) {
-            stream.sorted((a, b) -> b.getNameCount() - a.getNameCount())
-                  .forEach(p -> {
-                      try {
-                          Files.deleteIfExists(p);
-                      } catch (IOException ignore) {
-                          // Best-effort cleanup; we're in shutdown.
-                      }
-                  });
-        } catch (IOException ignore) {
-            // Best-effort cleanup; we're in shutdown.
-        }
-    }
-
-    private record Snapshot(List<Path> entries, Path extractionRoot) {
-    }
-
 }

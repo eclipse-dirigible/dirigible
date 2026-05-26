@@ -14,7 +14,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -24,6 +27,8 @@ import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.context.ApplicationEventPublisher;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -32,6 +37,9 @@ class JavaLoaderTest {
 
     private static final String PROJECT = "sample-project";
     private static final String FQN = "client.SampleHandler";
+
+    @TempDir
+    Path tempDir;
 
     private JavaClassRegistry handlerRegistry;
     private ClientClassLoaderHolder holder;
@@ -45,7 +53,11 @@ class JavaLoaderTest {
         holder = new ClientClassLoaderHolder();
         handlerConsumer = new HandlerClassConsumer(handlerRegistry);
         recording = new RecordingConsumer();
-        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording));
+        JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
+        when(outputDirectory.get()).thenReturn(tempDir);
+        ApplicationEventPublisher noopPublisher = (Object ignored) -> {
+        };
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording), outputDirectory, noopPublisher);
     }
 
     @Test

@@ -9,10 +9,12 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import com.codeborne.selenide.Condition;
 import org.apache.commons.lang3.SystemUtils;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.openqa.selenium.By;
 import org.openqa.selenium.Keys;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -30,6 +32,36 @@ public class DatabasePerspective {
 
     public void expandSubmenu(String schemaName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, schemaName);
+    }
+
+    /**
+     * Expands the "Tables" tree node and waits for {@code tableName} to appear as a child entry.
+     *
+     * <p>
+     * A plain double-click (used by {@link #expandSubmenu}) can race against the tree's click-to-expand
+     * / click-to-collapse toggle: the first half of the double-click expands the node while the second
+     * half immediately collapses it, so the child entries never become visible. This method retries
+     * with a single click if the double-click does not produce the expected child within a short
+     * window.
+     */
+    public void expandTablesUntilVisible(String tableName) {
+        By anchorSelector = By.tagName(HtmlElementType.ANCHOR.getType());
+
+        expandSubmenu("Tables");
+        if (browser.findOptionalElementInAllFrames(anchorSelector, 10, Condition.exist, Condition.exactText(tableName))
+                   .isPresent()) {
+            return;
+        }
+
+        // Double-click likely collapsed the node — fall back to single click.
+        browser.clickOnElementWithText(HtmlElementType.ANCHOR, "Tables");
+        if (browser.findOptionalElementInAllFrames(anchorSelector, 10, Condition.exist, Condition.exactText(tableName))
+                   .isPresent()) {
+            return;
+        }
+
+        // One more double-click attempt; the caller's own 60 s assertion will handle the rest.
+        expandSubmenu("Tables");
     }
 
     public void assertSubmenu(String submenu) {
