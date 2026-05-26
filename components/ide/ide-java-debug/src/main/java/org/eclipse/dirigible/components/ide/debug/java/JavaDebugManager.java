@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.ide.debug.java;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
 import org.slf4j.Logger;
@@ -19,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.Socket;
+import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -143,9 +145,19 @@ public class JavaDebugManager implements DisposableBean {
                     "[java-debug] vscode.java.startDebugSession returned no port — is com.microsoft.java.debug.plugin installed? Response: "
                             + response);
         }
+        // The browser sends setBreakpoints with virtual paths like /{workspace}/{project}/...
+        // The DAP server needs real filesystem paths. Translate at the bridge layer.
+        String virtualPathPrefix = "/" + workspace + "/";
+        String realPathPrefix = Paths
+                                     .get(DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue(), "dirigible", "repository", "root",
+                                             "users", username, workspace)
+                                     .toAbsolutePath()
+                                     .normalize()
+                                     .toString()
+                + "/";
         logger.info("[java-debug] Connecting to DAP server on localhost:{}", port);
         Socket dapSocket = new Socket("localhost", port);
-        return new JavaDebugBridge(dapSocket);
+        return new JavaDebugBridge(dapSocket, virtualPathPrefix, realPathPrefix);
     }
 
     private static String sanitize(String value) {

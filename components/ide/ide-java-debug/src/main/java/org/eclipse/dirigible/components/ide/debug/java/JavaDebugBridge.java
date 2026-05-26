@@ -9,6 +9,9 @@
  */
 package org.eclipse.dirigible.components.ide.debug.java;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
@@ -38,10 +41,25 @@ public class JavaDebugBridge {
     private final Socket dapSocket;
     private final OutputStream dapOut;
     private final Map<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
+    private final ObjectMapper mapper = new ObjectMapper();
 
-    JavaDebugBridge(Socket dapSocket) throws IOException {
+    /**
+     * Virtual path prefix sent by the browser in {@code setBreakpoints} source paths, e.g.
+     * {@code /workspace/} (the workspace name with surrounding slashes).
+     */
+    private final String virtualPathPrefix;
+    /**
+     * Real filesystem path prefix that replaces {@link #virtualPathPrefix} when forwarding
+     * {@code setBreakpoints} to the DAP server, e.g.
+     * {@code /home/user/.../repository/root/users/admin/workspace/}.
+     */
+    private final String realPathPrefix;
+
+    JavaDebugBridge(Socket dapSocket, String virtualPathPrefix, String realPathPrefix) throws IOException {
         this.dapSocket = dapSocket;
         this.dapOut = dapSocket.getOutputStream();
+        this.virtualPathPrefix = virtualPathPrefix;
+        this.realPathPrefix = realPathPrefix;
         startDapReader();
     }
 
@@ -73,7 +91,7 @@ public class JavaDebugBridge {
             return;
         }
         try {
-            byte[] body = json.getBytes(StandardCharsets.UTF_8);
+            byte[] body = translateSourcePaths(json).getBytes(StandardCharsets.UTF_8);
             String header = "Content-Length: " + body.length + "\r\n\r\n";
             dapOut.write(header.getBytes(StandardCharsets.UTF_8));
             dapOut.write(body);
@@ -87,6 +105,41 @@ public class JavaDebugBridge {
         try {
             dapSocket.close();
         } catch (IOException ignored) {
+        }
+    }
+
+    /**
+     * Translates the {@code source.path} field in DAP {@code setBreakpoints} requests from the virtual
+     * workspace path the browser uses to the real filesystem path the DAP server needs. All other
+     * messages are returned unchanged.
+     */
+    private String translateSourcePaths(String json) {
+        if (!json.contains("setBreakpoints")) {
+            return json;
+        }
+        try {
+            JsonNode root = mapper.readTree(json);
+            if (!"setBreakpoints".equals(root.path("command")
+                                             .asText())) {
+                return json;
+            }
+            JsonNode source = root.path("arguments")
+                                  .path("source");
+            if (!source.isObject()) {
+                return json;
+            }
+            String path = source.path("path")
+                                .asText(null);
+            if (path == null || !path.startsWith(virtualPathPrefix)) {
+                return json;
+            }
+            String relative = path.substring(virtualPathPrefix.length());
+            ((ObjectNode) source).put("path", realPathPrefix + relative);
+            logger.debug("[java-debug] Translated breakpoint path {} → {}", path, realPathPrefix + relative);
+            return mapper.writeValueAsString(root);
+        } catch (Exception e) {
+            logger.warn("[java-debug] Could not translate breakpoint source path", e);
+            return json;
         }
     }
 

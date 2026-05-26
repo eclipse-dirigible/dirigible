@@ -131,7 +131,7 @@
                 <bk-scrollbar class="bk-full-height">
                     <table bk-table display-mode="compact" outer-borders="none">
                         <tbody bk-table-body>
-                            <tr bk-table-row ng-repeat="bp in breakpointList() track by $index" hoverable="true">
+                            <tr bk-table-row ng-repeat="bp in bpList track by $index" hoverable="true">
                                 <td bk-table-cell>
                                     <span style="font-size:11px">{{bp.file}}:{{bp.line}}</span>
                                 </td>
@@ -139,7 +139,7 @@
                                     <bk-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" aria-label="Remove breakpoint"></bk-button>
                                 </td>
                             </tr>
-                            <tr ng-if="breakpointList().length === 0" bk-table-row>
+                            <tr ng-if="bpList.length === 0" bk-table-row>
                                 <td bk-table-cell no-data="true">No breakpoints set</td>
                             </tr>
                         </tbody>

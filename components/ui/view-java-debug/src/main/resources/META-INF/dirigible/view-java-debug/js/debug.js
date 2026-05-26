@@ -26,8 +26,19 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
 
     // Map of virtualFilePath -> int[]  (1-based line numbers)
     const breakpoints = {};
+    $scope.bpList = [];
     let ws = null;
     let dapSeq = 1;
+
+    function refreshBpList() {
+        const list = [];
+        for (const [file, lines] of Object.entries(breakpoints)) {
+            for (const line of lines) {
+                list.push({ file: file.split('/').pop(), line, fullPath: file });
+            }
+        }
+        $scope.bpList = list;
+    }
 
     $scope.statusLabel = () => {
         switch ($scope.status) {
@@ -40,22 +51,13 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
 
     $scope.isPaused = () => $scope.callStack.length > 0;
 
-    $scope.breakpointList = () => {
-        const list = [];
-        for (const [file, lines] of Object.entries(breakpoints)) {
-            for (const line of lines) {
-                list.push({ file: file.split('/').pop(), line, fullPath: file });
-            }
-        }
-        return list;
-    };
-
     $scope.removeBreakpoint = (bp) => {
         if (breakpoints[bp.fullPath]) {
             breakpoints[bp.fullPath] = breakpoints[bp.fullPath].filter(l => l !== bp.line);
             if (breakpoints[bp.fullPath].length === 0) {
                 delete breakpoints[bp.fullPath];
             }
+            refreshBpList();
             syncBreakpointsForFile(bp.fullPath);
             broadcastBreakpoints();
         }
@@ -268,7 +270,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
             if ($scope.status === 'connected') {
                 syncBreakpointsForFile(filePath);
             }
-            $timeout(() => {});  // trigger digest
+            $timeout(refreshBpList);
         },
     });
 });
