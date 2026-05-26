@@ -10,7 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const javaDebugApp = angular.module('javaDebug', ['blimpKit', 'platformView']);
-javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
+javaDebugApp.constant('Layout', new LayoutHub());
+javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     const themingHub = new ThemingHub();
 
     $scope.config = {
@@ -244,10 +245,41 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout) => {
     // -------------------------------------------------------------------------
 
     function highlightLine(filePath, lineNumber) {
+        if (filePath && lineNumber > 0) {
+            // DAP returns real filesystem paths; convert to the virtual workspace path
+            // that Layout.openEditor and the editor's resourcePath use.
+            const virtualPath = realToVirtualPath(filePath);
+            if (virtualPath) {
+                Layout.openEditor({ path: virtualPath, contentType: 'text/x-java' });
+            }
+        }
         themingHub.postMessage({
             topic: 'java.debug.highlight',
             data: { filePath, lineNumber },
         });
+        if (filePath && lineNumber > 0) {
+            // Re-broadcast after a short delay so newly opened editor tabs receive it
+            // (they register their listener after their iframe initialises).
+            $timeout(() => {
+                themingHub.postMessage({
+                    topic: 'java.debug.highlight',
+                    data: { filePath, lineNumber },
+                });
+            }, 1500);
+        }
+    }
+
+    /**
+     * Converts a real server-side filesystem path returned by the DAP stack trace
+     * (e.g. /repo/root/users/admin/workspace/proj/Foo.java) back to the virtual
+     * workspace path the IDE uses (e.g. /workspace/proj/Foo.java) by finding the
+     * last occurrence of /{workspaceName}/ in the path.
+     */
+    function realToVirtualPath(realPath) {
+        const ws = $scope.config.workspace || 'workspace';
+        const marker = '/' + ws + '/';
+        const idx = realPath.lastIndexOf(marker);
+        return idx >= 0 ? realPath.substring(idx) : null;
     }
 
     function broadcastBreakpoints() {
