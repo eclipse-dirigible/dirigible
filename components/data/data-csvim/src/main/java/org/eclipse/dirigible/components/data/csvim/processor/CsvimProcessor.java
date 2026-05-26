@@ -307,7 +307,8 @@ public class CsvimProcessor {
             safeSchema = requireSafeIdentifier(schema);
             safeTable = requireSafeIdentifier(tableName);
         } catch (IllegalArgumentException badIdent) {
-            logger.warn("Skipping IDENTITY restart — schema/table name not a safe SQL identifier: {}", badIdent.getMessage());
+            logger.warn("Skipping IDENTITY restart — schema/table name not a safe SQL identifier: {}",
+                    sanitizeForLog(badIdent.getMessage()));
             return;
         }
         try (ResultSet cols = connection.getMetaData()
@@ -320,21 +321,23 @@ public class CsvimProcessor {
                 try {
                     safeColumn = requireSafeIdentifier(cols.getString("COLUMN_NAME"));
                 } catch (IllegalArgumentException badColumn) {
-                    logger.warn("Skipping IDENTITY restart on [{}.{}] — column name not a safe SQL identifier: {}", safeSchema, safeTable,
-                            badColumn.getMessage());
+                    logger.warn("Skipping IDENTITY restart on [{}.{}] — column name not a safe SQL identifier: {}",
+                            sanitizeForLog(safeSchema), sanitizeForLog(safeTable), sanitizeForLog(badColumn.getMessage()));
                     continue;
                 }
                 try {
                     long next = computeNextValue(connection, safeSchema, safeTable, safeColumn);
                     executeIdentityRestart(dataSource, connection, safeSchema, safeTable, safeColumn, next);
-                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", safeSchema, safeTable, safeColumn, next);
+                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", sanitizeForLog(safeSchema), sanitizeForLog(safeTable),
+                            sanitizeForLog(safeColumn), next);
                 } catch (SQLException restartError) {
-                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", safeSchema, safeTable, safeColumn,
-                            restartError.getMessage());
+                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", sanitizeForLog(safeSchema),
+                            sanitizeForLog(safeTable), sanitizeForLog(safeColumn), restartError.getMessage());
                 }
             }
         } catch (SQLException metadataError) {
-            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", safeSchema, safeTable, metadataError.getMessage());
+            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", sanitizeForLog(safeSchema), sanitizeForLog(safeTable),
+                    metadataError.getMessage());
         }
     }
 
@@ -345,6 +348,8 @@ public class CsvimProcessor {
      */
     private long computeNextValue(Connection connection, String safeSchema, String safeTable, String safeColumn) throws SQLException {
         String sql = "SELECT MAX(" + quote(connection, safeColumn) + ") FROM " + qualifiedTable(connection, safeSchema, safeTable);
+        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
+        // parameter binding exists for DDL/identifier positions.
         try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
             if (rs.next()) {
                 long current = rs.getLong(1);
@@ -379,9 +384,11 @@ public class CsvimProcessor {
             sql = "ALTER TABLE `" + safeSchema + "`.`" + safeTable + "` AUTO_INCREMENT = " + next;
         } else {
             logger.info("IDENTITY restart not implemented for dialect [{}] — skipping [{}.{}.{}]", dataSource.getDatabaseSystem(),
-                    safeSchema, safeTable, safeColumn);
+                    sanitizeForLog(safeSchema), sanitizeForLog(safeTable), sanitizeForLog(safeColumn));
             return;
         }
+        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
+        // parameter binding exists for DDL/identifier positions.
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.execute();
         }
@@ -414,8 +421,8 @@ public class CsvimProcessor {
                 }
             }
         } catch (SQLException | IllegalArgumentException probeError) {
-            logger.warn("Could not probe IDENTITY columns on [{}.{}] for IDENTITY_INSERT toggle: {}", schema, tableName,
-                    probeError.getMessage());
+            logger.warn("Could not probe IDENTITY columns on [{}.{}] for IDENTITY_INSERT toggle: {}", sanitizeForLog(schema),
+                    sanitizeForLog(tableName), probeError.getMessage());
         }
         return false;
     }
@@ -433,14 +440,18 @@ public class CsvimProcessor {
             safeSchema = requireSafeIdentifier(schema);
             safeTable = requireSafeIdentifier(tableName);
         } catch (IllegalArgumentException badIdent) {
-            logger.warn("Skipping SET IDENTITY_INSERT — schema/table name not a safe SQL identifier: {}", badIdent.getMessage());
+            logger.warn("Skipping SET IDENTITY_INSERT — schema/table name not a safe SQL identifier: {}",
+                    sanitizeForLog(badIdent.getMessage()));
             return;
         }
         String sql = "SET IDENTITY_INSERT [" + safeSchema + "].[" + safeTable + "] " + (on ? "ON" : "OFF");
+        // lgtm[java/sql-injection] identifiers whitelisted by requireSafeIdentifier — no PreparedStatement
+        // parameter binding exists for DDL/identifier positions.
         try (PreparedStatement ps = connection.prepareStatement(sql)) {
             ps.execute();
         } catch (SQLException e) {
-            logger.warn("Failed to {} IDENTITY_INSERT on [{}.{}]: {}", on ? "enable" : "disable", safeSchema, safeTable, e.getMessage());
+            logger.warn("Failed to {} IDENTITY_INSERT on [{}.{}]: {}", on ? "enable" : "disable", sanitizeForLog(safeSchema),
+                    sanitizeForLog(safeTable), e.getMessage());
         }
     }
 
@@ -473,6 +484,15 @@ public class CsvimProcessor {
             throw new IllegalArgumentException("not a safe SQL identifier: [" + value + "]");
         }
         return value;
+    }
+
+    /**
+     * Replaces CR / LF / TAB with {@code _} so a (still user-influenced) identifier or message can be
+     * passed to {@code logger.*} without splitting / spoofing the log structure. CodeQL recognises this
+     * pattern as a sanitiser for {@code java/log-injection}.
+     */
+    private static String sanitizeForLog(String value) {
+        return value == null ? "null" : value.replaceAll("[\\r\\n\\t]", "_");
     }
 
     private boolean isDefaultDataSource(String dataSourceName) {

@@ -22,6 +22,8 @@ import org.eclipse.dirigible.components.data.structures.domain.TableConstraintCh
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintForeignKey;
 import org.eclipse.dirigible.components.data.structures.domain.TableConstraintUnique;
 import org.eclipse.dirigible.components.data.structures.domain.TableIndex;
+import org.eclipse.dirigible.components.database.DatabaseSystem;
+import org.eclipse.dirigible.components.database.DatabaseSystemDeterminer;
 import org.eclipse.dirigible.database.sql.DataType;
 import org.eclipse.dirigible.database.sql.ISqlKeywords;
 import org.eclipse.dirigible.database.sql.SqlFactory;
@@ -66,6 +68,13 @@ public class TableCreateProcessor {
 
         createTableBuilder.schema(tableModel.getSchema());
 
+        // MSSQL refuses explicit-ID INSERTs into IDENTITY columns by default, which breaks every
+        // pre-existing TS/JS code path that emits sequence-based IDs (Aerokit Repository, DataStore,
+        // etc.). Keep the autoincrement *flag* on the model so it reaches Hibernate / Java template
+        // consumers that need it, but skip the DDL IDENTITY clause on MSSQL so the column shape stays
+        // the pre-fix INTEGER NOT NULL. H2 / PostgreSQL / MySQL keep IDENTITY.
+        boolean emitAutoincrement = !DatabaseSystem.MSSQL.equals(DatabaseSystemDeterminer.determine(connection));
+
         List<TableColumn> columns = tableModel.getColumns();
         List<TableIndex> indexes = tableModel.getIndexes();
         for (TableColumn columnModel : columns) {
@@ -76,7 +85,7 @@ public class TableCreateProcessor {
             boolean isNullable = columnModel.isNullable();
             boolean isPrimaryKey = columnModel.isPrimaryKey();
             boolean isUnique = columnModel.isUnique();
-            boolean autoincrement = columnModel.isAutoincrement();
+            boolean autoincrement = emitAutoincrement && columnModel.isAutoincrement();
             String defaultValue = columnModel.getDefaultValue();
             String scale = columnModel.getScale();
             String precision = columnModel.getPrecision();
