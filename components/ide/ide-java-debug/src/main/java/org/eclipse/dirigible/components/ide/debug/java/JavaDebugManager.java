@@ -10,7 +10,6 @@
 package org.eclipse.dirigible.components.ide.debug.java;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsInstance;
 import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
 import org.slf4j.Logger;
@@ -20,7 +19,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import java.net.Socket;
-import java.nio.file.Paths;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -103,8 +101,7 @@ public class JavaDebugManager implements DisposableBean {
 
         // JDT.LS queues workspace commands until the LSP initialize handshake completes. Perform it
         // from the server side when the browser editor hasn't connected yet (no-op otherwise).
-        String workspaceUri = workspaceRootUri(username, workspace);
-        lspInstance.ensureInitialized(workspaceUri)
+        lspInstance.ensureInitialized()
                    .get(60, TimeUnit.SECONDS);
 
         logger.info("[java-debug] Requesting DAP server from JDT.LS for {}/{}", sanitize(username), sanitize(workspace));
@@ -127,15 +124,6 @@ public class JavaDebugManager implements DisposableBean {
         logger.info("[java-debug] Connecting to DAP server on localhost:{}", port);
         Socket dapSocket = new Socket("localhost", port);
         return new JavaDebugBridge(dapSocket);
-    }
-
-    private static String workspaceRootUri(String username, String workspace) {
-        String repoRoot = DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue();
-        return Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace)
-                    .toAbsolutePath()
-                    .normalize()
-                    .toUri()
-                    .toString();
     }
 
     private static String sanitize(String value) {

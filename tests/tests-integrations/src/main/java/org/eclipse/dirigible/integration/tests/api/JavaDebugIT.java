@@ -86,23 +86,23 @@ class JavaDebugIT extends IntegrationTest {
 
         // Step 3 — server-side LSP initialization. Without this, workspace/executeCommand is queued
         // forever because JDT.LS waits for an initialize + initialized from a client.
-        String workspaceUri = workspaceRootUri();
-        LOGGER.info("[JavaDebugIT] Initializing JDT.LS for workspace URI: {}", workspaceUri);
-        lsp.ensureInitialized(workspaceUri)
+        LOGGER.info("[JavaDebugIT] Initializing JDT.LS for workspace");
+        lsp.ensureInitialized()
            .get(120, TimeUnit.SECONDS);
 
         // Step 4 — ask JDT.LS to start the DAP server via the debug plugin command.
         LOGGER.info("[JavaDebugIT] Sending vscode.java.startDebugSession");
-        JsonNode response =
-                lsp.sendRequest("workspace/executeCommand", "{\"command\":\"vscode.java.startDebugSession\",\"arguments\":[]}")
-                   .get(30, TimeUnit.SECONDS);
+        JsonNode response = lsp.sendRequest("workspace/executeCommand", "{\"command\":\"vscode.java.startDebugSession\",\"arguments\":[]}")
+                               .get(30, TimeUnit.SECONDS);
 
         LOGGER.info("[JavaDebugIT] vscode.java.startDebugSession response: {}", response);
         assertFalse(response.has("error"),
                 "workspace/executeCommand returned an error — debug plugin may not be loaded by Equinox: " + response);
 
         JsonNode result = response.path("result");
-        int port = result.isInt() ? result.asInt() : result.path("port").asInt(0);
+        int port = result.isInt() ? result.asInt()
+                : result.path("port")
+                        .asInt(0);
         assertTrue(port > 0, "Expected a TCP port in the startDebugSession response but got: " + response);
 
         // Step 5 — verify the DAP server is actually listening on that port.
@@ -118,9 +118,9 @@ class JavaDebugIT extends IntegrationTest {
     // -------------------------------------------------------------------------
 
     /**
-     * Asserts that at least one {@code config_<platform>/config.ini} under the JDT.LS install
-     * directory contains an {@code osgi.bundles} entry for {@code com.microsoft.java.debug.plugin}.
-     * Fails with a clear message identifying the missing registration as the root cause.
+     * Asserts that at least one {@code config_<platform>/config.ini} under the JDT.LS install directory
+     * contains an {@code osgi.bundles} entry for {@code com.microsoft.java.debug.plugin}. Fails with a
+     * clear message identifying the missing registration as the root cause.
      */
     private void assertDebugPluginInConfigIni() throws Exception {
         String jdtlsHome = getJdtlsHome();
@@ -138,7 +138,8 @@ class JavaDebugIT extends IntegrationTest {
             for (Path configDir : (Iterable<Path>) children::iterator) {
                 if (!configDir.getFileName()
                               .toString()
-                              .startsWith("config_") || !Files.isDirectory(configDir)) {
+                              .startsWith("config_")
+                        || !Files.isDirectory(configDir)) {
                     continue;
                 }
                 Path configIni = configDir.resolve("config.ini");
@@ -154,8 +155,8 @@ class JavaDebugIT extends IntegrationTest {
             }
         }
         assertTrue(found,
-                "com.microsoft.java.debug.plugin is NOT registered in any config_<platform>/config.ini under "
-                        + jdtlsHome + ". Equinox will not load it — this causes 'No delegateCommandHandler for "
+                "com.microsoft.java.debug.plugin is NOT registered in any config_<platform>/config.ini under " + jdtlsHome
+                        + ". Equinox will not load it — this causes 'No delegateCommandHandler for "
                         + "vscode.java.startDebugSession'. Fix: installDebugPlugin() must append the plugin entry "
                         + "to the osgi.bundles list in config.ini.");
     }
@@ -167,15 +168,6 @@ class JavaDebugIT extends IntegrationTest {
         }
         return Paths.get(System.getProperty("user.home"), ".dirigible", "jdtls")
                     .toAbsolutePath()
-                    .toString();
-    }
-
-    private static String workspaceRootUri() {
-        String repoRoot = org.eclipse.dirigible.commons.config.DirigibleConfig.REPOSITORY_LOCAL_ROOT_FOLDER.getStringValue();
-        return Paths.get(repoRoot, "dirigible", "repository", "root", "users", USERNAME, WORKSPACE)
-                    .toAbsolutePath()
-                    .normalize()
-                    .toUri()
                     .toString();
     }
 

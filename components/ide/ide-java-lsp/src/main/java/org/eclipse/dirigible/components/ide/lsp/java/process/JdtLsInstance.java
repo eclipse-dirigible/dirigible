@@ -60,13 +60,6 @@ public class JdtLsInstance {
      */
     private volatile boolean lspInitialized = false;
 
-    /**
-     * Cached JDT.LS capabilities JSON (the {@code result} of the {@code initialize} response). Used to
-     * synthesize a fake-but-real-capabilities response for browser clients that connect after the
-     * server-side initialization has already completed.
-     */
-    private volatile String cachedCapabilitiesJson = null;
-
     JdtLsInstance(Process process, String virtualRoot, String realRoot) {
         this.process = process;
         this.stdin = process.getOutputStream();
@@ -86,11 +79,11 @@ public class JdtLsInstance {
         logger.debug("[java-lsp] Session {} detached (total: {})", sessionId, sessions.size());
     }
 
-    boolean hasSession(String sessionId) {
+    public boolean hasSession(String sessionId) {
         return sessions.containsKey(sessionId);
     }
 
-    boolean isAlive() {
+    public boolean isAlive() {
         return process.isAlive();
     }
 
@@ -99,39 +92,17 @@ public class JdtLsInstance {
             logger.warn("[java-lsp] Process is dead, dropping message");
             return;
         }
-        // Track browser-initiated LSP initialization: when the browser sends the `initialized`
-        // notification (no id, no response expected), JDT.LS has been fully initialized by the editor.
-        // Mark it here so that ensureInitialized() becomes a no-op.
+        // Track when the browser sends the `initialized` notification so ensureInitialized() becomes
+        // a no-op if a browser editor has already completed the LSP handshake.
         try {
             JsonNode msg = jsonMapper.readTree(json);
-            String method = msg.path("method")
-                               .asText("");
-            if ("initialized".equals(method) && !msg.has("id")) {
+            if ("initialized".equals(msg.path("method")
+                                        .asText())
+                    && !msg.has("id")) {
                 lspInitialized = true;
                 logger.debug("[java-lsp] JDT.LS initialized by browser LSP client");
             }
         } catch (Exception ignored) {
-        }
-
-        // When JDT.LS was already initialized server-side, a browser that subsequently connects will
-        // send an `initialize` request. JDT.LS would reject it with -32600 (server already initialized).
-        // Instead, intercept it here and send back the real cached capabilities so the browser proceeds
-        // normally without re-initializing JDT.LS.
-        if (lspInitialized && cachedCapabilitiesJson != null) {
-            try {
-                JsonNode msg = jsonMapper.readTree(json);
-                if ("initialize".equals(msg.path("method")
-                                           .asText())
-                        && msg.has("id")) {
-                    int browserId = msg.get("id")
-                                       .asInt();
-                    String fakeResponse = "{\"jsonrpc\":\"2.0\",\"id\":" + browserId + ",\"result\":" + cachedCapabilitiesJson + "}";
-                    broadcast(fakeResponse);
-                    logger.debug("[java-lsp] Intercepted browser initialize (already initialized) — sent cached capabilities");
-                    return;
-                }
-            } catch (Exception ignored) {
-            }
         }
         try {
             String translated = json.replace(virtualRoot, realRoot);
@@ -168,25 +139,28 @@ public class JdtLsInstance {
      * JDT.LS buffers (and never processes) {@code workspace/*} requests that arrive before it receives
      * the {@code initialize} + {@code initialized} pair from an LSP client. This method performs that
      * handshake from the server side so that workspace commands work even when no browser editor
-     * session has connected yet. If JDT.LS was already initialized (e.g. by a browser), this is a
-     * no-op.
+     * session has connected yet. If JDT.LS was already initialized (e.g. by a browser editor), this is
+     * a no-op and the future completes immediately.
      *
      * <p>
-     * When a browser subsequently connects and sends {@code initialize}, the request is intercepted in
-     * {@link #sendToProcess} and a fake-but-real-capabilities response is returned so the browser LSP
-     * client continues normally without JDT.LS rejecting a duplicate initialization.
+     * When a browser editor subsequently connects and sends its own {@code initialize} request, it is
+     * forwarded to JDT.LS unmodified. JDT.LS re-initializes with the browser's full client capabilities
+     * and proper workspace folders, which restores correct classpath/project configuration for the
+     * editor. The DAP server (started by {@code vscode.java.startDebugSession}) is a separate TCP
+     * socket and is unaffected by JDT.LS re-initialization.
      *
-     * @param workspaceUri real {@code file://} URI of the workspace root directory
      * @return a future that completes when JDT.LS is in the initialized state
      */
-    public synchronized CompletableFuture<Void> ensureInitialized(String workspaceUri) {
+    public synchronized CompletableFuture<Void> ensureInitialized() {
         if (lspInitialized) {
             return CompletableFuture.completedFuture(null);
         }
         long pid = ProcessHandle.current()
                                 .pid();
-        String escapedUri = workspaceUri.replace("\\", "\\\\")
-                                        .replace("\"", "\\\"");
+        // Use this.realRoot (already the canonical real URI with trailing slash) so the workspace
+        // root matches what sendToProcess uses for virtual→real URI translation.
+        String escapedUri = realRoot.replace("\\", "\\\\")
+                                    .replace("\"", "\\\"");
         String initParams = "{\"processId\":" + pid + "," + "\"clientInfo\":{\"name\":\"dirigible-java-debug\"}," + "\"rootUri\":\""
                 + escapedUri + "\"," + "\"workspaceFolders\":[{\"uri\":\"" + escapedUri + "\",\"name\":\"workspace\"}],"
                 + "\"capabilities\":{\"workspace\":{\"executeCommand\":{\"dynamicRegistration\":false}}},"
@@ -199,13 +173,10 @@ public class JdtLsInstance {
                 result.completeExceptionally(ex);
                 return;
             }
-            // Cache capabilities so we can replay them to browser clients that connect later.
-            cachedCapabilitiesJson = node.path("result")
-                                         .toString();
             // Send the 'initialized' notification — JDT.LS transitions to initialized state here.
             sendToProcess("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}");
             lspInitialized = true;
-            logger.info("[java-lsp] JDT.LS initialized from server side for workspace {}", workspaceUri);
+            logger.info("[java-lsp] JDT.LS initialized from server side for workspace {}", realRoot);
             result.complete(null);
         });
         return result;
