@@ -384,7 +384,42 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                                 + "or pre-extract a JDT.LS release to that directory.");
             }
         }
+        installDebugPlugin();
         installChecked = true;
+    }
+
+    /**
+     * Copies the bundled {@code com.microsoft.java.debug.plugin.jar} into the JDT.LS
+     * {@code plugins/} directory if a newer or different version is not already present.
+     * The JAR is downloaded at build time by {@code download-maven-plugin} and packed as
+     * {@code jdtls-debug/com.microsoft.java.debug.plugin.jar} inside the application JAR.
+     * A no-op when the bundled resource is absent (e.g. quick-build without the download).
+     */
+    private void installDebugPlugin() {
+        try (InputStream bundled = getClass().getClassLoader()
+                                             .getResourceAsStream("jdtls-debug/com.microsoft.java.debug.plugin.jar")) {
+            if (bundled == null) {
+                logger.debug("[java-lsp] No bundled debug plugin found — Java debugger will be unavailable");
+                return;
+            }
+            Path pluginsDir = jdtlsHome.resolve("plugins");
+            try (Stream<Path> existing = Files.list(pluginsDir)) {
+                existing.filter(p -> p.getFileName()
+                                      .toString()
+                                      .startsWith("com.microsoft.java.debug.plugin"))
+                        .forEach(p -> {
+                            try {
+                                Files.delete(p);
+                            } catch (IOException ignored) {
+                            }
+                        });
+            }
+            Path target = pluginsDir.resolve("com.microsoft.java.debug.plugin.jar");
+            Files.copy(bundled, target, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            logger.info("[java-lsp] Installed debug plugin at {}", target);
+        } catch (Exception e) {
+            logger.warn("[java-lsp] Could not install debug plugin: {}", e.getMessage());
+        }
     }
 
     /**

@@ -133,6 +133,10 @@
         <jdtls.download.url>https://download.eclipse.org/jdtls/milestones/${jdtls.version}/jdt-language-server-${jdtls.version}-${jdtls.build.timestamp}.tar.gz</jdtls.download.url>
         <jdtls.sha256>354242694936016cd48635967cb28cd4b0735779dafe963077139d2823ccda3a</jdtls.sha256>
         <jdtls.download.skip>false</jdtls.download.skip>
+        <!-- com.microsoft.java.debug plugin bundled alongside JDT.LS (EPL-1.0) -->
+        <java.debug.plugin.version>0.55.0</java.debug.plugin.version>
+        <java.debug.plugin.download.url>https://github.com/microsoft/java-debug/releases/download/${java.debug.plugin.version}/com.microsoft.java.debug.plugin-${java.debug.plugin.version}.jar</java.debug.plugin.download.url>
+        <java.debug.plugin.download.skip>false</java.debug.plugin.download.skip>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
@@ -817,6 +821,7 @@
                 <license.skip>true</license.skip>
                 <skip.code.formatting>true</skip.code.formatting>
                 <jdtls.download.skip>true</jdtls.download.skip>
+                <java.debug.plugin.download.skip>true</java.debug.plugin.download.skip>
             </properties>
         </profile>
         <profile>

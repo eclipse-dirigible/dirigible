@@ -33,6 +33,10 @@
                 <directory>${project.build.directory}/jdtls-download</directory>
                 <targetPath>jdtls</targetPath>
             </resource>
+            <resource>
+                <directory>${project.build.directory}/jdtls-debug-plugin</directory>
+                <targetPath>jdtls-debug</targetPath>
+            </resource>
         </resources>
         <plugins>
             <plugin>
@@ -52,6 +56,21 @@
                             <outputFileName>jdtls.tar.gz</outputFileName>
                             <sha256>${jdtls.sha256}</sha256>
                             <cacheDirectory>${settings.localRepository}/jdtls-cache</cacheDirectory>
+                            <readTimeOut>300000</readTimeOut>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>download-java-debug-plugin</id>
+                        <phase>generate-resources</phase>
+                        <goals>
+                            <goal>wget</goal>
+                        </goals>
+                        <configuration>
+                            <skip>${java.debug.plugin.download.skip}</skip>
+                            <url>${java.debug.plugin.download.url}</url>
+                            <outputDirectory>${project.build.directory}/jdtls-debug-plugin</outputDirectory>
+                            <outputFileName>com.microsoft.java.debug.plugin.jar</outputFileName>
+                            <cacheDirectory>${settings.localRepository}/java-debug-cache</cacheDirectory>
                             <readTimeOut>300000</readTimeOut>
                         </configuration>
                     </execution>
