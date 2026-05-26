@@ -12,7 +12,7 @@
 const viewData = {
     id: 'java-debug',
     region: 'bottom',
-    label: 'Java Debugger',
+    label: 'Debugger',
     lazyLoad: true,
     autoFocusTab: false,
     path: '/services/web/view-java-debug/debug.html'
