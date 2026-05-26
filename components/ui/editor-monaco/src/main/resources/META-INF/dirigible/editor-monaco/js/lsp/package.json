@@ -1,0 +1,14 @@
+{
+    "name": "java-lsp-client",
+    "private": true,
+    "type": "module",
+    "dependencies": {
+        "vscode-ws-jsonrpc": "^3.5.0"
+    },
+    "devDependencies": {
+        "esbuild": "^0.24.0",
+        "typescript": "^5.7.0",
+        "monaco-editor": "^0.40.0",
+        "vscode-languageserver-types": "^3.17.0"
+    }
+}

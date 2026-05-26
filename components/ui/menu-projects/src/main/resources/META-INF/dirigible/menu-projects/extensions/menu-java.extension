@@ -1,0 +1,5 @@
+{
+    "module": "menu-projects/templates/menu-java.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Java Workbench New Menu Extension"
+}

@@ -90,6 +90,7 @@
         <module>ide/ide-git</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
+        <module>ide/ide-java-lsp</module>
         <module>ide/ide-problems</module>
         <module>ide/ide-logs</module>
 
@@ -756,6 +757,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-terminal</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-java-lsp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
