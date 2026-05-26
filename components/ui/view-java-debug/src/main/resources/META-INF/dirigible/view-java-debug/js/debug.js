@@ -31,6 +31,24 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     let ws = null;
     let dapSeq = 1;
 
+    const STORAGE_KEY = 'dirigible.java.debug.breakpoints';
+
+    function saveBreakpoints() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(breakpoints));
+        } catch (e) { /* storage unavailable */ }
+    }
+
+    (function loadBreakpoints() {
+        try {
+            const stored = localStorage.getItem(STORAGE_KEY);
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                Object.assign(breakpoints, parsed);
+            }
+        } catch (e) { /* corrupted storage — start fresh */ }
+    })();
+
     function refreshBpList() {
         const list = [];
         for (const [file, lines] of Object.entries(breakpoints)) {
@@ -59,9 +77,23 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
                 delete breakpoints[bp.fullPath];
             }
             refreshBpList();
+            saveBreakpoints();
             syncBreakpointsForFile(bp.fullPath);
             broadcastBreakpoints();
         }
+    };
+
+    $scope.clearAllBreakpoints = () => {
+        const paths = Object.keys(breakpoints);
+        paths.forEach(path => {
+            delete breakpoints[path];
+            if ($scope.status === 'connected') {
+                syncBreakpointsForFile(path, []);
+            }
+        });
+        refreshBpList();
+        saveBreakpoints();
+        broadcastBreakpoints();
     };
 
     $scope.attach = () => {
@@ -289,6 +321,9 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         });
     }
 
+    // Restore glyph decorations in any already-open editors after loading from storage.
+    $timeout(broadcastBreakpoints);
+
     // Listen for breakpoint changes from the editor (glyph margin clicks)
     themingHub.addMessageListener({
         topic: 'java.debug.breakpoints.changed',
@@ -299,6 +334,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             } else {
                 delete breakpoints[filePath];
             }
+            saveBreakpoints();
             if ($scope.status === 'connected') {
                 syncBreakpointsForFile(filePath);
             }

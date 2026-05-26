@@ -127,7 +127,10 @@
             </div>
             <!-- Breakpoints -->
             <div class="debug-panel">
-                <div class="debug-panel-title">Breakpoints</div>
+                <div class="debug-panel-title" style="display:flex;align-items:center;justify-content:space-between;padding-right:2px">
+                    <span>Breakpoints</span>
+                    <bk-button glyph="sap-icon--clear-all" compact="true" state="transparent" title="Clear all breakpoints" aria-label="Clear all breakpoints" ng-click="clearAllBreakpoints()" ng-disabled="bpList.length === 0"></bk-button>
+                </div>
                 <bk-scrollbar class="bk-full-height">
                     <table bk-table display-mode="compact" outer-borders="none">
                         <tbody bk-table-body>

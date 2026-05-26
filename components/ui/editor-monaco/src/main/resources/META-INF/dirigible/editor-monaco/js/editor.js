@@ -784,6 +784,27 @@ class DirigibleEditor {
             },
         });
 
+        // Restore breakpoint glyphs from the debug view's persisted state
+        themingHub.addMessageListener({
+            topic: 'java.debug.breakpoints',
+            handler: (msg) => {
+                const { breakpoints } = msg || {};
+                if (!breakpoints) return;
+                const myPath = editorParameters.resourcePath;
+                const lines = (breakpoints[myPath] || []).slice();
+                _breakpointLines = lines;
+                breakpointDecorations = editor.deltaDecorations(breakpointDecorations,
+                    lines.map(line => ({
+                        range: new monaco.Range(line, 1, line, 1),
+                        options: {
+                            glyphMarginClassName: 'debug-breakpoint-glyph',
+                            glyphMarginHoverMessage: { value: 'Breakpoint' },
+                        },
+                    }))
+                );
+            },
+        });
+
         if (!this.readOnly) {
             editor.addAction(EditorActionsProvider.createSaveAction(!this.isTemplate));
         }
