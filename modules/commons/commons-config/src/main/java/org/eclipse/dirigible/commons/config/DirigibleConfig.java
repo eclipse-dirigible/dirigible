@@ -118,7 +118,17 @@ public enum DirigibleConfig {
     BASIC_ADMIN_USERNAME("DIRIGIBLE_BASIC_USERNAME", toBase64("admin")),
 
     /** The basic admin pass. */
-    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin"));
+    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin")),
+
+    /** Whether the Java LSP (JDT.LS) integration is enabled. */
+    JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
+
+    /** Directory where the JDT Language Server is installed (or will be downloaded to). */
+    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
+
+    /** URL of the JDT Language Server tar.gz archive to download when not already installed. */
+    JAVA_LSP_DOWNLOAD_URL("DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL",
+            "https://download.eclipse.org/jdtls/milestones/1.38.0/jdt-language-server-1.38.0-202408011337.tar.gz");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);

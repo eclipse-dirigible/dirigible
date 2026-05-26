@@ -125,6 +125,14 @@
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.3</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
+        <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
+
+        <!-- JDT Language Server bundled at build time -->
+        <jdtls.version>1.38.0</jdtls.version>
+        <jdtls.build.timestamp>202408011337</jdtls.build.timestamp>
+        <jdtls.download.url>https://download.eclipse.org/jdtls/milestones/${jdtls.version}/jdt-language-server-${jdtls.version}-${jdtls.build.timestamp}.tar.gz</jdtls.download.url>
+        <jdtls.sha256>ba697788a19f2ba57b16302aba6b343c649928c95f76b0d170494ac12d17ac78</jdtls.sha256>
+        <jdtls.download.skip>false</jdtls.download.skip>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
@@ -314,6 +322,11 @@
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>exec-maven-plugin</artifactId>
                     <version>${maven-exec-plugin.version}</version>
+                </plugin>
+                <plugin>
+                    <groupId>com.googlecode.maven-download-plugin</groupId>
+                    <artifactId>download-maven-plugin</artifactId>
+                    <version>${maven-download-plugin.version}</version>
                 </plugin>
                 <plugin>
                     <groupId>com.mycila</groupId>
@@ -803,6 +816,7 @@
                 <maven.javadoc.skip>true</maven.javadoc.skip>
                 <license.skip>true</license.skip>
                 <skip.code.formatting>true</skip.code.formatting>
+                <jdtls.download.skip>true</jdtls.download.skip>
             </properties>
         </profile>
         <profile>
@@ -952,7 +966,7 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.28.0</version>
+                <version>2.28.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

@@ -45,7 +45,8 @@ const editorData = {
 		'application/data-mapping-model+xml',
 		'application/json+form',
 		'application/xml+calculationview',
-		'application/json+hdi'
+		'application/json+hdi',
+		'text/x-java-source'
 	]
 };
 if (typeof exports !== 'undefined') {
