@@ -113,9 +113,12 @@ public class JavaDebugManager implements DisposableBean {
                 lspInstance.sendRequest("workspace/executeCommand", "{\"command\":\"vscode.java.startDebugSession\",\"arguments\":[]}")
                            .get(30, TimeUnit.SECONDS);
 
+        // vscode.java.startDebugSession returns the port as a direct integer: {"result": 59683}
+        // not as a nested object {"result": {"port": 59683}}.
         JsonNode result = response.path("result");
-        int port = result.path("port")
-                         .asInt(0);
+        int port = result.isInt() ? result.asInt()
+                : result.path("port")
+                        .asInt(0);
         if (port <= 0) {
             throw new IllegalStateException(
                     "[java-debug] vscode.java.startDebugSession returned no port — is com.microsoft.java.debug.plugin installed? Response: "

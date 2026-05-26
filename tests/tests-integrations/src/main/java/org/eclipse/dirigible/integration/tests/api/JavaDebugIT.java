@@ -101,9 +101,8 @@ class JavaDebugIT extends IntegrationTest {
         assertFalse(response.has("error"),
                 "workspace/executeCommand returned an error — debug plugin may not be loaded by Equinox: " + response);
 
-        int port = response.path("result")
-                           .path("port")
-                           .asInt(0);
+        JsonNode result = response.path("result");
+        int port = result.isInt() ? result.asInt() : result.path("port").asInt(0);
         assertTrue(port > 0, "Expected a TCP port in the startDebugSession response but got: " + response);
 
         // Step 5 — verify the DAP server is actually listening on that port.
