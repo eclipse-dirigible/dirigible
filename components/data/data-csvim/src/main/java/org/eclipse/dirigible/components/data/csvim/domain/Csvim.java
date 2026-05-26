@@ -15,8 +15,6 @@ import java.util.Objects;
 import java.util.Optional;
 
 import org.eclipse.dirigible.components.base.artefact.Artefact;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 
 import com.google.gson.annotations.Expose;
 
@@ -68,8 +66,7 @@ public class Csvim extends Artefact {
     /**
      * The csv file definitions.
      */
-    @OneToMany(mappedBy = "csvim", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
+    @OneToMany(mappedBy = "csvim", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Nullable
     @Expose
     private List<CsvFile> files = new ArrayList<CsvFile>();

@@ -1,5 +1,0 @@
-{
-    "module": "shell-ide/configs/general.js",
-    "extensionPoint": "platform-settings",
-    "description": "General settings view"
-}

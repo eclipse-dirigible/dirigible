@@ -11,8 +11,10 @@ package org.eclipse.dirigible.cli;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.shell.core.command.annotation.EnableCommand;
 
 @SpringBootApplication
+@EnableCommand(ProjectCommands.class)
 public class DirigibleCLIApplication {
 
     public static void main(String[] args) {

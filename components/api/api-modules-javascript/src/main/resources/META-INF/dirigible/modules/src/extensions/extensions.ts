@@ -86,7 +86,9 @@ export class Extensions {
 					extensionModule = dirigibleRequire(module);
 				} catch (e) {
 					// Fallback to dynamic import (for environments supporting ESM/Async)
-					extensionModule = await import(`../../../../${module}`);
+					let modulePath = module.endsWith('.js') ? module.replace(/\.js$/, '') : module;
+					modulePath = module.endsWith('.ts') ? module.replace(/\.ts$/, '') : module;
+					extensionModule = await import(`../../../../${modulePath}`);
 				}
 
 				if (!extensionModule || Object.keys(extensionModule).length === 0) {

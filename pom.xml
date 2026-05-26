@@ -125,12 +125,20 @@
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.3</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
+        <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
+
+        <!-- JDT Language Server bundled at build time -->
+        <jdtls.version>1.38.0</jdtls.version>
+        <jdtls.build.timestamp>202408011337</jdtls.build.timestamp>
+        <jdtls.download.url>https://download.eclipse.org/jdtls/milestones/${jdtls.version}/jdt-language-server-${jdtls.version}-${jdtls.build.timestamp}.tar.gz</jdtls.download.url>
+        <jdtls.sha256>ba697788a19f2ba57b16302aba6b343c649928c95f76b0d170494ac12d17ac78</jdtls.sha256>
+        <jdtls.download.skip>false</jdtls.download.skip>
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>3.5.9</spring.boot.version>
-        <spring.admin.version>3.5.7</spring.admin.version>
-        <springdoc.version>2.8.13</springdoc.version>
+        <spring.boot.version>4.0.6</spring.boot.version>
+        <spring.admin.version>4.0.4</spring.admin.version>
+        <springdoc.version>3.0.3</springdoc.version>
 
         <!-- Webjars -->
         <webjars.locator.version>0.52</webjars.locator.version>
@@ -163,7 +171,7 @@
         <olingo.version>3.1.4</olingo.version>
 
         <!-- FTP -->
-        <mina-core.version>2.2.5</mina-core.version>
+        <mina-core.version>2.2.7</mina-core.version>
         <sshd-core.version>2.17.1</sshd-core.version>
         <ftpserver.version>1.2.1</ftpserver.version>
 
@@ -190,7 +198,7 @@
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
         <ngdbc.version>2.28.7</ngdbc.version>
-        <snowflake.version>4.1.0</snowflake.version>
+        <snowflake.version>4.2.0</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -201,14 +209,14 @@
         <jetcd.core.version>0.8.6</jetcd.core.version>
 
         <!-- Various -->
-        <c3p0.version>0.12.0</c3p0.version>
+        <c3p0.version>0.13.0</c3p0.version>
         <guava.version>33.6.0-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
         <classgraph.version>4.8.184</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->
-        <blimpkit.version>2.1.0</blimpkit.version>
+        <blimpkit.version>2.1.6</blimpkit.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.7</sortablejs.version>
@@ -226,8 +234,8 @@
         <angular-file-upload.version>2.6.1</angular-file-upload.version>
         <angularjs.version>1.8.2</angularjs.version>
         <ag-grid.version>27.1.0</ag-grid.version>
-        <papaparse.version>5.3.2</papaparse.version>
-        <bpmn-visualization.version>0.46.0</bpmn-visualization.version>
+        <papaparse.version>5.5.3</papaparse.version>
+        <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.11</alpinejs.version>
         <harmonia.version>1.4.2</harmonia.version>
@@ -235,7 +243,8 @@
         <lucide.version>1.8.0</lucide.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
-        <selenide.version>7.15.1</selenide.version>
+        <selenide.version>7.16.1</selenide.version>
+        <rest-assured.version>6.0.0</rest-assured.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
@@ -315,6 +324,11 @@
                     <version>${maven-exec-plugin.version}</version>
                 </plugin>
                 <plugin>
+                    <groupId>com.googlecode.maven-download-plugin</groupId>
+                    <artifactId>download-maven-plugin</artifactId>
+                    <version>${maven-download-plugin.version}</version>
+                </plugin>
+                <plugin>
                     <groupId>com.mycila</groupId>
                     <artifactId>license-maven-plugin</artifactId>
                     <version>${maven-license-plugin.version}</version>
@@ -360,6 +374,11 @@
                         <testClassesDirectory>${project.build.outputDirectory}</testClassesDirectory>
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <argLine>
+                            --add-opens=java.base/java.lang=ALL-UNNAMED
+                            --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                            --add-opens=java.base/java.nio=ALL-UNNAMED
+                        </argLine>
                         <includes>
                             <include>**/*IT.java</include>
                         </includes>
@@ -797,6 +816,7 @@
                 <maven.javadoc.skip>true</maven.javadoc.skip>
                 <license.skip>true</license.skip>
                 <skip.code.formatting>true</skip.code.formatting>
+                <jdtls.download.skip>true</jdtls.download.skip>
             </properties>
         </profile>
         <profile>
@@ -920,20 +940,19 @@
             <groupId>net.bytebuddy</groupId>
             <artifactId>byte-buddy</artifactId>
         </dependency>
-
-        <!-- Test Dependencies -->
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp</artifactId>
-            <scope>test</scope>
             <version>${okhttp.version}</version>
         </dependency>
         <dependency>
             <groupId>com.squareup.okhttp3</groupId>
             <artifactId>okhttp-urlconnection</artifactId>
-            <scope>test</scope>
             <version>${okhttp.version}</version>
         </dependency>
+
+        <!-- Test Dependencies -->
+
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
@@ -947,7 +966,14 @@
             <dependency>
                 <groupId>io.opentelemetry.instrumentation</groupId>
                 <artifactId>opentelemetry-instrumentation-bom</artifactId>
-                <version>2.27.0</version>
+                <version>2.28.1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.apache.groovy</groupId>
+                <artifactId>groovy-bom</artifactId>
+                <version>5.0.6</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

@@ -9,15 +9,24 @@
  */
 package org.eclipse.dirigible.commons.config;
 
-import java.nio.charset.StandardCharsets;
-import java.util.Base64;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 
 /**
  * The Enum DirigibleConfig.
  */
 public enum DirigibleConfig {
+
+    MS_SHAREPOINT_TENANT_ID("DIRIGIBLE_MS_SHAREPOINT_TENANT_ID", null), //
+    MS_SHAREPOINT_SITE_HOSTNAME("DIRIGIBLE_MS_SHAREPOINT_SITE_HOSTNAME", null), //
+    MS_SHAREPOINT_SITE_PATH("DIRIGIBLE_MS_SHAREPOINT_SITE_PATH", null), //
+    MS_SHAREPOINT_CLIENT_ID("DIRIGIBLE_MS_SHAREPOINT_CLIENT_ID", null), //
+    MS_SHAREPOINT_CLIENT_SECRET("DIRIGIBLE_MS_SHAREPOINT_CLIENT_SECRET", null), //
+    MS_SHAREPOINT_TOKEN("DIRIGIBLE_MS_SHAREPOINT_TOKEN", null), //
 
     REGISTRY_EXTERNAL_FOLDER("DIRIGIBLE_REGISTRY_EXTERNAL_FOLDER", null), //
 
@@ -109,7 +118,17 @@ public enum DirigibleConfig {
     BASIC_ADMIN_USERNAME("DIRIGIBLE_BASIC_USERNAME", toBase64("admin")),
 
     /** The basic admin pass. */
-    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin"));
+    BASIC_ADMIN_PASS("DIRIGIBLE_BASIC_PASSWORD", toBase64("admin")),
+
+    /** Whether the Java LSP (JDT.LS) integration is enabled. */
+    JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
+
+    /** Directory where the JDT Language Server is installed (or will be downloaded to). */
+    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
+
+    /** URL of the JDT Language Server tar.gz archive to download when not already installed. */
+    JAVA_LSP_DOWNLOAD_URL("DIRIGIBLE_JAVA_LSP_DOWNLOAD_URL",
+            "https://download.eclipse.org/jdtls/milestones/1.38.0/jdt-language-server-1.38.0-202408011337.tar.gz");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
@@ -222,5 +241,13 @@ public enum DirigibleConfig {
 
     public void setIntValue(int value) {
         setStringValue(Integer.toString(value));
+    }
+
+    public String getMandatoryStringValue() throws InvalidConfigException {
+        String stringValue = getStringValue();
+        if (StringUtils.isBlank(stringValue)) {
+            throw new InvalidConfigException("Configuration with key [" + key + "] is empty", key);
+        }
+        return stringValue;
     }
 }

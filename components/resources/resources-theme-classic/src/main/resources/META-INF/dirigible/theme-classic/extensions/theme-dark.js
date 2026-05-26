@@ -13,9 +13,8 @@ exports.getTheme = () => ({
 	id: 'classic-dark',
 	name: 'Classic Dark',
 	type: 'dark',
-	version: 2,
+	version: 3,
 	links: [
-		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-dark-variables.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-dark.css',
 	]
 });

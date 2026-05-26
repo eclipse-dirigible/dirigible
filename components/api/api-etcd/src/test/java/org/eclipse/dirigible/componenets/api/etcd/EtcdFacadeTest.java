@@ -16,12 +16,13 @@ import io.etcd.jetcd.kv.GetResponse;
 import io.etcd.jetcd.test.EtcdClusterExtension;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.etcd.EtcdFacade;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.api.extension.RegisterExtension;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.ComponentScan;
 import org.springframework.security.test.context.support.WithMockUser;
@@ -54,7 +55,7 @@ public class EtcdFacadeTest {
     /**
      * Sets the up.
      */
-    @Before
+    @BeforeEach
     public void setUp() {
         cluster.restart(-1, TimeUnit.SECONDS);
         Configuration.set("DIRIGIBLE_ETCD_CLIENT_ENDPOINT", cluster.clientEndpoints()
@@ -131,5 +132,9 @@ public class EtcdFacadeTest {
 
         assertNotNull(s);
         assertEquals(bs.toString(Charsets.UTF_8), s);
+    }
+
+    @SpringBootApplication
+    static class TestApplication {
     }
 }

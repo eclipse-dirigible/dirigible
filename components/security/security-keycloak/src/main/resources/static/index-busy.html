@@ -58,7 +58,7 @@
     <body class="bk-vbox bk-center--vertical" bk-scrollbar>
         <div class="bk-vbox bk-box--gap-xl bk-restrict-width--sm bk-full-width bk-padding-top-bottom--md" ng-hide="state.error">
             <h4 bk-title wrap="true" header-size="4" aria-label="page title" style="text-align: center;">Preparing the Instance</h4>
-            <bk-list ng-if="jobs.length" class="bk-list-border">
+            <bk-list ng-if="jobs.length" class="bk-border">
                 <bk-list-item ng-repeat="job in jobs track by $index">
                     <bk-loader ng-if="job.status === 'loading'"></bk-loader>
                     <bk-list-icon ng-if="job.status !== 'loading'" data-status="{{job.status}}" glyph="{{job.icon}}"></bk-list-icon>

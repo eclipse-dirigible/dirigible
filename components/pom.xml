@@ -45,6 +45,7 @@
         <module>data/data-transfer</module>
         <module>data/data-management</module>
         <module>data/data-store</module>
+        <module>data/data-store-java</module>
         <module>data/data-csvim</module>
         <module>data/data-export</module>
         <module>data/data-import</module>
@@ -53,6 +54,7 @@
         <module>data/data-processes</module>
 
         <!-- Engines -->
+        <module>engine/engine-java</module>
         <module>engine/engine-javascript</module>
         <module>engine/engine-typescript</module>
         <module>engine/engine-proxy</module>
@@ -69,6 +71,7 @@
         <module>engine/engine-cms</module>
         <module>engine/engine-cms-internal</module>
         <module>engine/engine-cms-s3</module>
+        <module>engine/engine-cms-sharepoint</module>
         <module>engine/engine-jobs</module>
         <module>engine/engine-openapi</module>
         <module>engine/engine-websockets</module>
@@ -87,6 +90,7 @@
         <module>ide/ide-git</module>
         <module>ide/ide-template</module>
         <module>ide/ide-terminal</module>
+        <module>ide/ide-java-lsp</module>
         <module>ide/ide-problems</module>
         <module>ide/ide-logs</module>
 
@@ -108,6 +112,7 @@
         <module>api/api-extensions</module>
         <module>api/api-security</module>
         <module>api/api-s3</module>
+        <module>api/api-sharepoint</module>
         <module>api/api-platform</module>
         <module>api/api-indexing</module>
         <module>api/api-net</module>
@@ -358,6 +363,21 @@
             </exclusions>
         </dependency>
         <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-jdbc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-data-jpa-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
@@ -525,6 +545,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-data-store</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-data-store-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -732,6 +757,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-terminal</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-java-lsp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1313,6 +1343,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-s3</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-api-sharepoint</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

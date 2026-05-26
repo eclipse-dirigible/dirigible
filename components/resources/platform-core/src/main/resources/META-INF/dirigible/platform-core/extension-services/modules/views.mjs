@@ -24,7 +24,7 @@ function sortViews(a, b) {
 	return 0;
 }
 
-export async function getViews(extensionPoints = []) {
+export async function getViews(extensionPoints = [], type) {
 	const views = [];
 	const viewExtensions = [];
 	for (let i = 0; i < extensionPoints.length; i++) {
@@ -50,6 +50,7 @@ export async function getViews(extensionPoints = []) {
 			if (!view.region) view.autoFocusTab = false;
 			else if ((view.region === 'center' || view.region === 'bottom') && !view.hasOwnProperty('autoFocusTab')) view.autoFocusTab = true;
 			else if ((view.region === 'left' || view.region === 'right') && !view.hasOwnProperty('autoFocusTab')) view.autoFocusTab = false;
+			if (type === 'settings') view.lazyLoad = true;
 			views.push(view);
 		}
 	}

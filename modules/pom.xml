@@ -161,6 +161,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-engine-cms-sharepoint</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-engine-javascript</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -280,6 +285,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-engine-graalium-execution</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-engine-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

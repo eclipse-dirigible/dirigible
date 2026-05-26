@@ -172,6 +172,10 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                 case 'xsodata':
                     url += '/web';
                     break;
+				case 'java':
+				    url += '/java';
+					resourcePath = resourcePath.substring(0, resourcePath.lastIndexOf('.'));
+				    break;				
                 case 'edm':
                 case 'dsm':
                 case 'dmm':

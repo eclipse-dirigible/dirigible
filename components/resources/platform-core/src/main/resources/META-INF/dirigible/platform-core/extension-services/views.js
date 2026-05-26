@@ -22,6 +22,6 @@ function setETag() {
 
 response.setContentType('application/json');
 setETag();
-response.println(JSON.stringify(await getViews(request.getParameterValues('extensionPoints') ?? ['platform-views'])));
+response.println(JSON.stringify(await getViews(request.getParameterValues('extensionPoints') ?? ['platform-views'], request.getParameterValues('type'))));
 response.flush();
 response.close();

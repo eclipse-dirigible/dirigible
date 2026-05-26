@@ -13,8 +13,6 @@ import com.google.gson.annotations.Expose;
 import jakarta.persistence.*;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 import org.eclipse.dirigible.components.base.encryption.Encrypted;
-import org.hibernate.annotations.LazyCollection;
-import org.hibernate.annotations.LazyCollectionOption;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,8 +60,7 @@ public class DataSource extends Artefact {
     private String schema;
 
     /** The properties. */
-    @OneToMany(mappedBy = "datasource", fetch = FetchType.LAZY, cascade = CascadeType.ALL)
-    @LazyCollection(LazyCollectionOption.FALSE)
+    @OneToMany(mappedBy = "datasource", fetch = FetchType.EAGER, cascade = CascadeType.ALL)
     @Expose
     private List<DataSourceProperty> properties = new ArrayList<DataSourceProperty>();
 

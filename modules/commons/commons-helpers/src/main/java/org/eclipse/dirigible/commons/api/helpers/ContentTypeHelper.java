@@ -497,6 +497,9 @@ public class ContentTypeHelper {
     /** The Constant APPLICATION_JSON_HDI. */
     public static final String APPLICATION_JSON_HDI = "application/json+hdi";
 
+    /** The Constant TEXT_X_JAVA_SOURCE. */
+    public static final String TEXT_X_JAVA_SOURCE = "text/x-java-source";
+
     /** The Constant CONTENT_TYPES. */
     private static final Map<String, String> CONTENT_TYPES = new HashMap<String, String>();
 
@@ -762,6 +765,7 @@ public class ContentTypeHelper {
         TEXT_CONTENT_TYPES.put("edm", APPLICATION_ENTITY_DATA_MODEL); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("dmm", APPLICATION_DATA_MAPPING); // $NON-NLS-1
         TEXT_CONTENT_TYPES.put("hdi", APPLICATION_JSON_HDI); //$NON-NLS-1$
+        TEXT_CONTENT_TYPES.put("java", TEXT_X_JAVA_SOURCE); //$NON-NLS-1$
 
 
         CONTENT_TYPES.putAll(BINARY_CONTENT_TYPES);

@@ -15,15 +15,15 @@ import org.eclipse.dirigible.cli.server.DirigibleServerConfig;
 import org.eclipse.dirigible.cli.util.SleepUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.shell.standard.ShellComponent;
-import org.springframework.shell.standard.ShellMethod;
-import org.springframework.shell.standard.ShellOption;
+import org.springframework.shell.core.command.annotation.Command;
+import org.springframework.shell.core.command.annotation.Option;
+import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.TimeUnit;
 
-@ShellComponent
+@Component
 class ProjectCommands {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ProjectCommands.class);
@@ -36,22 +36,24 @@ class ProjectCommands {
         this.projectGenerator = projectGenerator;
     }
 
-    @ShellMethod(value = "Generate Eclipse Dirigible project.", key = {"new"})
+    @Command(name = "new", description = "Generate Eclipse Dirigible project.")
     String generateNewProject(
-            @ShellOption(value = {"name", "n"}, defaultValue = "dirigible-project", help = "The name of the project") String projectName,
-            @ShellOption(value = {"override", "o"}, defaultValue = "false",
-                    help = "Set to true to overwrite the existing project if it already exists.") boolean overrideProject) {
+            @Option(longName = "name", shortName = 'n', defaultValue = "dirigible-project",
+                    description = "The name of the project") String projectName,
+            @Option(longName = "override", shortName = 'o', defaultValue = "false",
+                    description = "Set to true to overwrite the existing project if it already exists.") boolean overrideProject) {
         Path projectPath = projectGenerator.generate(projectName, overrideProject);
 
         return "Successfully created project " + projectName + " in path " + projectPath.toString();
     }
 
-    @ShellMethod(value = "Run Eclipse Dirigible project", key = {"start"})
-    String startProject(@ShellOption(value = {"dirigibleJarPath"}, defaultValue = ShellOption.NULL,
-            help = "Path to the Eclipse Dirigible fat/uber jar. This value is automatically resolved when the CLI is installed via npm.") String dirigibleJarPathOption,
-            @ShellOption(value = {"projectPath"}, defaultValue = ShellOption.NULL,
-                    help = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption,
-            @ShellOption(value = {"watch", "w"}, defaultValue = "false", help = "Run in watch mode (live-reload).") boolean watchMode) {
+    @Command(name = "start", description = "Run Eclipse Dirigible project")
+    String startProject(@Option(longName = "dirigibleJarPath",
+            description = "Path to the Eclipse Dirigible fat/uber jar. This value is automatically resolved when the CLI is installed via npm.") String dirigibleJarPathOption,
+            @Option(longName = "projectPath",
+                    description = "Path to Eclipse Dirigible project. If not specified, user working directory will be used.") String projectPathOption,
+            @Option(longName = "watch", shortName = 'w', defaultValue = "false",
+                    description = "Run in watch mode (live-reload).") boolean watchMode) {
 
         Path dirigibleJarPath = getDirigibleJarPath(dirigibleJarPathOption);
         Path projectPath = getProjectPath(projectPathOption);
@@ -79,7 +81,13 @@ class ProjectCommands {
     }
 
     private boolean isOptionProvided(Object optionValue) {
-        return null != optionValue;
+        if (optionValue == null) {
+            return false;
+        }
+        if (optionValue instanceof String s) {
+            return !s.isEmpty();
+        }
+        return true;
     }
 
     private Path getProjectPath(String projectPathOption) {

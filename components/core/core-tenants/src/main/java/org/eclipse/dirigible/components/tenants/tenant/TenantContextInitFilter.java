@@ -72,7 +72,7 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
             throws ServletException, IOException {
         Optional<Tenant> currentTenant = tenantExtractor.determineTenantSubdomain(request);
         if (currentTenant.isEmpty()) {
-            response.sendError(HttpServletResponse.SC_NOT_FOUND, "There is no registered tenant for the current host");
+            writeNotFoundResponse(request, response, "There is no registered tenant for the current host");
             if (LOGGER.isWarnEnabled()) {
                 LOGGER.warn("Tried to reach unregistered tenant. Headers: [{}]", getHeaders(request));
             }
@@ -96,6 +96,37 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
         Map<String, String> headers = new HashMap<>();
         HOST_HEADERS.forEach(h -> headers.put(h, request.getHeader(h)));
         return gson.toJson(headers);
+    }
+
+    private void writeNotFoundResponse(HttpServletRequest request, HttpServletResponse response, String message) throws IOException {
+        if (prefersHtml(request)) {
+            // Browser clients: delegate to Spring's BasicErrorController error page.
+            response.sendError(HttpServletResponse.SC_NOT_FOUND, message);
+        } else {
+            response.setStatus(HttpServletResponse.SC_NOT_FOUND);
+            response.setContentType("application/json");
+            Map<String, Object> body = new HashMap<>();
+            body.put("timestamp", java.time.Instant.now()
+                                                   .toString());
+            body.put("status", HttpServletResponse.SC_NOT_FOUND);
+            body.put("error", "Not Found");
+            body.put("message", message);
+            body.put("path", request.getRequestURI());
+            response.getWriter()
+                    .write(gson.toJson(body));
+        }
+    }
+
+    private boolean prefersHtml(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        if (accept == null) {
+            return false;
+        }
+        String lower = accept.toLowerCase();
+        if (lower.contains("application/json")) {
+            return false;
+        }
+        return lower.contains("text/html");
     }
 
     /**

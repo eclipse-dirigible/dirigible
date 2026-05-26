@@ -47,5 +47,6 @@ export function getFileTypes() {
         ".job.template": "json",
         ".svg.template": "xml",
         ".report": "json",
+        ".java": "java",
     }
 };

@@ -30,6 +30,17 @@
             <artifactId>webjars-locator-core</artifactId>
             <version>${webjars.locator.core.version}</version>
         </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-webmvc-test</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <optional>true</optional>
+        </dependency>
     </dependencies>
     
 	<properties>

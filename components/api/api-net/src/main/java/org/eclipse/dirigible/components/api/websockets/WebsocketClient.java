@@ -85,7 +85,7 @@ public class WebsocketClient {
         WebSocketStompClient stompClient = new WebSocketStompClient(new SockJsClient(transports));
         stompClient.setMessageConverter(new MappingJackson2MessageConverter());
         StompSessionHandler sessionHandler = new ClientStompSessionHandler();
-        session = stompClient.connect(uri, sessionHandler)
+        session = stompClient.connectAsync(uri, sessionHandler)
                              .get();
         return session;
     }

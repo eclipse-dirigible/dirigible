@@ -1,0 +1,5 @@
+{
+    "module": "perspective-settings/configs/general.js",
+    "extensionPoint": "platform-settings",
+    "description": "General settings view"
+}

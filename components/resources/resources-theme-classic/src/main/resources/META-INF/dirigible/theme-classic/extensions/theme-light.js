@@ -13,9 +13,8 @@ exports.getTheme = () => ({
 	id: 'classic-light',
 	name: 'Classic Light',
 	type: 'light',
-	version: 2,
+	version: 3,
 	links: [
-		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-light-variables.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/classic-light.css',
 	]
 });

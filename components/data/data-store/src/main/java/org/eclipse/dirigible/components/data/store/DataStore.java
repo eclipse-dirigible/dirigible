@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.data.store;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
@@ -157,9 +158,16 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            Object id = session.save(type, data);
+            // Use merge to retain Hibernate-6 save() semantics: handles both transient and detached entities,
+            // including detached associations reached via cascade. persist() is too strict and throws
+            // EntityExistsException when a detached entity (e.g. an already-persisted manyToOne target) is
+            // passed.
+            Object merged = session.merge(type, data);
             transaction.commit();
-            return id;
+            if (merged instanceof Map<?, ?> mergedMap) {
+                return mergedMap.get("id");
+            }
+            return data.get("id");
         }
     }
 
@@ -188,6 +196,11 @@ public class DataStore {
                                                          .setProperty("hibernate.hbm2ddl.auto", "update")
                                                          .setProperty("hibernate.current_session_context_class",
                                                                  "org.hibernate.context.internal.ThreadLocalSessionContext");
+
+        String dialect = detectHibernateDialect();
+        if (dialect != null) {
+            configuration.setProperty("hibernate.dialect", dialect);
+        }
 
         mappings.forEach((k, v) -> addInputStreamToConfig(configuration, k, v));
 
@@ -229,6 +242,43 @@ public class DataStore {
      */
     public DataSource getDataSource() {
         return dataSource;
+    }
+
+    private String detectHibernateDialect() {
+        try (Connection connection = datasourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            String productName = connection.getMetaData()
+                                           .getDatabaseProductName();
+            if (productName == null) {
+                return null;
+            }
+            String name = productName.toLowerCase();
+            if (name.contains("h2")) {
+                return "org.hibernate.dialect.H2Dialect";
+            }
+            if (name.contains("postgres")) {
+                return "org.hibernate.dialect.PostgreSQLDialect";
+            }
+            if (name.contains("mariadb")) {
+                return "org.hibernate.dialect.MariaDBDialect";
+            }
+            if (name.contains("mysql")) {
+                return "org.hibernate.dialect.MySQLDialect";
+            }
+            if (name.contains("microsoft sql server") || name.contains("mssql")) {
+                return "org.hibernate.dialect.SQLServerDialect";
+            }
+            if (name.contains("hdb") || name.contains("hana")) {
+                return "org.hibernate.dialect.HANADialect";
+            }
+            if (name.contains("snowflake")) {
+                return null;
+            }
+            return null;
+        } catch (SQLException e) {
+            logger.warn("Could not detect Hibernate dialect from datasource metadata", e);
+            return null;
+        }
     }
 
     /**
@@ -296,7 +346,7 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.saveOrUpdate(type, data);
+            session.merge(type, data);
             transaction.commit();
         }
     }
@@ -323,7 +373,7 @@ public class DataStore {
         Map<String, Object> data = JsonTypeConverter.normalizeForEntity(object, type);
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
-            session.update(type, data);
+            session.merge(type, data);
             transaction.commit();
         }
     }
@@ -338,7 +388,7 @@ public class DataStore {
         try (Session session = getSessionFactory().openSession()) {
             Transaction transaction = session.beginTransaction();
             Object object = get(type, id);
-            session.delete(type, object);
+            session.remove(object);
             transaction.commit();
         }
     }

@@ -1,0 +1,16 @@
+:root,
+:host {
+
+    --border: oklch(1 0 0);
+    --popover-arrow-border: oklch(1 0 0);
+
+    --font-sans: "72", "72full", Arial, Helvetica, sans-serif;
+    --font-sans-bold: "72-Bold", "72-Boldfull", "72", "72full", Arial, Helvetica, sans-serif;
+    --font-sans-semibold: "72-Semibold", "72-Semiboldfull", "72", "72full", Arial, Helvetica, sans-serif;
+    --font-mono: "72Mono", "72Monofull", lucida console, monospace;
+    --font-mono-bold: "72Mono-Bold", "72Mono-Boldfull", lucida console, monospace;
+    --font-size: 0.875rem;
+
+    --radius-control: 0.5rem;
+    --radius: 0px;
+}

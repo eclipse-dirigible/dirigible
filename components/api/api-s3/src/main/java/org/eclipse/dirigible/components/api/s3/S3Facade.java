@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.api.s3;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.engine.cms.TenantPathResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -55,17 +56,17 @@ public class S3Facade {
     private static S3Facade INSTANCE;
 
     /** The tenant path resolved. */
-    private final TenantPathResolved tenantPathResolved;
+    private final TenantPathResolver tenantPathResolver;
     /** The s 3. */
     private S3Client s3;
 
     /**
      * Instantiates a new s 3 facade.
      *
-     * @param tenantPathResolved the tenant path resolved
+     * @param tenantPathResolver the tenant path resolved
      */
-    S3Facade(TenantPathResolved tenantPathResolved) {
-        this.tenantPathResolved = tenantPathResolved;
+    S3Facade(TenantPathResolver tenantPathResolver) {
+        this.tenantPathResolver = tenantPathResolver;
         INSTANCE = this;
     }
 
@@ -102,7 +103,7 @@ public class S3Facade {
      * @param name the name
      */
     public static void delete(String name) {
-        String tenantName = INSTANCE.tenantPathResolved.resolve(name);
+        String tenantName = INSTANCE.tenantPathResolver.resolve(name);
         String bucket = getBucketName();
         if (isFolderPath(tenantName)) {
             deleteFolder(tenantName);
@@ -134,7 +135,7 @@ public class S3Facade {
      * @param prefix the prefix
      */
     public static void deleteFolder(String prefix) {
-        String tenantPrefix = INSTANCE.tenantPathResolved.resolve(prefix);
+        String tenantPrefix = INSTANCE.tenantPathResolver.resolve(prefix);
         String bucket = getBucketName();
         try (S3Client s3Client = S3Client.builder()
                                          .build()) {
@@ -244,7 +245,7 @@ public class S3Facade {
     public static ResponseInputStream<GetObjectResponse> getResponseInputStream(String name) {
         String bucket = getBucketName();
 
-        String tenantName = INSTANCE.tenantPathResolved.resolve(name);
+        String tenantName = INSTANCE.tenantPathResolver.resolve(name);
         return S3Facade.get()
                        .getS3Client()
                        .getObject(GetObjectRequest.builder()
@@ -278,7 +279,7 @@ public class S3Facade {
     }
 
     private static void put(String name, String contentType, RequestBody requestBody) {
-        String tenantName = INSTANCE.tenantPathResolved.resolve(name);
+        String tenantName = INSTANCE.tenantPathResolver.resolve(name);
         String bucket = getBucketName();
         PutObjectRequest objectRequest;
         if (isFolderPath(tenantName)) {
@@ -310,7 +311,7 @@ public class S3Facade {
      * @return the list
      */
     public static List<S3Object> listObjects(String path) {
-        String tenantPath = INSTANCE.tenantPathResolved.resolve(path);
+        String tenantPath = INSTANCE.tenantPathResolver.resolve(path);
 
         String bucket = getBucketName();
         ListObjectsV2Request listObjectsV2Request = ListObjectsV2Request.builder()
@@ -324,7 +325,7 @@ public class S3Facade {
 
         List<S3Object> contents = listObjectsV2Response.contents();
 
-        logger.info("Number of objects in the bucket: [{}]", contents.size());
+        logger.debug("Number of objects in the bucket: [{}]", contents.size());
         return contents;
     }
 
@@ -335,7 +336,7 @@ public class S3Facade {
      * @return true, if successful
      */
     public static boolean exists(String keyName) {
-        String tenantKeyName = INSTANCE.tenantPathResolved.resolve(keyName);
+        String tenantKeyName = INSTANCE.tenantPathResolver.resolve(keyName);
         String bucket = getBucketName();
         try {
             HeadObjectRequest objectRequest = HeadObjectRequest.builder()
@@ -368,7 +369,7 @@ public class S3Facade {
      */
     public static String getObjectContentType(String keyName) {
         String bucket = getBucketName();
-        String tenantKeyName = INSTANCE.tenantPathResolved.resolve(keyName);
+        String tenantKeyName = INSTANCE.tenantPathResolver.resolve(keyName);
         try {
             HeadObjectRequest objectRequest = HeadObjectRequest.builder()
                                                                .key(tenantKeyName)

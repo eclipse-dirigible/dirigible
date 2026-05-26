@@ -37,6 +37,7 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
     }]).factory('Views', (Extensions) => {
         let cachedViews;
         let cachedSubviews;
+        let cachedSettings;
         const errorHandler = (error) => {
             console.error(error);
             reject(error);
@@ -69,9 +70,23 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
                 }, errorHandler);
             }
         };
+        const getSettings = (id) => {
+            if (cachedSettings) {
+                return new Promise((resolve) => {
+                    resolve(cachedSettings);
+                });
+            } else {
+                return Extensions.getSettings().then((response) => {
+                    cachedSettings = response.data;
+                    if (id) return cachedSettings.find(v => v.id === id);
+                    return cachedSettings;
+                }, errorHandler);
+            }
+        };
         return {
             getViews: getViews,
             getSubviews: getSubviews,
+            getSettings: getSettings
         };
     }).factory('ViewParameters', () => ({
         get: getViewParameters
@@ -81,13 +96,13 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
         replace: true,
         scope: {
             viewId: '@', // String - ID of the view you want to show.
-            params: '<?', // JSON - JSON object containing extra parameters/data.
-            type: '@?', // String - Type of the view. Available options - 'view' (default), 'subview'.
+            params: '<?', // Object - JS object containing extra parameters/data.
+            type: '@?', // String - Type of the view. Available options - 'view' (default), 'subview' and 'setting'.
         },
         link: function (scope) {
             if (scope.params !== undefined && !(typeof scope.params === 'object' && !Array.isArray(scope.params) && scope.params !== null))
                 throw Error("embeddedView: params must be an object");
-            const types = ['view', 'subview'];
+            const types = ['view', 'subview', 'setting'];
             if (scope.type !== undefined && !types.includes(scope.type))
                 throw Error(`embeddedView: wrong view type. Available options - ${types.join(', ')}`);
 
@@ -124,10 +139,11 @@ if (typeof viewData === 'undefined' && typeof perspectiveData === 'undefined' &&
                 }
             }
 
-            if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
-            else Views.getViews(scope.viewId).then(setView);
+            if (scope.type === types[0]) Views.getViews(scope.viewId).then(setView);
+            else if (scope.type === types[1]) Views.getSubviews(scope.viewId).then(setView);
+            else Views.getSettings(scope.viewId).then(setView);
         },
-        template: `<iframe title="{{::viewLabel}}" loading="{{::view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
+        template: `<iframe title="{{::viewLabel}}" loading="{{view.lazyLoad ? 'lazy' : 'eager'}}" ng-src="{{::view.path}}" data-parameters="{{::view.params}}"></iframe>`
     })).directive('configIcons', () => ({
         restrict: 'A',
         transclude: false,
