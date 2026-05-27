@@ -105,6 +105,7 @@ public class JavaDebugBridge {
         // Send a graceful disconnect so the DAP server detaches rather than terminates the
         // debuggee JVM. Without this the adapter calls VM.exit() when it sees the socket close,
         // which kills the Dirigible process and makes the JDWP port unavailable for reconnect.
+        boolean sent = false;
         synchronized (this) {
             if (isAlive()) {
                 try {
@@ -114,9 +115,17 @@ public class JavaDebugBridge {
                     dapOut.write(("Content-Length: " + body.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                     dapOut.write(body);
                     dapOut.flush();
-                    Thread.sleep(100);
+                    sent = true;
                 } catch (Exception ignored) {
                 }
+            }
+        }
+        if (sent) {
+            try {
+                Thread.sleep(100);
+            } catch (InterruptedException ie) {
+                Thread.currentThread()
+                      .interrupt();
             }
         }
         try {
@@ -225,8 +234,12 @@ public class JavaDebugBridge {
                 int colon = header.indexOf(':');
                 if (colon > 0 && header.substring(0, colon)
                                        .equalsIgnoreCase("Content-Length")) {
-                    contentLength = Integer.parseInt(header.substring(colon + 1)
-                                                           .trim());
+                    try {
+                        contentLength = Integer.parseInt(header.substring(colon + 1)
+                                                               .trim());
+                    } catch (NumberFormatException ignored) {
+                        // Malformed Content-Length — keep scanning; the outer loop will return -1.
+                    }
                 }
             } else {
                 line.append((char) b);

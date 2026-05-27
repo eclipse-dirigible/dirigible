@@ -29,7 +29,7 @@ public class JavaDebugConfigEndpoint {
 
     @GetMapping("/config")
     public ResponseEntity<Map<String, Object>> getConfig() {
-        int jdwpPort = Integer.parseInt(DirigibleConfig.JAVA_DEBUG_JDWP_PORT.getStringValue());
+        int jdwpPort = DirigibleConfig.JAVA_DEBUG_JDWP_PORT.getIntValue();
         return ResponseEntity.ok(Map.of("jdwpPort", jdwpPort));
     }
 }
