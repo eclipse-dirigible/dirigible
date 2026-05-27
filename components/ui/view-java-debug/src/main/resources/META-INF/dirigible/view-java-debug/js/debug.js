@@ -61,20 +61,26 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
     // Connecting animation
     // -------------------------------------------------------------------------
 
-    const CONNECTING_MESSAGES = [
-        'Connecting...',
-        'Waking up JDT.LS...',
-        'Digging through bytecode...',
-        'Negotiating DAP handshake...',
-        'Loading debug symbols...',
-        'Tickling the JVM...',
-        'Awaiting debug adapter...',
-        'Still connecting...',
-        'Almost there...',
-        'Attaching to JVM...',
-        'Brewing debug session...',
-        'Poking the JDWP port...',
-    ];
+	const CONNECTING_MESSAGES = [
+	    'Connecting...',
+	    'Bootstrapping JDT Language Server...',
+	    'Resolving workspace classpath...',
+	    'Parsing project sources...',
+	    'Negotiating DAP handshake...',
+	    'Attaching to JVM...',
+	    'Opening JDWP tunnel...',
+	    'Loading debug symbols...',
+	    'Resolving source maps...',
+	    'Scanning annotations...',
+	    'Compiling hot paths...',
+	    'Inspecting bytecode...',
+	    'Generating AST cache...',
+	    'Waiting for debugger transport...',
+	    'Poking the JDWP port...',
+	    'Spinning up debug adapter...',
+	    'Injecting breakpoints...',
+	    'Evaluating launch configuration...',
+	];
     let connectingMsgIdx = 0;
     let connectingInterval = null;
 
