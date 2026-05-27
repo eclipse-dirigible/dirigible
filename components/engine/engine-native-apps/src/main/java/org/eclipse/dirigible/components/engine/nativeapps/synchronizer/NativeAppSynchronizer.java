@@ -153,6 +153,10 @@ public class NativeAppSynchronizer extends BaseSynchronizer<NativeApp, Long> {
                         processManager.stop(app);
                     }
                     break;
+                case PREPARE:
+                    // No-op. Native apps have no prepare-phase work — start happens on CREATE
+                    // (ALWAYS mode) or on first proxy request (LAZY mode).
+                    break;
             }
             return true;
         } catch (Exception ex) {

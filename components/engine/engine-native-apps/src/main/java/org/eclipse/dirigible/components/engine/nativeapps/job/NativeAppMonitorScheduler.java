@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.nativeapps.job;
 
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
+import org.eclipse.dirigible.components.engine.nativeapps.util.LogSanitizer;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.JobBuilder;
 import org.quartz.JobDetail;
@@ -61,7 +62,7 @@ public class NativeAppMonitorScheduler {
                                             .withSchedule(CronScheduleBuilder.cronSchedule(cron))
                                             .build();
             scheduler.scheduleJob(job, trigger);
-            LOGGER.info("Native-app monitor scheduled with cron [{}].", cron);
+            LOGGER.info("Native-app monitor scheduled with cron [{}].", LogSanitizer.sanitize(cron));
         } catch (SchedulerException ex) {
             LOGGER.error("Failed to schedule the native-app monitor: {}", ex.getMessage(), ex);
         }

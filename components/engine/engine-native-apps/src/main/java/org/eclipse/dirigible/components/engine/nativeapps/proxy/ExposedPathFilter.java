@@ -14,6 +14,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.domain.ExposedPath;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeApp;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppConfig;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.Security;
+import org.eclipse.dirigible.components.engine.nativeapps.util.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.server.mvc.common.MvcUtils;
@@ -51,7 +52,8 @@ class ExposedPathFilter implements HandlerFilterFunction<ServerResponse, ServerR
                                      .getPath();
         Optional<ExposedPath> match = pickLongestMatching(exposed, upstreamPath);
         if (match.isEmpty()) {
-            LOGGER.debug("Path [{}] is not in the exposedPaths whitelist for native app [{}].", upstreamPath, app.getName());
+            LOGGER.debug("Path [{}] is not in the exposedPaths whitelist for native app [{}].", LogSanitizer.sanitize(upstreamPath),
+                    LogSanitizer.sanitize(app.getName()));
             return ServerResponse.status(HttpStatus.NOT_FOUND)
                                  .body("Native app path is not exposed.");
         }
@@ -59,9 +61,9 @@ class ExposedPathFilter implements HandlerFilterFunction<ServerResponse, ServerR
         if (!callerHoldsAnyScope(request, match.get()
                                                .getScopes())) {
             String user = MvcUtils.getApplicationContext(request) == null ? "anonymous" : safeRemoteUser(request);
-            LOGGER.debug("User [{}] denied for path [{}] of native app [{}]; required scopes={}", user, upstreamPath, app.getName(),
-                    match.get()
-                         .getScopes());
+            LOGGER.debug("User [{}] denied for path [{}] of native app [{}]; required scopes={}", LogSanitizer.sanitize(user),
+                    LogSanitizer.sanitize(upstreamPath), LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(match.get()
+                                                                                                                          .getScopes()));
             return ServerResponse.status(HttpStatus.FORBIDDEN)
                                  .body("Insufficient scopes for the requested native-app path.");
         }
@@ -105,19 +107,21 @@ class ExposedPathFilter implements HandlerFilterFunction<ServerResponse, ServerR
     private static boolean callerHoldsAnyScope(ServerRequest request, List<String> scopes) {
         String user = safeRemoteUser(request);
         if (scopes == null || scopes.isEmpty()) {
-            LOGGER.debug("Scope check passes for user [{}]: no scopes required, any authenticated caller may proceed.", user);
+            LOGGER.debug("Scope check passes for user [{}]: no scopes required, any authenticated caller may proceed.",
+                    LogSanitizer.sanitize(user));
             return true;
         }
         HttpServletRequest servletRequest = request.servletRequest();
         for (String scope : scopes) {
             if (servletRequest.isUserInRole(scope)) {
-                LOGGER.debug("Scope check passes for user [{}]: caller holds required scope [{}].", user, scope);
+                LOGGER.debug("Scope check passes for user [{}]: caller holds required scope [{}].", LogSanitizer.sanitize(user),
+                        LogSanitizer.sanitize(scope));
                 return true;
             }
         }
         LOGGER.debug(
                 "Scope check fails for user [{}]: caller holds none of the required scopes {}. DEVELOPER/ADMINISTRATOR super-roles do not grant implicit access to native-app paths.",
-                user, scopes);
+                LogSanitizer.sanitize(user), LogSanitizer.sanitize(scopes));
         return false;
     }
 

@@ -16,6 +16,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.domain.Lifecycle;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeApp;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppConfig;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppKind;
+import org.eclipse.dirigible.components.engine.nativeapps.util.LogSanitizer;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;
@@ -162,8 +163,13 @@ public class NativeAppProcessManager {
         Map<String, String> env = pb.environment();
         env.put(NATIVE_APP_PORT_ENV, Integer.toString(port));
 
-        LOGGER.info("Starting native app [{}] in [{}] on port [{}] with command {}", app.getName(), workingDir.getAbsolutePath(), port,
-                pb.command());
+        // INFO logs just the executable + arg count to avoid leaking secrets that an author may
+        // have embedded in command arguments. Full sanitized command is at DEBUG for diagnostics.
+        List<String> commandTokens = pb.command();
+        LOGGER.info("Starting native app [{}] in [{}] on port [{}] with executable [{}] and [{}] argument(s)",
+                LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()), port,
+                LogSanitizer.sanitize(commandTokens.isEmpty() ? "" : commandTokens.get(0)), Math.max(0, commandTokens.size() - 1));
+        LOGGER.debug("Native app [{}] full start command: {}", LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(commandTokens));
 
         Process process;
         try {
@@ -230,7 +236,11 @@ public class NativeAppProcessManager {
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
         pb.redirectErrorStream(true);
-        LOGGER.info("Running stop command for native app [{}] in [{}]: {}", app.getName(), workingDir.getAbsolutePath(), pb.command());
+        List<String> stopTokens = pb.command();
+        LOGGER.info("Running stop command for native app [{}] in [{}]: executable [{}] with [{}] argument(s)",
+                LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()),
+                LogSanitizer.sanitize(stopTokens.isEmpty() ? "" : stopTokens.get(0)), Math.max(0, stopTokens.size() - 1));
+        LOGGER.debug("Native app [{}] full stop command: {}", LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(stopTokens));
         try {
             Process p = pb.start();
             ProcessLogPump.start(app.getName() + ".stop", p);
