@@ -102,6 +102,23 @@ public class JavaDebugBridge {
     }
 
     public void destroy() {
+        // Send a graceful disconnect so the DAP server detaches rather than terminates the
+        // debuggee JVM. Without this the adapter calls VM.exit() when it sees the socket close,
+        // which kills the Dirigible process and makes the JDWP port unavailable for reconnect.
+        synchronized (this) {
+            if (isAlive()) {
+                try {
+                    byte[] body =
+                            "{\"type\":\"request\",\"seq\":99999,\"command\":\"disconnect\",\"arguments\":{\"restart\":false,\"terminateDebuggee\":false}}".getBytes(
+                                    StandardCharsets.UTF_8);
+                    dapOut.write(("Content-Length: " + body.length + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    dapOut.write(body);
+                    dapOut.flush();
+                    Thread.sleep(100);
+                } catch (Exception ignored) {
+                }
+            }
+        }
         try {
             dapSocket.close();
         } catch (IOException ignored) {
