@@ -11,7 +11,7 @@
  */
 const viewData = {
     id: 'java-debug',
-    region: 'bottom',
+    region: 'left',
     label: 'Debugger',
     lazyLoad: true,
     autoFocusTab: false,

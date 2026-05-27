@@ -20,6 +20,13 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         port: '8000',
     };
 
+    $scope.sections = {
+        config: true,
+        callStack: true,
+        variables: true,
+        breakpoints: true,
+    };
+
     $scope.status = 'disconnected'; // disconnected | connecting | connected | error
     $scope.callStack = [];
     $scope.variables = [];
