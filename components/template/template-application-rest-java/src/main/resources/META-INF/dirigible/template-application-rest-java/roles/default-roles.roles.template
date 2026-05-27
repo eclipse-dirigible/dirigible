@@ -1,0 +1,15 @@
+[
+#foreach($role in $roles)
+    #if($role.roleRead)
+    {
+        "name": "${role.roleRead}",
+        "description": "A role that grants read only permission for ${role.entityName}."
+    }#end#if($role.roleRead && $role.roleWrite || $foreach.hasNext),#end
+    #if($role.roleWrite)
+    {
+        "name": "${role.roleWrite}",
+        "description": "A role that grants full access for ${role.entityName}."
+    }#if($foreach.hasNext),#end
+    #end
+#end
+]

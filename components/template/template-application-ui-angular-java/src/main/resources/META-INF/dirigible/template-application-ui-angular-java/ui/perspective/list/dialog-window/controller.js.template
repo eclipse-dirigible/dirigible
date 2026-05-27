@@ -1,0 +1,30 @@
+#set($dollar = '$')
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, ViewParameters) => {
+	$scope.entity = {};
+
+	let params = ViewParameters.get();
+	if (Object.keys(params).length) {
+		$scope.action = 'select';
+
+#foreach ($property in $properties)
+#if($property.isDateType)
+		if (params.entity.${property.name}) {
+			params.entity.${property.name} = new Date(params.entity.${property.name});
+		}
+#end
+#end
+		$scope.entity = params.entity;
+#foreach ($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+		const options${property.name}Map = new Map();
+		params.options${property.name}?.forEach(e => options${property.name}Map.set(e.value, e));
+		$scope.options${property.name} = Array.from(options${property.name}Map.values());
+#if($property.widgetDropDownMultiSelect)
+		if (${dollar}scope.entity.${property.name}) {
+			${dollar}scope.entity.${property.name} = ${dollar}scope.entity.${property.name}.split(',').map(e => parseInt(e));
+		}
+#end
+#end
+#end
+	}
+});

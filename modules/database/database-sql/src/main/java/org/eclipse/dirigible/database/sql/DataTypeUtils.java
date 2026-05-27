@@ -327,6 +327,16 @@ public class DataTypeUtils {
      */
     public static Integer getSqlTypeByDataType(String type) throws IllegalArgumentException {
         type = type.toUpperCase();
+        // MSSQL's JDBC getColumns() returns "INT IDENTITY" / "BIGINT IDENTITY" for IDENTITY columns;
+        // MySQL similarly appends " AUTO_INCREMENT". The suffix is a column-level flag, not part of
+        // the JDBC type — strip it so the base type ("INT" / "BIGINT" / …) resolves against the map.
+        if (type.endsWith(" IDENTITY")) {
+            type = type.substring(0, type.length() - " IDENTITY".length())
+                       .trim();
+        } else if (type.endsWith(" AUTO_INCREMENT")) {
+            type = type.substring(0, type.length() - " AUTO_INCREMENT".length())
+                       .trim();
+        }
         if (STRING_TO_DATABASE_TYPE.containsKey(type)) {
             return STRING_TO_DATABASE_TYPE.get(type);
         }

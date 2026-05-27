@@ -1,0 +1,5 @@
+{
+    "extensionPoint": "platform-templates",
+    "module": "template-application-angular-java/template/template.js",
+    "description": "Application Template (with Angular UI) - Java"
+}

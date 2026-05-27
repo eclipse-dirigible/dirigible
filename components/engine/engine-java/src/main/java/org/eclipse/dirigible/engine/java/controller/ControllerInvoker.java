@@ -50,7 +50,15 @@ public class ControllerInvoker {
         // Prefer the Spring-managed primary ObjectMapper (so users get the platform's Jackson
         // configuration); fall back to a fresh one if no bean is registered — e.g. in minimal test
         // contexts where JacksonAutoConfiguration didn't fire.
-        this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new);
+        //
+        // Work on a copy + ServiceLoader-discover modules so we get JavaTimeModule (jsr310) etc.
+        // without mutating the shared Spring bean. Spring Boot 4 / Jackson 3 no longer registers
+        // java.time.* handlers by default, so a raw Spring mapper rejects LocalDate / Instant fields
+        // with REQUIRE_HANDLERS_FOR_JAVA8_TIMES; this ensures generated entities with audit / date
+        // fields bind cleanly from @Body JSON.
+        this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new)
+                                                .copy()
+                                                .findAndRegisterModules();
     }
 
     /** Test-friendly constructor — bypasses Spring's ObjectProvider. */
@@ -67,6 +75,14 @@ public class ControllerInvoker {
         try {
             args = bindParameters(route, match.pathParameters(), request, response);
         } catch (BindingException e) {
+            // Spring Boot 4 strips ResponseStatusException.getReason() from the JSON response body, so
+            // without this log line the caller sees a bare 400 with no clue what failed (e.g. a
+            // mistyped JSON field that Jackson couldn't coerce into the target Java type).
+            LOGGER.warn("Bad request binding for [{}#{}]: {}", match.entry()
+                                                                    .fqn(),
+                    route.method()
+                         .getName(),
+                    e.getMessage());
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
         }
 

@@ -48,6 +48,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 import static org.eclipse.dirigible.components.api.platform.RepositoryFacade.getResource;
@@ -218,7 +219,8 @@ public class CsvimProcessor {
                 if (countBatch >= batchSize) {
                     countBatch = 0;
                     if (recordsToInsert.size() > 0) {
-                        insertCsvRecords(connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(), csvFile);
+                        insertCsvRecords(dataSource, connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(),
+                                csvFile);
                     }
                     if (Boolean.TRUE.equals(csvFile.getUpsert()) && recordsToUpdate.size() > 0) {
                         updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName,
@@ -230,12 +232,19 @@ public class CsvimProcessor {
             }
 
             if (recordsToInsert.size() > 0) {
-                insertCsvRecords(connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(), csvFile);
+                insertCsvRecords(dataSource, connection, targetSchema, tableMetadata, recordsToInsert, csvParser.getHeaderNames(), csvFile);
             }
             if (Boolean.TRUE.equals(csvFile.getUpsert()) && recordsToUpdate.size() > 0) {
                 updateCsvRecords(connection, targetSchema, tableMetadata, recordsToUpdate, csvParser.getHeaderNames(), pkName, csvFile);
             }
             updateSequence(csvFile, connection, countAll);
+            if (countAll > 0) {
+                // CSV inserts always carry an explicit PK value; the DB's IDENTITY counter is therefore
+                // not advanced by the load. Bump it to MAX(col)+1 so a subsequent INSERT … DEFAULT
+                // (e.g. from a Hibernate @GeneratedValue(IDENTITY) entity) doesn't collide on the seeded
+                // rows.
+                restartIdentityColumns(dataSource, connection, targetSchema, tableName);
+            }
         }
     }
 
@@ -279,6 +288,194 @@ public class CsvimProcessor {
                 }
             }
         }
+    }
+
+    /**
+     * Walks JDBC metadata for the freshly-loaded table, finds every {@code IS_AUTOINCREMENT == YES}
+     * column, and advances its internal counter to {@code MAX(col) + 1}. Most engines (H2, PostgreSQL,
+     * MSSQL, MySQL) do not auto-advance an identity counter when the INSERT supplies an explicit value,
+     * which leaves the next "generate-me-one" INSERT colliding with the seeded rows on PK = 1.
+     *
+     * <p>
+     * Failures here are logged and swallowed — the CSV data is already persisted, and not every dialect
+     * supports identity restart in a portable way. Production traffic will surface the same collision
+     * the user already saw if the restart fails, but at least the seeded rows survive.
+     */
+    private void restartIdentityColumns(DirigibleDataSource dataSource, Connection connection, String schema, String tableName) {
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping IDENTITY restart — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
+            return;
+        }
+        try (ResultSet cols = connection.getMetaData()
+                                        .getColumns(connection.getCatalog(), schema, tableName, "%")) {
+            while (cols.next()) {
+                if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
+                    continue;
+                }
+                String column = cols.getString("COLUMN_NAME");
+                if (column == null || !SAFE_IDENTIFIER.matcher(column)
+                                                      .matches()) {
+                    logger.warn("Skipping IDENTITY restart on [{}.{}] — column name not a safe SQL identifier: [{}]", sanitize(schema),
+                            sanitize(tableName), sanitize(column));
+                    continue;
+                }
+                try {
+                    long next = computeNextValue(connection, schema, tableName, column);
+                    executeIdentityRestart(dataSource, connection, schema, tableName, column, next);
+                    logger.info("Advanced IDENTITY counter on [{}.{}.{}] to [{}]", sanitize(schema), sanitize(tableName), sanitize(column),
+                            next);
+                } catch (SQLException restartError) {
+                    logger.warn("Failed to advance IDENTITY counter on [{}.{}.{}]: {}", sanitize(schema), sanitize(tableName),
+                            sanitize(column), sanitize(restartError.getMessage()));
+                }
+            }
+        } catch (SQLException metadataError) {
+            logger.warn("Failed to look up IDENTITY columns on [{}.{}]: {}", sanitize(schema), sanitize(tableName),
+                    sanitize(metadataError.getMessage()));
+        }
+    }
+
+    /**
+     * Computes the next value to seed an identity counter with: {@code MAX(col) + 1}. Both
+     * {@code schema}, {@code table} and {@code column} MUST already be {@link #SAFE_IDENTIFIER}-matched
+     * by the caller; this method re-validates inline to make the whitelist barrier visible at the
+     * concatenation sink.
+     */
+    private long computeNextValue(Connection connection, String schema, String table, String column) throws SQLException {
+        if (!SAFE_IDENTIFIER.matcher(schema)
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(table)
+                                   .matches()
+                || !SAFE_IDENTIFIER.matcher(column)
+                                   .matches()) {
+            throw new IllegalArgumentException("identifier not whitelisted");
+        }
+        String q = connection.getMetaData()
+                             .getIdentifierQuoteString();
+        String sql = "SELECT MAX(" + q + column + q + ") FROM " + q + schema + q + "." + q + table + q;
+        try (PreparedStatement ps = connection.prepareStatement(sql); ResultSet rs = ps.executeQuery()) {
+            if (rs.next()) {
+                long current = rs.getLong(1);
+                return rs.wasNull() ? 1L : current + 1L;
+            }
+        }
+        return 1L;
+    }
+
+    /**
+     * Emits dialect-specific DDL to advance an identity counter past {@code next}. Unknown dialects are
+     * skipped with an info-level log — better than throwing and aborting the whole CSVIM cycle.
+     * Identifiers are re-validated inline so the whitelist barrier is visible at the SQL concatenation
+     * sink.
+     */
+    private void executeIdentityRestart(DirigibleDataSource dataSource, Connection connection, String schema, String table, String column,
+            long next) throws SQLException {
+        if (!SAFE_IDENTIFIER.matcher(schema)
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(table)
+                                   .matches()
+                || !SAFE_IDENTIFIER.matcher(column)
+                                   .matches()) {
+            throw new IllegalArgumentException("identifier not whitelisted");
+        }
+        String sql;
+        if (dataSource.isOfType(DatabaseSystem.H2)) {
+            String q = connection.getMetaData()
+                                 .getIdentifierQuoteString();
+            sql = "ALTER TABLE " + q + schema + q + "." + q + table + q + " ALTER COLUMN " + q + column + q + " RESTART WITH " + next;
+        } else if (dataSource.isOfType(DatabaseSystem.POSTGRESQL)) {
+            // pg_get_serial_sequence case-folds its first argument unless inner double-quotes preserve
+            // the original casing. We must pass "<schema>"."<table>" (with the quotes inside the SQL
+            // string literal) or PG will look up a lower-cased table that doesn't exist.
+            // setval(seq, n, false) -> next nextval() returns exactly n.
+            sql = "SELECT setval(pg_get_serial_sequence('\"" + schema + "\".\"" + table + "\"', '" + column + "'), " + next + ", false)";
+        } else if (dataSource.isOfType(DatabaseSystem.MSSQL)) {
+            // RESEED stores the *current* identity, so the next assigned id is current + increment.
+            sql = "DBCC CHECKIDENT('" + schema + "." + table + "', RESEED, " + (next - 1) + ")";
+        } else if (dataSource.isOfType(DatabaseSystem.MYSQL) || dataSource.isOfType(DatabaseSystem.MARIADB)) {
+            sql = "ALTER TABLE `" + schema + "`.`" + table + "` AUTO_INCREMENT = " + next;
+        } else {
+            logger.info("IDENTITY restart not implemented for dialect [{}] — skipping [{}.{}.{}]", dataSource.getDatabaseSystem(),
+                    sanitize(schema), sanitize(table), sanitize(column));
+            return;
+        }
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.execute();
+        }
+    }
+
+    /**
+     * MSSQL refuses to insert an explicit value into an IDENTITY column unless
+     * {@code SET IDENTITY_INSERT [table] ON} is in effect. We only need to toggle the flag when the
+     * target table has an IDENTITY column AND the CSV headers actually supply a value for it.
+     */
+    private boolean csvSuppliesIdentityColumn(Connection connection, String schema, String tableName, List<String> headerNames) {
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping IDENTITY_INSERT probe — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
+            return false;
+        }
+        try (ResultSet cols = connection.getMetaData()
+                                        .getColumns(connection.getCatalog(), schema, tableName, "%")) {
+            while (cols.next()) {
+                if (!"YES".equalsIgnoreCase(cols.getString("IS_AUTOINCREMENT"))) {
+                    continue;
+                }
+                String column = cols.getString("COLUMN_NAME");
+                for (String header : headerNames) {
+                    if (header != null && header.equalsIgnoreCase(column)) {
+                        return true;
+                    }
+                }
+            }
+        } catch (SQLException probeError) {
+            logger.warn("Could not probe IDENTITY columns on [{}.{}] for IDENTITY_INSERT toggle: {}", sanitize(schema), sanitize(tableName),
+                    sanitize(probeError.getMessage()));
+        }
+        return false;
+    }
+
+    /**
+     * Toggle MSSQL {@code SET IDENTITY_INSERT [table] ON|OFF} around an explicit-id batch insert.
+     */
+    private void setMssqlIdentityInsert(Connection connection, String schema, String tableName, boolean on) {
+        if (!SAFE_IDENTIFIER.matcher(String.valueOf(schema))
+                            .matches()
+                || !SAFE_IDENTIFIER.matcher(String.valueOf(tableName))
+                                   .matches()) {
+            logger.warn("Skipping SET IDENTITY_INSERT — schema/table name not a safe SQL identifier: [{}].[{}]", sanitize(schema),
+                    sanitize(tableName));
+            return;
+        }
+        String sql = "SET IDENTITY_INSERT [" + schema + "].[" + tableName + "] " + (on ? "ON" : "OFF");
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.execute();
+        } catch (SQLException e) {
+            logger.warn("Failed to {} IDENTITY_INSERT on [{}.{}]: {}", on ? "enable" : "disable", sanitize(schema), sanitize(tableName),
+                    sanitize(e.getMessage()));
+        }
+    }
+
+    /**
+     * SQL-identifier allow-list. Matches the canonical unquoted identifier form (letter/underscore
+     * start, letters/digits/underscores after) — narrower than the SQL standard so the same value is
+     * safe to log and to concatenate into DDL where no parameter binding exists.
+     */
+    private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
+
+    /**
+     * Strip CR / LF / TAB so a (still user-influenced) value can be passed to {@code logger.*} without
+     * splitting / spoofing the log structure.
+     */
+    private static String sanitize(String value) {
+        return value == null ? null : value.replaceAll("[\r\n\t]", "_");
     }
 
     private boolean isDefaultDataSource(String dataSourceName) {
@@ -423,14 +620,29 @@ public class CsvimProcessor {
      * @param headerNames the header names
      * @param csvFile the csv file
      */
-    private void insertCsvRecords(Connection connection, String schema, TableMetadata tableModel, List<CSVRecord> recordsToProcess,
-            List<String> headerNames, CsvFile csvFile) {
+    private void insertCsvRecords(DirigibleDataSource dataSource, Connection connection, String schema, TableMetadata tableModel,
+            List<CSVRecord> recordsToProcess, List<String> headerNames, CsvFile csvFile) {
         try {
             List<CsvRecord> csvRecords = recordsToProcess.stream()
                                                          .map(e -> new CsvRecord(e, tableModel, headerNames,
                                                                  csvFile.getDistinguishEmptyFromNull(), csvFile.getParsedLocale()))
                                                          .collect(Collectors.toList());
-            csvProcessor.insert(connection, schema, tableModel, csvRecords, headerNames, csvFile);
+
+            // MSSQL refuses INSERTs that supply a value for an IDENTITY column unless
+            // SET IDENTITY_INSERT <table> ON is in effect. Every other CSVIM-supported engine
+            // happily accepts the explicit value and just leaves its own counter behind.
+            boolean toggleMssqlIdentityInsert = dataSource.isOfType(DatabaseSystem.MSSQL)
+                    && csvSuppliesIdentityColumn(connection, schema, tableModel.getName(), headerNames);
+            if (toggleMssqlIdentityInsert) {
+                setMssqlIdentityInsert(connection, schema, tableModel.getName(), true);
+            }
+            try {
+                csvProcessor.insert(connection, schema, tableModel, csvRecords, headerNames, csvFile);
+            } finally {
+                if (toggleMssqlIdentityInsert) {
+                    setMssqlIdentityInsert(connection, schema, tableModel.getName(), false);
+                }
+            }
         } catch (Exception e) {
             String csvRecordValue = e.getMessage();
             CsvimUtils.logProcessorErrors(String.format(PROBLEM_MESSAGE_INSERT_RECORD, tableModel.getName(), csvRecordValue),

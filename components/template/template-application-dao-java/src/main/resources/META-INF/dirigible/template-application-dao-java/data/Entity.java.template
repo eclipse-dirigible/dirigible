@@ -1,0 +1,45 @@
+package gen.${javaGenFolderName}.data.${javaPerspectiveName};
+
+import org.eclipse.dirigible.engine.java.annotations.Column;
+import org.eclipse.dirigible.engine.java.annotations.CreatedAt;
+import org.eclipse.dirigible.engine.java.annotations.CreatedBy;
+import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.Entity;
+import org.eclipse.dirigible.engine.java.annotations.GeneratedValue;
+import org.eclipse.dirigible.engine.java.annotations.GenerationType;
+import org.eclipse.dirigible.engine.java.annotations.Id;
+import org.eclipse.dirigible.engine.java.annotations.Table;
+import org.eclipse.dirigible.engine.java.annotations.UpdatedAt;
+import org.eclipse.dirigible.engine.java.annotations.UpdatedBy;
+
+@Entity
+@Table(name = "${tablePrefix}${dataName}")
+@Documentation("${name} entity mapping")
+public class ${name}Entity {
+
+#foreach($property in $properties)
+#if($property.dataPrimaryKey)
+    @Id
+#end
+#if($property.dataAutoIncrement)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+#end
+#if($property.auditType == "CREATED_AT")
+    @CreatedAt
+#elseif($property.auditType == "CREATED_BY")
+    @CreatedBy
+#elseif($property.auditType == "UPDATED_AT")
+    @UpdatedAt
+#elseif($property.auditType == "UPDATED_BY")
+    @UpdatedBy
+#end
+    @Column(name = "${property.dataName}"#if($property.dataLength && $property.dataType != "DECIMAL"), length = ${property.dataLength}#end#if($property.dataPrecision), precision = ${property.dataPrecision}#end#if($property.dataScale), scale = ${property.dataScale}#end#if(!$property.dataPrimaryKey && $property.dataNotNull), nullable = false#elseif(!$property.dataPrimaryKey && !$property.dataNotNull), nullable = true#end#if($property.dataUnique), unique = true#end)
+#if($property.description)
+    @Documentation("${property.description}")
+#else
+    @Documentation("${property.name}")
+#end
+    public ${property.dataTypeJavaClass} ${property.name};
+
+#end
+}

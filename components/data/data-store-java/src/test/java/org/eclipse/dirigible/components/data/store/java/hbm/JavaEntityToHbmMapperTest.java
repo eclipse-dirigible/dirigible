@@ -71,6 +71,21 @@ class JavaEntityToHbmMapperTest {
                     .any());
     }
 
+    /**
+     * java.time.* properties must be emitted with their FQN as the Hibernate type. The short names
+     * (e.g. "Instant") aren't registered in Hibernate's basic-type registry and would trip
+     * {@code Class.forName("Instant")} → {@code ClassLoadingException} when the SessionFactory is
+     * built.
+     */
+    @Test
+    void emits_fqn_for_java_time_types() {
+        String xml = JavaEntityToHbmMapper.map("p::Audited", Audited.class)
+                                          .descriptor()
+                                          .serialize();
+        assertTrue(xml.contains("type=\"java.time.Instant\""), xml);
+        assertTrue(xml.indexOf("type=\"Instant\"") < 0, "must not emit bare short name 'Instant': " + xml);
+    }
+
     @Test
     void skips_transient_fields() {
         JavaEntityToHbmMapper.Result r = JavaEntityToHbmMapper.map("p::WithTransient", WithTransient.class);
