@@ -127,7 +127,16 @@ public enum DirigibleConfig {
     JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
 
     /** Default JDWP port the Java debug adapter attaches to. */
-    JAVA_DEBUG_JDWP_PORT("DIRIGIBLE_JAVA_DEBUG_JDWP_PORT", "8000");
+    JAVA_DEBUG_JDWP_PORT("DIRIGIBLE_JAVA_DEBUG_JDWP_PORT", "8000"),
+
+    /** Milliseconds the platform waits for a started native-app process to start accepting TCP. */
+    NATIVE_APP_READY_TIMEOUT_MS("DIRIGIBLE_NATIVE_APP_READY_TIMEOUT_MS", "30000"),
+
+    /** Cron expression for the Quartz job that keeps ALWAYS-mode native apps alive. */
+    NATIVE_APP_MONITOR_CRON("DIRIGIBLE_NATIVE_APP_MONITOR_CRON", "0/30 * * * * ?"),
+
+    /** TTL in seconds for the native-app proxy lookup cache. */
+    NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);

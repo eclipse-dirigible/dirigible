@@ -1,0 +1,15 @@
+{
+  "name": "http-bin-app-delete",
+  "description": "Remote native app used by the delete scenario — its file is removed mid-test to assert the synchronizer unregisters the proxy.",
+  "basePath": "http-bin-app-delete",
+  "type": "remote",
+  "config": {
+    "url": "__UPSTREAM_URL__",
+    "security": {
+      "authentication": null,
+      "exposedPaths": [
+        { "path": "/get", "scopes": [] }
+      ]
+    }
+  }
+}
