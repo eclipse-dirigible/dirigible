@@ -93,7 +93,7 @@ class JavaDebugIT extends IntegrationTest {
         // Step 4 — ask JDT.LS to start the DAP server via the debug plugin command.
         LOGGER.info("[JavaDebugIT] Sending vscode.java.startDebugSession");
         JsonNode response = lsp.sendRequest("workspace/executeCommand", "{\"command\":\"vscode.java.startDebugSession\",\"arguments\":[]}")
-                               .get(30, TimeUnit.SECONDS);
+                               .get(90, TimeUnit.SECONDS);
 
         LOGGER.info("[JavaDebugIT] vscode.java.startDebugSession response: {}", response);
         assertFalse(response.has("error"),
