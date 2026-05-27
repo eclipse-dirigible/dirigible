@@ -11,15 +11,10 @@
  */
 const javaDebugApp = angular.module('javaDebug', ['blimpKit', 'platformView']);
 javaDebugApp.constant('Layout', new LayoutHub());
-javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
+javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Layout) => {
     const themingHub = new ThemingHub();
 
-    $scope.config = {
-        port: '8000',
-    };
-
     $scope.sections = {
-        config: true,
         callStack: true,
         variables: true,
         breakpoints: true,
@@ -53,23 +48,66 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     });
 
     // -------------------------------------------------------------------------
-    // Port — fetch default from the backend (DirigibleConfig.JAVA_DEBUG_JDWP_PORT)
+    // Port — fetched from backend (DirigibleConfig.JAVA_DEBUG_JDWP_PORT)
     // -------------------------------------------------------------------------
 
+    let jdwpPort = 8000;
     fetch('/services/ide/java-debug/config')
         .then(r => r.json())
-        .then(data => {
-            if (data.jdwpPort) {
-                $scope.$apply(() => { $scope.config.port = String(data.jdwpPort); });
-            }
-        })
+        .then(data => { if (data.jdwpPort) jdwpPort = data.jdwpPort; })
         .catch(() => { /* keep default 8000 */ });
+
+    // -------------------------------------------------------------------------
+    // Connecting animation
+    // -------------------------------------------------------------------------
+
+    const CONNECTING_MESSAGES = [
+        'Connecting...',
+        'Waking up JDT.LS...',
+        'Digging through bytecode...',
+        'Negotiating DAP handshake...',
+        'Loading debug symbols...',
+        'Tickling the JVM...',
+        'Awaiting debug adapter...',
+        'Still connecting...',
+        'Almost there...',
+        'Attaching to JVM...',
+        'Brewing debug session...',
+        'Poking the JDWP port...',
+    ];
+    let connectingMsgIdx = 0;
+    let connectingInterval = null;
+
+    function startConnectingAnimation() {
+        connectingMsgIdx = 0;
+        if (connectingInterval) $interval.cancel(connectingInterval);
+        connectingInterval = $interval(() => {
+            connectingMsgIdx = (connectingMsgIdx + 1) % CONNECTING_MESSAGES.length;
+        }, 3000);
+    }
+
+    function stopConnectingAnimation() {
+        if (connectingInterval) {
+            $interval.cancel(connectingInterval);
+            connectingInterval = null;
+        }
+    }
+
+    $scope.$on('$destroy', stopConnectingAnimation);
+
+    $scope.statusLabel = () => {
+        switch ($scope.status) {
+            case 'connected': return 'Connected';
+            case 'connecting': return CONNECTING_MESSAGES[connectingMsgIdx];
+            case 'error': return 'Error';
+            default: return 'Disconnected';
+        }
+    };
 
     // -------------------------------------------------------------------------
     // Breakpoints — persist to / restore from localStorage
     // -------------------------------------------------------------------------
 
-    // Map of virtualFilePath -> int[]  (1-based line numbers)
     const breakpoints = {};
     $scope.bpList = [];
     let ws = null;
@@ -103,15 +141,6 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         $scope.bpList = list;
     }
 
-    $scope.statusLabel = () => {
-        switch ($scope.status) {
-            case 'connected': return 'Connected';
-            case 'connecting': return 'Connecting...';
-            case 'error': return 'Error';
-            default: return 'Disconnected';
-        }
-    };
-
     $scope.isPaused = () => $scope.callStack.length > 0;
 
     $scope.removeBreakpoint = (bp) => {
@@ -141,10 +170,9 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     };
 
     $scope.attach = () => {
-        if (ws) {
-            ws.close();
-        }
+        if (ws) ws.close();
         $scope.status = 'connecting';
+        startConnectingAnimation();
         const wsUrl = `ws://${location.host}/websockets/ide/java-debug?workspace=${encodeURIComponent(currentWorkspace)}`;
         ws = new WebSocket(wsUrl);
         ws.onopen = () => {
@@ -166,9 +194,11 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             }
         };
         ws.onerror = () => {
+            stopConnectingAnimation();
             $timeout(() => { $scope.status = 'error'; });
         };
         ws.onclose = () => {
+            stopConnectingAnimation();
             $timeout(() => {
                 if ($scope.status !== 'disconnected') {
                     $scope.status = 'disconnected';
@@ -186,6 +216,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             ws.close();
             ws = null;
         }
+        stopConnectingAnimation();
         $scope.status = 'disconnected';
         $scope.callStack = [];
         $scope.variables = [];
@@ -240,11 +271,9 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         }
         switch (msg.command) {
             case 'initialize':
+                stopConnectingAnimation();
                 $timeout(() => { $scope.status = 'connected'; });
-                sendDap('attach', {
-                    hostName: 'localhost',
-                    port: parseInt($scope.config.port, 10) || 8000,
-                });
+                sendDap('attach', { hostName: 'localhost', port: jdwpPort });
                 sendAllBreakpoints();
                 break;
             case 'stackTrace':
@@ -287,6 +316,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
                 break;
             case 'terminated':
             case 'exited':
+                stopConnectingAnimation();
                 $timeout(() => {
                     $scope.status = 'disconnected';
                     $scope.callStack = [];
@@ -331,8 +361,6 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
 
     function highlightLine(filePath, lineNumber) {
         if (filePath && lineNumber > 0) {
-            // DAP returns real filesystem paths; convert to the virtual workspace path
-            // that Layout.openEditor and the editor's resourcePath use.
             const virtualPath = realToVirtualPath(filePath);
             if (virtualPath) {
                 Layout.openEditor({ path: virtualPath, contentType: 'text/x-java' });
@@ -343,8 +371,6 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             data: { filePath, lineNumber },
         });
         if (filePath && lineNumber > 0) {
-            // Re-broadcast after a short delay so newly opened editor tabs receive it
-            // (they register their listener after their iframe initialises).
             $timeout(() => {
                 themingHub.postMessage({
                     topic: 'java.debug.highlight',
@@ -354,12 +380,6 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         }
     }
 
-    /**
-     * Converts a real server-side filesystem path returned by the DAP stack trace
-     * (e.g. /repo/root/users/admin/workspace/proj/Foo.java) back to the virtual
-     * workspace path the IDE uses (e.g. /workspace/proj/Foo.java) by finding the
-     * last occurrence of /{workspaceName}/ in the path.
-     */
     function realToVirtualPath(realPath) {
         const marker = '/' + currentWorkspace + '/';
         const idx = realPath.lastIndexOf(marker);
@@ -373,10 +393,8 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         });
     }
 
-    // Restore glyph decorations in any already-open editors after loading from storage.
     $timeout(broadcastBreakpoints);
 
-    // Listen for breakpoint changes from the editor (glyph margin clicks)
     themingHub.addMessageListener({
         topic: 'java.debug.breakpoints.changed',
         handler: (msg) => {

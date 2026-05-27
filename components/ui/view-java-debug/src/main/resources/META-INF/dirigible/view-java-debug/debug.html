@@ -30,9 +30,6 @@
                 overflow: hidden;
                 border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
             }
-            .dbg-section-fixed {
-                flex: 0 0 auto;
-            }
             .dbg-section-grow {
                 flex: 1;
                 min-height: 80px;
@@ -70,59 +67,46 @@
             .dbg-chevron.dbg-open {
                 transform: rotate(90deg);
             }
-            .dbg-config-form {
-                padding: 6px 8px;
-                display: flex;
-                flex-direction: column;
-                gap: 4px;
-            }
-            .dbg-config-row {
-                display: flex;
-                align-items: center;
-                gap: 6px;
-            }
-            .dbg-config-label {
+            .dbg-status-bar {
+                padding: 3px 8px;
                 font-size: 11px;
+                font-style: italic;
                 color: var(--sapContent_LabelColor, #6a6d70);
-                min-width: 58px;
+                border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
                 flex-shrink: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
             }
-            .dbg-config-actions {
-                display: flex;
-                gap: 4px;
-                margin-top: 2px;
+            .dbg-status-bar.dbg-connected {
+                font-style: normal;
+                color: var(--sapPositiveColor, #256f3a);
+            }
+            .dbg-status-bar.dbg-error {
+                font-style: normal;
+                color: var(--sapNegativeColor, #bb0000);
             }
         </style>
     </head>
 
     <body class="bk-vbox">
-        <!-- Step controls toolbar -->
+        <!-- Toolbar: Attach/Disconnect + step controls -->
         <bk-toolbar compact="true" type="solid">
+            <bk-button glyph="sap-icon--connected" compact="true" state="transparent" title="Attach debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected' || status === 'connecting'"></bk-button>
+            <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected' && status !== 'connecting'"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue (F5)" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--step-next" compact="true" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--pushpin-off" compact="true" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--undo" compact="true" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--stop" compact="true" state="transparent" title="Stop" aria-label="Stop" ng-click="dapStop()" ng-disabled="status !== 'connected'"></bk-button>
-            <bk-toolbar-spacer></bk-toolbar-spacer>
-            <span style="font-size:11px;padding-right:4px;" ng-class="{'sap-icon--status-positive': status === 'connected', 'sap-icon--status-negative': status === 'error'}">{{statusLabel()}}</span>
         </bk-toolbar>
 
-        <!-- Configuration section -->
-        <div class="dbg-section dbg-section-fixed">
-            <div class="dbg-section-header" ng-click="sections.config = !sections.config">
-                <span>Configuration</span>
-                <span class="dbg-chevron sap-icon--navigation-right-arrow" ng-class="{'dbg-open': sections.config}"></span>
-            </div>
-            <div class="dbg-config-form" ng-show="sections.config">
-                <div class="dbg-config-row">
-                    <span class="dbg-config-label">JDWP Port</span>
-                    <bk-input style="width:70px" ng-model="config.port" placeholder="8000"></bk-input>
-                </div>
-                <div class="dbg-config-actions">
-                    <bk-button glyph="sap-icon--connected" compact="true" state="emphasized" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected'">Attach</bk-button>
-                    <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected'">Disconnect</bk-button>
-                </div>
-            </div>
+        <!-- Status strip — always visible, shows animated message while connecting -->
+        <div class="dbg-status-bar" ng-class="{'dbg-connected': status === 'connected', 'dbg-error': status === 'error'}">
+            <span class="sap-icon--status-positive" ng-if="status === 'connected'" style="margin-right:4px"></span>
+            <span class="sap-icon--status-negative" ng-if="status === 'error'" style="margin-right:4px"></span>
+            {{statusLabel()}}
         </div>
 
         <!-- Call Stack section -->
