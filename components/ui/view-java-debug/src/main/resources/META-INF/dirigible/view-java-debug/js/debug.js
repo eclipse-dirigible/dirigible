@@ -15,8 +15,6 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     const themingHub = new ThemingHub();
 
     $scope.config = {
-        workspace: 'workspace',
-        host: 'localhost',
         port: '8000',
     };
 
@@ -31,6 +29,45 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     $scope.callStack = [];
     $scope.variables = [];
     $scope.selectedFrame = null;
+
+    // -------------------------------------------------------------------------
+    // Workspace — read from platform localStorage, kept in sync via hub event
+    // -------------------------------------------------------------------------
+
+    let currentWorkspace = (function () {
+        try {
+            const prefix = getBrandingInfo().prefix;
+            return localStorage.getItem(`${prefix}.workspace.selected`) || 'workspace';
+        } catch (e) {
+            return 'workspace';
+        }
+    })();
+
+    themingHub.addMessageListener({
+        topic: 'platform.workspace.changed',
+        handler: (msg) => {
+            if (msg && msg.workspace) {
+                currentWorkspace = msg.workspace;
+            }
+        },
+    });
+
+    // -------------------------------------------------------------------------
+    // Port — fetch default from the backend (DirigibleConfig.JAVA_DEBUG_JDWP_PORT)
+    // -------------------------------------------------------------------------
+
+    fetch('/services/ide/java-debug/config')
+        .then(r => r.json())
+        .then(data => {
+            if (data.jdwpPort) {
+                $scope.$apply(() => { $scope.config.port = String(data.jdwpPort); });
+            }
+        })
+        .catch(() => { /* keep default 8000 */ });
+
+    // -------------------------------------------------------------------------
+    // Breakpoints — persist to / restore from localStorage
+    // -------------------------------------------------------------------------
 
     // Map of virtualFilePath -> int[]  (1-based line numbers)
     const breakpoints = {};
@@ -108,8 +145,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             ws.close();
         }
         $scope.status = 'connecting';
-        const workspace = $scope.config.workspace || 'workspace';
-        const wsUrl = `ws://${location.host}/websockets/ide/java-debug?workspace=${encodeURIComponent(workspace)}`;
+        const wsUrl = `ws://${location.host}/websockets/ide/java-debug?workspace=${encodeURIComponent(currentWorkspace)}`;
         ws = new WebSocket(wsUrl);
         ws.onopen = () => {
             sendDap('initialize', {
@@ -206,7 +242,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             case 'initialize':
                 $timeout(() => { $scope.status = 'connected'; });
                 sendDap('attach', {
-                    hostName: $scope.config.host || 'localhost',
+                    hostName: 'localhost',
                     port: parseInt($scope.config.port, 10) || 8000,
                 });
                 sendAllBreakpoints();
@@ -325,8 +361,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
      * last occurrence of /{workspaceName}/ in the path.
      */
     function realToVirtualPath(realPath) {
-        const ws = $scope.config.workspace || 'workspace';
-        const marker = '/' + ws + '/';
+        const marker = '/' + currentWorkspace + '/';
         const idx = realPath.lastIndexOf(marker);
         return idx >= 0 ? realPath.substring(idx) : null;
     }

@@ -124,7 +124,10 @@ public enum DirigibleConfig {
     JAVA_LSP_ENABLED("DIRIGIBLE_JAVA_LSP_ENABLED", Boolean.TRUE.toString()),
 
     /** Directory where the JDT Language Server is installed (or will be extracted to). */
-    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null);
+    JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
+
+    /** Default JDWP port the Java debug adapter attaches to. */
+    JAVA_DEBUG_JDWP_PORT("DIRIGIBLE_JAVA_DEBUG_JDWP_PORT", "8000");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
