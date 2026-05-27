@@ -15,7 +15,7 @@ workbench.controller('WorkbenchController', ($scope, Layout) => {
     let rightClickTabId;
 
     $scope.layoutConfig = {
-        views: ['welcome', 'projects', 'import', 'search', 'properties', 'console', 'terminal', 'preview', 'problems'],
+        views: ['welcome', 'projects', 'import', 'search', 'properties', 'console', 'terminal', 'preview', 'problems', 'java-debug'],
         viewSettings: {},
         layoutSettings: {
             hideCenterPane: false,

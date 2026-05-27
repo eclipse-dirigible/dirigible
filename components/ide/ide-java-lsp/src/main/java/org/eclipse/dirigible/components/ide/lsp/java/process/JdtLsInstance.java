@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.ide.lsp.java.process;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
@@ -23,7 +25,9 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Wraps a single running JDT Language Server OS process and the WebSocket sessions it serves.
@@ -46,6 +50,16 @@ public class JdtLsInstance {
     /** Real filesystem URI root used by JDT.LS, e.g. {@code file:///home/user/.../proj1/}. */
     private final String realRoot;
 
+    private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
+    private final AtomicInteger serverRequestCounter = new AtomicInteger(-1);
+    private final ObjectMapper jsonMapper = new ObjectMapper();
+
+    /**
+     * Set to {@code true} once JDT.LS has completed the LSP initialize handshake (either via a browser
+     * client or the server-side initialization triggered by {@link #ensureInitialized}).
+     */
+    private volatile boolean lspInitialized = false;
+
     JdtLsInstance(Process process, String virtualRoot, String realRoot) {
         this.process = process;
         this.stdin = process.getOutputStream();
@@ -65,11 +79,11 @@ public class JdtLsInstance {
         logger.debug("[java-lsp] Session {} detached (total: {})", sessionId, sessions.size());
     }
 
-    boolean hasSession(String sessionId) {
+    public boolean hasSession(String sessionId) {
         return sessions.containsKey(sessionId);
     }
 
-    boolean isAlive() {
+    public boolean isAlive() {
         return process.isAlive();
     }
 
@@ -77,6 +91,18 @@ public class JdtLsInstance {
         if (!process.isAlive()) {
             logger.warn("[java-lsp] Process is dead, dropping message");
             return;
+        }
+        // Track when the browser sends the `initialized` notification so ensureInitialized() becomes
+        // a no-op if a browser editor has already completed the LSP handshake.
+        try {
+            JsonNode msg = jsonMapper.readTree(json);
+            if ("initialized".equals(msg.path("method")
+                                        .asText())
+                    && !msg.has("id")) {
+                lspInitialized = true;
+                logger.debug("[java-lsp] JDT.LS initialized by browser LSP client");
+            }
+        } catch (Exception ignored) {
         }
         try {
             String translated = json.replace(virtualRoot, realRoot);
@@ -88,6 +114,72 @@ public class JdtLsInstance {
         } catch (IOException e) {
             logger.error("[java-lsp] Error writing to JDT.LS stdin", e);
         }
+    }
+
+    /**
+     * Sends a server-initiated JSON-RPC request to the JDT.LS process and returns a future that
+     * completes with the response. Uses negative IDs to avoid collision with browser-originated request
+     * IDs (which are positive integers assigned by the LSP client).
+     *
+     * @param method LSP method name, e.g. {@code workspace/executeCommand}
+     * @param paramsJson JSON object for the {@code params} field
+     */
+    public CompletableFuture<JsonNode> sendRequest(String method, String paramsJson) {
+        int id = serverRequestCounter.getAndDecrement();
+        CompletableFuture<JsonNode> future = new CompletableFuture<>();
+        pendingRequests.put(id, future);
+        sendToProcess("{\"jsonrpc\":\"2.0\",\"id\":" + id + ",\"method\":\"" + method + "\",\"params\":" + paramsJson + "}");
+        return future;
+    }
+
+    /**
+     * Ensures JDT.LS has completed the LSP initialize handshake before workspace commands can be sent.
+     *
+     * <p>
+     * JDT.LS buffers (and never processes) {@code workspace/*} requests that arrive before it receives
+     * the {@code initialize} + {@code initialized} pair from an LSP client. This method performs that
+     * handshake from the server side so that workspace commands work even when no browser editor
+     * session has connected yet. If JDT.LS was already initialized (e.g. by a browser editor), this is
+     * a no-op and the future completes immediately.
+     *
+     * <p>
+     * When a browser editor subsequently connects and sends its own {@code initialize} request, it is
+     * forwarded to JDT.LS unmodified. JDT.LS re-initializes with the browser's full client capabilities
+     * and proper workspace folders, which restores correct classpath/project configuration for the
+     * editor. The DAP server (started by {@code vscode.java.startDebugSession}) is a separate TCP
+     * socket and is unaffected by JDT.LS re-initialization.
+     *
+     * @return a future that completes when JDT.LS is in the initialized state
+     */
+    public synchronized CompletableFuture<Void> ensureInitialized() {
+        if (lspInitialized) {
+            return CompletableFuture.completedFuture(null);
+        }
+        long pid = ProcessHandle.current()
+                                .pid();
+        // Use this.realRoot (already the canonical real URI with trailing slash) so the workspace
+        // root matches what sendToProcess uses for virtual→real URI translation.
+        String escapedUri = realRoot.replace("\\", "\\\\")
+                                    .replace("\"", "\\\"");
+        String initParams = "{\"processId\":" + pid + "," + "\"clientInfo\":{\"name\":\"dirigible-java-debug\"}," + "\"rootUri\":\""
+                + escapedUri + "\"," + "\"workspaceFolders\":[{\"uri\":\"" + escapedUri + "\",\"name\":\"workspace\"}],"
+                + "\"capabilities\":{\"workspace\":{\"executeCommand\":{\"dynamicRegistration\":false}}},"
+                + "\"initializationOptions\":{}}";
+
+        CompletableFuture<JsonNode> initResponse = sendRequest("initialize", initParams);
+        CompletableFuture<Void> result = new CompletableFuture<>();
+        initResponse.whenComplete((node, ex) -> {
+            if (ex != null) {
+                result.completeExceptionally(ex);
+                return;
+            }
+            // Send the 'initialized' notification — JDT.LS transitions to initialized state here.
+            sendToProcess("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}");
+            lspInitialized = true;
+            logger.info("[java-lsp] JDT.LS initialized from server side for workspace {}", realRoot);
+            result.complete(null);
+        });
+        return result;
     }
 
     void destroy() {
@@ -142,6 +234,30 @@ public class JdtLsInstance {
 
     // -------------------------------------------------------------------------
 
+    private boolean routeToServerRequest(String json) {
+        try {
+            JsonNode node = jsonMapper.readTree(json);
+            if (!node.has("id") || node.has("method")) {
+                return false;
+            }
+            int responseId = node.get("id")
+                                 .asInt(Integer.MIN_VALUE);
+            CompletableFuture<JsonNode> future = pendingRequests.remove(responseId);
+            if (future == null) {
+                return false;
+            }
+            if (node.has("error")) {
+                future.completeExceptionally(new RuntimeException("[java-lsp] Request " + responseId + " failed: " + node.get("error")));
+            } else {
+                future.complete(node);
+            }
+            return true;
+        } catch (Exception e) {
+            logger.warn("[java-lsp] Could not route server request response", e);
+            return false;
+        }
+    }
+
     private void startStdoutReader() {
         Thread t = new Thread(() -> {
             try {
@@ -155,7 +271,9 @@ public class JdtLsInstance {
                         break;
                     String json = new String(body, StandardCharsets.UTF_8);
                     String translated = json.replace(realRoot, virtualRoot);
-                    broadcast(translated);
+                    if (!routeToServerRequest(translated)) {
+                        broadcast(translated);
+                    }
                 }
             } catch (IOException e) {
                 if (process.isAlive()) {

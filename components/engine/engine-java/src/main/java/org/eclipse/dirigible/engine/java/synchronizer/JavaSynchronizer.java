@@ -73,8 +73,9 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
 
     /**
      * Set by any per-artefact lifecycle change in the current cycle; consumed by {@link #finishing}.
+     * Also true on startup so that existing CREATED artefacts are re-registered after a restart.
      */
-    private final AtomicBoolean dirty = new AtomicBoolean(false);
+    private final AtomicBoolean dirty = new AtomicBoolean(true);
 
     private SynchronizerCallback callback;
 

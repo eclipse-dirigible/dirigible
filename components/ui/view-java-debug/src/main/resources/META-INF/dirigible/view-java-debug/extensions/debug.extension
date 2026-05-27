@@ -1,0 +1,5 @@
+{
+    "module": "view-java-debug/configs/debug-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Java Debugger View"
+}

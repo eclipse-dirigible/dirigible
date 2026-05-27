@@ -22,6 +22,8 @@ const brandingInfo = getBrandingInfo();
 
 let csrfToken;
 let lineDecorations = [];
+let breakpointDecorations = [];
+let debugLineDecorations = [];
 
 let monacoTheme = 'vs-light';
 let themeId = 'vs-light';
@@ -646,6 +648,7 @@ class DirigibleEditor {
                         value: '',
                         automaticLayout: true,
                         readOnly: readOnly,
+                        glyphMargin: true,
                         fontFamily: 'Droid Sans Mono, Consolas, Menlo, Monaco, Liberation Mono, Courier New, monospace',
                         fontSize: 14,
                         autoClosingBrackets: DirigibleEditor.isAutoBracketsEnabled(),
@@ -730,6 +733,81 @@ class DirigibleEditor {
         editor.onDidChangeCursorPosition(function (e) {
             statusBarHub.showLabel(`Line ${e.position.lineNumber}, Column ${e.position.column}`);
         });
+
+        // Glyph-margin click → toggle breakpoint
+        let _breakpointLines = [];
+        editor.onMouseDown(function (e) {
+            if (e.target.type === 2 /* GUTTER_GLYPH_MARGIN */ || e.target.type === 3 /* GUTTER_LINE_NUMBERS */) {
+                const lineNumber = e.target.position && e.target.position.lineNumber;
+                if (!lineNumber) return;
+                const idx = _breakpointLines.indexOf(lineNumber);
+                if (idx >= 0) {
+                    _breakpointLines.splice(idx, 1);
+                } else {
+                    _breakpointLines.push(lineNumber);
+                }
+                breakpointDecorations = editor.deltaDecorations(breakpointDecorations,
+                    _breakpointLines.map(line => ({
+                        range: new monaco.Range(line, 1, line, 1),
+                        options: {
+                            glyphMarginClassName: 'debug-breakpoint-glyph',
+                            glyphMarginHoverMessage: { value: 'Breakpoint' },
+                        },
+                    }))
+                );
+                themingHub.postMessage({
+                    topic: 'java.debug.breakpoints.changed',
+                    data: { filePath: editorParameters.resourcePath, lines: _breakpointLines.slice() },
+                });
+            }
+        });
+
+        // Listen for debug highlight (current paused line)
+        themingHub.addMessageListener({
+            topic: 'java.debug.highlight',
+            handler: (msg) => {
+                const { filePath, lineNumber } = msg || {};
+                const myPath = editorParameters.resourcePath;
+                if (filePath && myPath && (filePath.endsWith(myPath) || myPath.endsWith(filePath.replace(/^file:\/\//, ''))) && lineNumber > 0) {
+                    editor.revealLineInCenter(lineNumber);
+                    debugLineDecorations = editor.deltaDecorations(debugLineDecorations, [{
+                        range: new monaco.Range(lineNumber, 1, lineNumber, 1),
+                        options: {
+                            isWholeLine: true,
+                            className: 'debug-current-line',
+                            glyphMarginClassName: 'debug-current-line-glyph',
+                        },
+                    }]);
+                } else {
+                    debugLineDecorations = editor.deltaDecorations(debugLineDecorations, []);
+                }
+            },
+        });
+
+        // Restore breakpoint glyphs from the debug view's persisted state
+        themingHub.addMessageListener({
+            topic: 'java.debug.breakpoints',
+            handler: (msg) => {
+                const { breakpoints } = msg || {};
+                if (!breakpoints) return;
+                const myPath = editorParameters.resourcePath;
+                const lines = (breakpoints[myPath] || []).slice();
+                _breakpointLines = lines;
+                breakpointDecorations = editor.deltaDecorations(breakpointDecorations,
+                    lines.map(line => ({
+                        range: new monaco.Range(line, 1, line, 1),
+                        options: {
+                            glyphMarginClassName: 'debug-breakpoint-glyph',
+                            glyphMarginHoverMessage: { value: 'Breakpoint' },
+                        },
+                    }))
+                );
+            },
+        });
+        // Ask the debug view to re-broadcast current breakpoints now that this editor is ready.
+        // Handles the case where the debug view fired its startup broadcast before this iframe
+        // registered the listener above (e.g. after a full browser refresh).
+        themingHub.postMessage({ topic: 'java.debug.breakpoints.request', data: {} });
 
         if (!this.readOnly) {
             editor.addAction(EditorActionsProvider.createSaveAction(!this.isTemplate));

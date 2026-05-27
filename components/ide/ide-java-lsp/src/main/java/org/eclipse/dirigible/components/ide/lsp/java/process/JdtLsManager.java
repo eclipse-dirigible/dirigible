@@ -30,12 +30,14 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.jar.JarFile;
 import java.util.stream.Stream;
 
 /**
@@ -384,7 +386,129 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                                 + "or pre-extract a JDT.LS release to that directory.");
             }
         }
+        installDebugPlugin();
         installChecked = true;
+    }
+
+    /**
+     * Copies the bundled {@code com.microsoft.java.debug.plugin.jar} into the JDT.LS {@code plugins/}
+     * directory and registers it in every {@code config_<platform>/config.ini} file. A no-op when the
+     * bundled resource is absent (e.g. quick-build without the download).
+     *
+     * <p>
+     * JDT.LS uses Equinox with a hardcoded {@code osgi.bundles} list in {@code config.ini}. Only
+     * bundles explicitly listed there are installed — placing a JAR in the {@code plugins/} directory
+     * alone is not sufficient. This method therefore both copies the JAR and appends the bundle
+     * reference to every platform-specific {@code config.ini}.
+     */
+    private void installDebugPlugin() {
+        try (InputStream bundled = getClass().getClassLoader()
+                                             .getResourceAsStream("jdtls-debug/com.microsoft.java.debug.plugin.jar")) {
+            if (bundled == null) {
+                logger.debug("[java-lsp] No bundled debug plugin found — Java debugger will be unavailable");
+                return;
+            }
+            Path pluginsDir = jdtlsHome.resolve("plugins");
+
+            // Stage to a temp file so we can read the Bundle-Version before committing the final name.
+            // Equinox requires the naming convention <symbolicname>_<version>.jar.
+            Path staging = pluginsDir.resolve(".debug-plugin-staging.jar");
+            Files.copy(bundled, staging, StandardCopyOption.REPLACE_EXISTING);
+
+            String bundleVersion = "0.0.0";
+            try (JarFile jar = new JarFile(staging.toFile())) {
+                java.util.jar.Manifest mf = jar.getManifest();
+                if (mf != null) {
+                    String v = mf.getMainAttributes()
+                                 .getValue("Bundle-Version");
+                    if (v != null && !v.isBlank()) {
+                        bundleVersion = v.trim();
+                    }
+                }
+            }
+
+            String targetFileName = "com.microsoft.java.debug.plugin_" + bundleVersion + ".jar";
+
+            // Remove any pre-existing debug plugin JARs (staging file excluded by its '.' prefix).
+            try (Stream<Path> existing = Files.list(pluginsDir)) {
+                existing.filter(p -> p.getFileName()
+                                      .toString()
+                                      .startsWith("com.microsoft.java.debug.plugin"))
+                        .forEach(p -> {
+                            try {
+                                Files.delete(p);
+                            } catch (IOException ignored) {
+                            }
+                        });
+            }
+
+            Path target = pluginsDir.resolve(targetFileName);
+            Files.move(staging, target, StandardCopyOption.REPLACE_EXISTING);
+            logger.info("[java-lsp] Installed debug plugin at {}", target);
+
+            // Register in config.ini — required because JDT.LS/Equinox ignores JARs that are not
+            // listed in the osgi.bundles property of config_<platform>/config.ini.
+            registerInConfigIni(targetFileName);
+        } catch (Exception e) {
+            logger.warn("[java-lsp] Could not install debug plugin: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Adds {@code pluginFileName} to the {@code osgi.bundles} list in every
+     * {@code config_<platform>/config.ini} under {@link #jdtlsHome}. Existing entries for
+     * {@code com.microsoft.java.debug.plugin} (any version) are removed first to avoid duplicates.
+     */
+    private void registerInConfigIni(String pluginFileName) {
+        // In config.ini (Java properties format) colons must be escaped as \:
+        String pluginEntry = "reference\\:file\\:" + pluginFileName + "@4";
+        try (Stream<Path> children = Files.list(jdtlsHome)) {
+            children.filter(p -> p.getFileName()
+                                  .toString()
+                                  .startsWith("config_")
+                    && Files.isDirectory(p))
+                    .forEach(configDir -> {
+                        Path configIni = configDir.resolve("config.ini");
+                        if (Files.exists(configIni)) {
+                            try {
+                                addToOsgiBundles(configIni, pluginEntry);
+                            } catch (IOException e) {
+                                logger.warn("[java-lsp] Could not update {}: {}", configIni, e.getMessage());
+                            }
+                        }
+                    });
+        } catch (IOException e) {
+            logger.warn("[java-lsp] Could not scan jdtlsHome for config dirs: {}", e.getMessage());
+        }
+    }
+
+    private static void addToOsgiBundles(Path configIni, String pluginEntry) throws IOException {
+        String content = Files.readString(configIni, StandardCharsets.UTF_8);
+
+        // Strip any existing entry for com.microsoft.java.debug.plugin (possibly a different version)
+        // to avoid loading two versions simultaneously.
+        String cleaned = content.replaceAll(",reference\\\\:file\\\\:com\\.microsoft\\.java\\.debug\\.plugin[^,\\r\\n]*", "");
+
+        if (cleaned.contains(pluginEntry)) {
+            return;
+        }
+
+        // Append our entry at the end of the osgi.bundles line.
+        int osgiBundlesIdx = cleaned.indexOf("osgi.bundles=");
+        if (osgiBundlesIdx < 0) {
+            logger.warn("[java-lsp] osgi.bundles property not found in {}", configIni);
+            return;
+        }
+        // osgi.bundles is a single very long line in JDT.LS config.ini (no backslash continuation).
+        int lineEnd = cleaned.indexOf('\n', osgiBundlesIdx);
+        if (lineEnd < 0) {
+            lineEnd = cleaned.length();
+        }
+        // Trim trailing \r if present (Windows line endings)
+        int insertAt = (lineEnd > 0 && cleaned.charAt(lineEnd - 1) == '\r') ? lineEnd - 1 : lineEnd;
+        String updated = cleaned.substring(0, insertAt) + "," + pluginEntry + cleaned.substring(insertAt);
+        Files.writeString(configIni, updated, StandardCharsets.UTF_8);
+        logger.info("[java-lsp] Registered debug plugin in {}", configIni);
     }
 
     /**
