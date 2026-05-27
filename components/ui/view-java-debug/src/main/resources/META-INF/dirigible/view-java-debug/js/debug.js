@@ -149,7 +149,17 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         highlightLine(null, 0);
     };
 
-    $scope.dapContinue = () => sendDap('continue', { threadId: currentThreadId() });
+    function clearPausedState() {
+        $scope.callStack = [];
+        $scope.variables = [];
+        $scope.selectedFrame = null;
+        highlightLine(null, 0);
+    }
+
+    $scope.dapContinue = () => {
+        clearPausedState();
+        sendDap('continue', { threadId: currentThreadId() });
+    };
     $scope.stepOver = () => sendDap('next', { threadId: currentThreadId() });
     $scope.stepIn = () => sendDap('stepIn', { threadId: currentThreadId() });
     $scope.stepOut = () => sendDap('stepOut', { threadId: currentThreadId() });
