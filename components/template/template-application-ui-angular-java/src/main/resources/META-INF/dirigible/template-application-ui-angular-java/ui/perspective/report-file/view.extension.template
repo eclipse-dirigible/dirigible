@@ -1,0 +1,6 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/ui/Reports/${name}/view.js",
+    "extensionPoint": "application-reports",
+    "description": "${projectName} - Application View"#if($perspectiveRole || $security.roleRead),
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($security.roleRead)${security.roleRead}#end"#end
+}

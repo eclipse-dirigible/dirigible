@@ -36,4 +36,4 @@ package-lock.json
 **/ttyd.sh
 **/spring-shell.log
 **/version.txt
-/.claude/scheduled_tasks.lock
+.claude/

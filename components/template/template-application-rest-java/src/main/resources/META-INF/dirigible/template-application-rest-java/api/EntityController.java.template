@@ -1,0 +1,285 @@
+package gen.${javaGenFolderName}.api.${javaPerspectiveName};
+
+#foreach ($property in $properties)
+#if($property.roleRead || $property.roleWrite)
+#set($isEntityPropertySecurityEnabled = "true")
+#end
+#end
+#set($needsRoles = false)
+#if($perspectiveRole || $roleRead || $roleWrite || $isEntityPropertySecurityEnabled)
+#set($needsRoles = true)
+#end
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
+
+import org.eclipse.dirigible.components.api.security.UserFacade;
+import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.engine.java.annotations.Inject;
+import org.eclipse.dirigible.engine.java.annotations.http.Body;
+import org.eclipse.dirigible.engine.java.annotations.http.Controller;
+import org.eclipse.dirigible.engine.java.annotations.http.Delete;
+import org.eclipse.dirigible.engine.java.annotations.http.Get;
+import org.eclipse.dirigible.engine.java.annotations.http.PathParam;
+import org.eclipse.dirigible.engine.java.annotations.http.Post;
+import org.eclipse.dirigible.engine.java.annotations.http.Put;
+import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+
+@Controller
+@Documentation("${projectName} - ${name} Controller")
+public class ${name}Controller {
+
+    private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
+
+    @Inject
+    private ${name}Repository repository;
+
+    @Get
+    @Documentation("List ${name}")
+    public List<${name}Entity> getAll(@QueryParam("$limit") Integer limit,
+                                      @QueryParam("$offset") Integer offset#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS"),
+                                      @QueryParam("${masterEntityId}") String ${masterEntityId}#end) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        int actualLimit = limit != null ? limit.intValue() : 20;
+        int actualOffset = offset != null ? offset.intValue() : 0;
+#if($layoutType == "MANAGE_DETAILS" || $layoutType == "LIST_DETAILS")
+        List<${name}Entity> result;
+        if (${masterEntityId} != null) {
+            Map<String, Object> params = new LinkedHashMap<>();
+            params.put("${masterEntityId}", ${masterEntityId});
+            result = repository.query("from ${name}Entity e where e.${masterEntityId} = :${masterEntityId}", params);
+        } else {
+            result = repository.findAll(actualLimit, actualOffset);
+        }
+#else
+        List<${name}Entity> result = repository.findAll(actualLimit, actualOffset);
+#end
+#if($isEntityPropertySecurityEnabled)
+        result.forEach(this::redactRead);
+#end
+        return result;
+    }
+
+    @Get("/count")
+    @Documentation("Count ${name}")
+    public Map<String, Long> count() {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return Map.of("count", repository.count());
+    }
+
+    @Post("/count")
+    @Documentation("Count ${name} with filter")
+    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return Map.of("count", (long) runFilter(filter).size());
+    }
+
+    @Post("/search")
+    @Documentation("Search ${name}")
+    public List<${name}Entity> search(@Body Map<String, Object> filter) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        List<${name}Entity> result = runFilter(filter);
+#if($isEntityPropertySecurityEnabled)
+        result.forEach(this::redactRead);
+#end
+        return result;
+    }
+
+    @Get("/{id}")
+    @Documentation("Get ${name} by id")
+    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        ${name}Entity entity = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+#if($isEntityPropertySecurityEnabled)
+        redactRead(entity);
+#end
+        return entity;
+    }
+
+    @Post
+    @Documentation("Create ${name}")
+    public ${name}Entity create(@Body ${name}Entity entity) {
+#if($needsRoles)
+        checkPermissions("write");
+#end
+#if($isEntityPropertySecurityEnabled)
+        applyOnCreate(entity);
+#end
+        validate(entity);
+        return repository.save(entity);
+    }
+
+    @Put("/{id}")
+    @Documentation("Update ${name} by id")
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+#if($needsRoles)
+        checkPermissions("write");
+#end
+#if($isEntityPropertySecurityEnabled)
+        ${name}Entity existing = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        mergeWritable(existing, entity);
+        validate(existing);
+        return repository.update(existing);
+#else
+        entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
+        validate(entity);
+        return repository.update(entity);
+#end
+    }
+
+    @Delete("/{id}")
+    @Documentation("Delete ${name} by id")
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($needsRoles)
+        checkPermissions("write");
+#end
+        if (repository.findOne(id).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
+        }
+        repository.deleteById(id);
+    }
+
+    private List<${name}Entity> runFilter(Map<String, Object> filter) {
+        StringBuilder hql = new StringBuilder("from ${name}Entity e");
+        Map<String, Object> params = new LinkedHashMap<>();
+        boolean first = true;
+        if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {
+            for (Map.Entry<?, ?> entry : equals.entrySet()) {
+                String field = requireKnownField(String.valueOf(entry.getKey()));
+                String paramName = "p" + params.size();
+                hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
+                params.put(paramName, entry.getValue());
+                first = false;
+            }
+        }
+        if (filter != null && filter.get("conditions") instanceof List<?> conditions) {
+            for (Object raw : conditions) {
+                if (!(raw instanceof Map<?, ?> condition)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid filter condition");
+                }
+                String field = requireKnownField(String.valueOf(condition.get("propertyName")));
+                String operator = String.valueOf(condition.get("operator")).toUpperCase(Locale.ROOT);
+                Object value = condition.get("value");
+                String paramName = "p" + params.size();
+                String clause = switch (operator) {
+                    case "EQ" -> "e." + field + " = :" + paramName;
+                    case "IN" -> {
+                        if (!(value instanceof Collection<?>)) {
+                            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "IN value must be a list for field: " + field);
+                        }
+                        yield "e." + field + " in (:" + paramName + ")";
+                    }
+                    case "LIKE" -> "e." + field + " like :" + paramName;
+                    default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
+                };
+                hql.append(first ? " where " : " and ").append(clause);
+                params.put(paramName, value);
+                first = false;
+            }
+        }
+        return repository.query(hql.toString(), params);
+    }
+
+    private static String requireKnownField(String field) {
+        if (!FILTER_FIELDS.contains(field)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
+        }
+        return field;
+    }
+#if($needsRoles)
+
+    private void checkPermissions(String op) {
+#if($perspectiveRole)
+        if (!UserFacade.isInRole("${perspectiveRole}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+#if($roleRead)
+        if ("read".equals(op) && !(UserFacade.isInRole("${roleRead}")#if($roleWrite) || UserFacade.isInRole("${roleWrite}")#end)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+#if($roleWrite)
+        if ("write".equals(op) && !UserFacade.isInRole("${roleWrite}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+    }
+#end
+#if($isEntityPropertySecurityEnabled)
+
+    private void redactRead(${name}Entity entity) {
+#foreach ($property in $properties)
+#if($property.roleRead)
+        if (!UserFacade.isInRole("${property.roleRead}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
+    }
+
+    private void mergeWritable(${name}Entity target, ${name}Entity input) {
+#foreach ($property in $properties)
+#if(!$property.dataPrimaryKey)
+#if($property.roleWrite)
+        if (UserFacade.isInRole("${property.roleWrite}")) {
+            target.${property.name} = input.${property.name};
+        }
+#else
+        target.${property.name} = input.${property.name};
+#end
+#end
+#end
+    }
+
+    private void applyOnCreate(${name}Entity entity) {
+#foreach ($property in $properties)
+#if($property.roleWrite)
+        if (!UserFacade.isInRole("${property.roleWrite}")) {
+            entity.${property.name} = null;
+        }
+#end
+#end
+    }
+#end
+
+    private static void validate(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.isRequiredProperty)
+        if (entity.${property.name} == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
+        }
+#end
+#if($property.dataTypeJavaClass == "String" && $property.dataLength && $property.dataTypeJava != "time")
+        if (entity.${property.name} != null && entity.${property.name}.length() > ${property.dataLength}) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' exceeds the maximum length of ${property.dataLength}");
+        }
+#end
+#if($property.widgetPattern && $property.widgetPattern != "")
+        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPattern}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPattern}'");
+        }
+#end
+#end
+    }
+}

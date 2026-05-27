@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.data.structures.domain;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.google.gson.annotations.Expose;
+import com.google.gson.annotations.SerializedName;
 import jakarta.persistence.*;
 import org.hibernate.annotations.OnDelete;
 import org.hibernate.annotations.OnDeleteAction;
@@ -75,6 +76,7 @@ public class TableColumn {
     private boolean unique;
     @Column(name = "COLUMN_AUTOINCREMENT", columnDefinition = "BOOLEAN", nullable = true)
     @Expose
+    @SerializedName(value = "autoincrement", alternate = {"identity"})
     private boolean autoincrement;
     /** The table. */
     @ManyToOne(fetch = FetchType.EAGER, optional = false)

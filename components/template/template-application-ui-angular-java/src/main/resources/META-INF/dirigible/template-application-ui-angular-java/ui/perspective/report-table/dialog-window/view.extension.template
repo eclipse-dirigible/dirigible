@@ -1,0 +1,6 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/ui/Reports/${name}/dialog-window/view.js",
+    "extensionPoint": "application-windows",
+    "description": "${projectName} - Application Dialog Window"#if($perspectiveRole || $roleRead),
+    "role": "#if($perspectiveRole)${perspectiveRole},#end#if($roleRead)${roleRead}#end"#end
+}
