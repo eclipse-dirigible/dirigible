@@ -127,6 +127,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
             if (stored) {
                 const parsed = JSON.parse(stored);
                 Object.assign(breakpoints, parsed);
+                refreshBpList();
             }
         } catch (e) { /* corrupted storage — start fresh */ }
     })();
@@ -393,7 +394,16 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
         });
     }
 
+    // Restore glyph decorations in any already-open editors after loading from storage.
     $timeout(broadcastBreakpoints);
+
+    // Re-broadcast whenever an editor tab signals it has finished initialising.
+    // This handles the case where the debug view's startup broadcast fired before
+    // the editor's iframe registered its listener (e.g. after a full browser refresh).
+    themingHub.addMessageListener({
+        topic: 'java.debug.breakpoints.request',
+        handler: () => broadcastBreakpoints(),
+    });
 
     themingHub.addMessageListener({
         topic: 'java.debug.breakpoints.changed',

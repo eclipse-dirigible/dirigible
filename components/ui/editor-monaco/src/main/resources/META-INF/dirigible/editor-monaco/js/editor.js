@@ -804,6 +804,10 @@ class DirigibleEditor {
                 );
             },
         });
+        // Ask the debug view to re-broadcast current breakpoints now that this editor is ready.
+        // Handles the case where the debug view fired its startup broadcast before this iframe
+        // registered the listener above (e.g. after a full browser refresh).
+        themingHub.postMessage({ topic: 'java.debug.breakpoints.request', data: {} });
 
         if (!this.readOnly) {
             editor.addAction(EditorActionsProvider.createSaveAction(!this.isTemplate));
