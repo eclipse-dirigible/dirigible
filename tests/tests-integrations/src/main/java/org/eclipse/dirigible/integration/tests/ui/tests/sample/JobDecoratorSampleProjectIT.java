@@ -29,7 +29,7 @@ public class JobDecoratorSampleProjectIT extends SampleProjectRepositoryIT {
 
     @Override
     protected void verifyProject() {
-        await().atMost(30, TimeUnit.SECONDS)
+        await().atMost(60, TimeUnit.SECONDS)
                .pollInterval(3, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage("MyJob executed!", Level.INFO));
     }

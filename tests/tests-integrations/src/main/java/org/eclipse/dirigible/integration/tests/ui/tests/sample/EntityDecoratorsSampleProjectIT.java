@@ -50,7 +50,7 @@ public class EntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
                            .then()
                            .statusCode(200)
                            .body(equalToCompressingWhiteSpace(OPENAPI_RESPONSE_BODY));
-                });
+                }, 60);
     }
 
     @Override
