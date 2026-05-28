@@ -32,12 +32,25 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 public class SampleLibraryNativeAppNodejsIT extends SampleProjectRepositoryIT {
 
-    private static final String BASE = "/services/native-apps-proxy/v1/library-native-app-nodejs/rest/api/v1/books";
+    private static final String API_ROOT = "/services/native-apps-proxy/v1/library-native-app-nodejs/rest/api/v1";
+
+    private static final String BASE = API_ROOT + "/books";
+
+    private static final String LIBRARY_INFO = API_ROOT + "/library";
 
     private static final String LIBRARY_ADMIN_ROLE = "library-admin";
 
     private static final String READER_USERNAME = "library-reader";
     private static final String READER_PASSWORD = "library-reader-pass";
+
+    /**
+     * Values declared in the sample repo's {@code .native-app} via the start-command
+     * {@code arguments[]} ({@code --library-address}, {@code --library-phone}). The IT asserts that GET
+     * {@code /library} returns exactly these values, proving start arguments reach the spawned Node
+     * process and influence its runtime configuration.
+     */
+    private static final String EXPECTED_LIBRARY_ADDRESS = "42 Wallaby Way, Sydney";
+    private static final String EXPECTED_LIBRARY_PHONE = "+61-2-9999-0042";
 
     @Autowired
     private SecurityUtil securityUtil;
@@ -96,6 +109,16 @@ public class SampleLibraryNativeAppNodejsIT extends SampleProjectRepositoryIT {
                .then()
                .statusCode(200)
                .body(containsString("The Hobbit"));
+
+        // The .native-app's start arguments include --library-address / --library-phone; the Node
+        // app surfaces those at /library. Asserting on the response proves the artefact's
+        // arguments[] entries reach the spawned process and influence its runtime configuration.
+        given().when()
+               .get(LIBRARY_INFO)
+               .then()
+               .statusCode(200)
+               .body(containsString(EXPECTED_LIBRARY_ADDRESS))
+               .body(containsString(EXPECTED_LIBRARY_PHONE));
     }
 
     private static org.hamcrest.Matcher<Integer> anyOf(int a, int b) {
