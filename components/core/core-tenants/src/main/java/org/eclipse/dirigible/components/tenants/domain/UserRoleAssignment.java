@@ -10,6 +10,8 @@
 package org.eclipse.dirigible.components.tenants.domain;
 
 import org.eclipse.dirigible.components.security.domain.Role;
+import org.hibernate.annotations.OnDelete;
+import org.hibernate.annotations.OnDeleteAction;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -38,9 +40,17 @@ public class UserRoleAssignment {
     @JoinColumn(name = "USER_ID")
     private User user;
 
-    /** The role. */
+    /**
+     * The role.
+     *
+     * {@link OnDelete} emits {@code ON DELETE CASCADE} on the FK at schema-generation time so the DB
+     * drops the assignment row when its role is deleted. Without this the {@code RolesSynchronizer}
+     * tripped the integrity constraint whenever a {@code .roles} artefact was removed while a user
+     * still held the role.
+     */
     @ManyToOne
     @JoinColumn(name = "ROLE_ID")
+    @OnDelete(action = OnDeleteAction.CASCADE)
     private Role role;
 
     /**
