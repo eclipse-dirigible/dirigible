@@ -115,7 +115,7 @@ public class NativeAppProcessManager {
         if (state == null) {
             return;
         }
-        runStopCommandsBestEffort(app);
+        runStopCommandsBestEffort(app, state.getPort());
         Process p = state.getProcess();
         if (p == null) {
             return;
@@ -211,8 +211,15 @@ public class NativeAppProcessManager {
      * Runs the configured {@code lifecycle.stop} command for the current OS, if any. Returns silently
      * (with diagnostic logs) when no stop command applies — the caller still falls back to
      * {@link Process#destroy()} / {@link Process#destroyForcibly()}, so the process always exits.
+     *
+     * <p>
+     * The resolved port from the live {@link RuntimeState} is exported to the stop subprocess as
+     * {@value #NATIVE_APP_PORT_ENV}. Without this, an author's stop script that reads the env var (with
+     * a fallback like {@code ${PORT:-8080}}) could resolve to the platform's own port and accidentally
+     * signal the Dirigible JVM. The contract for the stop script is therefore symmetric with the start
+     * script: both see the same {@value #NATIVE_APP_PORT_ENV}.
      */
-    private void runStopCommandsBestEffort(NativeApp app) {
+    private void runStopCommandsBestEffort(NativeApp app, int port) {
         NativeAppConfig config = app.getConfig();
         if (config == null) {
             LOGGER.debug("No stop command run for native app [{}]: typed config is unavailable.", app.getName());
@@ -236,6 +243,8 @@ public class NativeAppProcessManager {
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
         pb.redirectErrorStream(true);
+        pb.environment()
+          .put(NATIVE_APP_PORT_ENV, Integer.toString(port));
         List<String> stopTokens = pb.command();
         LOGGER.info("Running stop command for native app [{}] in [{}]: executable [{}] with [{}] argument(s)",
                 LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()),
