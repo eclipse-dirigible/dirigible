@@ -180,6 +180,11 @@ public class NativeAppSynchronizer extends BaseSynchronizer<NativeApp, Long> {
     @Override
     public void cleanupImpl(NativeApp app) {
         try {
+            // The DB-loaded entity carries configJson but not the transient typed tree; rehydrate so
+            // the process manager can read lifecycle.stop.commands and dispatch the configured stop
+            // subprocess. Without this, runStopCommandsBestEffort bails on a null config and the only
+            // termination signal is Process.destroy().
+            NativeAppParser.rehydrateConfig(app);
             if (app.getKind() == NativeAppKind.LOCAL) {
                 processManager.stop(app);
             }

@@ -19,9 +19,13 @@ import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
@@ -89,7 +93,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     @AfterEach
     void cleanupArtefact() {
         processManager.stopAll();
-        for (String name : new String[] {"local-lazy", "local-always", "local-auth"}) {
+        for (String name : new String[] {"local-lazy", "local-always", "local-auth", "local-stop-port"}) {
             removeProjectFiles(name);
         }
         synchronizationProcessor.forceProcessSynchronizers();
@@ -139,6 +143,48 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Regression for the "unpublish kills the JVM" bug: the stop subprocess must receive
+     * {@code DIRIGIBLE_NATIVE_APP_PORT} on its environment, otherwise an author's stop script that
+     * reads the env var with a fallback (e.g. {@code ${PORT:-8080}}) silently resolves to the
+     * platform's own port and signals the Dirigible JVM.
+     */
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void stop_command_subprocess_receives_DIRIGIBLE_NATIVE_APP_PORT() throws Exception {
+        Path marker = Files.createTempFile("native-stop-port-", ".txt");
+        marker.toFile()
+              .deleteOnExit();
+
+        writeFixture("local-stop-port", stopMarkerFixture("local-stop-port", marker.toAbsolutePath()
+                                                                                   .toString()));
+
+        // Lazy mode — first proxy request spawns the process.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/native-apps-proxy/v1/local-stop-port/")
+                                                 .then()
+                                                 .statusCode(200),
+                ASSERT_TIMEOUT_SECONDS);
+
+        NativeApp app = service.findByName("local-stop-port");
+        int resolvedPort = processManager.getState(app)
+                                         .orElseThrow(() -> new AssertionError("RuntimeState missing for [local-stop-port]."))
+                                         .getPort();
+
+        // Synchronizer DELETE → processManager.stop(app) → runs lifecycle.stop with the resolved port
+        // exported on the subprocess env. The stop script captures the env var to the marker file.
+        removeProjectFiles("local-stop-port");
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        String captured = Files.readString(marker)
+                               .trim();
+        if (!Integer.toString(resolvedPort)
+                    .equals(captured)) {
+            throw new AssertionError("Expected stop subprocess to see DIRIGIBLE_NATIVE_APP_PORT=[" + resolvedPort
+                    + "] but marker file contained [" + captured + "].");
+        }
+    }
+
     @Test
     void basic_auth_header_is_injected_for_local_app() {
         writeFixture("local-auth", localAuthFixture());
@@ -172,6 +218,44 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
 
     private String localAuthFixture() {
         return baseLocalFixture("local-auth", "lazy", "alice", "wonderland");
+    }
+
+    /**
+     * Builds a fixture whose {@code lifecycle.stop} subprocess captures
+     * {@code $DIRIGIBLE_NATIVE_APP_PORT} into the given marker file. Used to assert end-to-end that the
+     * resolved port reaches the stop subprocess via the env var. mac/linux only — the resolver falls
+     * back to {@code Process.destroy()} on Windows since no {@code os: windows} stop entry is provided.
+     */
+    private String stopMarkerFixture(String name, String markerAbsolutePath) {
+        // %%s survives String.formatted() and reaches sh as the literal printf format string %s.
+        return """
+                {
+                  "name": "%s",
+                  "description": "stop-command env-var marker",
+                  "basePath": "%s",
+                  "type": "local",
+                  "config": {
+                    "lifecycle": {
+                      "start": {
+                        "mode": "lazy",
+                        "commands": [
+                          { "os": "mac",   "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "linux", "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] }
+                        ]
+                      },
+                      "stop": {
+                        "commands": [
+                          { "os": "mac",   "executable": "sh", "dir": "%s",
+                            "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] },
+                          { "os": "linux", "executable": "sh", "dir": "%s",
+                            "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] }
+                        ]
+                      }
+                    },
+                    "security": null
+                  }
+                }
+                """.formatted(name, name, name, name, name, markerAbsolutePath, name, markerAbsolutePath);
     }
 
     private String baseLocalFixture(String name, String mode, String user, String pass) {
