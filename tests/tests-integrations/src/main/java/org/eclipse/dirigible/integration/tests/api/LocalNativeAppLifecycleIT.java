@@ -11,6 +11,7 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeApp;
 import org.eclipse.dirigible.components.engine.nativeapps.process.NativeAppProcessManager;
+import org.eclipse.dirigible.components.engine.nativeapps.process.RuntimeState;
 import org.eclipse.dirigible.components.engine.nativeapps.service.NativeAppService;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -26,6 +27,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
@@ -93,7 +95,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     @AfterEach
     void cleanupArtefact() {
         processManager.stopAll();
-        for (String name : new String[] {"local-lazy", "local-always", "local-auth", "local-stop-port"}) {
+        for (String name : new String[] {"local-lazy", "local-always", "local-auth", "local-stop-port", "local-orphan"}) {
             removeProjectFiles(name);
         }
         synchronizationProcessor.forceProcessSynchronizers();
@@ -185,6 +187,55 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Regression for the orphan-grandchild case: when the held root is a shell that spawns the real
+     * listener as a non-{@code exec} child, {@link Process#destroy()} kills only the shell and the
+     * child is reparented to init/launchd. {@code stop()} must walk {@link ProcessHandle#descendants()}
+     * and SIGKILL anything still alive afterwards.
+     */
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void stop_kills_descendant_processes() throws Exception {
+        writeFixture("local-orphan", shellWrappedFixture("local-orphan"));
+
+        // Lazy mode — first proxy request spawns the sh → java tree.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/native-apps-proxy/v1/local-orphan/")
+                                                 .then()
+                                                 .statusCode(200),
+                ASSERT_TIMEOUT_SECONDS);
+
+        NativeApp app = service.findByName("local-orphan");
+        RuntimeState state = processManager.getState(app)
+                                           .orElseThrow(() -> new AssertionError("RuntimeState missing for [local-orphan]."));
+        Process held = state.getProcess();
+
+        // Snapshot the descendant tree while still alive — sh wrapper must have at least one
+        // java descendant. If we don't see one, the fixture's shell exec'd away (defeating the
+        // test premise) or java hasn't been spawned yet.
+        List<ProcessHandle> descendants = held.toHandle()
+                                              .descendants()
+                                              .toList();
+        if (descendants.isEmpty()) {
+            throw new AssertionError("Expected at least one descendant under the held shell PID [" + held.pid() + "].");
+        }
+
+        processManager.stop(app);
+
+        // Tiny grace for SIGKILL delivery, then assert every previously-snapshotted descendant is
+        // gone. Without the descendants() walk in stop(), the java grandchild would survive sh's
+        // SIGTERM and still be alive here.
+        Thread.sleep(500);
+        for (ProcessHandle d : descendants) {
+            if (d.isAlive()) {
+                throw new AssertionError("Descendant PID [" + d.pid() + "] (command [" + d.info()
+                                                                                          .command()
+                                                                                          .orElse("<unknown>")
+                        + "]) should have been killed by stop() — orphan-grandchild leak.");
+            }
+        }
+    }
+
     @Test
     void basic_auth_header_is_injected_for_local_app() {
         writeFixture("local-auth", localAuthFixture());
@@ -218,6 +269,38 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
 
     private String localAuthFixture() {
         return baseLocalFixture("local-auth", "lazy", "alice", "wonderland");
+    }
+
+    /**
+     * Fixture whose start command spawns {@code java Server.java} as a NON-{@code exec} child of
+     * {@code sh}. The {@code ; true} tail prevents bash's tail-call optimization (otherwise sh would
+     * {@code exec} into java and the held PID would be java itself with no descendants). This produces
+     * the shell → java orphan-prone chain we want to exercise. mac/linux only.
+     */
+    private String shellWrappedFixture(String name) {
+        return """
+                {
+                  "name": "%s",
+                  "description": "shell-wrapped java server (orphan-grandchild regression)",
+                  "basePath": "%s",
+                  "type": "local",
+                  "config": {
+                    "lifecycle": {
+                      "start": {
+                        "mode": "lazy",
+                        "commands": [
+                          { "os": "mac",   "executable": "sh", "dir": "%s",
+                            "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] },
+                          { "os": "linux", "executable": "sh", "dir": "%s",
+                            "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] }
+                        ]
+                      },
+                      "stop": { "commands": [] }
+                    },
+                    "security": null
+                  }
+                }
+                """.formatted(name, name, name, name);
     }
 
     /**

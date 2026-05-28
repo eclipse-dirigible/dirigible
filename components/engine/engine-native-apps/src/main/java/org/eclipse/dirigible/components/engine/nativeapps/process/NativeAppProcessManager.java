@@ -122,6 +122,15 @@ public class NativeAppProcessManager {
         if (p == null) {
             return;
         }
+        // Snapshot the descendant tree BEFORE Process.destroy(). Shell-based launchers commonly
+        // produce chains like `sh → npm → sh → node`, and SIGTERM to the held root does not
+        // always propagate through every link (especially when `exec` rewrites the held PID into
+        // npm, which then spawns a fresh sh+node pair that survives the npm exit). After the root
+        // dies the OS reparents the orphans to init/launchd and they are no longer reachable as
+        // descendants of the held handle. Capture now and clean up at the end.
+        List<ProcessHandle> descendants = p.toHandle()
+                                           .descendants()
+                                           .toList();
         p.destroy();
         try {
             if (!p.waitFor(STOP_GRACE_MS, TimeUnit.MILLISECONDS)) {
@@ -134,14 +143,44 @@ public class NativeAppProcessManager {
                   .interrupt();
             p.destroyForcibly();
         }
+        killLeftoverDescendants(app, descendants);
+    }
+
+    /**
+     * SIGKILLs any descendants still alive after the root process exits — handles the case where the
+     * held root (typically a shell or npm) failed to propagate SIGTERM through to the actual server
+     * child. Going straight to {@link ProcessHandle#destroyForcibly()} (SIGKILL) is the right call
+     * here: the root already had its chance to clean up gracefully and didn't propagate.
+     */
+    private void killLeftoverDescendants(NativeApp app, List<ProcessHandle> descendants) {
+        for (ProcessHandle d : descendants) {
+            if (!d.isAlive()) {
+                continue;
+            }
+            String command = d.info()
+                              .command()
+                              .orElse("<unknown>");
+            LOGGER.info("Killing leftover descendant of native app [{}]: PID [{}], command [{}].", LogSanitizer.sanitize(app.getName()),
+                    d.pid(), LogSanitizer.sanitize(command));
+            d.destroyForcibly();
+        }
     }
 
     public void stopAll() {
         for (Long id : new ArrayList<>(states.keySet())) {
             RuntimeState state = states.remove(id);
-            if (state != null && state.getProcess() != null) {
-                state.getProcess()
-                     .destroy();
+            if (state == null || state.getProcess() == null) {
+                continue;
+            }
+            Process proc = state.getProcess();
+            List<ProcessHandle> descendants = proc.toHandle()
+                                                  .descendants()
+                                                  .toList();
+            proc.destroy();
+            for (ProcessHandle d : descendants) {
+                if (d.isAlive()) {
+                    d.destroyForcibly();
+                }
             }
         }
     }
