@@ -16,19 +16,26 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.security.domain.Role;
+import org.eclipse.dirigible.components.security.event.RoleDeletionEvent;
 import org.eclipse.dirigible.components.security.service.RoleService;
 import org.eclipse.dirigible.components.tenants.domain.Tenant;
 import org.eclipse.dirigible.components.tenants.domain.User;
 import org.eclipse.dirigible.components.tenants.domain.UserRoleAssignment;
 import org.eclipse.dirigible.components.tenants.exceptions.TenantNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.context.event.EventListener;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * The Class UserService.
  */
 @Service
 public class UserService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(UserService.class);
 
     /** The tenant service. */
     private final TenantService tenantService;
@@ -221,6 +228,23 @@ public class UserService {
                                      .isPresent()) {
                 assignmentRepository.save(assignment);
             }
+        }
+    }
+
+    /**
+     * Detach every user-role assignment that references a role being removed by
+     * {@code RolesSynchronizer}. Runs synchronously in the synchronizer's transaction, before the role
+     * row itself is deleted, so the FK from {@code DIRIGIBLE_USER_ROLE_ASSIGNMENTS} resolves cleanly.
+     *
+     * @param event carries the role about to be deleted
+     */
+    @EventListener
+    @Transactional
+    public void onRoleDeletion(RoleDeletionEvent event) {
+        Role role = event.getRole();
+        int removed = assignmentRepository.deleteAllByRole(role);
+        if (removed > 0) {
+            LOGGER.info("Detached {} user-role assignment(s) referencing role [{}] before deletion.", removed, role.getName());
         }
     }
 }

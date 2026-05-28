@@ -19,10 +19,12 @@ import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.security.domain.Role;
+import org.eclipse.dirigible.components.security.event.RoleDeletionEvent;
 import org.eclipse.dirigible.components.security.service.RoleService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
@@ -56,6 +58,12 @@ public class RolesSynchronizer extends BaseSynchronizer<Role, Long> {
     private final RoleService securityRoleService;
 
     /**
+     * Publishes {@link RoleDeletionEvent} so that downstream modules (notably {@code core-tenants}) can
+     * clean up rows that reference the role about to be removed.
+     */
+    private final ApplicationEventPublisher eventPublisher;
+
+    /**
      * The synchronization callback.
      */
     private SynchronizerCallback callback;
@@ -64,10 +72,13 @@ public class RolesSynchronizer extends BaseSynchronizer<Role, Long> {
      * Instantiates a new security role synchronizer.
      *
      * @param securityRoleService the security role service
+     * @param eventPublisher publisher used to broadcast {@link RoleDeletionEvent} before each role
+     *        delete
      */
     @Autowired
-    public RolesSynchronizer(RoleService securityRoleService) {
+    public RolesSynchronizer(RoleService securityRoleService, ApplicationEventPublisher eventPublisher) {
         this.securityRoleService = securityRoleService;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -186,6 +197,12 @@ public class RolesSynchronizer extends BaseSynchronizer<Role, Long> {
                                                              .map(p -> Boolean.FALSE)
                                                              .orElse(Boolean.TRUE);
             if (delete) {
+                // Broadcast first so listeners (e.g. core-tenants) can detach assignments that
+                // hold an FK to this role; otherwise the subsequent DELETE trips the
+                // DIRIGIBLE_USER_ROLE_ASSIGNMENTS → DIRIGIBLE_SECURITY_ROLES integrity check.
+                // Listeners run synchronously in the caller's transaction, so cleanup is flushed
+                // before getService().delete(role) issues its SQL.
+                eventPublisher.publishEvent(new RoleDeletionEvent(this, role));
                 getService().delete(role);
             }
         } catch (Exception e) {
