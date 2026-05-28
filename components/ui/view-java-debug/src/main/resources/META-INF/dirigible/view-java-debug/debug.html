@@ -92,13 +92,13 @@
     <body class="bk-vbox">
         <!-- Toolbar: Attach/Disconnect + step controls -->
         <bk-toolbar compact="true" type="solid">
-            <bk-button glyph="sap-icon--connected" compact="true" state="transparent" title="Attach debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected' || status === 'connecting'"></bk-button>
+            <bk-button glyph="sap-icon--connected" compact="true" state="transparent" title="Connect debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected' || status === 'connecting'"></bk-button>
             <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected' && status !== 'connecting'"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue (F5)" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--step-next" compact="true" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--pushpin-off" compact="true" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--undo" compact="true" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-right" compact="true" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-bottom" compact="true" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--forward" compact="true" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--stop" compact="true" state="transparent" title="Stop" aria-label="Stop" ng-click="dapStop()" ng-disabled="status !== 'connected'"></bk-button>
         </bk-toolbar>
 
