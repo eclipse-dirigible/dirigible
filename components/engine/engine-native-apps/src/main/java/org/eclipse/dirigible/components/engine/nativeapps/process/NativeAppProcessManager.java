@@ -205,23 +205,25 @@ public class NativeAppProcessManager {
         Map<String, String> env = pb.environment();
         env.put(NATIVE_APP_PORT_ENV, Integer.toString(port));
 
+        // INFO logs just the executable + arg count to avoid leaking secrets that an author may
+        // have embedded in command arguments. Full sanitized command is at DEBUG for diagnostics.
         List<String> commandTokens = pb.command();
+        LOGGER.info("Starting native app [{}] in [{}] on port [{}] with executable [{}] and [{}] argument(s)",
+                LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()), port,
+                LogSanitizer.sanitize(commandTokens.isEmpty() ? "" : commandTokens.get(0)), Math.max(0, commandTokens.size() - 1));
+        LOGGER.debug("Native app [{}] full start command: {}", LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(commandTokens));
+
         Process process;
         try {
             process = pb.start();
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to start native app [" + app.getName() + "]: " + ex.getMessage(), ex);
         }
-        // Single INFO line per start. Includes PID + port so the operator can correlate later
-        // (e.g. `lsof -ti tcp:<port>` / `ps -p <pid>`). The held PID is the immediate child
-        // Dirigible spawned — for shell-based launchers this is the wrapper, and the real listener
-        // may be a grandchild reached via `exec`. Either way, the OS process tree under this PID
-        // covers it. Full command is at DEBUG to avoid leaking secrets authors might have embedded
-        // in command arguments.
-        LOGGER.info("Started native app [{}] in [{}]: PID [{}], port [{}], executable [{}] with [{}] argument(s).",
-                LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()), process.pid(), port,
-                LogSanitizer.sanitize(commandTokens.isEmpty() ? "" : commandTokens.get(0)), Math.max(0, commandTokens.size() - 1));
-        LOGGER.debug("Native app [{}] full start command: {}", LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(commandTokens));
+        // Log the PID alongside the port so the operator can correlate later (e.g.
+        // `lsof -ti tcp:<port>` / `ps -p <pid>`). The held PID is the immediate child Dirigible
+        // spawned — for shell-based launchers this is the wrapper, and the real listener may be
+        // a grandchild reached via `exec`. Either way, the OS process tree under this PID covers it.
+        LOGGER.info("Native app [{}] spawned: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), process.pid(), port);
         ProcessLogPump.start(app.getName(), process);
         RuntimeState state = new RuntimeState(process, port, Instant.now());
         states.put(app.getId(), state);
