@@ -239,6 +239,23 @@ public class NativeAppProcessManager {
             return;
         }
         Command command = stopCmd.get();
+        // If the project directory the stop command needs to run inside is already gone (the
+        // workbench's "unpublish" deletes the project tree before the synchronizer fires DELETE),
+        // the stop script almost certainly can't work — it typically reads package.json /
+        // node_modules from that directory. Falling back to registry root just yields noisy npm
+        // errors like "Missing script: stop". Skip and let Process.destroy() (followed by
+        // destroyForcibly() in stop()) terminate the spawned chain instead.
+        if (command.getDir() != null && !command.getDir()
+                                                .isBlank()) {
+            String registryDiskRoot = repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
+            File requestedDir = new File(registryDiskRoot, command.getDir());
+            if (!requestedDir.exists()) {
+                LOGGER.info(
+                        "Skipping lifecycle.stop for native app [{}]: working directory [{}] no longer exists (project files already removed); terminating via Process.destroy() instead.",
+                        LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(requestedDir.getAbsolutePath()));
+                return;
+            }
+        }
         File workingDir = resolveWorkingDir(command);
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
