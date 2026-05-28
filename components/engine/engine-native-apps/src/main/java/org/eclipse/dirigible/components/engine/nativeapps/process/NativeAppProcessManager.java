@@ -115,15 +115,18 @@ public class NativeAppProcessManager {
         if (state == null) {
             return;
         }
-        runStopCommandsBestEffort(app, state.getPort());
         Process p = state.getProcess();
+        long pid = (p != null) ? p.pid() : -1L;
+        LOGGER.info("Stopping native app [{}]: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), pid, state.getPort());
+        runStopCommandsBestEffort(app, state.getPort());
         if (p == null) {
             return;
         }
         p.destroy();
         try {
             if (!p.waitFor(STOP_GRACE_MS, TimeUnit.MILLISECONDS)) {
-                LOGGER.warn("Native app [{}] did not stop within {}ms; forcibly destroying.", app.getName(), STOP_GRACE_MS);
+                LOGGER.warn("Native app [{}] (PID [{}]) did not stop within {}ms; forcibly destroying.",
+                        LogSanitizer.sanitize(app.getName()), pid, STOP_GRACE_MS);
                 p.destroyForcibly();
             }
         } catch (InterruptedException ie) {
@@ -177,6 +180,11 @@ public class NativeAppProcessManager {
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to start native app [" + app.getName() + "]: " + ex.getMessage(), ex);
         }
+        // Log the PID alongside the port so the operator can correlate later (e.g.
+        // `lsof -ti tcp:<port>` / `ps -p <pid>`). The held PID is the immediate child Dirigible
+        // spawned — for shell-based launchers this is the wrapper, and the real listener may be
+        // a grandchild reached via `exec`. Either way, the OS process tree under this PID covers it.
+        LOGGER.info("Native app [{}] spawned: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), process.pid(), port);
         ProcessLogPump.start(app.getName(), process);
         RuntimeState state = new RuntimeState(process, port, Instant.now());
         states.put(app.getId(), state);
@@ -190,7 +198,9 @@ public class NativeAppProcessManager {
                 throw new IllegalStateException("Native app [" + app.getName() + "] exited before it became ready.");
             }
             if (isLoopbackPortOpen(state.getPort())) {
-                LOGGER.info("Native app [{}] is ready on port [{}].", app.getName(), state.getPort());
+                LOGGER.info("Native app [{}] is ready: PID [{}], port [{}].", app.getName(), state.getProcess()
+                                                                                                  .pid(),
+                        state.getPort());
                 return;
             }
             try {
@@ -251,8 +261,8 @@ public class NativeAppProcessManager {
             File requestedDir = new File(registryDiskRoot, command.getDir());
             if (!requestedDir.exists()) {
                 LOGGER.info(
-                        "Skipping lifecycle.stop for native app [{}]: working directory [{}] no longer exists (project files already removed); terminating via Process.destroy() instead.",
-                        LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(requestedDir.getAbsolutePath()));
+                        "Skipping lifecycle.stop for native app [{}] on port [{}]: working directory [{}] no longer exists (project files already removed); terminating via Process.destroy() instead.",
+                        LogSanitizer.sanitize(app.getName()), port, LogSanitizer.sanitize(requestedDir.getAbsolutePath()));
                 return;
             }
         }
