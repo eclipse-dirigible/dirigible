@@ -13,9 +13,17 @@ import org.springframework.stereotype.Component;
 
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Resolves {@link AuthenticationInjector} by the {@code authentication.type} string the artefact
+ * author wrote in the {@code .native-app} file. Lookup is case-insensitive — authors who type
+ * {@code "Basic"} or {@code "BASIC"} still match the {@code "basic"} injector. {@link Locale#ROOT}
+ * is used for the case fold to avoid locale-specific quirks (the Turkish dotted-I being the
+ * canonical example).
+ */
 @Component
 public class AuthenticationInjectorRegistry {
 
@@ -24,7 +32,9 @@ public class AuthenticationInjectorRegistry {
     public AuthenticationInjectorRegistry(List<AuthenticationInjector> injectors) {
         Map<String, AuthenticationInjector> map = new HashMap<>();
         for (AuthenticationInjector injector : injectors) {
-            map.put(injector.type(), injector);
+            map.put(injector.type()
+                            .toLowerCase(Locale.ROOT),
+                    injector);
         }
         this.byType = Map.copyOf(map);
     }
@@ -33,6 +43,6 @@ public class AuthenticationInjectorRegistry {
         if (type == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(byType.get(type));
+        return Optional.ofNullable(byType.get(type.toLowerCase(Locale.ROOT)));
     }
 }
