@@ -52,7 +52,7 @@ final class ProcessLogPump {
                 }
             }
         } catch (IOException ex) {
-            logger.debug("Native-app log pump stopped: {}", ex.getMessage());
+            logger.debug("Native-app log pump stopped: {}", ex.getMessage(), ex);
         }
     }
 }

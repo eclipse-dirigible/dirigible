@@ -132,8 +132,8 @@ public enum DirigibleConfig {
     /** Milliseconds the platform waits for a started native-app process to start accepting TCP. */
     NATIVE_APP_READY_TIMEOUT_MS("DIRIGIBLE_NATIVE_APP_READY_TIMEOUT_MS", "30000"),
 
-    /** Cron expression for the Quartz job that keeps ALWAYS-mode native apps alive. */
-    NATIVE_APP_MONITOR_CRON("DIRIGIBLE_NATIVE_APP_MONITOR_CRON", "0/30 * * * * ?"),
+    /** Interval (seconds) between ticks of the SystemJob that keeps ALWAYS-mode native apps alive. */
+    NATIVE_APP_MONITOR_INTERVAL_SECONDS("DIRIGIBLE_NATIVE_APP_MONITOR_INTERVAL_SECONDS", "30"),
 
     /** TTL in seconds for the native-app proxy lookup cache. */
     NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60");
