@@ -50,7 +50,9 @@ final class OsCommandResolver {
             return Optional.empty();
         }
         return commands.stream()
-                       .filter(c -> Os.fromToken(c.getOs()) == current)
+                       .filter(c -> Os.fromTokenIfKnown(c.getOs())
+                                      .map(parsed -> parsed == current)
+                                      .orElse(false))
                        .findFirst();
     }
 }

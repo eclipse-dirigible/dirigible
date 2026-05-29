@@ -10,13 +10,13 @@
 package org.eclipse.dirigible.components.engine.nativeapps.process;
 
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * The host operating systems the native-app command resolver knows about. {@link #UNSUPPORTED} is
- * returned both when {@link OsCommandResolver#currentOs()} runs on a platform we don't recognise
- * and when a {@code command.os} token in a {@code .native-app} file doesn't parse cleanly — it
- * never matches anything in {@link OsCommandResolver#pickForCurrentOs}, so an unrecognised host
- * silently has no commands to pick.
+ * the sentinel returned by {@link OsCommandResolver#currentOs()} when the running platform is none
+ * of mac / linux / windows — a runtime fact, not an authoring mistake. The platform stays
+ * functional on UNSUPPORTED hosts; it just declines to pick any native-app command.
  *
  * <p>
  * {@code toString()} is overridden to return the lower-case JSON token so error messages and log
@@ -34,22 +34,35 @@ enum Os {
     }
 
     /**
-     * Maps the JSON {@code command.os} string to an {@link Os}. Case-insensitive. Returns
-     * {@link #UNSUPPORTED} for null, blank, or unrecognised input — the matcher in
-     * {@link OsCommandResolver#pickForCurrentOs} treats UNSUPPORTED as never-equal so unknown tokens
-     * simply don't pick.
+     * Strictly parses a {@code command.os} JSON token. Returns the matching {@link Os} for one of mac /
+     * linux / windows (case-insensitive); throws {@link IllegalArgumentException} for null, blank, or
+     * anything else. Use this when the value comes from an authored {@code .native-app} file and a typo
+     * should fail loud at the layer that owns the artefact (e.g. a future synchronizer-side validation
+     * step). For the runtime per-request matching path where an unknown token should simply not match,
+     * use {@link #fromTokenIfKnown}.
      */
     static Os fromToken(String token) {
+        return fromTokenIfKnown(token).orElseThrow(() -> new IllegalArgumentException(
+                "Unknown OS token [" + token + "] — must be one of mac / linux / windows (case-insensitive)."));
+    }
+
+    /**
+     * Leniently parses a {@code command.os} JSON token. Returns {@link Optional#empty()} for null,
+     * blank, or any unrecognised value; otherwise the matching {@link Os}. Used by
+     * {@link OsCommandResolver#pickForCurrentOs} so a command tagged for an OS the platform doesn't
+     * know about silently doesn't match — without paying an exception per request.
+     */
+    static Optional<Os> fromTokenIfKnown(String token) {
         if (token == null || token.isBlank()) {
-            return UNSUPPORTED;
+            return Optional.empty();
         }
         String normalised = token.toLowerCase(Locale.ROOT);
         for (Os os : values()) {
             if (os != UNSUPPORTED && os.token.equals(normalised)) {
-                return os;
+                return Optional.of(os);
             }
         }
-        return UNSUPPORTED;
+        return Optional.empty();
     }
 
     @Override
