@@ -32,6 +32,10 @@
                 --fdButton_Height: 1.25rem !important;
             }
 
+            .dbg-section h3 {
+                text-transform: uppercase;
+            }
+
         </style>
     </head>
 
@@ -42,10 +46,10 @@
             <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected' && status !== 'connecting'">
             </bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue (F5)" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--arrow-right" compact="true" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--arrow-bottom" compact="true" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--forward" compact="true" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-right" compact="true" state="transparent" title="Step Over" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-bottom" compact="true" state="transparent" title="Step Into" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--forward" compact="true" state="transparent" title="Step Out" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--stop" compact="true" state="transparent" title="Stop" aria-label="Stop" ng-click="dapStop()" ng-disabled="status !== 'connected'"></bk-button>
         </bk-toolbar>
 
@@ -60,13 +64,15 @@
         <bk-panel class="bk-vbox dbg-section" expanded="sections.callStack" compact="true" ng-style="sections.callStack && {'flex': '1' }">
             <bk-panel-header class="bk-padding--none">
                 <bk-panel-expand hint="expand panel content"></bk-panel-expand>
-                <h3 bk-panel-title class="bk-font--normal bk-text--subtitle">Call Stack</h3>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Call Stack</h3>
             </bk-panel-header>
             <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Call stack section">
                 <bk-list compact="true" ng-if="callStack.length">
                     <bk-list-item interactive="true" ng-repeat="frame in callStack track by $index" ng-click="selectFrame(frame)" selected="frame === selectedFrame">
                         <bk-list-title>{{frame.name}}</bk-list-title>
-                        <bk-list-secondary class="bk-text--subtitle">{{frame.source && frame.source.name ? frame.source.name : ''}}{{frame.line ? ':' + frame.line : ''}}</bk-list-secondary>
+                        <bk-list-secondary class="bk-text--subtitle bk-center--vertical bk-box--gap">{{frame.source && frame.source.name ? frame.source.name : ''}}<span bk-object-status text="{{frame.line ? frame.line : ''}}"
+                                inverted="true"></span>
+                        </bk-list-secondary>
                     </bk-list-item>
                 </bk-list>
                 <bk-list compact="true" ng-if="callStack.length === 0">
@@ -81,7 +87,7 @@
         <bk-panel class="bk-vbox dbg-section" expanded="sections.variables" compact="true" ng-style="sections.variables && {'flex': '1' }">
             <bk-panel-header class="bk-padding--none">
                 <bk-panel-expand hint="expand panel content"></bk-panel-expand>
-                <h3 bk-panel-title class="bk-font--normal bk-text--subtitle">Variables</h3>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Variables</h3>
             </bk-panel-header>
             <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Variables section">
                 <bk-list compact="true" ng-if="variables.length">
@@ -102,15 +108,15 @@
         <bk-panel class="bk-vbox dbg-section" expanded="sections.breakpoints" compact="true" ng-style="sections.breakpoints && {'flex': '1' }">
             <bk-panel-header class="bk-padding--none">
                 <bk-panel-expand hint="expand panel content"></bk-panel-expand>
-                <h3 bk-panel-title class="bk-font--normal bk-text--subtitle">Breakpoints</h3>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Breakpoints</h3>
                 <bk-button class="fd-margin-end--tiny" glyph="sap-icon--clear-all" compact="true" state="transparent" title="Clear all breakpoints" aria-label="Clear all breakpoints" ng-click="clearAllBreakpoints()"
                     ng-disabled="bpList.length === 0"></bk-button>
             </bk-panel-header>
             <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Breakpoints section">
                 <bk-list compact="true" ng-if="bpList.length">
-                    <bk-list-item interactive="true" ng-repeat="bp in bpList track by $index">
+                    <bk-list-item ng-repeat="bp in bpList track by $index">
                         <bk-list-title>{{bp.file}}:{{bp.line}}</bk-list-title>
-                        <bk-button bk-list-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" aria-label="Remove breakpoint"></bk-button>
+                        <bk-button bk-list-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" title="Remove breakpoint" aria-label="Remove breakpoint"></bk-button>
                     </bk-list-item>
                 </bk-list>
                 <bk-list compact="true" ng-if="bpList.length === 0">
