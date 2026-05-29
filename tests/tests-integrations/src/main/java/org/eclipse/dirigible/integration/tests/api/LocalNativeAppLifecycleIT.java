@@ -18,7 +18,6 @@ import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -92,14 +91,10 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     @Autowired
     private NativeAppService service;
 
-    @AfterEach
-    void cleanupArtefact() {
-        processManager.stopAll();
-        for (String name : new String[] {"local-lazy", "local-always", "local-auth", "local-stop-port", "local-orphan"}) {
-            removeProjectFiles(name);
-        }
-        synchronizationProcessor.forceProcessSynchronizers();
-    }
+    // No manual @AfterEach cleanup: @DirtiesContext(AFTER_EACH_TEST_METHOD) destroys the Spring
+    // context between tests, which triggers DirigibleCleanupBean (drops H2 tables + deletes the
+    // dirigible folder) and NativeAppShutdown (stops every owned native-app process). Adding our
+    // own cleanup here would just race the framework's.
 
     private void removeProjectFiles(String name) {
         for (String relative : new String[] {"/" + name + "/" + name + ".native-app", "/" + name + "/Server.java"}) {

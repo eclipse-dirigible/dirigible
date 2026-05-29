@@ -20,7 +20,8 @@ import org.junit.jupiter.api.BeforeAll;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * Clones {@code dirigiblelabs/sample-library-native-app-nodejs}, publishes it through the IDE, and
+ * End-to-end IT for the {@code local} native-app kind. Clones
+ * {@code dirigiblelabs/sample-library-native-app-nodejs}, publishes it through the IDE, and
  * verifies the platform:
  * <ol>
  * <li>Registers the {@code library-admin} role from {@code roles.roles}.</li>
@@ -29,8 +30,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * <li>Spawns the Node process on demand and proxies CRUD calls through with the basic-auth header
  * injected by Dirigible once the caller is granted {@code library-admin}.</li>
  * </ol>
+ *
+ * <p>
+ * Counterpart to {@code RemoteNativeAppIT} which exercises the {@code remote} kind.
  */
-public class SampleLibraryNativeAppNodejsIT extends SampleProjectRepositoryIT {
+public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
 
     private static final String API_ROOT = "/services/native-apps-proxy/v1/library-native-app-nodejs/rest/api/v1";
 
@@ -86,6 +90,11 @@ public class SampleLibraryNativeAppNodejsIT extends SampleProjectRepositoryIT {
         securityUtil.assignRoleToUser(READER_USERNAME, defaultTenantId, LIBRARY_ADMIN_ROLE);
 
         restAssuredExecutor.execute(this::exerciseBookCrud, READER_USERNAME, READER_PASSWORD);
+
+        // 3. Independent of CRUD: assert the .native-app's start arguments reached the spawned
+        // Node process. Lives outside exerciseBookCrud because it tests the artefact's
+        // arguments[] propagation contract, not the book CRUD behaviour.
+        restAssuredExecutor.execute(this::assertStartArgumentsReachedNodeProcess, READER_USERNAME, READER_PASSWORD);
     }
 
     private void expectForbiddenForReader() {
@@ -109,10 +118,15 @@ public class SampleLibraryNativeAppNodejsIT extends SampleProjectRepositoryIT {
                .then()
                .statusCode(200)
                .body(containsString("The Hobbit"));
+    }
 
-        // The .native-app's start arguments include --library-address / --library-phone; the Node
-        // app surfaces those at /library. Asserting on the response proves the artefact's
-        // arguments[] entries reach the spawned process and influence its runtime configuration.
+    /**
+     * The {@code .native-app}'s {@code lifecycle.start.commands[].arguments[]} include
+     * {@code --library-address} / {@code --library-phone}; the Node app surfaces those at
+     * {@code /library}. Asserting on the response proves the artefact's {@code arguments[]} entries
+     * reach the spawned process and influence its runtime configuration.
+     */
+    private void assertStartArgumentsReachedNodeProcess() {
         given().when()
                .get(LIBRARY_INFO)
                .then()
