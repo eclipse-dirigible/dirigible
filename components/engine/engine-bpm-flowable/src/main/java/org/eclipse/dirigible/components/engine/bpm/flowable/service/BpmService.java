@@ -101,7 +101,7 @@ public class BpmService {
      * @return the model
      * @throws JsonProcessingException the json processing exception
      */
-    public ObjectNode getModel(String workspace, String project, String path) throws JsonProcessingException {
+    public String getModel(String workspace, String project, String path) throws JsonProcessingException {
         BpmnXMLConverter bpmnXMLConverter = new BpmnXMLConverter();
         File file = getWorkspaceService().getWorkspace(workspace)
                                          .getProject(project)
@@ -129,7 +129,7 @@ public class BpmService {
                     + ""));
             rootNode.set("lastUpdatedBy", JsonNodeFactory.instance.textNode(file.getInformation()
                                                                                 .getModifiedBy()));
-            return rootNode;
+            return new ObjectMapper().writeValueAsString(rootNode);
         } else {
             throw new RepositoryNotFoundException(
                     format("The requested BPMN file does not exist in workspace: [{0}], project: [{1}] and path: [{2}]", workspace, project,
@@ -177,14 +177,10 @@ public class BpmService {
      * @return the stencil set
      * @throws IOException Signals that an I/O exception has occurred.
      */
-    public JsonNode getStencilSet() throws IOException {
+    public String getStencilSet() throws IOException {
         InputStream in = BpmService.class.getResourceAsStream("/stencilset_bpmn.json");
         try {
-            byte[] content = IOUtils.toByteArray(in);
-            ObjectMapper objectMapper = new ObjectMapper();
-            JsonNode modelNode = objectMapper.readTree(content);
-            // return new String(content, StandardCharsets.UTF_8);
-            return modelNode;
+            return IOUtils.toString(in, java.nio.charset.StandardCharsets.UTF_8);
         } finally {
             if (in != null) {
                 in.close();
