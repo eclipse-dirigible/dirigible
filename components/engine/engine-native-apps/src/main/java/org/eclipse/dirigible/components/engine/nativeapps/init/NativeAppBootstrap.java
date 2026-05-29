@@ -18,7 +18,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.synchronizer.NativeApp
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
+import org.springframework.context.ApplicationListener;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,7 +28,7 @@ import org.springframework.stereotype.Component;
  * NativeAppMonitorJob}.
  */
 @Component
-class NativeAppBootstrap {
+class NativeAppBootstrap implements ApplicationListener<ApplicationReadyEvent> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppBootstrap.class);
 
@@ -40,8 +40,8 @@ class NativeAppBootstrap {
         this.processManager = processManager;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void startAlwaysApps() {
+    @Override
+    public void onApplicationEvent(ApplicationReadyEvent event) {
         for (NativeApp app : registry.findAll()) {
             if (app.getKind() != NativeAppKind.LOCAL || app.getStartMode() != StartMode.ALWAYS) {
                 continue;

@@ -55,7 +55,7 @@ public class NativeAppMonitorJob implements Job {
                     processManager.startAsync(app);
                 }
             } catch (RuntimeException ex) {
-                LOGGER.warn("Native-app monitor cycle skipped app [{}]: {}", app.getName(), ex.getMessage());
+                LOGGER.warn("Native-app monitor cycle skipped app [{}]: {}", app.getName(), ex.getMessage(), ex);
             }
         }
     }
