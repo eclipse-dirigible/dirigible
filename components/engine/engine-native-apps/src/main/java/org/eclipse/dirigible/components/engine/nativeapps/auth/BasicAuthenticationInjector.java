@@ -11,8 +11,6 @@ package org.eclipse.dirigible.components.engine.nativeapps.auth;
 
 import org.eclipse.dirigible.components.engine.nativeapps.domain.Authentication;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.BasicAuthCredentials;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.function.ServerRequest;
@@ -23,8 +21,6 @@ import java.util.Base64;
 @Component
 public class BasicAuthenticationInjector implements AuthenticationInjector {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(BasicAuthenticationInjector.class);
-
     @Override
     public String type() {
         return Authentication.TYPE_BASIC;
@@ -32,16 +28,22 @@ public class BasicAuthenticationInjector implements AuthenticationInjector {
 
     @Override
     public ServerRequest inject(ServerRequest request, Authentication auth) {
-        BasicAuthCredentials cred = auth == null ? null : auth.getCredentials();
+        BasicAuthCredentials cred = auth.getCredentials();
         if (cred == null) {
-            LOGGER.debug("Basic auth requested but no credentials configured; request will be forwarded unchanged.");
-            return request;
+            throw new IllegalStateException(
+                    "Native app declares basic authentication but security.authentication.credentials is missing in the .native-app file.");
         }
         String user = cred.getUser();
+        if (user == null || user.isBlank()) {
+            throw new IllegalStateException(
+                    "Native app declares basic authentication but security.authentication.credentials.user is missing or blank in the .native-app file"
+                            + " (verify the value or its ${...} placeholder resolution).");
+        }
         String pass = cred.getPassword();
-        if (user == null || pass == null) {
-            LOGGER.debug("Basic auth credentials missing user or pass; request will be forwarded unchanged.");
-            return request;
+        if (pass == null || pass.isBlank()) {
+            throw new IllegalStateException(
+                    "Native app declares basic authentication but security.authentication.credentials.password is missing or blank in the .native-app file"
+                            + " (verify the value or its ${...} placeholder resolution).");
         }
         String encoded = Base64.getEncoder()
                                .encodeToString((user + ":" + pass).getBytes(StandardCharsets.UTF_8));
