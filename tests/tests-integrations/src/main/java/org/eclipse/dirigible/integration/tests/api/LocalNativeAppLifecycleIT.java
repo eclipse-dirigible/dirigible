@@ -91,11 +91,6 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     @Autowired
     private NativeAppService service;
 
-    // No manual @AfterEach cleanup: @DirtiesContext(AFTER_EACH_TEST_METHOD) destroys the Spring
-    // context between tests, which triggers DirigibleCleanupBean (drops H2 tables + deletes the
-    // dirigible folder) and NativeAppShutdown (stops every owned native-app process). Adding our
-    // own cleanup here would just race the framework's.
-
     private void removeProjectFiles(String name) {
         for (String relative : new String[] {"/" + name + "/" + name + ".native-app", "/" + name + "/Server.java"}) {
             String path = IRepositoryStructure.PATH_REGISTRY_PUBLIC + relative;

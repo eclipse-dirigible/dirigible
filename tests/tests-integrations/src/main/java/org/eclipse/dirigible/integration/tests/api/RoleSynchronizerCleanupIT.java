@@ -101,7 +101,5 @@ class RoleSynchronizerCleanupIT extends IntegrationTest {
                        .contains(ROLE_NAME)) {
             throw new AssertionError("User still carries role [" + ROLE_NAME + "] after synchronizer cleanup.");
         }
-        // No explicit test-user cleanup: @DirtiesContext(AFTER_EACH_TEST_METHOD) triggers
-        // DirigibleCleanupBean on context teardown, which drops the H2 tables outright.
     }
 }
