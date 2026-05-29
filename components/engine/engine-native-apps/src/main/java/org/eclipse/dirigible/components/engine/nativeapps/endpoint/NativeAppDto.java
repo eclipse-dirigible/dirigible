@@ -18,7 +18,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.process.NativeAppProce
  * Read-only projection of a {@link NativeApp} returned by the management endpoint. Credentials are
  * intentionally omitted so resolved secret values never leave the platform.
  */
-public class NativeAppDto {
+class NativeAppDto {
 
     private Long id;
     private String name;

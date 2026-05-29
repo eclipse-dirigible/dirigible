@@ -16,13 +16,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
-public class NativeAppShutdown {
+class NativeAppShutdown {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppShutdown.class);
 
     private final NativeAppProcessManager processManager;
 
-    public NativeAppShutdown(NativeAppProcessManager processManager) {
+    NativeAppShutdown(NativeAppProcessManager processManager) {
         this.processManager = processManager;
     }
 

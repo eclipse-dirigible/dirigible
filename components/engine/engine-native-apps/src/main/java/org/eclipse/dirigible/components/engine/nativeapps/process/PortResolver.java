@@ -15,7 +15,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.ServerSocket;
 
-public final class PortResolver {
+final class PortResolver {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(PortResolver.class);
 
@@ -39,7 +39,7 @@ public final class PortResolver {
      * accepted — same trade-off used elsewhere in the platform; see {@code PortUtil#getFreeRandomPort}
      * for SFTP.
      */
-    public static int resolve(Integer preferred) {
+    static int resolve(Integer preferred) {
         if (preferred != null && preferred > 0 && isBindable(preferred)) {
             return preferred;
         }

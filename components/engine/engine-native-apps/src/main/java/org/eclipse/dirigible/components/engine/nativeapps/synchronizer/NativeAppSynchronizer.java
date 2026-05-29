@@ -34,7 +34,7 @@ import java.util.List;
 
 @Component
 @Order(SynchronizersOrder.NATIVE_APP)
-public class NativeAppSynchronizer extends BaseSynchronizer<NativeApp, Long> {
+class NativeAppSynchronizer extends BaseSynchronizer<NativeApp, Long> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppSynchronizer.class);
 
@@ -46,7 +46,7 @@ public class NativeAppSynchronizer extends BaseSynchronizer<NativeApp, Long> {
 
     private SynchronizerCallback callback;
 
-    public NativeAppSynchronizer(NativeAppService service, NativeAppRegistry registry, NativeAppProcessManager processManager) {
+    NativeAppSynchronizer(NativeAppService service, NativeAppRegistry registry, NativeAppProcessManager processManager) {
         this.service = service;
         this.registry = registry;
         this.processManager = processManager;

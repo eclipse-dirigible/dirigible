@@ -43,13 +43,13 @@ import static org.springframework.http.HttpStatus.NOT_FOUND;
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURED + "native-apps")
-public class NativeAppManagementEndpoint extends BaseEndpoint {
+class NativeAppManagementEndpoint extends BaseEndpoint {
 
     private final NativeAppService service;
     private final NativeAppRegistry registry;
     private final NativeAppProcessManager processManager;
 
-    public NativeAppManagementEndpoint(NativeAppService service, NativeAppRegistry registry, NativeAppProcessManager processManager) {
+    NativeAppManagementEndpoint(NativeAppService service, NativeAppRegistry registry, NativeAppProcessManager processManager) {
         this.service = service;
         this.registry = registry;
         this.processManager = processManager;

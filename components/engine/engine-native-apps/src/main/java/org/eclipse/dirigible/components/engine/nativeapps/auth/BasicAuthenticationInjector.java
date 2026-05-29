@@ -19,7 +19,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 @Component
-public class BasicAuthenticationInjector implements AuthenticationInjector {
+class BasicAuthenticationInjector implements AuthenticationInjector {
 
     @Override
     public String type() {

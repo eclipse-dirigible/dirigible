@@ -31,7 +31,7 @@ import org.springframework.stereotype.Component;
  * Spring context is ready. Cron is configurable via {@code DIRIGIBLE_NATIVE_APP_MONITOR_CRON}.
  */
 @Component
-public class NativeAppMonitorScheduler {
+class NativeAppMonitorScheduler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppMonitorScheduler.class);
 
@@ -40,12 +40,12 @@ public class NativeAppMonitorScheduler {
 
     private final Scheduler scheduler;
 
-    public NativeAppMonitorScheduler(Scheduler scheduler) {
+    NativeAppMonitorScheduler(Scheduler scheduler) {
         this.scheduler = scheduler;
     }
 
     @EventListener(ApplicationReadyEvent.class)
-    public void scheduleMonitor() {
+    void scheduleMonitor() {
         try {
             JobKey jobKey = JobKey.jobKey(JOB_NAME, JOB_GROUP);
             TriggerKey triggerKey = TriggerKey.triggerKey(JOB_NAME, JOB_GROUP);

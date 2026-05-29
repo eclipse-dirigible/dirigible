@@ -19,7 +19,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppKind;
  * {@link org.eclipse.dirigible.components.base.artefact.Artefact#type Artefact.type}, which is the
  * artefact-type string used internally.
  */
-public class NativeAppFile {
+class NativeAppFile {
 
     @Expose
     private String id;

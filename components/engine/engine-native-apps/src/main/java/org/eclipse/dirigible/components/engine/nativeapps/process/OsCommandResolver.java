@@ -15,7 +15,7 @@ import org.eclipse.dirigible.components.engine.nativeapps.domain.Command;
 import java.util.List;
 import java.util.Optional;
 
-public final class OsCommandResolver {
+final class OsCommandResolver {
 
     static final String OS_MAC = "mac";
     static final String OS_LINUX = "linux";
@@ -27,7 +27,7 @@ public final class OsCommandResolver {
      * Returns the lower-case OS token matching the running platform, or {@code null} if it isn't one of
      * the supported values.
      */
-    public static String currentOs() {
+    static String currentOs() {
         if (SystemUtils.IS_OS_MAC) {
             return OS_MAC;
         }
@@ -43,7 +43,7 @@ public final class OsCommandResolver {
     /**
      * Picks the command from the configured list whose {@code os} field matches the running platform.
      */
-    public static Optional<Command> pickForCurrentOs(List<Command> commands) {
+    static Optional<Command> pickForCurrentOs(List<Command> commands) {
         if (commands == null || commands.isEmpty()) {
             return Optional.empty();
         }

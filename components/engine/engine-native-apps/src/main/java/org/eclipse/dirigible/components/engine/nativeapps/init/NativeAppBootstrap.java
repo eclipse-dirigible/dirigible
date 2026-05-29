@@ -28,14 +28,14 @@ import org.springframework.stereotype.Component;
  * NativeAppMonitorJob}.
  */
 @Component
-public class NativeAppBootstrap {
+class NativeAppBootstrap {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppBootstrap.class);
 
     private final NativeAppRegistry registry;
     private final NativeAppProcessManager processManager;
 
-    public NativeAppBootstrap(NativeAppRegistry registry, NativeAppProcessManager processManager) {
+    NativeAppBootstrap(NativeAppRegistry registry, NativeAppProcessManager processManager) {
         this.registry = registry;
         this.processManager = processManager;
     }
