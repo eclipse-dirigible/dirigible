@@ -22,7 +22,9 @@ import jakarta.persistence.UniqueConstraint;
 import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 @Entity
-@Table(name = "DIRIGIBLE_NATIVE_APPS", uniqueConstraints = @UniqueConstraint(columnNames = "ARTEFACT_NAME"))
+@Table(name = "DIRIGIBLE_NATIVE_APPS",
+        uniqueConstraints = {@UniqueConstraint(name = "UK_DIRIGIBLE_NATIVE_APPS_NAME", columnNames = "ARTEFACT_NAME"),
+                @UniqueConstraint(name = "UK_DIRIGIBLE_NATIVE_APPS_BASE_PATH", columnNames = "NATIVE_APP_BASE_PATH")})
 public class NativeApp extends Artefact {
 
     public static final String ARTEFACT_TYPE = "native-app";
@@ -32,6 +34,13 @@ public class NativeApp extends Artefact {
     @Column(name = "NATIVE_APP_ID", nullable = false)
     private Long id;
 
+    /**
+     * Reverse-proxy base-path segment under {@code /services/native-apps-proxy/v1/}. Unique across the
+     * registry: two artefacts cannot claim the same {@code basePath} because the proxy's
+     * {@link org.eclipse.dirigible.components.engine.nativeapps.registry.NativeAppRegistry
+     * NativeAppRegistry} maps each unique {@code basePath} to exactly one app — duplicates would
+     * silently overwrite. The empty-string catch-all is allowed but, like every other value, only once.
+     */
     @Column(name = "NATIVE_APP_BASE_PATH", columnDefinition = "VARCHAR", nullable = false, length = 255)
     private String basePath;
 

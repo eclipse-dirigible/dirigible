@@ -17,42 +17,40 @@ import java.util.Optional;
 
 final class OsCommandResolver {
 
-    static final String OS_MAC = "mac";
-    static final String OS_LINUX = "linux";
-    static final String OS_WINDOWS = "windows";
-
     private OsCommandResolver() {}
 
     /**
-     * Returns the lower-case OS token matching the running platform, or {@code null} if it isn't one of
-     * the supported values.
+     * Returns the {@link Os} matching the running platform, or {@link Os#UNSUPPORTED} when the host is
+     * none of mac / linux / windows.
      */
-    static String currentOs() {
+    static Os currentOs() {
         if (SystemUtils.IS_OS_MAC) {
-            return OS_MAC;
+            return Os.MAC;
         }
         if (SystemUtils.IS_OS_LINUX) {
-            return OS_LINUX;
+            return Os.LINUX;
         }
         if (SystemUtils.IS_OS_WINDOWS) {
-            return OS_WINDOWS;
+            return Os.WINDOWS;
         }
-        return null;
+        return Os.UNSUPPORTED;
     }
 
     /**
      * Picks the command from the configured list whose {@code os} field matches the running platform.
+     * An unrecognised host ({@link Os#UNSUPPORTED}) or a command whose {@code os} token doesn't parse
+     * cleanly never matches.
      */
     static Optional<Command> pickForCurrentOs(List<Command> commands) {
         if (commands == null || commands.isEmpty()) {
             return Optional.empty();
         }
-        String os = currentOs();
-        if (os == null) {
+        Os current = currentOs();
+        if (current == Os.UNSUPPORTED) {
             return Optional.empty();
         }
         return commands.stream()
-                       .filter(c -> os.equalsIgnoreCase(c.getOs()))
+                       .filter(c -> Os.fromToken(c.getOs()) == current)
                        .findFirst();
     }
 }
