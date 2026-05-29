@@ -51,7 +51,7 @@ class NativeAppBootstrap implements ApplicationListener<ApplicationReadyEvent> {
                 processManager.startAsync(app);
                 LOGGER.info("Boot-time startup kicked off for native app [{}].", app.getName());
             } catch (RuntimeException ex) {
-                LOGGER.warn("Failed to start native app [{}] at boot: {}", app.getName(), ex.getMessage());
+                LOGGER.warn("Failed to start native app [{}] at boot: {}", app.getName(), ex.getMessage(), ex);
             }
         }
     }
