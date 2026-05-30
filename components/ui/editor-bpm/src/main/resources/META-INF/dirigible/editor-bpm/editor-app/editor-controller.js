@@ -40,20 +40,20 @@ angular.module('flowableModeler')
     function fetchModel() {
 
         var modelUrl;
-        if ($routeParams.modelId) {
+        if ($routeParams.workspace) {
         	var modelId = $routeParams.workspace + '/' + $routeParams.project + '/' + $routeParams.path;
             modelUrl = FLOWABLE.URL.getModel(modelId);
         } else {
             modelUrl = FLOWABLE.URL.newModelInfo();
         }
 
-        $http({method: 'GET', url: modelUrl}).
-            success(function (data, status, headers, config) {
-                $rootScope.editor = new ORYX.Editor(data);
-                $rootScope.modelData = angular.fromJson(data);
+        $http({method: 'GET', url: modelUrl}).then(
+            function (response) {
+                $rootScope.editor = new ORYX.Editor(response.data);
+                $rootScope.modelData = angular.fromJson(response.data);
                 $rootScope.editorFactory.resolve();
-            }).
-            error(function (data, status, headers, config) {
+            },
+            function () {
                 $location.path("/processes/");
             });
     }

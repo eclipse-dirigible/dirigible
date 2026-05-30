@@ -59,14 +59,14 @@ angular.module('flowableModeler').controller('FlowableProcessReferencePopupCtrl'
     $scope.loadProcesses = function() {
    	 
     	$http.get(FLOWABLE.APP_URL.getModelsUrl("?modelType=0"))
-    		.success(
+    		.then(
     			function(response) {
     				$scope.state.loadingProcesses = false;
     				$scope.state.processError = false;
     				$scope.processModels = response.data;
     			})
-    		.error(
-    			function(data, status, headers, config) {
+    		.catch(
+    			function() {
     				$scope.state.loadingProcesses = false;
     				$scope.state.processError = true;
     			});

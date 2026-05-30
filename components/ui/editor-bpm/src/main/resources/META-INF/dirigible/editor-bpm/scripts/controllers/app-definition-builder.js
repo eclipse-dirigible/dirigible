@@ -41,8 +41,8 @@ angular.module('flowableModeler')
     
     $scope.loadApp = function() {
     	$http({method: 'GET', url: FLOWABLE.APP_URL.getAppDefinitionUrl($routeParams.modelId)}).
-        	success(function(data, status, headers, config) {
-        	    $rootScope.currentAppDefinition = data;
+        	then(function(response) {
+        	    $rootScope.currentAppDefinition = response.data;
         	    if (!$rootScope.currentAppDefinition.definition.theme) {
         	        $rootScope.currentAppDefinition.definition.theme = 'theme-1';
         	    }
@@ -50,7 +50,7 @@ angular.module('flowableModeler')
                     $rootScope.currentAppDefinition.definition.icon = 'glyphicon-asterisk';
                 }
 
-        	}).error(function(data, status, headers, config) {
+        	}).catch(function() {
         		console.log("Error loading model");
         	});
     };

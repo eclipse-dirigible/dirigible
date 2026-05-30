@@ -34,9 +34,10 @@ angular.module('flowableModeler')
       }
       
       $http({method: 'GET', url: url}).
-        success(function(data, status, headers, config) {
+        then(function(response) {
+          var data = response.data;
           $scope.model.process = data;
-          
+
           $scope.loadVersions();
 
           $scope.model.bpmn20DownloadUrl = $routeParams.modelHistoryId == undefined ?
@@ -47,11 +48,11 @@ angular.module('flowableModeler')
         	  $rootScope.$on('$routeChangeStart', function(event, next, current) {
         		  jQuery('.qtip').qtip('destroy', true);
         	  });
-        	  
+
 	          $timeout(function() {
 	            jQuery("#bpmnModel").attr('data-model-id', $routeParams.modelId);
 	            jQuery("#bpmnModel").attr('data-model-type', 'design');
-	            
+
 	            // in case we want to show a historic model, include additional attribute on the div
 	            if(!$scope.model.process.latestVersion) {
 	              jQuery("#bpmnModel").attr('data-history-id', $routeParams.modelHistoryId);
@@ -71,7 +72,7 @@ angular.module('flowableModeler')
                 });
               });
 
-        }).error(function(data, status, headers, config) {
+        }).catch(function() {
           $scope.returnToList();
         });
     };

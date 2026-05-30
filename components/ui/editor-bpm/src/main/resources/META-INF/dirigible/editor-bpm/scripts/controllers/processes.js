@@ -269,13 +269,15 @@ angular.module('flowableModeler')
           }).progress(function(evt) {
               $scope.model.uploadProgress = parseInt(100.0 * evt.loaded / evt.total);
 
-          }).success(function(data) {
+          }).then(function(response) {
+              var data = response.data;
               $scope.model.loading = false;
 
               $location.path("/editor/" + data.id);
               $scope.$hide();
 
-          }).error(function(data) {
+          }).catch(function(response) {
+              var data = response.data;
 
               if (data && data.message) {
                   $scope.model.errorMessage = data.message;

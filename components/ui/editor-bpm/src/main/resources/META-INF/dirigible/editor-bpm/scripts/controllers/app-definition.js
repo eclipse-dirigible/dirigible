@@ -53,17 +53,17 @@ angular.module('flowableModeler')
     	}
 
     	$http({method: 'GET', url: url}).
-        	success(function(data, status, headers, config) {
-        		$scope.model.app = data;
+        	then(function(response) {
+        		$scope.model.app = response.data;
         		$scope.loadVersions();
 
-        	}).error(function(data, status, headers, config) {
+        	}).catch(function() {
         		$scope.returnToList();
         	});
 
     	$http({method: 'GET', url: definitionUrl}).
-            success(function(data, status, headers, config) {
-                $scope.model.appDefinition = data;
+            then(function(response) {
+                $scope.model.appDefinition = response.data;
             });
     };
 
@@ -302,13 +302,14 @@ angular.module('flowableModeler')
           }).progress(function(evt) {
               $scope.popup.uploadProgress = parseInt(100.0 * evt.loaded / evt.total);
 
-          }).success(function(data, status, headers, config) {
+          }).then(function() {
               $scope.popup.loading = false;
 
               $route.reload();
               $scope.$hide();
 
-          }).error(function(data, status, headers, config) {
+          }).catch(function(response) {
+              var data = response.data;
 
               if (data && data.message) {
                   $scope.popup.errorMessage = data.message;

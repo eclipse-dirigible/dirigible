@@ -15,7 +15,7 @@
 
 var FLOWABLE = FLOWABLE || {};
 
-// angular.lowercase = text => text.toLowerCase(); // forward compatibility for 1.8.2
+// angular.lowercase removed in Angular 1.8 — shim is applied inline in index.html
 
 FLOWABLE.CONFIG = {
 	'onPremise': true,
