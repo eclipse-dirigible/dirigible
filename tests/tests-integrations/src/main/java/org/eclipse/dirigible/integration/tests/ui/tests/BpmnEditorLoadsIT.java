@@ -64,8 +64,8 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
         // are actually defined in the loaded theme.
         Selenide.$(By.id("canvasSection"))
                 .shouldBe(Condition.visible);
-        Object value = Selenide.executeJavaScript(
-                "return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor');");
+        Object value =
+                Selenide.executeJavaScript("return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor');");
         org.slf4j.LoggerFactory.getLogger(BpmnEditorLoadsIT.class)
                                .info("DIAG --sapBackgroundColor in BPM iframe = [{}]", value);
         Selenide.switchTo()
