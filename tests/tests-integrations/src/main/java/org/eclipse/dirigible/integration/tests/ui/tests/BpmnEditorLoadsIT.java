@@ -59,5 +59,19 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
         Selenide.$(By.xpath("//span[contains(.,'Start Events')]"))
                 .click();
         browser.findElementInAllFrames(By.id("StartNoneEvent"), Condition.visible);
+
+        // TEMP DIAG: verify the legacy --sap* variables that the BPM editor's CSS depends on
+        // are actually defined in the loaded theme.
+        Selenide.$(By.id("canvasSection"))
+                .shouldBe(Condition.visible);
+        Object value = Selenide.executeJavaScript(
+                "return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor');");
+        org.slf4j.LoggerFactory.getLogger(BpmnEditorLoadsIT.class)
+                               .info("DIAG --sapBackgroundColor in BPM iframe = [{}]", value);
+        Selenide.switchTo()
+                .defaultContent();
+        String shot = browser.createScreenshot();
+        org.slf4j.LoggerFactory.getLogger(BpmnEditorLoadsIT.class)
+                               .info("DIAG screenshot: {}", shot);
     }
 }
