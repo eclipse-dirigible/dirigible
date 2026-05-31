@@ -98,6 +98,43 @@ The scope of "BlimpKit alignment" is **not** a framework change. It's a template
 rewrite. AngularJS 1.8.2 stays. The drop-in `$modal` / `$popover` factories stay — or get
 replaced by a BlimpKit-dialog-based `$modal` (see option C below).
 
+### Status — what's done on branch `bpmn-editor-blimpkit-migration` (PR [#5963](https://github.com/eclipse-dirigible/dirigible/pull/5963))
+
+All 21 popup templates have been migrated to `<bk-dialog>`. The branch sits on top of
+`fix-bpmn-editor` with the following stack (oldest first):
+
+```
+b72ed157f7  Document BlimpKit-wiring prerequisite in CLAUDE_BPMN.md
+b5bb5eb055  Make $modal factory dual-mode for the BlimpKit popup migration
+dd677b78fa  Wire BlimpKit into the editor-bpm iframe
+37e5088b35  Migrate text-popup.html to <bk-dialog>
+ed8ad20297  Re-enable Angular debug info after the blimpKit module turns it off
+68abacfe2e  Migrate execution-listeners-popup.html to <bk-dialog>
+b6fcb6ae8c  Migrate condition-expression, feedback, fields, duedate popups
+e5e3e1bc28  Migrate reference + form-properties popups
+0b6c0e144b  Migrate remaining popups + form-builder popover
+```
+
+Out of the six steps listed in §2.3 below: **step 0 (BlimpKit wiring), step 1 (modal-service
+rewrite), and step 2 (popup templates) are done**. Steps 3-6 (property panel, glyphicon
+sweep, defensive-CSS removal, `--sap*` audit) are still open.
+
+`grep -l 'class="modal"'` over `editor-app/configuration/properties/` and
+`views/popover/` returns empty. All three BPMN ITs pass (BpmnEditorLoadsIT 18.5s,
+BpmnEditorIT 39.9s, BpmnEditorPropertyPopupIT 45.4s). The popup IT was updated in
+`68abacfe2e` to look for `section.fd-dialog.fd-dialog--active` instead of `div.modal.in`,
+and to walk `$parent` up from the close button to find the modalScope holding `$hide`.
+Only the execution-listeners popup is exercised end-to-end by the IT; the other 20
+templates have compile-time + load-time validation only.
+
+The dual-mode branch in `modal-service.js` (`/<bk-dialog\b/i.test(html)`) is now always
+hitting the BlimpKit path — every popup template under the editor uses `<bk-dialog>`. The
+legacy Bootstrap-3 branch (`jQuery(element).modal(...)`) plus the
+`libs/bootstrap_3.1.1/js/bootstrap.min.js` `<script>` and the
+`libs/bootstrap_3.1.1/css/bootstrap.min.css` `<link>` in `index.html` can all come out in
+a single cleanup commit once step 5 (defensive-CSS removal) verifies nothing in the
+property panel still depends on Bootstrap-3 base styles.
+
 ### 2.1 Inventory of what to migrate
 
 #### Pop-up templates (20 files)
@@ -224,7 +261,7 @@ Reference real-world uses in the codebase:
 
 Iterate, don't big-bang. The editor must keep working through every commit. Suggested order:
 
-0. **Prerequisite — wire BlimpKit into the editor iframe.** The editor-bpm iframe is a
+0. **DONE in `dd677b78fa`. Prerequisite — wire BlimpKit into the editor iframe.** The editor-bpm iframe is a
    self-contained Angular 1.8.2 app (`ng-app="flowableModeler"`); it does **not** inherit
    the IDE shell's script/link tags. As of `fix-bpmn-editor` it loads jQuery 2.0.3,
    AngularJS 1.8.2, angular-translate, ui-grid, Bootstrap-3 CSS and **no BlimpKit assets at
@@ -261,7 +298,7 @@ Iterate, don't big-bang. The editor must keep working through every commit. Sugg
    - Loading `blimpkit.min.js` BEFORE `app.js` is mandatory — `app.js`'s `angular.module(...)`
      references `'blimpKit'`, which has to be registered already.
 
-1. **Replace the modal-service.js implementation, not its API.**
+1. **DONE in `b5bb5eb055`. Replace the modal-service.js implementation, not its API.**
    Keep the `$modal` factory signature (`$modal({ template, scope, prefixEvent }) → instance`) so the ~30 call-sites
    (`_internalCreateModal`, every `FlowableXxxCtrl`) don't have to change. Internally swap
    from `jQuery(element).modal(...)` to compiling `<bk-dialog>` markup and managing
@@ -272,19 +309,38 @@ Iterate, don't big-bang. The editor must keep working through every commit. Sugg
    and branches: bk-dialog mode flips a `modal.visible` flag the dialog binds to;
    legacy mode keeps the `jQuery(el).modal(...)` path. Once every popup is on
    `<bk-dialog>`, delete the legacy branch and the jQuery modal plugin can come out.
-2. **Migrate one popup template at a time**, ideally starting with `text-popup.html`
+2. **DONE in `37e5088b35` / `68abacfe2e` / `b6fcb6ae8c` / `e5e3e1bc28` / `0b6c0e144b`. Migrate one popup template at a time**, ideally starting with `text-popup.html`
    (simplest) → `execution-listeners-popup.html` (covered by `BpmnEditorPropertyPopupIT`) →
    the rest. After each, run the three ITs.
    *Practical hint:* `<bk-dialog>` has an isolate scope, so you can't put
    `ng-controller="FlowableXxxPopupCtrl"` on the dialog element itself — Angular throws
    "Multiple directives asking for new/isolated scope". Wrap with a thin `<div ng-controller="...">`
    that hosts the controller, then place `<bk-dialog visible="modal.visible">` inside.
-3. **Convert `.property-row` markup** in `editor.html` and the property write templates to
+3. **TODO. Convert `.property-row` markup** in `editor.html` and the property write templates to
    `bk-form-item` / `bk-input` etc. This is the biggest visual win but requires care because
-   Oryx's property panel re-renders dynamically.
-4. **Sweep `glyphicon-*` → `sap-icon--*`.** Mechanical, low-risk.
-5. **Drop the `.modal-header .close` defensive CSS** and the `dirigible-theme-{light,dark,auto}` body class once `<bk-dialog>` and BlimpKit-native filter rules are in.
-6. **Audit `--sap*` usage in the editor's own CSS** (`editor-app/theme/{style,stencils}.css`). Once everything renders through BlimpKit components, the `--sap*` legacy shim from `1329f23be5` can stop shipping in the editor's links — but only after every consumer is converted.
+   Oryx's property panel re-renders dynamically. The property panel shell lives in
+   `editor-app/editor.html` near `#propertySection`; the per-property templates live in
+   `editor-app/configuration/properties/*-display-template.html` and
+   `*-write-template.html`. The dynamic re-render is driven by `properties.js` (the
+   `flowableProperty` directive — grep for it). Walk through each `*-write-template.html`,
+   convert `.form-control` inputs / selects / textareas to bk-* equivalents, then update
+   the display template if it renders the value in a Bootstrap-3-specific shell.
+   *Practical hint, learned from the popup migration*: bk-input / bk-textarea / bk-select
+   all use `ng-model` against the parent scope (their isolate scope only owns their own
+   `compact` / `state` / `glyph` bindings); the existing `selectedProperty.foo` references
+   keep working unchanged.
+4. **TODO. Sweep `glyphicon-*` → `sap-icon--*`.** Mechanical, low-risk. The popup-template
+   migration already converted every glyphicon inside dialogs to `sap-icon--*`; the
+   remaining glyphicons are in `editor-app/editor.html`, the property panel
+   templates, and the form-builder shell. A `grep -rn 'glyphicon-' editor-bpm/src` is the
+   inventory.
+5. **TODO. Drop the `.modal-header .close` defensive CSS** in `editor-app/theme/style.css`,
+   the `dirigible-theme-{light,dark,auto}` body class, and the Bootstrap-3 `<script>` +
+   `<link>` from `index.html` once `<bk-dialog>` and BlimpKit-native filter rules are in
+   for every popup. After this commit (step 2 complete), only the property panel still
+   uses Bootstrap-3 styles — once step 3 lands, all of Bootstrap-3 can come out, including
+   the dual-mode branch in `modal-service.js`.
+6. **TODO. Audit `--sap*` usage in the editor's own CSS** (`editor-app/theme/{style,stencils}.css`). Once everything renders through BlimpKit components, the `--sap*` legacy shim from `1329f23be5` can stop shipping in the editor's links — but only after every consumer is converted.
 
 ### 2.4 Tests to extend
 
