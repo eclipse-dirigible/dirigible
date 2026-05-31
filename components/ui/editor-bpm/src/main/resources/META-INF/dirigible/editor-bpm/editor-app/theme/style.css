@@ -504,35 +504,6 @@ li.x-menu-list-item.x-menu-item-active a {
   margin: 12px 0 12px 0;
 }
 
-/*
- * Modal header close (×) button. The original Flowable templates use Bootstrap-3's
- * <button type="button" class="close" …>×</button> markup; without an explicit
- * override the button ends up zero-sized inside the editor iframe (Bootstrap-3 +
- * BlimpKit interaction). Re-state the visible defaults and follow the active theme's
- * foreground color so the × stays visible in both light and dark modes.
- */
-.modal-header .close {
-  float: right;
-  width: auto;
-  min-width: 1.5rem;
-  height: 1.5rem;
-  padding: 0 0.25rem;
-  font-size: 1.5rem;
-  line-height: 1;
-  font-weight: bold;
-  color: var(--sapTextColor, #303030);
-  background: transparent;
-  border: 0;
-  opacity: 0.6;
-  cursor: pointer;
-}
-
-.modal-header .close:hover,
-.modal-header .close:focus {
-  opacity: 1;
-  outline: none;
-}
-
 .Oryx_button {
   background-color: var(--sapButton_Background, #e6e6e6);
 }
