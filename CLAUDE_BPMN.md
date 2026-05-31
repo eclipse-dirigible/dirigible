@@ -242,15 +242,19 @@ Iterate, don't big-bang. The editor must keep working through every commit. Sugg
    IDE shell injects via `<meta name="platform-links">`, and it's the canonical list.
 
    **Side-effects to know about** before flipping this on:
-   - The `blimpKit` module's `.config()` block calls `$compileProvider.cssClassDirectivesEnabled(false)` /
-     `commentDirectivesEnabled(false)` / `debugInfoEnabled(false)` once debug is on. Those
-     are app-global flags. Any directive in editor-bpm that relied on class-based or
-     comment-based form must be audited (`grep -rn "restrict:\s*['\"][^'\"]*C" …/editor-bpm` is
-     the cheap check). Today the matches are `autoHeight`, `scrollToActive`, `autoScroll`,
-     `autoFocus`, and `activitiFixDropdownBug` (the last is declared twice — in
-     `editor-directives.js` and `common/directives.js`). None of them are referenced as a
-     CSS class anywhere under `editor-bpm` — all five are used in attribute form. Safe to
-     proceed; re-run the grep before changes if anyone adds new directives.
+   - The `blimpKit` module's `.config()` block calls `$compileProvider.cssClassDirectivesEnabled(false)`
+     / `commentDirectivesEnabled(false)` / `debugInfoEnabled(false)` once debug is on.
+     Those are app-global flags. The `cssClassDirectivesEnabled(false)` part is safe — the
+     class-form-permissive directives in editor-bpm (`autoHeight`, `scrollToActive`,
+     `autoScroll`, `autoFocus`, `activitiFixDropdownBug`) are all attribute-used everywhere
+     I checked. But **`debugInfoEnabled(false)` is a real regression for the BPMN
+     integration tests**: `BpmnEditorIT.bpmnEditor_select_rename_and_save` and
+     `BpmnEditorPropertyPopupIT.executionListenersPopup_opens_and_closes_without_locking_the_editor`
+     both reach into Angular via `angular.element(node).scope()` (to call `$apply` and to
+     read `scope.$hide`), and Angular only attaches scope references to DOM nodes when
+     debug info is on. The shipped fix is a one-line `.config()` block in `scripts/app.js`
+     that re-enables all three flags. It runs after `blimpKit.config()` (dependency
+     config blocks always run first), so the override sticks.
    - Bootstrap-3 CSS stays loaded (the not-yet-migrated popups still need its `.modal`
      styles). The Fundamental-Styles `.fd-*` classes don't collide by name, but z-index /
      `.modal-backdrop` interaction needs eyes-on the first time a `<bk-dialog>` opens.
