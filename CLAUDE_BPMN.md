@@ -512,7 +512,100 @@ java -DDIRIGIBLE_SFTP_SERVER_ENABLED=false \
 
 ---
 
-## 5. Project version pinning
+## 5. Java handlers on BPMN service tasks (`${JavaTask}` + `flowable:class="..."`)
+
+Counterpart of the long-standing `${JSTask}` JavaScript delegate (`DirigibleCallDelegate`, bean
+name `JSTask`). Lets a service task in a `.bpmn` file invoke a client `.java` class compiled by
+`engine-java` instead of a `.ts`/`.mjs` script. Two entry points, both shipped together:
+
+| Style | BPMN syntax | Resolution path |
+|---|---|---|
+| Delegate expression (mirrors `${JSTask}`) | `flowable:delegateExpression="${JavaTask}"` + `<flowable:field name="handler"><flowable:string>com.acme.MyTask</flowable:string></flowable:field>` | `DirigibleJavaCallDelegate` (`@Component("JavaTask")`) reads the `handler` field, calls `ClientClassLoaderHolder.current().loadClass(fqn)`, instantiates per execution, invokes Flowable's `JavaDelegate.execute(...)` |
+| Pure Flowable class binding | `flowable:class="com.acme.MyTask"` | Flowable's `ReflectUtil.loadClass` → custom CL set on the engine config = `ClientAwareClassLoader` (parent = platform CL, `findClass` defers to `ClientClassLoaderHolder.current()`) |
+
+### Why both
+
+The user's editor UX is set up for the delegate-expression + handler-field pattern (same UI as
+`${JSTask}`). The pure-class path is the idiomatic Flowable way and what BPMN modellers from other
+projects expect. Adding the engine-config classloader was a one-line change once the delegating
+CL existed, so we shipped both.
+
+### Hot-reload caveat — read before relying on `flowable:class="..."`
+
+`ClientAwareClassLoader` is a Spring **singleton**. Once Flowable's `Class.forName(name, true,
+clientAwareCL)` succeeds for a given FQN, the JVM records `clientAwareCL` as an *initiating
+loader* for that name and pins the result. Subsequent calls return the cached class even after
+the underlying `ClientClassLoader` has been hot-swapped by `JavaLoader.rebuild()`. Effect:
+
+- **`${JavaTask}` is hot-reload-safe** — `DirigibleJavaCallDelegate` calls
+  `holder.current().loadClass(fqn)` directly each execution, so it always sees the latest
+  generation.
+- **`flowable:class="..."` resolves the *first* generation only** — a restart is required to
+  pick up a recompiled class.
+
+Documented on `ClientAwareClassLoader`'s class-level JavaDoc; users that need hot-reload should
+prefer the `${JavaTask}` path.
+
+### User contract
+
+The client class must implement Flowable's `org.flowable.engine.delegate.JavaDelegate` (one
+method: `execute(DelegateExecution)`). It must have a public no-arg constructor. It runs in the
+same compiled class space as every other client `.java` in the registry — it can reference
+sibling classes by FQN, and `engine-java`'s annotations / repositories / controllers are visible
+on its compile classpath.
+
+Example client source:
+
+```java
+package com.acme;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+public class MyJavaTask implements JavaDelegate {
+    @Override
+    public void execute(DelegateExecution execution) {
+        execution.setVariable("myResult", computeSomething());
+    }
+}
+```
+
+### Files touched
+
+- `components/engine/engine-bpm-flowable/pom.xml` — adds dep on `dirigible-components-engine-java`.
+- `components/engine/engine-bpm-flowable/src/main/java/.../delegate/DirigibleJavaCallDelegate.java` *(new)* — the `JavaTask` Spring bean. Mirrors `DirigibleCallDelegate` (OpenTelemetry span, `TracingFacade` hooks, tenant-context wrap, `DIRIGIBLE_BPM_INTERNAL_SKIP_STEP` short-circuit). Wraps loader lookup with a clear `BpmnRuntimeException` when the holder is empty (no rebuild yet) or the class isn't a `JavaDelegate`.
+- `components/engine/engine-bpm-flowable/src/main/java/.../config/ClientAwareClassLoader.java` *(new)* — delegating `ClassLoader`; parent = platform CL, `findClass` defers to the holder.
+- `components/engine/engine-bpm-flowable/src/main/java/.../config/BpmFlowableConfig.java` — `config.setClassLoader(new ClientAwareClassLoader(parent, clientClassLoaderHolder))` inside `createProcessEngineConfig`.
+- `tests/tests-integrations/src/main/java/.../api/JavaBpmnIT.java` *(new)* — HTTP-only IT (no Selenide). Drops two `JavaDelegate`-implementing `.java` sources and a `.bpmn` with two service tasks (one per style), calls `SynchronizationProcessor.forceProcessSynchronizers()`, posts to `/services/bpm/bpm-processes/instance`, then asserts both delegates wrote their side-effect variables on the historic process instance. Runs in ~25 s.
+
+### Don't repeat these dead-ends
+
+- **Don't add a `findByFqn(...)` to `JavaClassRegistry`.** That registry is populated by
+  `HandlerClassConsumer`, which only accepts classes implementing `JavaHandler` (the HTTP-handler
+  SPI). A class that implements *only* Flowable's `JavaDelegate` is compiled into
+  `ClientClassLoader` but never enters `JavaClassRegistry`. Look it up via
+  `ClientClassLoaderHolder.current().loadClass(fqn)` instead — that's what
+  `DirigibleJavaCallDelegate` does.
+- **Don't fall into the trap that `parameters` on `StartProcessInstanceData` is a Map.** It's a
+  `String` (a JSON-string of variables, deserialized by Gson inside `BpmProviderFlowable`). The IT
+  body must be `"parameters":"{}"` not `"parameters":{}` — the latter triggers
+  `HttpMessageNotReadableException` and a 400.
+- **`HistoricVariableInstance` JSON field is `variableName`, not `name`.** Jackson serialises
+  using the getter name (`getVariableName()` → `variableName`). Test assertions on `name` silently
+  match nothing.
+- **Don't expect `flowable:class="..."` to hot-reload.** Documented above — JVM caches
+  `(initiatingLoader, name) → class`, and our `ClientAwareClassLoader` is a singleton. Tell
+  users to restart or use `${JavaTask}`.
+
+### What the editor needs (not implemented in this PR)
+
+The Flowable BPMN editor currently only knows about the `${JSTask}` delegate-expression pattern
+for the property-panel "delegate" entry. To make the `${JavaTask}` flow first-class in the UI,
+the property-panel template that today writes `${JSTask}` + `handler` field would also need a
+"Java" option that writes `${JavaTask}` + `handler` field with the FQN. Until that's done, users
+type the delegate expression manually — both styles work at runtime regardless.
+
+---
+
+## 6. Project version pinning
 
 - AngularJS: **1.8.2** via `org.webjars:angularjs` (in `components/resources/platform-core/pom.xml`).
 - jQuery: **2.0.3** (bundled in `components/ui/editor-bpm/.../scripts/jquery-2.0.3.min.js`). Upgrade is decoupled from the BlimpKit migration but the jQuery 2.x → 3.x upgrade is a candidate follow-up.
