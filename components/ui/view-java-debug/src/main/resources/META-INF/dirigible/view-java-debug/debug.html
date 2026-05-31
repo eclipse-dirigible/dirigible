@@ -70,7 +70,7 @@
                 <bk-list compact="true" ng-if="callStack.length">
                     <bk-list-item interactive="true" ng-repeat="frame in callStack track by $index" ng-click="selectFrame(frame)" selected="frame === selectedFrame">
                         <bk-list-title>{{frame.name}}</bk-list-title>
-                        <bk-list-secondary class="bk-text--subtitle bk-center--vertical bk-box--gap">{{frame.source && frame.source.name ? frame.source.name : ''}}<span bk-object-status text="{{frame.line ? frame.line : ''}}"
+                        <bk-list-secondary class="bk-text--subtitle bk-center--vertical bk-box--gap">{{frame.source && frame.source.name ? frame.source.name : ''}}<span ng-if="frame.line" bk-object-status text="{{frame.line}}"
                                 inverted="true"></span>
                         </bk-list-secondary>
                     </bk-list-item>
@@ -91,9 +91,9 @@
             </bk-panel-header>
             <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Variables section">
                 <bk-list compact="true" ng-if="variables.length">
-                    <bk-list-item interactive="true" ng-repeat="v in variables track by $index">
+                    <bk-list-item ng-repeat="v in variables track by $index">
                         <bk-list-title>{{v.name}}</bk-list-title>
-                        <bk-list-secondary>{{v.value}} : <span class="bk-text--subtitle">{{v.type}}</span></bk-list-secondary>
+                        <bk-list-secondary>{{v.value}}<span ng-if="v.type"> : <span class="bk-text--subtitle">{{v.type}}</span></span></bk-list-secondary>
                     </bk-list-item>
                 </bk-list>
                 <bk-list compact="true" ng-if="variables.length === 0">

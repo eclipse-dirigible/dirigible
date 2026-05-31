@@ -11,7 +11,7 @@
  */
 const javaDebugApp = angular.module('javaDebug', ['blimpKit', 'platformView']);
 javaDebugApp.constant('Layout', new LayoutHub());
-javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
+javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Layout) => {
     const themingHub = new ThemingHub();
 
     $scope.sections = {
@@ -58,7 +58,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         .catch(() => { /* keep default 8000 */ });
 
     // -------------------------------------------------------------------------
-    // Connecting status and messages
+    // Connecting animation
     // -------------------------------------------------------------------------
 
     const CONNECTING_MESSAGES = [
@@ -82,6 +82,24 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         'Evaluating launch configuration...',
     ];
     let connectingMsgIdx = 0;
+    let connectingInterval = null;
+
+    function startConnectingAnimation() {
+        connectingMsgIdx = 0;
+        if (connectingInterval) $interval.cancel(connectingInterval);
+        connectingInterval = $interval(() => {
+            connectingMsgIdx = (connectingMsgIdx + 1) % CONNECTING_MESSAGES.length;
+        }, 3000);
+    }
+
+    function stopConnectingAnimation() {
+        if (connectingInterval) {
+            $interval.cancel(connectingInterval);
+            connectingInterval = null;
+        }
+    }
+
+    $scope.$on('$destroy', stopConnectingAnimation);
 
     $scope.statusLabel = () => {
         switch ($scope.status) {
@@ -178,6 +196,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
     $scope.attach = () => {
         if (ws) ws.close();
         $scope.status = 'connecting';
+        startConnectingAnimation();
         const wsUrl = `ws://${location.host}/websockets/ide/java-debug?workspace=${encodeURIComponent(currentWorkspace)}`;
         ws = new WebSocket(wsUrl);
         ws.onopen = () => {
@@ -199,9 +218,11 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             }
         };
         ws.onerror = () => {
+            stopConnectingAnimation();
             $scope.$evalAsync(() => { $scope.status = 'error'; });
         };
         ws.onclose = () => {
+            stopConnectingAnimation();
             $scope.$evalAsync(() => {
                 if ($scope.status !== 'disconnected') {
                     $scope.status = 'disconnected';
@@ -219,6 +240,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
             ws.close();
             ws = null;
         }
+        stopConnectingAnimation();
         $scope.status = 'disconnected';
         $scope.callStack = [];
         $scope.variables = [];
@@ -273,6 +295,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
         }
         switch (msg.command) {
             case 'initialize':
+                stopConnectingAnimation();
                 $scope.$evalAsync(() => { $scope.status = 'connected'; });
                 sendDap('attach', { hostName: 'localhost', port: jdwpPort });
                 sendAllBreakpoints();
@@ -317,6 +340,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, Layout) => {
                 break;
             case 'terminated':
             case 'exited':
+                stopConnectingAnimation();
                 $scope.$evalAsync(() => {
                     $scope.status = 'disconnected';
                     $scope.callStack = [];
