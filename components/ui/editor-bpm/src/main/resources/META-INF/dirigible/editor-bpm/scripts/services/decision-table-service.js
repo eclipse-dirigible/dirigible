@@ -21,10 +21,11 @@ angular.module('flowableModeler').service('DecisionTableService', [ '$rootScope'
         var httpAsPromise = function(options) {
             var deferred = $q.defer();
             $http(options).
-                success(function (response, status, headers, config) {
+                then(function (httpResponse) {
+                    var response = httpResponse.data;
                     deferred.resolve(response);
-                })
-                .error(function (response, status, headers, config) {
+                }, function (httpResponse) {
+                    var response = httpResponse.data;
                     console.log('Something went wrong during http call:' + response);
                     deferred.reject(response);
                 });
@@ -116,14 +117,14 @@ angular.module('flowableModeler').service('DecisionTableService', [ '$rootScope'
 	                    method: 'PUT',
 	                    url: FLOWABLE.APP_URL.getDecisionTableModelUrl($rootScope.currentDecisionTable.id),
 	                    data: data}).
-	                
-	                	success(function (response, status, headers, config) {
+
+	                	then(function (httpResponse) {
 
                             if (saveCallback) {
                                 saveCallback();
                             }
-                        }).
-                        error(function (response, status, headers, config) {
+                        }, function (httpResponse) {
+                            var response = httpResponse.data;
                             if (errorCallback) {
                                 errorCallback(response);
                             }
@@ -149,13 +150,13 @@ angular.module('flowableModeler').service('DecisionTableService', [ '$rootScope'
                 decisionTableIdParams += 'version=' + Date.now();
 
                 $http({method: 'GET', url: FLOWABLE.APP_URL.getDecisionTableModelValuesUrl(decisionTableIdParams)}).
-                    success(function (data) {
+                    then(function (response) {
+                        var data = response.data;
                         if (callback) {
                             callback(data);
                         }
-                    }).
-
-                    error(function (data) {
+                    }, function (response) {
+                        var data = response.data;
                         console.log('Something went wrong when fetching decision table(s):' + JSON.stringify(data));
                     });
                     

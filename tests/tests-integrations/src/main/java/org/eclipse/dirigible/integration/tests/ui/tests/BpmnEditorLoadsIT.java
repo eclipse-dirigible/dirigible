@@ -60,18 +60,15 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
                 .click();
         browser.findElementInAllFrames(By.id("StartNoneEvent"), Condition.visible);
 
-        // TEMP DIAG: verify the legacy --sap* variables that the BPM editor's CSS depends on
-        // are actually defined in the loaded theme.
+        // The BPM editor's editor-app/theme/*.css references --sap* CSS variables that come from the
+        // active theme's sap-variables-{light,dark}.css. Assert the variable resolves to a non-empty
+        // value so we catch any regression where the theme stops shipping the legacy variables.
         Selenide.$(By.id("canvasSection"))
                 .shouldBe(Condition.visible);
-        Object value =
-                Selenide.executeJavaScript("return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor');");
-        org.slf4j.LoggerFactory.getLogger(BpmnEditorLoadsIT.class)
-                               .info("DIAG --sapBackgroundColor in BPM iframe = [{}]", value);
-        Selenide.switchTo()
-                .defaultContent();
-        String shot = browser.createScreenshot();
-        org.slf4j.LoggerFactory.getLogger(BpmnEditorLoadsIT.class)
-                               .info("DIAG screenshot: {}", shot);
+        Object sapBgColor = Selenide.executeJavaScript(
+                "return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor').trim();");
+        org.junit.jupiter.api.Assertions.assertTrue(sapBgColor != null && !sapBgColor.toString()
+                                                                                     .isEmpty(),
+                "--sapBackgroundColor is undefined inside the BPM editor iframe — theme variables not applied.");
     }
 }

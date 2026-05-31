@@ -53,16 +53,18 @@ angular.module('flowableModeler')
     	}
 
     	$http({method: 'GET', url: url}).
-        	success(function(data, status, headers, config) {
+        	then(function(response) {
+        		var data = response.data;
         		$scope.model.app = data;
         		$scope.loadVersions();
 
-        	}).error(function(data, status, headers, config) {
+        	}, function(response) {
         		$scope.returnToList();
         	});
 
     	$http({method: 'GET', url: definitionUrl}).
-            success(function(data, status, headers, config) {
+            then(function(response) {
+                var data = response.data;
                 $scope.model.appDefinition = data;
             });
     };
@@ -81,7 +83,8 @@ angular.module('flowableModeler')
       };
 
       $http({method: 'GET', url: FLOWABLE.APP_URL.getModelHistoriesUrl($scope.model.latestModelId), params: params}).
-	      success(function(data, status, headers, config) {
+	      then(function(response) {
+	        var data = response.data;
 	        if ($scope.model.app.latestVersion) {
 	          if (!data.data) {
 	            data.data = [];
@@ -211,7 +214,8 @@ angular.module('flowableModeler')
         delete $scope.popup.error;
 
         $http({method: 'POST', url: FLOWABLE.APP_URL.getAppDefinitionPublishUrl($scope.model.app.id), data: data}).
-            success(function(data, status, headers, config) {
+            then(function(response) {
+                var data = response.data;
                 $scope.$hide();
 
                 if (data.error) {
@@ -222,8 +226,7 @@ angular.module('flowableModeler')
                     $route.reload();
                     $scope.addAlertPromise($translate('APP.ALERT.PUBLISH-CONFIRM'), 'info');
                 }
-            }).
-            error(function(data, status, headers, config) {
+            }, function(response) {
                 $scope.popup.loading = false;
                 $scope.$hide();
                 $scope.addAlertPromise($translate('APP.ALERT.PUBLISH-ERROR'), 'error');
@@ -254,13 +257,12 @@ angular.module('flowableModeler')
         };
 
         $http({method: 'DELETE', url: FLOWABLE.APP_URL.getModelUrl($scope.model.app.id), params: params}).
-            success(function(data, status, headers, config) {
+            then(function(response) {
                 $scope.$hide();
                 $scope.popup.loading = false;
                 $scope.addAlertPromise($translate('APP.ALERT.DELETE-CONFIRM'), 'info');
                 $scope.returnToList();
-            }).
-            error(function(data, status, headers, config) {
+            }, function(response) {
                 $scope.$hide();
                 $scope.popup.loading = false;
             });
@@ -302,13 +304,14 @@ angular.module('flowableModeler')
           }).progress(function(evt) {
               $scope.popup.uploadProgress = parseInt(100.0 * evt.loaded / evt.total);
 
-          }).success(function(data, status, headers, config) {
+          }).then(function(response) {
               $scope.popup.loading = false;
 
               $route.reload();
               $scope.$hide();
 
-          }).error(function(data, status, headers, config) {
+          }, function(response) {
+              var data = response.data;
 
               if (data && data.message) {
                   $scope.popup.errorMessage = data.message;

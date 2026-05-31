@@ -102,8 +102,9 @@ flowableModule.service('ResourceService', ['$http', '$q', 'appResourceRoot',
 
         function loadFromHtml(url, callback, cache)
         {
-            $http.get(url).success(function(responseText)
+            $http.get(url).then(function(response)
             {
+                var responseText = response.data;
                 var xmlDoc;
                 if (window.DOMParser)
                 {

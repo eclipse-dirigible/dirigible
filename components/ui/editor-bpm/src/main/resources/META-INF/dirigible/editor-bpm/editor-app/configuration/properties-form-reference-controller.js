@@ -16,8 +16,9 @@ angular.module('flowableModeler').controller('FlowableFormReferenceDisplayCtrl',
     
     if ($scope.property && $scope.property.value && $scope.property.value.id) {
    		$http.get(FLOWABLE.APP_URL.getModelUrl($scope.property.value.id))
-            .success(
-                function(response) {
+            .then(
+                function(httpResponse) {
+                    var response = httpResponse.data;
                     $scope.form = {
                     	id: response.id,
                     	name: response.name
@@ -106,7 +107,7 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
                 },
                 url: FLOWABLE.URL.putModel(modelMetaData.modelId)})
 
-                .success(function (data, status, headers, config) {
+                .then(function (response) {
                     editorManager.handleEvents({
                         type: ORYX.CONFIG.EVENT_SAVED
                     });
@@ -116,9 +117,8 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
 					$rootScope.addHistoryItem($scope.selectedShape.resourceId);
                     $location.path('form-editor/' + $scope.selectedForm.id);
 
-                })
-                .error(function (data, status, headers, config) {
-                    
+                }, function (response) {
+
                 });
             
             $scope.close();
@@ -152,16 +152,17 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
         $scope.model.loading = true;
 
         $http({method: 'POST', url: FLOWABLE.APP_URL.getModelsUrl(), data: $scope.model.form}).
-            success(function(data, status, headers, config) {
-                
+            then(function(response) {
+                var data = response.data;
+
                 var newFormId = data.id;
                 $scope.property.value = {
-                	'id' : newFormId, 
+                	'id' : newFormId,
                 	'name' : data.name,
                 	'key' : data.key
                	};
                 $scope.updatePropertyInModel($scope.property);
-                
+
                 var modelMetaData = editorManager.getBaseModelData();
                 var json = editorManager.getModel();
 
@@ -175,11 +176,11 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
                     },
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)})
 
-                    .success(function (data, status, headers, config) {
+                    .then(function (response) {
                         editorManager.handleEvents({
                             type: ORYX.CONFIG.EVENT_SAVED
                         });
-                        
+
                         $scope.model.loading = false;
                         $scope.$hide();
 
@@ -188,14 +189,13 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
                         $rootScope.addHistoryItem($scope.selectedShape.resourceId);
                         $location.path('form-editor/' + newFormId);
 
-                    })
-                    .error(function (data, status, headers, config) {
+                    }, function (response) {
                         $scope.model.loading = false;
                         $scope.$hide();
                     });
-                
-            }).
-            error(function(data, status, headers, config) {
+
+            }, function(response) {
+                var data = response.data;
                 $scope.model.loading = false;
                 $scope.model.errorMessage = data.message;
             });
@@ -208,14 +208,14 @@ angular.module('flowableModeler').controller('FlowableFormReferencePopupCtrl',
     $scope.loadForms = function() {
         var modelMetaData = editorManager.getBaseModelData();
         $http.get(FLOWABLE.APP_URL.getFormModelsUrl())
-            .success(
-                function(response) {
+            .then(
+                function(httpResponse) {
+                    var response = httpResponse.data;
                     $scope.state.loadingForms = false;
                     $scope.state.formError = false;
                     $scope.forms = response.data;
-                })
-            .error(
-                function(data, status, headers, config) {
+                },
+                function(httpResponse) {
                     $scope.state.loadingForms = false;
                     $scope.state.formError = true;
                 });

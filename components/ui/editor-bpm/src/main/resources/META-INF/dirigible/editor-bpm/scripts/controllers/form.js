@@ -35,11 +35,12 @@ angular.module('flowableModeler')
       }
 
       $http({method: 'GET', url: url}).
-        success(function(data, status, headers, config) {
+        then(function(response) {
+          var data = response.data;
           $scope.model.form = data;
           $scope.loadVersions();
 
-        }).error(function(data, status, headers, config) {
+        }, function(response) {
           $scope.returnToList();
         });
     };
@@ -58,7 +59,8 @@ angular.module('flowableModeler')
       };
 
       $http({method: 'GET', url: FLOWABLE.APP_URL.getModelHistoriesUrl($scope.model.latestModelId), params: params}).
-	      success(function(data, status, headers, config) {
+	      then(function(response) {
+	        var data = response.data;
 	        if ($scope.model.form.latestVersion) {
 	          if (!data.data) {
 	            data.data = [];

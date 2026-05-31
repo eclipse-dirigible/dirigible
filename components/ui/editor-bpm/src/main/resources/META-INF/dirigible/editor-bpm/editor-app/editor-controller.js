@@ -40,7 +40,7 @@ angular.module('flowableModeler')
     function fetchModel() {
 
         var modelUrl;
-        if ($routeParams.modelId) {
+        if ($routeParams.workspace) {
         	var modelId = $routeParams.workspace + '/' + $routeParams.project + '/' + $routeParams.path;
             modelUrl = FLOWABLE.URL.getModel(modelId);
         } else {
