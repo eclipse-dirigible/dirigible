@@ -1,10 +1,9 @@
-
 <div ng-controller="FlowableTransitionEventCtrl">
-    <select ng-model="property.value" ng-change="transitionEventChanged()">
-    	<option>complete</option>
-    	<option>exit</option>
-    	<option>occur</option>
-    	<option>start</option>
-    	<option>terminate</option>
-    </select>
+    <bk-select ng-model="property.value" ng-change="transitionEventChanged()" compact="true" dropdown-fixed="true">
+        <bk-option text="complete" value="'complete'"></bk-option>
+        <bk-option text="exit" value="'exit'"></bk-option>
+        <bk-option text="occur" value="'occur'"></bk-option>
+        <bk-option text="start" value="'start'"></bk-option>
+        <bk-option text="terminate" value="'terminate'"></bk-option>
+    </bk-select>
 </div>
