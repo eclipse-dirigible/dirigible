@@ -72,13 +72,17 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
                 "--sapBackgroundColor is undefined inside the BPM editor iframe — theme variables not applied.");
 
         // angular-strap was removed during the Angular 1.4.7 -> 1.8.2 migration. Its $modal and
-        // $popover services are now provided by scripts/services/{modal,popover}-service.js so the
-        // property-panel popups (execution-listeners, task-listeners, event-listeners — each opening
-        // a modal that contains a "Delegate Expression" input) still work. Verify both factories
-        // are registered in the injector so an accidental script-tag drop is caught here.
-        Object servicesOk = Selenide.executeJavaScript("var inj = angular.element(document.body).injector();"
-                + "return inj.has('$modal') && inj.has('$popover') && typeof inj.get('$modal') === 'function' && typeof inj.get('$popover') === 'function';");
-        org.junit.jupiter.api.Assertions.assertTrue(Boolean.TRUE.equals(servicesOk),
-                "$modal and/or $popover factory missing from the editor's AngularJS injector — modal-service.js / popover-service.js not loaded?");
+        // $popover services are now provided by scripts/services/{modal,popover}-service.js (each
+        // delegating to Bootstrap-3's jQuery .modal/.popover plugin). The property-panel popups —
+        // execution-listeners, task-listeners, event-listeners; each opens a modal containing a
+        // "Delegate Expression" input — depend on this whole chain. Verify both factories are in
+        // the injector AND the underlying Bootstrap-3 jQuery plugins are present, so an accidental
+        // drop of any of the four script tags is caught here.
+        Object stackOk = Selenide.executeJavaScript("var inj = angular.element(document.body).injector();"
+                + "return inj.has('$modal') && typeof inj.get('$modal') === 'function'"
+                + "    && inj.has('$popover') && typeof inj.get('$popover') === 'function'" + "    && typeof jQuery.fn.modal === 'function'"
+                + "    && typeof jQuery.fn.popover === 'function';");
+        org.junit.jupiter.api.Assertions.assertTrue(Boolean.TRUE.equals(stackOk),
+                "Modal/popover stack incomplete — $modal/$popover factories or Bootstrap-3 jQuery plugins missing inside the BPM editor iframe.");
     }
 }
