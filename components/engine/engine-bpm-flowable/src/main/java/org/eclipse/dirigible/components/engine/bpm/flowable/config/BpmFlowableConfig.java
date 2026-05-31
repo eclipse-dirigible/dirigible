@@ -15,6 +15,7 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.engine.bpm.BpmProvider;
 import org.eclipse.dirigible.components.engine.bpm.flowable.diagram.DirigibleProcessDiagramGenerator;
+import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
 import org.flowable.engine.ProcessEngine;
 import org.flowable.engine.ProcessEngineConfiguration;
 import org.flowable.spring.SpringProcessEngineConfiguration;
@@ -46,6 +47,13 @@ public class BpmFlowableConfig {
      */
     @Autowired
     private DataSourcesManager datasourceManager;
+
+    /**
+     * Holder of the currently-installed client {@code .java} ClassLoader. Used to teach Flowable's
+     * delegate-class resolution about user-compiled classes.
+     */
+    @Autowired
+    private ClientClassLoaderHolder clientClassLoaderHolder;
 
     @Bean("BPM_PROVIDER")
     BpmProvider getBpmProvider(BpmProviderFlowable bpmProviderFlowable) {
@@ -95,6 +103,12 @@ public class BpmFlowableConfig {
 
         List<VariableType> customPreVariableTypes = List.of(new SimpleCollectionVariableType());
         config.setCustomPreVariableTypes(customPreVariableTypes);
+
+        // Allow flowable:class="my.fqn.MyClass" on a service task to resolve to client .java code
+        // compiled by engine-java. The parent stays the platform CL so Flowable + Dirigible classes
+        // remain reachable; the ClientClassLoader is consulted only when the parent fails.
+        ClassLoader parent = BpmFlowableConfig.class.getClassLoader();
+        config.setClassLoader(new ClientAwareClassLoader(parent, clientClassLoaderHolder));
 
         return config;
     }
