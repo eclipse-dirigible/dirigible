@@ -1,3 +1,4 @@
-<div ng-controller="FlowableBooleanPropertyCtrl">
-    <bk-checkbox ng-model="property.value" ng-change="changeValue()"></bk-checkbox>
+<div ng-controller="FlowableBooleanPropertyCtrl" class="property-checkbox">
+    <bk-checkbox id="prop-{{$id}}-cb" ng-model="property.value" ng-change="changeValue()"></bk-checkbox>
+    <bk-checkbox-label for="prop-{{$id}}-cb" empty="true"></bk-checkbox-label>
 </div>

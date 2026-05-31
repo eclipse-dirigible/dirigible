@@ -13,7 +13,8 @@
                 <div class="col-xs-12 editor-item-picker">
                     <div ng-if="!state.loadingCases && !state.caseError" class="col-xs-4 editor-item-picker-component" ng-repeat="caseModel in caseModels" ng-class="{'selected' : caseModel.id == selectedCase.id}" ng-click="selectCase(caseModel, $event)">
                         <div class="controls">
-                            <bk-checkbox ng-click="selectCase(caseModel, $event)" ng-checked="caseModel.id == selectedCase.id"></bk-checkbox>
+                            <bk-checkbox id="case-ref-cb-{{caseModel.id}}" ng-click="selectCase(caseModel, $event)" ng-checked="caseModel.id == selectedCase.id"></bk-checkbox>
+                            <bk-checkbox-label for="case-ref-cb-{{caseModel.id}}" empty="true"></bk-checkbox-label>
                         </div>
                         <h4>{{ caseModel.name }}</h4>
                         <img ng-src="{{ getModelThumbnailUrl(caseModel.id) }}" />

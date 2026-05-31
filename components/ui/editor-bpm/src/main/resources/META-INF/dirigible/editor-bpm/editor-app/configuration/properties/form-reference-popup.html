@@ -16,7 +16,8 @@
                 <div class="col-xs-12 editor-item-picker">
                     <div ng-if="!state.loadingForms && !state.formError" class="col-xs-4 editor-item-picker-component" ng-repeat="form in forms" ng-class="{'selected' : form.formId == selectedForm.formId}" ng-click="selectForm(form, $event)">
                         <div class="controls">
-                            <bk-checkbox ng-click="selectForm(form, $event)" ng-checked="form.id == selectedForm.id"></bk-checkbox>
+                            <bk-checkbox id="form-ref-cb-{{form.id}}" ng-click="selectForm(form, $event)" ng-checked="form.id == selectedForm.id"></bk-checkbox>
+                            <bk-checkbox-label for="form-ref-cb-{{form.id}}" empty="true"></bk-checkbox-label>
                         </div>
                         <h4>{{ form.name }}</h4>
                         <img ng-src="{{ getModelThumbnailUrl(form.id) }}" />

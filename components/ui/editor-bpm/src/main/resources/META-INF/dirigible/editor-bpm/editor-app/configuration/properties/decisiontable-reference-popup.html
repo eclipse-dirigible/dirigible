@@ -16,7 +16,8 @@
                 <div class="col-xs-12 editor-item-picker">
                     <div ng-if="!state.loadingDecisionTables && !state.decisionTableError" class="col-xs-4 editor-item-picker-component" ng-repeat="decisionTable in decisionTables" ng-class="{'selected' : decisionTable.decisionTableId == selectedDecisionTable.decisionTableId}" ng-click="selectDecisionTable(decisionTable, $event)">
                         <div class="controls">
-                            <bk-checkbox ng-click="selectDecisionTable(decisionTable, $event)" ng-checked="decisionTable.id == selectedDecisionTable.id"></bk-checkbox>
+                            <bk-checkbox id="dt-ref-cb-{{decisionTable.id}}" ng-click="selectDecisionTable(decisionTable, $event)" ng-checked="decisionTable.id == selectedDecisionTable.id"></bk-checkbox>
+                            <bk-checkbox-label for="dt-ref-cb-{{decisionTable.id}}" empty="true"></bk-checkbox-label>
                         </div>
                         <h4>{{ decisionTable.name }}</h4>
                         <img ng-src="{{ getModelThumbnailUrl(decisionTable.id) }}" />
