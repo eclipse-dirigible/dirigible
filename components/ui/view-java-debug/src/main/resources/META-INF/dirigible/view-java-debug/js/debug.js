@@ -61,26 +61,26 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
     // Connecting animation
     // -------------------------------------------------------------------------
 
-	const CONNECTING_MESSAGES = [
-	    'Connecting...',
-	    'Bootstrapping JDT Language Server...',
-	    'Resolving workspace classpath...',
-	    'Parsing project sources...',
-	    'Negotiating DAP handshake...',
-	    'Attaching to JVM...',
-	    'Opening JDWP tunnel...',
-	    'Loading debug symbols...',
-	    'Resolving source maps...',
-	    'Scanning annotations...',
-	    'Compiling hot paths...',
-	    'Inspecting bytecode...',
-	    'Generating AST cache...',
-	    'Waiting for debugger transport...',
-	    'Poking the JDWP port...',
-	    'Spinning up debug adapter...',
-	    'Injecting breakpoints...',
-	    'Evaluating launch configuration...',
-	];
+    const CONNECTING_MESSAGES = [
+        'Connecting...',
+        'Bootstrapping JDT Language Server...',
+        'Resolving workspace classpath...',
+        'Parsing project sources...',
+        'Negotiating DAP handshake...',
+        'Attaching to JVM...',
+        'Opening JDWP tunnel...',
+        'Loading debug symbols...',
+        'Resolving source maps...',
+        'Scanning annotations...',
+        'Compiling hot paths...',
+        'Inspecting bytecode...',
+        'Generating AST cache...',
+        'Waiting for debugger transport...',
+        'Poking the JDWP port...',
+        'Spinning up debug adapter...',
+        'Injecting breakpoints...',
+        'Evaluating launch configuration...',
+    ];
     let connectingMsgIdx = 0;
     let connectingInterval = null;
 
@@ -107,6 +107,23 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
             case 'connecting': return CONNECTING_MESSAGES[connectingMsgIdx];
             case 'error': return 'Error';
             default: return 'Disconnected';
+        }
+    };
+
+    $scope.getStatusType = () => {
+        switch ($scope.status) {
+            case 'connected': return 'positive';
+            case 'connecting': return 'informative';
+            case 'error': return 'negative';
+            default: return '';
+        }
+    };
+
+    $scope.getStatusGlyph = () => {
+        switch ($scope.status) {
+            case 'connected': return 'sap-icon--message-success';
+            case 'error': return 'sap-icon--message-error';
+            default: return '';
         }
     };
 
@@ -202,11 +219,11 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
         };
         ws.onerror = () => {
             stopConnectingAnimation();
-            $timeout(() => { $scope.status = 'error'; });
+            $scope.$evalAsync(() => { $scope.status = 'error'; });
         };
         ws.onclose = () => {
             stopConnectingAnimation();
-            $timeout(() => {
+            $scope.$evalAsync(() => {
                 if ($scope.status !== 'disconnected') {
                     $scope.status = 'disconnected';
                 }
@@ -279,13 +296,13 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
         switch (msg.command) {
             case 'initialize':
                 stopConnectingAnimation();
-                $timeout(() => { $scope.status = 'connected'; });
+                $scope.$evalAsync(() => { $scope.status = 'connected'; });
                 sendDap('attach', { hostName: 'localhost', port: jdwpPort });
                 sendAllBreakpoints();
                 break;
             case 'stackTrace':
                 if (msg.body && msg.body.stackFrames) {
-                    $timeout(() => {
+                    $scope.$evalAsync(() => {
                         $scope.callStack = msg.body.stackFrames;
                         if ($scope.callStack.length > 0) {
                             $scope.selectFrame($scope.callStack[0]);
@@ -300,7 +317,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
                 break;
             case 'variables':
                 if (msg.body && msg.body.variables) {
-                    $timeout(() => { $scope.variables = msg.body.variables; });
+                    $scope.$evalAsync(() => { $scope.variables = msg.body.variables; });
                 }
                 break;
         }
@@ -314,17 +331,17 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
                 break;
             case 'stopped':
                 _stoppedThreadId = msg.body && msg.body.threadId;
-                $timeout(() => { $scope.callStack = []; $scope.variables = []; });
+                $scope.$evalAsync(() => { $scope.callStack = []; $scope.variables = []; });
                 sendDap('stackTrace', { threadId: _stoppedThreadId, startFrame: 0, levels: 20 });
                 break;
             case 'continued':
-                $timeout(() => { $scope.callStack = []; $scope.variables = []; });
+                $scope.$evalAsync(() => { $scope.callStack = []; $scope.variables = []; });
                 highlightLine(null, 0);
                 break;
             case 'terminated':
             case 'exited':
                 stopConnectingAnimation();
-                $timeout(() => {
+                $scope.$evalAsync(() => {
                     $scope.status = 'disconnected';
                     $scope.callStack = [];
                     $scope.variables = [];
@@ -424,7 +441,7 @@ javaDebugApp.controller('JavaDebugController', ($scope, $timeout, $interval, Lay
             if ($scope.status === 'connected') {
                 syncBreakpointsForFile(filePath);
             }
-            $timeout(refreshBpList);
+            $scope.$evalAsync(refreshBpList);
         },
     });
 });
