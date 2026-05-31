@@ -11,12 +11,12 @@
     <div class="clearfix first">
         <div class="col-xs-12">
             <div class="col-xs-12">
-                <div class="btn-group span">
-                    <button class="selection" data-toggle="dropdown" ng-options="option.id as (option.title | translate) for option in taskDueDateOptions"
-                        bs-select ng-model="popup.selectedDueDateOption" ng-change="dueDateOptionChanged()" activiti-fix-dropdown-bug>
-                       <i class="icon icon-caret-down"></i>
-                   </button>
-                </div>
+                <!-- angular-strap's `bs-select` rendered a button-styled dropdown; without
+                     angular-strap a plain <select> with ng-options is the closest functional
+                     replacement (native UA dropdown, same model + options + change handler). -->
+                <select class="form-control" ng-model="popup.selectedDueDateOption"
+                        ng-options="option.id as (option.title | translate) for option in taskDueDateOptions"
+                        ng-change="dueDateOptionChanged()"></select>
             </div>
         </div>
     </div>

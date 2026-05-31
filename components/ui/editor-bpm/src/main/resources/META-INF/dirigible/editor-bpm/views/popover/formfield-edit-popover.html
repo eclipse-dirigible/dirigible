@@ -81,8 +81,10 @@
                                 <input id="firstDropdownOption" type="text" class="form-control" ng-if="$index == 0" ng-model="option.name" style="background-color: #E6E6E6;">
                                 <input type="text" class="form-control" ng-if="$index > 0" ng-model="option.name">
 
+                                <!-- angular-strap's `bs-tooltip` is no longer available;
+                                     fall back to the native `title` attribute. -->
                                 <a class="input-group-addon" ng-if="$index == 0"
-                                   data-placement="left" data-type="info" data-animation="am-fade-and-scale" bs-tooltip="'FORM-BUILDER.COMPONENT.DROPDOWN-EMPTY-VALUE-HELP'|translate">
+                                   title="{{'FORM-BUILDER.COMPONENT.DROPDOWN-EMPTY-VALUE-HELP' | translate}}">
                                     <i class="glyphicon glyphicon-question-sign"></i>
                                 </a>
 
