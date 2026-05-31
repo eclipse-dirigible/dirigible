@@ -224,15 +224,57 @@ Reference real-world uses in the codebase:
 
 Iterate, don't big-bang. The editor must keep working through every commit. Suggested order:
 
+0. **Prerequisite — wire BlimpKit into the editor iframe.** The editor-bpm iframe is a
+   self-contained Angular 1.8.2 app (`ng-app="flowableModeler"`); it does **not** inherit
+   the IDE shell's script/link tags. As of `fix-bpmn-editor` it loads jQuery 2.0.3,
+   AngularJS 1.8.2, angular-translate, ui-grid, Bootstrap-3 CSS and **no BlimpKit assets at
+   all**. A `<bk-dialog>` tag in any popup template renders as an unknown element until
+   four things are added to `editor-bpm/index.html`:
+   - `<link rel="stylesheet" href="/webjars/blimpkit__blimpkit/dist/css/blimpkit.css">`
+   - `<link rel="stylesheet" href="/webjars/fundamental-styles/dist/fundamental-styles.css">`
+   - `<script src="/webjars/angular-aria/angular-aria.min.js">` (the `blimpKit` module
+     depends on `ngAria` — see `platform-core/ui/blimpkit/blimpkit.js`)
+   - `<script src="/webjars/blimpkit__blimpkit/dist/blimpkit.min.js">` (the bundled
+     ~158 KB module defining every `bk-*` directive — webjar version `2.1.6`)
+
+   Plus `'blimpKit'` added to the `flowableModeler` module-dep array in `scripts/app.js`.
+   See the live recipe in `platform-links.json` (`ng-view` category) — that's what the
+   IDE shell injects via `<meta name="platform-links">`, and it's the canonical list.
+
+   **Side-effects to know about** before flipping this on:
+   - The `blimpKit` module's `.config()` block calls `$compileProvider.cssClassDirectivesEnabled(false)` /
+     `commentDirectivesEnabled(false)` / `debugInfoEnabled(false)` once debug is on. Those
+     are app-global flags. Any directive in editor-bpm that relied on class-based or
+     comment-based form must be audited (`grep -rn "restrict:\s*['\"][^'\"]*C" …/editor-bpm` is
+     the cheap check). Today the matches are `autoHeight`, `scrollToActive`, `autoScroll`,
+     `autoFocus`, and `activitiFixDropdownBug` (the last is declared twice — in
+     `editor-directives.js` and `common/directives.js`). None of them are referenced as a
+     CSS class anywhere under `editor-bpm` — all five are used in attribute form. Safe to
+     proceed; re-run the grep before changes if anyone adds new directives.
+   - Bootstrap-3 CSS stays loaded (the not-yet-migrated popups still need its `.modal`
+     styles). The Fundamental-Styles `.fd-*` classes don't collide by name, but z-index /
+     `.modal-backdrop` interaction needs eyes-on the first time a `<bk-dialog>` opens.
+   - Loading `blimpkit.min.js` BEFORE `app.js` is mandatory — `app.js`'s `angular.module(...)`
+     references `'blimpKit'`, which has to be registered already.
+
 1. **Replace the modal-service.js implementation, not its API.**
    Keep the `$modal` factory signature (`$modal({ template, scope, prefixEvent }) → instance`) so the ~30 call-sites
    (`_internalCreateModal`, every `FlowableXxxCtrl`) don't have to change. Internally swap
    from `jQuery(element).modal(...)` to compiling `<bk-dialog>` markup and managing
    visibility via Angular. Preserve `$scope.$hide()`, `$scope.$show()`, `prefixEvent`, and
    the `<prefix>.{show,hide,…}` events that controllers depend on.
+   *Practical hint:* the service has to keep working while only some popups have been
+   migrated. The shipped version uses a structural check (`/<bk-dialog\b/i.test(html)`)
+   and branches: bk-dialog mode flips a `modal.visible` flag the dialog binds to;
+   legacy mode keeps the `jQuery(el).modal(...)` path. Once every popup is on
+   `<bk-dialog>`, delete the legacy branch and the jQuery modal plugin can come out.
 2. **Migrate one popup template at a time**, ideally starting with `text-popup.html`
    (simplest) → `execution-listeners-popup.html` (covered by `BpmnEditorPropertyPopupIT`) →
    the rest. After each, run the three ITs.
+   *Practical hint:* `<bk-dialog>` has an isolate scope, so you can't put
+   `ng-controller="FlowableXxxPopupCtrl"` on the dialog element itself — Angular throws
+   "Multiple directives asking for new/isolated scope". Wrap with a thin `<div ng-controller="...">`
+   that hosts the controller, then place `<bk-dialog visible="modal.visible">` inside.
 3. **Convert `.property-row` markup** in `editor.html` and the property write templates to
    `bk-form-item` / `bk-input` etc. This is the biggest visual win but requires care because
    Oryx's property panel re-renders dynamically.
