@@ -84,10 +84,21 @@ public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
         Assertions.assertTrue(Boolean.TRUE.equals(hideExists),
                 "modal scope.$hide is missing — angular-strap-compatible $hide() helper was not added by modal-service.js.");
 
+        // The header ✕ button must also be a real, non-zero-sized, interactable target — Bootstrap-3
+        // ships `.close { font-size:21px; float:right; … }` but the BlimpKit reset can collapse it
+        // to zero size if the editor's own CSS doesn't re-state the defaults. Verify here so any
+        // future style regression that hides the ✕ is caught.
+        Object closeBtnSize = Selenide.executeJavaScript("var b = document.querySelector('div.modal.in .modal-header .close');"
+                + "if (!b) return null;" + "var r = b.getBoundingClientRect();"
+                + "return JSON.stringify({ w: Math.round(r.width), h: Math.round(r.height) });");
+        Assertions.assertNotNull(closeBtnSize, "modal-header close (×) button is missing from the DOM.");
+        Assertions.assertFalse(closeBtnSize.toString()
+                                           .contains("\"w\":0")
+                || closeBtnSize.toString()
+                               .contains("\"h\":0"),
+                "modal-header close (×) button has zero size: " + closeBtnSize);
+
         // Dismiss the modal via the Cancel button in the footer — same path the user takes.
-        // (The header ✕ button uses Bootstrap-3's `.close` class which BlimpKit's global CSS
-        // happens to collapse to zero size; that's a separate visual issue, not part of the
-        // backdrop/$hide regression this test guards.)
         Selenide.$(By.xpath("//div[contains(@class,'modal') and contains(@class,'in')]//button[normalize-space(.)='Cancel']"))
                 .shouldBe(Condition.visible, Duration.ofSeconds(5))
                 .click();
