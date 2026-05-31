@@ -70,5 +70,15 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
         org.junit.jupiter.api.Assertions.assertTrue(sapBgColor != null && !sapBgColor.toString()
                                                                                      .isEmpty(),
                 "--sapBackgroundColor is undefined inside the BPM editor iframe — theme variables not applied.");
+
+        // angular-strap was removed during the Angular 1.4.7 -> 1.8.2 migration. Its $modal and
+        // $popover services are now provided by scripts/services/{modal,popover}-service.js so the
+        // property-panel popups (execution-listeners, task-listeners, event-listeners — each opening
+        // a modal that contains a "Delegate Expression" input) still work. Verify both factories
+        // are registered in the injector so an accidental script-tag drop is caught here.
+        Object servicesOk = Selenide.executeJavaScript("var inj = angular.element(document.body).injector();"
+                + "return inj.has('$modal') && inj.has('$popover') && typeof inj.get('$modal') === 'function' && typeof inj.get('$popover') === 'function';");
+        org.junit.jupiter.api.Assertions.assertTrue(Boolean.TRUE.equals(servicesOk),
+                "$modal and/or $popover factory missing from the editor's AngularJS injector — modal-service.js / popover-service.js not loaded?");
     }
 }
