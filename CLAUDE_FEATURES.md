@@ -12,7 +12,14 @@ Source-of-truth pointers are included in each section so generated docs can cite
 - **Development model.** "In-System Programming": end users develop and modify the running system through the browser. There is no separate deploy step — artefacts are reconciled from the on-disk repository into runtime state by *synchronizers* on every change.
 - **Shipping artifact.** `build/application/target/dirigible-application-*-executable.jar`.
 - **Entry point.** `org.eclipse.dirigible.DirigibleApplication` (`build/application/src/main/java/org/eclipse/dirigible/DirigibleApplication.java`).
-- **Languages users can author in.** JavaScript (ESM/CJS, GraalJS), TypeScript (transpiled), Java (client `.java`), Python (limited), plus declarative artefacts (XML / JSON / YAML / Markdown / Confluence wiki).
+- **Languages users can author in.**
+  - **JavaScript** — ES6+ syntax over GraalJS; synchronous programming model (in contrast to Node.js); CommonJS + ESM supported.
+  - **TypeScript** — transpiled at the platform; full strong typing via tsconfig at the project root.
+  - **Java** — client `.java` compiled in-process by `engine-java`.
+  - **Python** — server-side modules via `engine-python` (subset).
+  - **ABAP** — supported in downstream products via [open-abap](https://github.com/open-abap) + the [abaplint transpiler](https://github.com/abaplint/transpiler); transpiles to JS for execution. Not part of the upstream dirigible codebase.
+  - **SAP HANA XSC (XSK)** — XS Classic compatibility (XSJS, XSODATA, HDB artefacts) lives in the separate [XSK project](https://xsk.io); consumed by downstream products (e.g. codbex `Kronos`).
+  - **Declarative artefacts** — XML / JSON / YAML / Markdown / Confluence wiki (see §2).
 - **Default UI.** `http://localhost:8080`, login `admin` / `admin`.
 - **License.** Eclipse Public License 2.0.
 
@@ -63,6 +70,21 @@ Use this table as the canonical list of file extensions and the runtime behavior
 | `*.md` | Markdown page rendered by the runtime | `MarkdownSynchronizer` |
 | `*.confluence` | Confluence-wiki page rendered by the runtime | `ConfluenceSynchronizer` |
 
+### 2.4 Design-time modeler artefacts
+
+Files produced by IDE modelers and consumed by template-based code generation. They typically generate the runtime artefacts in §2.1–2.3 rather than being reconciled directly by a synchronizer.
+
+| Extension | Modeler | Purpose |
+| --------- | ------- | ------- |
+| `*.dsm` | Database Schema Modeler | XML database-schema model used to generate `.schema` / `.table` / `.view` artefacts. |
+| `*.edm` | Entity Data Modeler | XML domain model used to generate `.model` plus full CRUD applications via the application templates. |
+| `*.model` | Entity Data Modeler (JSON projection) | JSON projection of an EDM consumed by application generation templates (entities + perspectives + navigations). |
+| `*.form` | Form Designer | Layout of a web form. |
+| `*.command` | (legacy) | Shell-command descriptor; superseded by `engine-command` + `@aerokit/sdk/platform/command`. |
+| `*.entity` | (codbex-specific) | JSON entity descriptor in downstream codbex products; rough equivalent of TS `*Entity.ts` in upstream dirigible. |
+
+Mapping to the help portal: *Modeling* → `docs-help/docs/development/ide/modelers/` and *Tutorials > Modeling* → `docs-help/docs/tutorials/modeling/`.
+
 ### 2.4 Repository layout an artefact lives in
 
 ```
@@ -73,6 +95,10 @@ Use this table as the canonical list of file extensions and the runtime behavior
 See `IRepositoryStructure`. Multi-tenancy is on by default (`DIRIGIBLE_MULTI_TENANT_MODE=true`), so artefact reconciliation runs per tenant unless the synchronizer is single-tenant by design.
 
 ### 2.5 Authoring an artefact (template inventory)
+
+Each modeler in §2.4 has an in-IDE editor under `components/ui/editor-*` and a templating pipeline under `components/template/`.
+
+
 
 Project templates available via the IDE's *Generate* action. Source: `components/template/template-*` (also reachable through `GenerationEndpoint`).
 
@@ -164,6 +190,43 @@ The canonical package is `@aerokit/sdk` — submodules are imported as `@aerokit
 - `@aerokit/sdk/qunit` — QUnit runner.
 - `@aerokit/sdk/test` — Generic test helpers.
 
+### 4.6 Submodule index (for reference generation)
+
+The published portal organises the API into ~100 reference pages. Each row below is a stable target for a docs page; the SDK module name (`@aerokit/sdk/<area>`) maps 1:1 to the help portal path.
+
+| Area | Submodules |
+| ---- | ---------- |
+| `bpm` | `deployer`, `process`, `tasks`, `values` |
+| `cache` | `cache` |
+| `cms` | `cmis` |
+| `core` | `configurations`, `context`, `env`, `globals` |
+| `db` | `dao`, `database`, `decorators`, `insert`, `orm`, `ormstatements`, `procedure`, `query`, `repository`, `sequence`, `sql`, `store`, `translator`, `update` |
+| `etcd` | `client` |
+| `extensions` | `extension-point`, `extensions-client`, `extensions-server` |
+| `git` | `client` |
+| `http` | `client`, `client-async`, `decorators`, `errors`, `request`, `response`, `rs`, `session`, `upload`, `utils` |
+| `indexing` | `searcher`, `writer` |
+| `io` | `bytes`, `files`, `ftp`, `image`, `streams`, `zip` |
+| `job` | `scheduler` |
+| `kafka` | `consumer`, `producer` |
+| `log` | `logging` |
+| `mail` | `client` |
+| `messaging` | `consumer`, `producer` |
+| `mongodb` | `client`, `dao` |
+| `net` | `soap`, `websocket` |
+| `pdf` | `pdf` |
+| `platform` | `command`, `engines`, `lifecycle`, `os`, `problems`, `registry`, `repository-client`, `repository-hub`, `repository-server`, `workspace-client`, `workspace-hub`, `workspace-server` |
+| `qldb` | `qldb` |
+| `qunit` | `qunit` |
+| `rabbitmq` | `consumer`, `producer` |
+| `redis` | `client` |
+| `security` | `decorators`, `oauth`, `user` |
+| `template` | `engines` |
+| `test` | `assert`, `runner` |
+| `utils` | `alphanumeric`, `base64`, `converter`, `digest`, `escape`, `hex`, `jsonpath`, `qrcode`, `url`, `utf8`, `uuid`, `xml` |
+
+There is also a parallel **User-Interface** API documented in the portal (`docs-api/docs/user-interface/`) covering `branding`, `context-menu`, `dialog`, `editor`, `internationalization`, `layout`, `menu`, `message-hub`, `notification`, `perspective`, `shell`, `shell-hub`, `shortcuts`, `status-bar`, `subview`, `themes`, `ui-components`, `view`, `viewParameters`, `window`. These are the browser-side helpers consumed by IDE extensions and custom perspectives.
+
 ---
 
 ## 5. Client Java surface
@@ -202,8 +265,22 @@ The IDE is composed of WebJar UI modules under `components/ui/` plus backend ser
 - **Tracing** — OpenTelemetry-backed view.
 
 ### 6.2 Editors (`components/ui/editor-*`)
-- `editor-monaco` (and `editor-monaco-extensions`) — Monaco-based code editing for JS/TS/Java/CSS/HTML/etc., with breakpoint glyphs (`debug-breakpoint-glyph`, `debug-current-line-glyph`).
+- `editor-monaco` (and `editor-monaco-extensions`) — Monaco-based code editing for JS/TS/Java/CSS/HTML/etc., with breakpoint glyphs (`debug-breakpoint-glyph`, `debug-current-line-glyph`). Powers JS/TS/Java/Python/HTML/CSS/JSON authoring.
 - Visual / form editors: `editor-bpm` (BPMN), `editor-csv`, `editor-csvim`, `editor-data-structures` (schema / table / view), `editor-entity`, `editor-extensions`, `editor-form-builder`, `editor-image`, `editor-integrations`, `editor-jobs`, `editor-listeners`, `editor-mapping`, `editor-report`, `editor-schema`, `editor-security`, `editor-websockets`.
+
+#### Modelers (visual designers)
+First-class designers, each writing one of the modeler artefacts from §2.4:
+
+| Modeler | Authors | Generates |
+| ------- | ------- | --------- |
+| Entity Data Modeler | `*.edm` / `*.model` | Full CRUD application (tables, OData, REST, UI) via the `template-application-*` family. |
+| Database Schema Modeler | `*.dsm` / `*.schema` | `.table` + `.view` artefacts + constraints. |
+| BPMN Modeler | `*.bpmn` | Flowable process definition. |
+| Form Designer | `*.form` | HTML form layout. |
+| Integrations Modeler (Karavan) | `*.camel` | Apache Camel route (`resources-karavan-libs`). |
+
+#### Underlying libraries
+Monaco (editor), mxGraph (Schema/EDM diagrams), bpmn-visualization-js (BPMN viewer), Flowable BPMN (modeler), Karavan (Camel route designer), AngularJS + GoldenLayout (legacy layout), AG Grid (tables), Chart.js (charts), jsTree (trees), Xterm.js (terminal).
 
 ### 6.3 Views (`components/ui/view-*`)
 Side / bottom panels: `view-artefacts`, `view-configurations`, `view-console`, `view-databases`, `view-data-structures`, `view-debugger` (JS), `view-java-debug`, `view-extensions`, `view-git`, `view-import`, `view-jobs`, `view-listeners`, `view-loggers`, `view-logs`, `view-preview`, `view-problems`, `view-projects`, `view-properties`, `view-registry`, `view-repository`, `view-search`, `view-security`, `view-sql`, `view-swagger`, `view-terminal`, `view-transfer`, `view-translation`, `view-websockets`, `view-welcome`.
@@ -227,6 +304,9 @@ Per-perspective top-bar menus: `menu-bpm`, `menu-camel`, `menu-csv`, `menu-datab
 - `platform-branding` — logos, titles, prefixes.
 - `resources-theme-blimpkit` / `-classic` / `-high-contrast` / `-mystic` — themes.
 - `settings-locale`, `resources-locale` — i18n.
+
+### 6.7 BlimpKit UI component library
+The IDE chrome (sidebars, dialogs, tabs, menus, toolbars, forms) is built on [BlimpKit](https://blimpkit.dev/) — a SAP-Fundamental-derived Angular component library. Custom perspectives / views should consume BlimpKit components for consistent look and feel; the catalogue is the canonical reference (do not invent ad-hoc styling).
 
 ---
 
@@ -272,6 +352,8 @@ CI runs the integration suite three times (H2, PostgreSQL 16, MSSQL 2022) — wh
 - **GitHub OAuth profile.** Activated by the `github` Spring profile via `DIRIGIBLE_GITHUB_CLIENT_ID` / `_CLIENT_SECRET` / `_SCOPE`. Configured in `application-github.properties`.
 - **Authorization model.** Declarative `.access` rules + `.roles` definitions, enforced by `engine-security` (URL patterns) and by `@Roles` in client Java (`ControllerInvoker.checkRoles`). Built-in super-roles: `DEVELOPER`, `ADMINISTRATOR`. Anonymous mode toggled by `Configuration.isAnonymousModeEnabled()` / `isAnonymousUserEnabled()`.
 - **Multi-tenancy.** On by default (`DIRIGIBLE_MULTI_TENANT_MODE=true`). Tenant resolution is subdomain-based (`DIRIGIBLE_TENANT_SUBDOMAIN_REGEX`); single-realm options exist for Keycloak / Cognito.
+  - **Tenant-isolated:** DataSources, CSV import/export, OData services, Documents (CMS storage), scheduled Jobs, Listeners. Each artefact reconciliation runs per tenant via `MultitenantBaseSynchronizer`.
+  - **System-level (NOT tenant-isolated):** BPMN process instances, Camel integration flows, declared Extensions, the Git perspective, development workspaces (`/users/<user>/workspace/...`).
 
 ---
 
@@ -404,18 +486,68 @@ Each sample is a self-contained Dirigible project demonstrating one feature area
 
 ---
 
-## 15. External documentation pointers
+## 15. Downstream products (codbex family)
 
-- User-facing help portal: <https://www.dirigible.io/help/> (separate repo: <https://github.com/dirigible-io/dirigible-io.github.io>; MkDocs sources under `docs-help/docs/`, nav in `docs-help/mkdocs.yml`).
-- Blog posts: same repo under `docs-blogs/`; three coordinated updates per post (markdown source, `docs/blogs.json`, `docs-blogs/mkdocs.yml`).
+[codbex](https://www.codbex.com) is a commercially-curated product family built on top of Eclipse Dirigible. It bundles the upstream platform with additional content (industry modules, migration tools, branded shells) and ships as a set of editions, each tailored to a use case:
+
+| Edition | Focus | Key inclusions |
+| ------- | ----- | -------------- |
+| **Atlas** | All-in-one platform | Every standard engine + tooling; the full-fat distribution. |
+| **Helios** | Enterprise JS development | JS API + UI + Debugger + Git + Themes + Databases + Jobs + Listeners + WebSockets + Security + Extensions. |
+| **Hades** | Database management | DB Explorer, SQL Console, Data Transfer, Import/Export, Anonymization (PostgreSQL, MySQL, HANA, H2, …). |
+| **Oceanus** | Document management | CMIS-compliant docs browser + viewer + import/export + ZIP. |
+| **Hyperion** | BPMN-first | BPMN Modeler, process definitions, instances, variables, inbox, dead-letter jobs. |
+| **Iapetus** | Integrations | Integrations Modeler + Apache Camel flows. |
+| **Rhea** | Model-driven | Entity, Forms and Reports modeling; the MDA stack. |
+| **Kronos** | XSC compatibility | XS Classic + ABAP compatibility plugins (XSK, open-abap, abaplint). |
+| **Phoebe** | Data-centric workflows | Apache Airflow integration. |
+| **Gaia** | Reference modules | Master data + reference data starter content. |
+
+### codbex-specific additions worth knowing
+
+- **`.entity`** — JSON entity descriptor; rough equivalent of upstream `*Entity.ts`.
+- **Industry modules** — `accounting`, `billing`, `e-commerce`, `employees`, `hotels`, `inventory`, `manufactoring`, `master-data`, `payments`, `payroll`, `projects`, `purchasing`, `reference-data`, `restaurants`, `salaries`, `sales`, `services`, `shipping`, `stores`, `timesheets`, `vacations` — ready-made domain projects layered on the platform.
+- **Migration tooling** — XSC → JS (XSK), ABAP → JS (abaplint transpiler).
+- **codbex SDK** — same shape as upstream `@aerokit/sdk/*`; alias `@dirigible/*` still resolves.
+
+For doc generation: when codbex content meaningfully diverges from upstream (e.g. `.entity` vs `*Entity.ts`), flag it. Most pages can be shared verbatim.
+
+---
+
+## 16. External documentation pointers
+
+### Dirigible (upstream)
+- User-facing help portal: <https://www.dirigible.io/help/> — separate repo at <https://github.com/dirigible-io/dirigible-io.github.io>. MkDocs sources under `docs-help/docs/`, nav in `docs-help/mkdocs.yml`. Local checkout: `/Users/delchev/Data/GitHub/dirigible.io/dirigible-io.github.io`.
+- API reference portal: same repo, `docs-api/docs/` (per-submodule pages — see §4.6).
+- Blog posts: `docs-blogs/`; three coordinated updates per post (markdown source, `docs/blogs.json`, `docs-blogs/mkdocs.yml`).
 - Samples portal: <https://samples.dirigible.io>.
 - Trial: <https://trial.dirigible.io>.
 - Slack: <https://slack.dirigible.io>.
 - Issues: <https://github.com/eclipse-dirigible/dirigible/issues>.
 
+### codbex (downstream)
+- Product site & docs: <https://www.codbex.com>. VitePress-based; local checkout: `/Users/delchev/Data/GitHub/codbex/codbex.github.io`.
+- Per-product GitHub repos under <https://github.com/codbex> (e.g. `codbex-atlas`, `codbex-helios`).
+
+### Cross-reference map for doc generation
+
+| This file's section | Help portal source |
+| ------------------- | ------------------ |
+| §1 Platform overview | `docs-help/docs/overview/index.md`, `architecture.md`, `features.md` |
+| §2 Artefacts | `docs-help/docs/development/artifacts/`, `codbex.github.io/docs/documentation/platform/artefacts/` |
+| §2.4 Modeler artefacts | `docs-help/docs/development/ide/modelers/`, `codbex.github.io/docs/documentation/tooling/modeling/` |
+| §3 Engines | `docs-help/docs/overview/engines.md`, `codbex.github.io/docs/documentation/platform/engines/` |
+| §4 JS/TS API | `docs-api/docs/<area>/<submodule>.md`, `codbex.github.io/docs/documentation/platform/sdk/<area>/` |
+| §5 Client Java | (no portal section yet — emerging; the announcement blog `dirigible-io.github.io#123` will seed it) |
+| §6 IDE | `docs-help/docs/development/ide/`, `codbex.github.io/docs/documentation/tooling/` |
+| §7 Data layer | `codbex.github.io/docs/documentation/tooling/databases/` |
+| §8 Security | `codbex.github.io/docs/documentation/configurations/basic-auth.md`, `client-registration.md`, `cognito-auth.md`, `keycloak-auth.md` |
+| §11 Configuration | `docs-help/docs/setup/setup-environment-variables/` (note: lags `DirigibleConfig.java`) |
+| §15 codbex products | `codbex.github.io/docs/products/` |
+
 ---
 
-## 16. Pointers for doc generation
+## 17. Pointers for doc generation
 
 When generating human-readable documentation from this file:
 
@@ -425,4 +557,6 @@ When generating human-readable documentation from this file:
 4. **§6 (IDE)** maps 1:1 to the existing portal sections (Workbench, Database, Git, Operations, Documents, Settings, Tracing, Processes, Security, Jobs). Cross-link perspectives to the artefact types they edit.
 5. **§7 (Data) and §8 (Security) → "Configuration & Operations"** in user docs; §11 (env-vars) belongs as an appendix and should be regenerated from `DirigibleConfig.java` rather than maintained by hand (the portal's env-vars page is known to lag the code by months).
 6. **§9 (HTTP surface)** + the auto-generated OpenAPI document at `/services/openapi` cover the API reference; favour generating from OpenAPI over hand-writing tables.
-7. **Refresh trigger.** Add a new artefact type → update §2; add a new engine → update §3; add a new `api-*` → update §4; add new env-var → update §11 (or trust the regeneration story).
+7. **Refresh trigger.** Add a new artefact type → update §2; add a new engine → update §3; add a new `api-*` → update §4 (+ §4.6 submodule index); add new env-var → update §11 (or trust the regeneration story); add a new codbex edition → update §15.
+8. **Reusable upstream/downstream content.** Most pages can be generated once and shared between dirigible help and codbex docs. Pivot on §15 to flag genuine divergence (codbex `.entity` vs upstream `*Entity.ts`, codbex edition matrix, codbex industry modules, ABAP/XSK support).
+9. **Editor / modeler pages** should pair each §2.4 modeler artefact with the matching §6.2 editor and its generation pipeline under `components/template/template-application-*`. Screenshots live in the portal under `docs-help/docs/images/` and `docs-help/docs/development/ide/img/`.
