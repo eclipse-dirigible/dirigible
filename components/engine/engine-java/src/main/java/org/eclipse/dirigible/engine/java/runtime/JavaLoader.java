@@ -78,8 +78,9 @@ public class JavaLoader {
      * Recompile + reload the entire client code surface.
      *
      * @param sources every client {@code .java} that should be visible in the new generation (i.e.
-     *        {@link JavaFileService#getAll()} filtered for the ones whose source files currently exist
-     *        in the registry, minus any that failed FQN-uniqueness pre-check)
+     *        {@link org.eclipse.dirigible.engine.java.service.JavaFileService#getAll()} filtered for
+     *        the ones whose source files currently exist in the registry, minus any that failed
+     *        FQN-uniqueness pre-check)
      * @return per-FQN outcomes — successes (in the new generation) and per-FQN compile error messages
      *         for the ones that failed to produce bytecode
      */
