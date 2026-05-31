@@ -103,10 +103,11 @@ public class BpmnEditorIT extends UserInterfaceIntegrationTest {
         //
         // Why scope.$apply(): we are outside Angular's digest cycle here; without $apply the
         // property.value change would not propagate to the model before inputBlurred() reads it.
-        Selenide.executeJavaScript("var input = document.querySelector('#propertySection input.fd-input, #propertySection input.form-control');"
-                + "if (input) {" + "  var scope = angular.element(input).scope();"
-                + "  scope.$apply(function() { scope.property.value = 'Renamed Task'; });"
-                + "  input.dispatchEvent(new Event('blur', {bubbles: true}));" + "}");
+        Selenide.executeJavaScript(
+                "var input = document.querySelector('#propertySection input.fd-input, #propertySection input.form-control');"
+                        + "if (input) {" + "  var scope = angular.element(input).scope();"
+                        + "  scope.$apply(function() { scope.property.value = 'Renamed Task'; });"
+                        + "  input.dispatchEvent(new Event('blur', {bubbles: true}));" + "}");
         Selenide.sleep(500);
         browser.findElementInAllFrames(By.xpath("//*[local-name()='tspan' and contains(.,'Renamed Task')]"));
 

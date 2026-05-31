@@ -25,8 +25,8 @@ import java.time.Duration;
  * <p>
  * When the user selects a shape and clicks one of the property rows that opens a modal — Class,
  * Expression, Delegate expression, Class fields, Execution listeners, ... — the popup's close
- * handler ultimately calls {@code $scope.$hide()} on the modal scope. After the Angular
- * 1.4.7 → 1.8.2 migration angular-strap was removed, so {@code $modal} is now provided by
+ * handler ultimately calls {@code $scope.$hide()} on the modal scope. After the Angular 1.4.7 →
+ * 1.8.2 migration angular-strap was removed, so {@code $modal} is now provided by
  * {@code scripts/services/modal-service.js}; that drop-in MUST add {@code $hide()/$show()} to the
  * modal scope, emit {@code modal.show.before/show/hide.before/hide} events up the scope tree, and
  * honour the {@code prefixEvent} option. If any of those is missing the popup can no longer be
@@ -36,8 +36,9 @@ import java.time.Duration;
  * The {@code execution-listeners-popup.html} template was migrated to BlimpKit's
  * {@code <bk-dialog>} as part of the BlimpKit visual alignment, so the expected DOM is now
  * {@code section.fd-dialog.fd-dialog--active} (Fundamental Styles) rather than Bootstrap-3's
- * {@code div.modal.in}. The close ✕ in the header is a {@code <bk-button glyph="sap-icon--decline">},
- * rendered as a {@code <button>} carrying {@code .sap-icon--decline}.
+ * {@code div.modal.in}. The close ✕ in the header is a
+ * {@code <bk-button glyph="sap-icon--decline">}, rendered as a {@code <button>} carrying
+ * {@code .sap-icon--decline}.
  */
 public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
 
@@ -102,8 +103,7 @@ public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
         // Dismiss the dialog via the Cancel button in the footer — same path the user takes.
         // bk-button[label="Cancel"] compiles to a <button class="fd-button ...">Cancel</button>
         // wrapped in <div class="fd-bar__element">.
-        Selenide.$(By.xpath("//section[contains(@class,'fd-dialog--active')]"
-                + "//footer//button[normalize-space(.)='Cancel']"))
+        Selenide.$(By.xpath("//section[contains(@class,'fd-dialog--active')]" + "//footer//button[normalize-space(.)='Cancel']"))
                 .shouldBe(Condition.visible, Duration.ofSeconds(5))
                 .click();
 

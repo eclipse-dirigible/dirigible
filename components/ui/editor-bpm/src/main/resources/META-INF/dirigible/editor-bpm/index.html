@@ -35,7 +35,11 @@
         <!-- BlimpKit / Fundamental-Styles — needed for <bk-*> components used in
              migrated popup templates. Order matters: load after Bootstrap-3 so the
              `.fd-*` rules override Bootstrap defaults where they differ, before the
-             editor-app theme CSS so the editor can still override BlimpKit. -->
+             editor-app theme CSS so the editor can still override BlimpKit. The
+             platform-core fonts.css declares the @font-face rules for "72" (body
+             font) and "SAP-icons" (icon font); without it `.sap-icon--*` glyphs
+             render as empty squares. -->
+        <link rel="stylesheet" href="/services/web/platform-core/ui/styles/fonts.css" />
         <link rel="stylesheet" href="/webjars/fundamental-styles/dist/fundamental-styles.css" />
         <link rel="stylesheet" href="/webjars/blimpkit__blimpkit/dist/css/blimpkit.css" />
 
