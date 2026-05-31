@@ -36,7 +36,7 @@ FLOWABLE.TOOLBAR_CONFIG.secondaryItems.push(
 	{
         "type" : "button",
         "title" : "Close",
-        "cssClass" : "glyphicon glyphicon-remove",
+        "cssClass" : "sap-icon sap-icon--decline",
         "action" : "FLOWABLE.TOOLBAR.ACTIONS.closeEditor"
     }
 );
