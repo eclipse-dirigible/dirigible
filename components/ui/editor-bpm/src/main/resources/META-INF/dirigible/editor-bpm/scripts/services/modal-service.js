@@ -13,21 +13,25 @@
 'use strict';
 
 /**
- * Drop-in replacement for angular-strap 2.x's `$modal` factory using Bootstrap-3's
- * jQuery modal plugin. Compatible with the legacy call-sites in the editor-bpm
- * code-base, which rely on the following angular-strap behaviours:
+ * Drop-in replacement for angular-strap 2.x's `$modal` factory. The factory
+ * signature and the `$hide`/`$show`/`modal`/`prefixEvent` contract are
+ * preserved so the ~30 existing call-sites in editor-bpm don't have to change.
  *
- *  - $modal({ template, scope, prefixEvent }) returns an instance with .show()/.hide();
- *    the same instance is also exposed as `scope.modal` on the new modal scope.
- *  - The modal scope (a child of the caller scope) gains `$hide()` and `$show()`
- *    helpers — many Flowable controllers call `$scope.$hide()` from their close()
- *    handler instead of going through the returned instance.
- *  - Events `<prefix>.show.before`, `<prefix>.show`, `<prefix>.hide.before`,
- *    `<prefix>.hide` are emitted UP the scope tree (so the caller scope can listen
- *    via $scope.$on or $scope.$parent.$on). Default prefix is 'modal'.
+ * Two rendering paths are supported during the BlimpKit visual migration:
+ *
+ *  - BlimpKit `<bk-dialog>` templates (preferred, target shape).
+ *  - Legacy Bootstrap-3 `<div class="modal">` templates (kept alive until every
+ *    popup template has been migrated, then removable).
+ *
+ * Detection is purely structural — if the template root is a `<bk-dialog>` (or
+ * the markup contains one), the new path is taken. Once every popup is on
+ * `<bk-dialog>`, the Bootstrap-3 branch can be deleted along with the jQuery
+ * modal plugin dependency.
  */
 flowableModule.factory('$modal', ['$http', '$templateCache', '$compile', '$rootScope', '$timeout',
     function ($http, $templateCache, $compile, $rootScope, $timeout) {
+
+        var BK_DIALOG_PATTERN = /<bk-dialog\b/i;
 
         return function (config) {
             var parentScope = config.scope || $rootScope;
@@ -35,15 +39,35 @@ flowableModule.factory('$modal', ['$http', '$templateCache', '$compile', '$rootS
             var prefix = config.prefixEvent || 'modal';
             var element = null;
             var pending = null;
+            var bkDialog = false;
 
             function emit(name) { modalScope.$emit(prefix + '.' + name); }
+
+            function applyAsync(fn) {
+                if (modalScope.$$phase || $rootScope.$$phase) {
+                    fn();
+                } else {
+                    modalScope.$apply(fn);
+                }
+            }
 
             function doHide() {
                 if (!element) return;
                 emit('hide.before');
                 var el = element;
                 element = null;
-                jQuery(el).modal('hide');
+
+                if (bkDialog) {
+                    // The `visible` binding drives the `fd-dialog--active` class via
+                    // ng-class; flipping it animates the dialog out. Re-evaluating
+                    // synchronously inside $apply keeps the close button responsive
+                    // even when the click came from outside an Angular handler.
+                    applyAsync(function () { instance.visible = false; });
+                } else {
+                    try { jQuery(el).modal('hide'); } catch (e) { /* ignore */ }
+                }
+                instance.$isShown = false;
+
                 $timeout(function () {
                     el.remove();
                     emit('hide');
@@ -53,7 +77,16 @@ flowableModule.factory('$modal', ['$http', '$templateCache', '$compile', '$rootS
 
             var instance = {
                 $isShown: false,
-                show: function () { if (element) { jQuery(element).modal('show'); instance.$isShown = true; } },
+                visible: true,
+                show: function () {
+                    if (!element) return;
+                    if (bkDialog) {
+                        applyAsync(function () { instance.visible = true; });
+                    } else {
+                        jQuery(element).modal('show');
+                    }
+                    instance.$isShown = true;
+                },
                 hide: doHide,
                 toggle: function () { instance.$isShown ? doHide() : instance.show(); },
                 destroy: doHide
@@ -62,42 +95,57 @@ flowableModule.factory('$modal', ['$http', '$templateCache', '$compile', '$rootS
             // angular-strap helpers expected on the modal scope by many controllers.
             modalScope.$hide = doHide;
             modalScope.$show = instance.show;
-            // The instance is also surfaced as scope.modal so callers can do scope.modal.hide().
+            // The instance is also surfaced as scope.modal so callers can do scope.modal.hide()
+            // and migrated templates can bind `visible="modal.visible"`.
             modalScope.modal = instance;
 
-            function show(html) {
+            function render(html) {
                 emit('show.before');
+                bkDialog = BK_DIALOG_PATTERN.test(html);
                 element = angular.element(html);
                 $compile(element)(modalScope);
                 angular.element(document.body).append(element);
-                pending = $timeout(function () {
-                    // Bootstrap-3 modal CSS sets `.modal { display: none; }` and the plugin's
-                    // .show() is supposed to flip it via jQuery.fn.show(). In practice (jQuery 2.0.3
-                    // + Bootstrap 3.1.1 inside the editor iframe) the inline style sometimes ends
-                    // up empty and the modal stays invisible while the backdrop covers the editor
-                    // — leaving the canvas locked. angular-strap historically forced display:block
-                    // itself; replicate that to avoid the lock-up.
-                    element[0].style.display = 'block';
-                    jQuery(element).modal({ show: false, backdrop: 'static', keyboard: false });
-                    jQuery(element).modal('show');
+
+                if (bkDialog) {
+                    // bk-dialog reads `visible` from `modal.visible` via ng-class binding.
+                    // It's already true on the instance, so the dialog renders active on
+                    // its first digest. Emit `show` after that digest so listeners run
+                    // against fully-rendered DOM (parity with the legacy path).
                     instance.$isShown = true;
-                    emit('show');
-                });
+                    pending = $timeout(function () { emit('show'); });
+                } else {
+                    pending = $timeout(function () {
+                        // Bootstrap-3 modal CSS sets `.modal { display: none; }` and the
+                        // plugin's .show() flips it via jQuery.fn.show(). In practice
+                        // (jQuery 2.0.3 + Bootstrap 3.1.1 inside the editor iframe) the
+                        // inline style sometimes ends up empty and the modal stays
+                        // invisible while the backdrop covers the editor — leaving the
+                        // canvas locked. angular-strap historically forced display:block
+                        // itself; replicate that.
+                        element[0].style.display = 'block';
+                        jQuery(element).modal({ show: false, backdrop: 'static', keyboard: false });
+                        jQuery(element).modal('show');
+                        instance.$isShown = true;
+                        emit('show');
+                    });
+                }
             }
 
             var cached = $templateCache.get(config.template);
             if (cached) {
-                show(cached);
+                render(cached);
             } else {
                 $http.get(config.template, { cache: $templateCache })
-                    .then(function (response) { show(response.data); });
+                    .then(function (response) { render(response.data); });
             }
 
-            // If the parent scope is destroyed while the modal is open, take the modal down with it.
+            // If the parent scope is destroyed while the modal is open, take it down too.
             parentScope.$on('$destroy', function () {
                 if (pending) $timeout.cancel(pending);
                 if (element) {
-                    try { jQuery(element).modal('hide'); } catch (e) { /* ignore */ }
+                    if (!bkDialog) {
+                        try { jQuery(element).modal('hide'); } catch (e) { /* ignore */ }
+                    }
                     element.remove();
                     element = null;
                 }
