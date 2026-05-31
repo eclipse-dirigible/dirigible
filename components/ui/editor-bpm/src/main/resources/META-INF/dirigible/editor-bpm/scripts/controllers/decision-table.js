@@ -75,12 +75,13 @@ angular.module('flowableModeler')
                 }
 
                 $http({method: 'GET', url: url}).
-                    success(function(data, status, headers, config) {
+                    then(function(response) {
+                        var data = response.data;
                         $scope.model.decisionTable = data;
                         $scope.model.decisionTableDownloadUrl = decisionTableUrl + '/export?version=' + Date.now();
                         $scope.loadVersions();
 
-                    }).error(function(data, status, headers, config) {
+                    }, function(response) {
                         $scope.returnToList();
                     });
             };
@@ -100,7 +101,8 @@ angular.module('flowableModeler')
                 };
 
                 $http({method: 'PUT', url: FLOWABLE.APP_URL.getModelUrl($scope.model.latestModelId), data: data}).
-                    success(function(data, status, headers, config) {
+                    then(function(response) {
+                        var data = response.data;
                         $scope.model.favoritePending = false;
                         if ($scope.model.decisionTable.favorite) {
                             $scope.addAlertPromise($translate('DECISION-TABLE.ALERT.UN-FAVORITE-CONFIRM'), 'info');
@@ -108,7 +110,7 @@ angular.module('flowableModeler')
                             $scope.addAlertPromise($translate('DECISION-TABLE.ALERT.FAVORITE-CONFIRM'), 'info');
                         }
                         $scope.model.decisionTable.favorite = !$scope.model.decisionTable.favorite;
-                    }).error(function(data, status, headers, config) {
+                    }, function(response) {
                         $scope.model.favoritePending = false;
                     });
             };
@@ -121,7 +123,8 @@ angular.module('flowableModeler')
                 };
 
                 $http({method: 'GET', url: FLOWABLE.APP_URL.getModelHistoriesUrl($scope.model.latestModelId), params: params}).
-                    success(function(data, status, headers, config) {
+                    then(function(response) {
+                        var data = response.data;
                         if ($scope.model.decisionTable.latestVersion) {
                             if (!data.data) {
                                 data.data = [];

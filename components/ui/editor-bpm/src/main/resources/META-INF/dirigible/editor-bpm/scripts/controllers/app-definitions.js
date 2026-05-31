@@ -73,11 +73,11 @@ angular.module('flowableModeler')
 		  }
 
 		  $http({method: 'GET', url: FLOWABLE.APP_URL.getModelsUrl(), params: params}).
-		  	success(function(data, status, headers, config) {
+		  	then(function(response) {
+		  		var data = response.data;
 	    		$scope.model.apps = data;
 	    		$scope.model.loading = false;
-	        }).
-	        error(function(data, status, headers, config) {
+	        }, function(response) {
 	           $scope.model.loading = false;
 	        });
 	  };
@@ -160,16 +160,17 @@ angular.module('flowableModeler')
             $scope.model.loading = true;
 
             $http({method: 'POST', url: FLOWABLE.APP_URL.getModelsUrl(), data: $scope.model.app}).
-                success(function (data, status, headers, config) {
+                then(function (httpResponse) {
+                    var data = httpResponse.data;
                     $scope.$hide();
 
                     $scope.model.loading = false;
                     $location.path("/app-editor/" + data.id);
 
-                }).
-                error(function (response, status, headers, config) {
+                }, function (httpResponse) {
+                    var response = httpResponse.data;
                     $scope.model.loading = false;
-					
+
 					if (response && response.message && response.message.length > 0) {
 						$scope.model.errorMessage = response.message;
 					}
@@ -215,14 +216,15 @@ angular.module('flowableModeler')
             $scope.model.loading = true;
 
             $http({method: 'POST', url: FLOWABLE.APP_URL.getCloneModelsUrl($scope.model.app.id), data: $scope.model.app}).
-                success(function (data, status, headers, config) {
+                then(function (httpResponse) {
+                    var data = httpResponse.data;
                     $scope.$hide();
 
                     $scope.model.loading = false;
                     $location.path("/app-editor/" + data.id);
 
-                }).
-                error(function (response, status, headers, config) {
+                }, function (httpResponse) {
+                    var response = httpResponse.data;
                     $scope.model.loading = false;
                     $scope.model.errorMessage = response.message;
                 });
@@ -263,13 +265,15 @@ angular.module('flowableModeler')
           }).progress(function(evt) {
               $scope.model.uploadProgress = parseInt(100.0 * evt.loaded / evt.total);
 
-          }).success(function(data, status, headers, config) {
+          }).then(function(response) {
+              var data = response.data;
               $scope.model.loading = false;
 
               $location.path("/apps/" + data.id);
               $scope.$hide();
 
-          }).error(function(data, status, headers, config) {
+          }, function(response) {
+              var data = response.data;
 
               if (data && data.message) {
                   $scope.model.errorMessage = data.message;

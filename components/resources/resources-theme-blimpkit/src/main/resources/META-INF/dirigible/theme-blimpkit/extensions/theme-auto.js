@@ -13,8 +13,9 @@ exports.getTheme = () => ({
 	id: 'blimpkit-auto',
 	name: 'BlimpKit',
 	type: 'auto',
-	version: 3,
+	version: 4,
 	links: [
+		'/services/web/theme-blimpkit/css/sap-variables-auto.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-auto.css',
 	]
 });

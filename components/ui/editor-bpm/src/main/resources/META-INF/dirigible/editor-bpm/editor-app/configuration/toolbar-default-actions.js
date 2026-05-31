@@ -147,7 +147,8 @@ FLOWABLE.TOOLBAR = {
             var saveSilently = function ($http, model, modelMetaData, editorManager) {
 
                 var csrfToken = null;
-                $http.get("", { headers: { "X-CSRF-Token": "Fetch" } }).success(function (data, statusCode, headers) {
+                $http.get("", { headers: { "X-CSRF-Token": "Fetch" } }).then(function (response) {
+                    var headers = response.headers;
                     csrfToken = headers()["x-csrf-token"];
                 });
 
@@ -175,7 +176,7 @@ FLOWABLE.TOOLBAR = {
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)
                 })
 
-                    .success(function (data, status, headers, config) {
+                    .then(function (response) {
                         console.info(modelMetaData.modelId + ' saved successfully');
                         // Fire event to all who is listening
 
@@ -196,8 +197,9 @@ FLOWABLE.TOOLBAR = {
                         });
                         statusBarHub.showMessage(`File '${editorParams.filePath}' saved`);
                         setEditorDirtyState(false);
-                    })
-                    .error(function (data, status, headers, config) {
+                    }, function (response) {
+                        var data = response.data;
+                        var status = response.status;
                         if (status === 409) {
                             console.error(data.message);
                         } else {
@@ -600,7 +602,8 @@ angular
                     url: FLOWABLE.URL.putModel(modelMetaData.modelId)
                 })
 
-                    .success(function (data, status, headers, config) {
+                    .then(function (response) {
+                        var data = response.data;
                         editorManager.handleEvents({
                             type: ORYX.CONFIG.EVENT_SAVED
                         });
@@ -629,8 +632,9 @@ angular
                             successCallback();
                         }
 
-                    })
-                    .error(function (data, status, headers, config) {
+                    }, function (response) {
+                        var data = response.data;
+                        var status = response.status;
                         if (status == 409) {
                             $scope.error = {};
                             $scope.error.isConflict = true;

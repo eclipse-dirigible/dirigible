@@ -992,7 +992,8 @@ flowableModule.directive('tabControl', ['$compile', '$http', '$templateCache', f
                 if($scope.activeTab && $scope.activeTab.templateUrl) {
                     // Load the HTML-fragment or get from cache
                     var loader = $http.get($scope.activeTab.templateUrl, {cache: $templateCache});
-                    var promise = loader.success(function(html) {
+                    var promise = loader.then(function(response) {
+                        var html = response.data;
                         contentDiv.html(html);
                     }).then(function (response) {
                         $scope.activeTemplate = $scope.activeTab.id;

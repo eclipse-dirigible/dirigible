@@ -13,8 +13,9 @@ exports.getTheme = () => ({
 	id: 'blimpkit-dark',
 	name: 'BlimpKit Dark',
 	type: 'dark',
-	version: 3,
+	version: 4,
 	links: [
+		'/services/web/theme-blimpkit/css/sap-variables-dark.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-dark.css',
 	]
 });

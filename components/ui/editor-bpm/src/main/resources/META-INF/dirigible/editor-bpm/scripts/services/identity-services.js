@@ -18,10 +18,11 @@ angular.module('flowableModeler').service('UserService', ['$http', '$q',
         var httpAsPromise = function(options) {
             var deferred = $q.defer();
             $http(options).
-                success(function (response, status, headers, config) {
+                then(function (httpResponse) {
+                    var response = httpResponse.data;
                     deferred.resolve(response);
-                })
-                .error(function (response, status, headers, config) {
+                }, function (httpResponse) {
+                    var response = httpResponse.data;
                     deferred.reject(response);
                 });
             return deferred.promise;
@@ -54,10 +55,11 @@ angular.module('flowableModeler').service('GroupService', ['$http', '$q',
         var httpAsPromise = function(options) {
             var deferred = $q.defer();
             $http(options).
-                success(function (response, status, headers, config) {
+                then(function (httpResponse) {
+                    var response = httpResponse.data;
                     deferred.resolve(response);
-                })
-                .error(function (response, status, headers, config) {
+                }, function (httpResponse) {
+                    var response = httpResponse.data;
                     deferred.reject(response);
                 });
             return deferred.promise;
