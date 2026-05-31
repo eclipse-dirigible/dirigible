@@ -1,17 +1,15 @@
-
-<div class="modal" ng-controller="FlowableTextPropertyPopupCtrl">
-    <div class="modal-dialog">
-        <div class="modal-content">
-			<div class="modal-header">
-				<button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-			    <h3>{{'PROPERTY.PROPERTY.EDIT.TITLE' | translate}} "{{property.title | translate}}"</h3>
-			</div>
-			<div class="modal-body">
-				<p><textarea auto-focus class="form-control" ng-model="property.value" style="width:70%; height:100%; max-width: 100%; max-height: 100%; min-height: 200px"/></p>
-			</div>
-			<div class="modal-footer">
-				<button ng-click="save()" class="btn btn-primary" translate >ACTION.SAVE</button>
-			</div>
-		</div>
-	</div>
+<div ng-controller="FlowableTextPropertyPopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="500px" window-max-width="80vw">
+        <bk-dialog-header title="{{ 'PROPERTY.PROPERTY.EDIT.TITLE' | translate }} &quot;{{ property.title | translate }}&quot;">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <bk-textarea auto-focus ng-model="property.value" rows="10" style="width: 100%; min-height: 220px;"></bk-textarea>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>
