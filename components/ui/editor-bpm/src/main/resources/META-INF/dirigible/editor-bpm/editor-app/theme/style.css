@@ -202,10 +202,22 @@ body {
   padding: 5px;
 }
 
-@media (prefers-color-scheme: dark) {
+/*
+ * Stencil-palette icons are dark PNG sprites; invert them to white when the editor is in a
+ * dark theme so they stay visible against the dark canvas/panel backgrounds. The class
+ * `dirigible-theme-{light,dark,auto}` is set on <body> by setTheme() in index.html based on
+ * the currently selected Dirigible theme. The OS-level `prefers-color-scheme` is only used
+ * as a fallback for the 'auto' theme so the legacy behaviour is preserved when the user
+ * hasn't explicitly picked a light or dark theme.
+ */
+.dirigible-theme-dark .Oryx_button img,
+.dirigible-theme-dark .stencil-item img {
+  filter: brightness(0) invert(1);
+}
 
-  .Oryx_button img,
-  .stencil-item img {
+@media (prefers-color-scheme: dark) {
+  .dirigible-theme-auto .Oryx_button img,
+  .dirigible-theme-auto .stencil-item img {
     filter: brightness(0) invert(1);
   }
 }

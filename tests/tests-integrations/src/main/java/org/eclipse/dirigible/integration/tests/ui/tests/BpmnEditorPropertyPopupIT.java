@@ -24,20 +24,20 @@ import java.time.Duration;
  *
  * <p>
  * When the user selects a shape and clicks one of the property rows that opens a modal — Class,
- * Expression, Delegate expression, Class fields, etc. — angular-strap's {@code $modal} factory
- * used to provide {@code $scope.$hide()} on the modal scope. The {@code text-popup.html} close
- * handler calls {@code $scope.close()} which in turn invokes {@code $scope.$hide()}. After the
- * Angular 1.4.7 → 1.8.2 migration, angular-strap was removed and {@code $modal} is provided by
+ * Expression, Delegate expression, Class fields, etc. — angular-strap's {@code $modal} factory used
+ * to provide {@code $scope.$hide()} on the modal scope. The {@code text-popup.html} close handler
+ * calls {@code $scope.close()} which in turn invokes {@code $scope.$hide()}. After the Angular
+ * 1.4.7 → 1.8.2 migration, angular-strap was removed and {@code $modal} is provided by
  * {@code scripts/services/modal-service.js}; that drop-in MUST add {@code $hide()/$show()} to the
- * modal scope, emit {@code modal.show.before/show/hide.before/hide} events up the scope tree,
- * and honour the {@code prefixEvent} option. If any of those is missing the modal can no longer
- * be closed — the backdrop stays, the editor grays out, and the canvas becomes unclickable.
+ * modal scope, emit {@code modal.show.before/show/hide.before/hide} events up the scope tree, and
+ * honour the {@code prefixEvent} option. If any of those is missing the modal can no longer be
+ * closed — the backdrop stays, the editor grays out, and the canvas becomes unclickable.
  *
  * <p>
  * The test creates a fresh {@code .bpmn} (template contains {@code MyServiceTask}), selects the
- * service task, opens the "Class" property modal, verifies the Bootstrap-3 backdrop is shown,
- * then dismisses the modal and verifies the backdrop / {@code modal-open} class are gone and the
- * canvas is interactive again.
+ * service task, opens the "Class" property modal, verifies the Bootstrap-3 backdrop is shown, then
+ * dismisses the modal and verifies the backdrop / {@code modal-open} class are gone and the canvas
+ * is interactive again.
  */
 public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
 
@@ -65,7 +65,8 @@ public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
         // editor-app/configuration/properties/execution-listeners-popup.html which is opened by
         // FlowableExecutionListenersCtrl via _internalCreateModal($modal, …)). Clicking its title
         // switches the row to write mode and immediately opens the modal.
-        Selenide.$(By.xpath("//*[@id='propertySection']//span[contains(@class,'title') and contains(normalize-space(.),'Execution listeners')]"))
+        Selenide.$(By.xpath(
+                "//*[@id='propertySection']//span[contains(@class,'title') and contains(normalize-space(.),'Execution listeners')]"))
                 .click();
 
         // Modal appeared: Bootstrap-3 modal plugin adds `.in` class to the .modal element and
@@ -77,8 +78,9 @@ public class BpmnEditorPropertyPopupIT extends UserInterfaceIntegrationTest {
 
         // Modal scope must expose $hide() — without it the close() handler in text-popup.html
         // (which calls $scope.$hide()) silently throws and the modal can never be dismissed.
-        Boolean hideExists = Selenide.executeJavaScript("var modalEl = document.querySelector('div.modal.in');"
-                + "if (!modalEl) return false;" + "var scope = angular.element(modalEl).scope();" + "return scope && typeof scope.$hide === 'function';");
+        Boolean hideExists =
+                Selenide.executeJavaScript("var modalEl = document.querySelector('div.modal.in');" + "if (!modalEl) return false;"
+                        + "var scope = angular.element(modalEl).scope();" + "return scope && typeof scope.$hide === 'function';");
         Assertions.assertTrue(Boolean.TRUE.equals(hideExists),
                 "modal scope.$hide is missing — angular-strap-compatible $hide() helper was not added by modal-service.js.");
 

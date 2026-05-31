@@ -294,6 +294,15 @@
                     link.setAttribute('data-type', 'theme');
                     headElement.appendChild(link);
                 }
+                // The editor's stencil-palette icons are colored via a CSS filter (see
+                // editor-app/theme/style.css). The rule used to gate on @media
+                // (prefers-color-scheme: dark) — that's the OS-level preference, not the
+                // Dirigible theme the user picked. Reflect the actual chosen theme as a body
+                // class so the CSS can target it directly.
+                if (document.body) {
+                    document.body.classList.remove('dirigible-theme-light', 'dirigible-theme-dark', 'dirigible-theme-auto');
+                    document.body.classList.add('dirigible-theme-' + (theme.type || 'auto'));
+                }
             }
 
             setTheme();
