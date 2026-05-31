@@ -98,6 +98,97 @@ The scope of "BlimpKit alignment" is **not** a framework change. It's a template
 rewrite. AngularJS 1.8.2 stays. The drop-in `$modal` / `$popover` factories stay — or get
 replaced by a BlimpKit-dialog-based `$modal` (see option C below).
 
+### Status — what's done on branch `bpmn-editor-blimpkit-migration` (PR [#5963](https://github.com/eclipse-dirigible/dirigible/pull/5963))
+
+The PR is rebased on top of `origin/master` (which now has the `fix-bpmn-editor` work
+merged in as squash commit `2ecd17d802`). Commits (oldest first):
+
+```
+Step 0 — Prerequisite: wire BlimpKit into the iframe
+  Document BlimpKit-wiring prerequisite in CLAUDE_BPMN.md
+  Wire BlimpKit into the editor-bpm iframe
+  Re-enable Angular debug info after the blimpKit module turns it off
+Step 1 — Modal-service rewrite
+  Make $modal factory dual-mode for the BlimpKit popup migration
+Step 2 — Popup templates (21 total)
+  Migrate text-popup.html
+  Migrate execution-listeners-popup.html + update BpmnEditorPropertyPopupIT
+  Migrate condition-expression, feedback, fields, duedate
+  Migrate reference + form-properties popups
+  Migrate remaining popups + form-builder popover
+Status update
+Step 3 — Property-panel inline write templates
+  Migrate inline property-panel write templates to BlimpKit (+ test fix)
+Step 4 — Glyphicon sweep + remaining editor popups
+  Sweep glyphicon-* → sap-icon--*, migrate remaining editor popups
+Step 5 — Defensive CSS removal (partial)
+  Drop defensive .modal-header .close CSS
+Post-review fixes
+  Fix sap-icon font + theme ui-grid colors in the BPMN editor
+  Pair every <bk-checkbox> with a <bk-checkbox-label> so the box is visible
+```
+
+Use `git log --oneline bpmn-editor-blimpkit-migration ^origin/master` for the current SHAs (they change on each rebase).
+
+**Done (steps 0-5 + visual-review fixes):**
+- All 21 BPMN-editor popups + the form-builder popover are `<bk-dialog>`. `grep -l
+  'class="modal"'` over `editor-app/configuration/properties/`, `editor-app/popups/`, and
+  `views/popover/` returns empty.
+- All 8 inline property-panel write templates use `<bk-input>` / `<bk-checkbox>` /
+  `<bk-select>` instead of native `<input>` / `<select>`. `editor-app/editor.html`'s
+  `.property-row` shell is left as-is (deeply integrated with Oryx's dynamic re-render;
+  changing it would mean rewriting `properties.js`).
+- Every `<bk-checkbox>` is paired with a `<bk-checkbox-label>` (with `empty="true"` when
+  the surrounding markup already labels the row). Without the label the box is
+  invisible — Fundamental-Styles' `.fd-checkbox` rule hides the native input and relies
+  on the label's `::before` pseudo to draw the visible chrome. See the general note in
+  CLAUDE.md's BlimpKit-gotchas section.
+- `/services/web/platform-core/ui/styles/fonts.css` is loaded by `index.html` for the
+  `SAP-icons` @font-face declaration. Without it every `sap-icon--*` glyph renders as a
+  tofu square (the IDE shell pulls fonts.css via the `platform-links` injection
+  mechanism; the editor-bpm iframe doesn't go through that, so it needs the explicit
+  `<link>`).
+- ui-grid 3.0.0's hard-coded light-mode colors (#fdfdfd / #f3f3f3 / #f0f0ee / #c9dde1
+  / #d4d4d4) are overridden in `editor-app/theme/style.css` with `var(--sapList_*)`
+  variables (Background, AlternatingBackground, HeaderBackground, SelectionBackgroundColor,
+  BorderColor, TextColor). Both light and dark theme bundles in theme-blimpkit define
+  the `--sapList_*` variables — listener-grids inside dialogs now follow the picked
+  theme instead of showing white-on-light cells against a dark dialog.
+- Every glyphicon-* in BPMN-editor-specific HTML/JS has been swept to a `sap-icon--*`
+  equivalent. The glyphicons that remain live in shared code with the other Flowable
+  perspectives (form-builder / decision-table / app-definition / casemodel) — out of
+  scope per the §1 "Don't delete those views" rule.
+- The defensive `.modal-header .close` CSS rule is gone.
+
+**Still open (step 6, and partials):**
+- `--sap*` legacy-variable audit (step 6) — the shim from `1329f23be5` is still shipping
+  via `theme-blimpkit/css/sap-variables-{light,dark,auto}.css`. Multiple editors and the
+  BPMN editor's own `style.css` reference `var(--sapTextColor)` etc. Replacing each call
+  with a Fundamental-Styles equivalent (`var(--sapTextColor)` → `var(--fdShellbar_TextColor)`
+  / `var(--sapContent_LabelColor)` / whichever applies semantically) needs case-by-case
+  judgement and a visual review per consumer.
+- The `dirigible-theme-{light,dark,auto}` body class stays — it still drives
+  `.dark-mode .Oryx_button img / .stencil-item img { filter: invert(…) }` in `style.css`.
+  Replacing those rules with a BlimpKit-native theming hook is its own task.
+- Bootstrap-3 CSS + JS in `index.html` stay loaded. The casemodel / form-builder /
+  decision-table / app-definition perspectives ship 9+ Bootstrap-3 modal templates under
+  `views/popup/*.html` that go through the same `$modal` factory, and the migrated
+  popups still use Bootstrap-3 grid classes (`.row`, `.col-xs-*`, `.col-md-*`) for the
+  two-column listener-grid + detail-pane layout.
+- The dual-mode branch in `modal-service.js` stays for the same reason — `$modal` is
+  invoked from both the migrated BPMN-editor popups and the unmigrated other-perspective
+  popups.
+
+All three BPMN ITs pass on `HEAD`:
+- BpmnEditorLoadsIT       44.15s
+- BpmnEditorIT            40.85s
+- BpmnEditorPropertyPopupIT  27.54s
+
+The Chrome renderer can occasionally time out at `IDE.openHomePage` on macOS 13 / Chrome
+148 with this PR loaded — that's environmental flake (server responds in ~120ms when
+poked directly with curl), reproducible across runs both with and without my changes.
+The retry-by-rerunning approach works.
+
 ### 2.1 Inventory of what to migrate
 
 #### Pop-up templates (20 files)
@@ -224,21 +315,86 @@ Reference real-world uses in the codebase:
 
 Iterate, don't big-bang. The editor must keep working through every commit. Suggested order:
 
-1. **Replace the modal-service.js implementation, not its API.**
+0. **DONE in `dd677b78fa`. Prerequisite — wire BlimpKit into the editor iframe.** The editor-bpm iframe is a
+   self-contained Angular 1.8.2 app (`ng-app="flowableModeler"`); it does **not** inherit
+   the IDE shell's script/link tags. As of `fix-bpmn-editor` it loads jQuery 2.0.3,
+   AngularJS 1.8.2, angular-translate, ui-grid, Bootstrap-3 CSS and **no BlimpKit assets at
+   all**. A `<bk-dialog>` tag in any popup template renders as an unknown element until
+   four things are added to `editor-bpm/index.html`:
+   - `<link rel="stylesheet" href="/webjars/blimpkit__blimpkit/dist/css/blimpkit.css">`
+   - `<link rel="stylesheet" href="/webjars/fundamental-styles/dist/fundamental-styles.css">`
+   - `<script src="/webjars/angular-aria/angular-aria.min.js">` (the `blimpKit` module
+     depends on `ngAria` — see `platform-core/ui/blimpkit/blimpkit.js`)
+   - `<script src="/webjars/blimpkit__blimpkit/dist/blimpkit.min.js">` (the bundled
+     ~158 KB module defining every `bk-*` directive — webjar version `2.1.6`)
+
+   Plus `'blimpKit'` added to the `flowableModeler` module-dep array in `scripts/app.js`.
+   See the live recipe in `platform-links.json` (`ng-view` category) — that's what the
+   IDE shell injects via `<meta name="platform-links">`, and it's the canonical list.
+
+   **Side-effects to know about** before flipping this on:
+   - The `blimpKit` module's `.config()` block calls `$compileProvider.cssClassDirectivesEnabled(false)`
+     / `commentDirectivesEnabled(false)` / `debugInfoEnabled(false)` once debug is on.
+     Those are app-global flags. The `cssClassDirectivesEnabled(false)` part is safe — the
+     class-form-permissive directives in editor-bpm (`autoHeight`, `scrollToActive`,
+     `autoScroll`, `autoFocus`, `activitiFixDropdownBug`) are all attribute-used everywhere
+     I checked. But **`debugInfoEnabled(false)` is a real regression for the BPMN
+     integration tests**: `BpmnEditorIT.bpmnEditor_select_rename_and_save` and
+     `BpmnEditorPropertyPopupIT.executionListenersPopup_opens_and_closes_without_locking_the_editor`
+     both reach into Angular via `angular.element(node).scope()` (to call `$apply` and to
+     read `scope.$hide`), and Angular only attaches scope references to DOM nodes when
+     debug info is on. The shipped fix is a one-line `.config()` block in `scripts/app.js`
+     that re-enables all three flags. It runs after `blimpKit.config()` (dependency
+     config blocks always run first), so the override sticks.
+   - Bootstrap-3 CSS stays loaded (the not-yet-migrated popups still need its `.modal`
+     styles). The Fundamental-Styles `.fd-*` classes don't collide by name, but z-index /
+     `.modal-backdrop` interaction needs eyes-on the first time a `<bk-dialog>` opens.
+   - Loading `blimpkit.min.js` BEFORE `app.js` is mandatory — `app.js`'s `angular.module(...)`
+     references `'blimpKit'`, which has to be registered already.
+
+1. **DONE in `b5bb5eb055`. Replace the modal-service.js implementation, not its API.**
    Keep the `$modal` factory signature (`$modal({ template, scope, prefixEvent }) → instance`) so the ~30 call-sites
    (`_internalCreateModal`, every `FlowableXxxCtrl`) don't have to change. Internally swap
    from `jQuery(element).modal(...)` to compiling `<bk-dialog>` markup and managing
    visibility via Angular. Preserve `$scope.$hide()`, `$scope.$show()`, `prefixEvent`, and
    the `<prefix>.{show,hide,…}` events that controllers depend on.
-2. **Migrate one popup template at a time**, ideally starting with `text-popup.html`
+   *Practical hint:* the service has to keep working while only some popups have been
+   migrated. The shipped version uses a structural check (`/<bk-dialog\b/i.test(html)`)
+   and branches: bk-dialog mode flips a `modal.visible` flag the dialog binds to;
+   legacy mode keeps the `jQuery(el).modal(...)` path. Once every popup is on
+   `<bk-dialog>`, delete the legacy branch and the jQuery modal plugin can come out.
+2. **DONE in `37e5088b35` / `68abacfe2e` / `b6fcb6ae8c` / `e5e3e1bc28` / `0b6c0e144b`. Migrate one popup template at a time**, ideally starting with `text-popup.html`
    (simplest) → `execution-listeners-popup.html` (covered by `BpmnEditorPropertyPopupIT`) →
    the rest. After each, run the three ITs.
-3. **Convert `.property-row` markup** in `editor.html` and the property write templates to
+   *Practical hint:* `<bk-dialog>` has an isolate scope, so you can't put
+   `ng-controller="FlowableXxxPopupCtrl"` on the dialog element itself — Angular throws
+   "Multiple directives asking for new/isolated scope". Wrap with a thin `<div ng-controller="...">`
+   that hosts the controller, then place `<bk-dialog visible="modal.visible">` inside.
+3. **DONE in `af8d12997c`. Convert `.property-row` markup** in `editor.html` and the property write templates to
    `bk-form-item` / `bk-input` etc. This is the biggest visual win but requires care because
-   Oryx's property panel re-renders dynamically.
-4. **Sweep `glyphicon-*` → `sap-icon--*`.** Mechanical, low-risk.
-5. **Drop the `.modal-header .close` defensive CSS** and the `dirigible-theme-{light,dark,auto}` body class once `<bk-dialog>` and BlimpKit-native filter rules are in.
-6. **Audit `--sap*` usage in the editor's own CSS** (`editor-app/theme/{style,stencils}.css`). Once everything renders through BlimpKit components, the `--sap*` legacy shim from `1329f23be5` can stop shipping in the editor's links — but only after every consumer is converted.
+   Oryx's property panel re-renders dynamically. The property panel shell lives in
+   `editor-app/editor.html` near `#propertySection`; the per-property templates live in
+   `editor-app/configuration/properties/*-display-template.html` and
+   `*-write-template.html`. The dynamic re-render is driven by `properties.js` (the
+   `flowableProperty` directive — grep for it). Walk through each `*-write-template.html`,
+   convert `.form-control` inputs / selects / textareas to bk-* equivalents, then update
+   the display template if it renders the value in a Bootstrap-3-specific shell.
+   *Practical hint, learned from the popup migration*: bk-input / bk-textarea / bk-select
+   all use `ng-model` against the parent scope (their isolate scope only owns their own
+   `compact` / `state` / `glyph` bindings); the existing `selectedProperty.foo` references
+   keep working unchanged.
+4. **DONE in `99f358cd70` (BPMN-editor scope only). Sweep `glyphicon-*` → `sap-icon--*`.** Mechanical, low-risk. The popup-template
+   migration already converted every glyphicon inside dialogs to `sap-icon--*`; the
+   remaining glyphicons are in `editor-app/editor.html`, the property panel
+   templates, and the form-builder shell. A `grep -rn 'glyphicon-' editor-bpm/src` is the
+   inventory.
+5. **PARTIAL DONE in `26899f1217`. Drop the `.modal-header .close` defensive CSS** in `editor-app/theme/style.css`,
+   the `dirigible-theme-{light,dark,auto}` body class, and the Bootstrap-3 `<script>` +
+   `<link>` from `index.html` once `<bk-dialog>` and BlimpKit-native filter rules are in
+   for every popup. After this commit (step 2 complete), only the property panel still
+   uses Bootstrap-3 styles — once step 3 lands, all of Bootstrap-3 can come out, including
+   the dual-mode branch in `modal-service.js`.
+6. **TODO. Audit `--sap*` usage in the editor's own CSS** (`editor-app/theme/{style,stencils}.css`). Once everything renders through BlimpKit components, the `--sap*` legacy shim from `1329f23be5` can stop shipping in the editor's links — but only after every consumer is converted. The shim is still in place (it shims for the editor-bpm CSS, the form-builder CSS, perspective-processes CSS, and the documents resources CSS) — replacing `var(--sapTextColor)` with Fundamental-Styles' `var(--sapContent_LabelColor)` / `var(--sapShell_TextColor)` / etc. requires a per-call decision on which Fundamental variable corresponds best.
 
 ### 2.4 Tests to extend
 
@@ -313,6 +469,46 @@ java -DDIRIGIBLE_SFTP_SERVER_ENABLED=false \
 8. **`$scope.$hide()` is what the original Flowable popup controllers call.** It used to be
    added to the modal scope by angular-strap; my `modal-service.js` re-adds it. Keep adding
    it (or its equivalent) in whatever `$modal` replacement comes next.
+
+9. **BPMN ITs flake on macOS / Chrome 148 with a renderer timeout.** Roughly one in three runs
+   one of the three BPMN ITs fails with `org.openqa.selenium.TimeoutException: timeout: Timed
+   out receiving message from renderer: -0.005` at `IDE.openHomePage` (the very first
+   navigation — `chromedriver.get(URL_ROOT)`). The server responds in ~120 ms when poked
+   directly with curl, so it's a chromedriver/Chrome handshake issue rather than a Dirigible
+   regression. Strategy: re-run the failing test in isolation; if it passes a second time,
+   it was the flake. If it fails twice in a row at the same spot, bisect the change.
+   Negative `-0.005` in the timeout value is a renderer-process crash (Chrome reports the
+   *remaining* time, and a crashed renderer triggers the timeout immediately so the value
+   is sub-zero).
+
+10. **ui-grid 3.0.0 has hard-coded light-mode colors** (`#fdfdfd` / `#f3f3f3` /
+    `#f0f0ee` / `#c9dde1` / `#d4d4d4`). They lose contrast in dark mode and were overridden
+    in `editor-app/theme/style.css` near the bottom with `var(--sapList_*)`. If you add new
+    ui-grid usages or pull in a different ui-grid build, re-audit the override block —
+    selector specificity matters because the original ui-grid.css rules ship with
+    `background-color:` and `border-color:` that beat unscoped overrides.
+
+11. **`select-text` directive on inline editors has no global definition.**
+    `string-property-write-mode-template.html` ships `<bk-input … select-text="property.value">`
+    and the directive isn't registered anywhere in `editor-bpm`. It's silently a no-op — the
+    attribute survives the migration because removing it didn't change behaviour and removing
+    it from a future commit needs a deliberate decision. If anyone DOES add a `selectText`
+    directive later, it'll start firing on this element automatically.
+
+12. **bk-checkbox needs a paired bk-checkbox-label.** Documented in CLAUDE.md's BlimpKit
+    gotchas section. The bug manifested on the Service Task property panel: "Asynchronous" /
+    "Is for compensation" rows looked empty because the bare `<bk-checkbox>` is invisible
+    by design — Fundamental-Styles' `.fd-checkbox` rule hides the native `<input>` and
+    relies on a sibling `<bk-checkbox-label>` for the visible chrome. Fixed in
+    `boolean-property-template.html` + the four reference-picker popups by pairing every
+    `<bk-checkbox>` with a `<bk-checkbox-label … empty="true">`.
+
+13. **The editor-bpm iframe doesn't go through `platform-links` injection.** Every script
+    + stylesheet the editor needs has to be linked explicitly in `editor-bpm/index.html`.
+    Critical example: `/services/web/platform-core/ui/styles/fonts.css` carries the
+    `@font-face` declarations for `SAP-icons` and the "72" body font — without it
+    `sap-icon--*` glyphs render as tofu squares. Mirror the `ng-view` category in
+    `platform-links.json` when adding shared platform code that the editor needs.
 
 ---
 

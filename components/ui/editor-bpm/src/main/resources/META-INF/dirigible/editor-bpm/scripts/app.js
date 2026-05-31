@@ -30,7 +30,8 @@ var flowableModeler = angular.module('flowableModeler', [
     'angularSpectrumColorpicker',
     'duScroll',
     'dndLists',
-    'ngHandsontable'
+    'ngHandsontable',
+    'blimpKit'
 ]);
 
 var flowableModule = flowableModeler;
@@ -44,6 +45,19 @@ function setEditorDirtyState(dirty) {
 }
 
 flowableModeler
+    // Re-enable Angular compile-provider flags that the `blimpKit` module disables in
+    // its own .config() block (debugInfoEnabled / commentDirectivesEnabled /
+    // cssClassDirectivesEnabled). The IDE shell keeps them off for production
+    // performance; the editor-bpm app is small, opens infrequently, and the BPMN
+    // integration tests poke into Angular scopes via `angular.element(node).scope()`,
+    // which requires debug info. Re-enabling here is safe because dependency
+    // .config() blocks run before the depending module's — blimpKit's flips run
+    // first, then this block runs and overrides them.
+    .config(['$compileProvider', function ($compileProvider) {
+        $compileProvider.debugInfoEnabled(true);
+        $compileProvider.commentDirectivesEnabled(true);
+        $compileProvider.cssClassDirectivesEnabled(true);
+    }])
     // Initialize routes
     .config(['$provide', '$routeProvider', '$translateProvider', '$locationProvider', function ($provide, $routeProvider, $translateProvider, $locationProvider) {
 

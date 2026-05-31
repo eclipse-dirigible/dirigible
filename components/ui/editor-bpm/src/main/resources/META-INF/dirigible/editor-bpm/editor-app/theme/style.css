@@ -504,35 +504,6 @@ li.x-menu-list-item.x-menu-item-active a {
   margin: 12px 0 12px 0;
 }
 
-/*
- * Modal header close (×) button. The original Flowable templates use Bootstrap-3's
- * <button type="button" class="close" …>×</button> markup; without an explicit
- * override the button ends up zero-sized inside the editor iframe (Bootstrap-3 +
- * BlimpKit interaction). Re-state the visible defaults and follow the active theme's
- * foreground color so the × stays visible in both light and dark modes.
- */
-.modal-header .close {
-  float: right;
-  width: auto;
-  min-width: 1.5rem;
-  height: 1.5rem;
-  padding: 0 0.25rem;
-  font-size: 1.5rem;
-  line-height: 1;
-  font-weight: bold;
-  color: var(--sapTextColor, #303030);
-  background: transparent;
-  border: 0;
-  opacity: 0.6;
-  cursor: pointer;
-}
-
-.modal-header .close:hover,
-.modal-header .close:focus {
-  opacity: 1;
-  outline: none;
-}
-
 .Oryx_button {
   background-color: var(--sapButton_Background, #e6e6e6);
 }
@@ -1339,4 +1310,86 @@ hot-table .column-header.label {
 
 .current-process {
   border: 1px solid var(--sapPositiveColor, #26a264);
+}
+
+/*
+ * ui-grid 3.0.0 ships with hard-coded light-mode colors (#fdfdfd / #f3f3f3 alternating
+ * row backgrounds, #d4d4d4 borders, #f0f0ee headers, #c9dde1 selected row) that don't
+ * follow the picked Dirigible theme — dark mode shows white-on-light cells against a
+ * dark dialog, hurting contrast badly. Override with the same `--sap*` variables the
+ * rest of the editor uses; both light and dark theme bundles in theme-blimpkit define
+ * them. Fallbacks match the original ui-grid hard-codes so the panel still renders if
+ * a future theme drops the variables.
+ */
+.ui-grid {
+  background: var(--sapList_Background, #fdfdfd);
+  color: var(--sapList_TextColor, var(--sapTextColor, #303030));
+  border: 1px solid var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-header,
+.ui-grid-top-panel,
+.ui-grid-top-panel-background {
+  background: var(--sapList_HeaderBackground, #f3f3f3) !important;
+  color: var(--sapList_HeaderTextColor, var(--sapTextColor, #303030));
+  border-color: var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-header-cell,
+.ui-grid-header-cell-wrapper,
+.ui-grid-header-cell-row {
+  background: transparent;
+  color: inherit;
+  border-color: var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-row:nth-child(odd) .ui-grid-cell {
+  background-color: var(--sapList_Background, #fdfdfd);
+}
+
+.ui-grid-row:nth-child(even) .ui-grid-cell {
+  background-color: var(--sapList_AlternatingBackground, #f3f3f3);
+}
+
+.ui-grid-row:last-child .ui-grid-cell {
+  border-bottom-color: var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-row .ui-grid-cell.ui-grid-row-header-cell {
+  background-color: var(--sapList_HeaderBackground, #f0f0ee);
+  border-bottom-color: var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-cell,
+.ui-grid-cell-contents {
+  color: var(--sapList_TextColor, var(--sapTextColor, #303030));
+  border-right-color: var(--sapList_BorderColor, #d4d4d4);
+}
+
+.ui-grid-row.ui-grid-row-selected > [ui-grid-row] > .ui-grid-cell {
+  background-color: var(--sapList_SelectionBackgroundColor, #c9dde1) !important;
+  color: var(--sapList_TextColor, var(--sapTextColor, #303030));
+}
+
+.ui-grid-row-saving .ui-grid-cell {
+  color: var(--sapContent_LabelColor, #848484) !important;
+}
+
+.ui-grid-row-dirty .ui-grid-cell {
+  color: var(--sapErrorBackground, #610b38);
+}
+
+.ui-grid-row-error .ui-grid-cell {
+  color: var(--sapNegativeColor, #ff0000) !important;
+}
+
+.ui-grid-viewport,
+.ui-grid-canvas,
+.ui-grid-render-container {
+  background: var(--sapList_Background, #fdfdfd);
+}
+
+.ui-grid-vertical-bar,
+.ui-grid-scrollbar-placeholder {
+  background-color: var(--sapList_BorderColor, transparent);
 }

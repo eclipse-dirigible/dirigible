@@ -92,16 +92,22 @@ public class BpmnEditorIT extends UserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible, Duration.ofSeconds(10));
         Selenide.$(By.xpath("//*[@id='propertySection']//span[contains(@class,'title') and starts-with(normalize-space(.),'Name')]"))
                 .click();
-        Selenide.$(By.cssSelector("#propertySection input.form-control"))
+        // The string-property write template used to render <input class="form-control"> (Bootstrap-3);
+        // after the BlimpKit property-panel migration it renders <bk-input> which compiles to
+        // <input class="fd-input fd-input--compact">. Match either, so the test stays
+        // robust against further class tweaks.
+        Selenide.$(By.cssSelector("#propertySection input.fd-input, #propertySection input.form-control"))
                 .shouldBe(Condition.visible, Duration.ofSeconds(5));
         // Set the property value via the Angular scope, then fire blur to trigger inputBlurred()
         // → updatePropertyInModel() → executeCommands() → canvas.update().
         //
         // Why scope.$apply(): we are outside Angular's digest cycle here; without $apply the
         // property.value change would not propagate to the model before inputBlurred() reads it.
-        Selenide.executeJavaScript("var input = document.querySelector('#propertySection input.form-control');" + "if (input) {"
-                + "  var scope = angular.element(input).scope();" + "  scope.$apply(function() { scope.property.value = 'Renamed Task'; });"
-                + "  input.dispatchEvent(new Event('blur', {bubbles: true}));" + "}");
+        Selenide.executeJavaScript(
+                "var input = document.querySelector('#propertySection input.fd-input, #propertySection input.form-control');"
+                        + "if (input) {" + "  var scope = angular.element(input).scope();"
+                        + "  scope.$apply(function() { scope.property.value = 'Renamed Task'; });"
+                        + "  input.dispatchEvent(new Event('blur', {bubbles: true}));" + "}");
         Selenide.sleep(500);
         browser.findElementInAllFrames(By.xpath("//*[local-name()='tspan' and contains(.,'Renamed Task')]"));
 

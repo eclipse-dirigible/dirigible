@@ -1,23 +1,19 @@
-
-<div class="modal" ng-controller="EditorUnsavedChangesPopupCtrl">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 translate="EDITOR.POPUP.UNSAVED-CHANGES.TITLE"></h2>
-            </div>
-            <div class="modal-body">
-            	<p translate="EDITOR.POPUP.UNSAVED-CHANGES.DESCRIPTION"></p>
-            </div>
-            <div class="modal-footer">
-            	<div class="pull-right">
-                	<button class="btn btn-danger" ng-click="discard()" translate="EDITOR.POPUP.UNSAVED-CHANGES.ACTION.DISCARD"></button>
-                	<button class="btn btn-success" ng-click="save()" ng-show="{{yesNoCancel}}" translate="EDITOR.POPUP.UNSAVED-CHANGES.ACTION.SAVE"></button>
-                	<button class="btn btn-default" ng-click="cancel()" translate="EDITOR.POPUP.UNSAVED-CHANGES.ACTION.CONTINUE"></button>
-                </div>
-            	<div class="loading pull-right" ng-show="loading">
-            		<div class="l1"></div><div class="l2"></div><div class="l2"></div>
-            	</div>
-            </div>
-        </div>
-    </div>
+<div ng-controller="EditorUnsavedChangesPopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="450px" window-max-width="60vw">
+        <bk-dialog-header title="{{ 'EDITOR.POPUP.UNSAVED-CHANGES.TITLE' | translate }}"></bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <p translate="EDITOR.POPUP.UNSAVED-CHANGES.DESCRIPTION"></p>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'EDITOR.POPUP.UNSAVED-CHANGES.ACTION.DISCARD' | translate }}" ng-click="discard()" state="negative"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element ng-show="yesNoCancel">
+                <bk-button label="{{ 'EDITOR.POPUP.UNSAVED-CHANGES.ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'EDITOR.POPUP.UNSAVED-CHANGES.ACTION.CONTINUE' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

@@ -1,49 +1,38 @@
-<div class="modal" ng-controller="FlowableMessageDefinitionsPopupCtrl">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-                <h2>{{'PROPERTY.PROPERTY.EDIT.TITLE' | translate}} "{{property.title | translate}}"</h2>
-            </div>
-
-            <div class="modal-body">
-            
-                <div class="row row-no-gutter">
-
-                	<div class="col-xs-8">
-                        <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
-            	        <div class="pull-right">
-            	            <div class="btn-group">
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.ADD | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="addNewMessageDefinition()"><i class="glyphicon glyphicon-plus"></i></a>
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.REMOVE | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="removeMessageDefinition()"><i class="glyphicon glyphicon-minus"></i></a>
-            	            </div>
-            	        </div>
-            		</div>
-
-                    <div class="col-xs-4" ng-show="selectedMessageDefinition">
-
-                        <div class="form-group">
-                            <label>{{'PROPERTY.MESSAGEDEFINITIONS.ID' | translate}}</label>
-                            <input type="text" class="form-control" ng-model="selectedMessageDefinition.id">
-                        </div>
-
-                        <div class="form-group">
-                            <label>{{'PROPERTY.MESSAGEDEFINITIONS.NAME' | translate}}</label>
-                            <input type="text" class="form-control" ng-model="selectedMessageDefinition.name">
-                        </div>
-
+<div ng-controller="FlowableMessageDefinitionsPopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="900px" window-max-width="90vw" window-min-height="500px">
+        <bk-dialog-header title="{{ 'PROPERTY.PROPERTY.EDIT.TITLE' | translate }} &quot;{{ property.title | translate }}&quot;">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <div class="row row-no-gutter">
+                <div class="col-xs-8">
+                    <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
+                    <div class="pull-right">
+                        <bk-button glyph="sap-icon--add" aria-label="{{ 'ACTION.ADD' | translate }}" title="{{ 'ACTION.ADD' | translate }}" compact="true" ng-click="addNewMessageDefinition()"></bk-button>
+                        <bk-button glyph="sap-icon--less" aria-label="{{ 'ACTION.REMOVE' | translate }}" title="{{ 'ACTION.REMOVE' | translate }}" compact="true" ng-click="removeMessageDefinition()"></bk-button>
                     </div>
-
-            	</div>
-            	
+                </div>
+                <div class="col-xs-4" ng-show="selectedMessageDefinition">
+                    <bk-form-group>
+                        <bk-form-item>
+                            <bk-form-label for="messageDefinitionIdField">{{ 'PROPERTY.MESSAGEDEFINITIONS.ID' | translate }}</bk-form-label>
+                            <bk-input id="messageDefinitionIdField" type="text" ng-model="selectedMessageDefinition.id"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item>
+                            <bk-form-label for="messageDefinitionNameField">{{ 'PROPERTY.MESSAGEDEFINITIONS.NAME' | translate }}</bk-form-label>
+                            <bk-input id="messageDefinitionNameField" type="text" ng-model="selectedMessageDefinition.name"></bk-input>
+                        </bk-form-item>
+                    </bk-form-group>
+                </div>
             </div>
-
-            <div class="modal-footer">
-                <button ng-click="cancel()" class="btn btn-primary" translate>ACTION.CANCEL</button>
-                <button ng-click="save()" class="btn btn-primary" translate>ACTION.SAVE</button>
-            </div>
-
-        </div>
-    </div>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

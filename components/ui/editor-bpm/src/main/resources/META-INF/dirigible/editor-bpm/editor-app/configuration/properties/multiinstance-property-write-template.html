@@ -1,8 +1,7 @@
-
 <div ng-controller="FlowableMultiInstanceCtrl">
-    <select ng-model="property.value" ng-change="multiInstanceChanged()">
-    	<option>None</option>
-    	<option>Parallel</option>
-    	<option>Sequential</option>
-    </select>
+    <bk-select ng-model="property.value" ng-change="multiInstanceChanged()" compact="true" dropdown-fixed="true">
+        <bk-option text="None" value="'None'"></bk-option>
+        <bk-option text="Parallel" value="'Parallel'"></bk-option>
+        <bk-option text="Sequential" value="'Sequential'"></bk-option>
+    </bk-select>
 </div>

@@ -32,6 +32,17 @@
         <link rel="stylesheet" href="libs/angular-spectrum-colorpicker_1.0.13/spectrum.css" />
         <!-- endbuild -->
 
+        <!-- BlimpKit / Fundamental-Styles — needed for <bk-*> components used in
+             migrated popup templates. Order matters: load after Bootstrap-3 so the
+             `.fd-*` rules override Bootstrap defaults where they differ, before the
+             editor-app theme CSS so the editor can still override BlimpKit. The
+             platform-core fonts.css declares the @font-face rules for "72" (body
+             font) and "SAP-icons" (icon font); without it `.sap-icon--*` glyphs
+             render as empty squares. -->
+        <link rel="stylesheet" href="/services/web/platform-core/ui/styles/fonts.css" />
+        <link rel="stylesheet" href="/webjars/fundamental-styles/dist/fundamental-styles.css" />
+        <link rel="stylesheet" href="/webjars/blimpkit__blimpkit/dist/css/blimpkit.css" />
+
         <link rel="stylesheet" media="screen" href="editor-app/editor/css/editor.css?v=2" type="text/css" />
         <!-- <link rel="stylesheet" href="editor-app/css/style.css?v=2" type="text/css" /> -->
         <link rel="stylesheet" href="editor-app/theme/style.css?v=2" type="text/css" />
@@ -74,7 +85,7 @@
     <![endif]-->
         <div class="alert-wrapper" ng-cloak>
             <div class="alert fadein {{alerts.current.type}}" ng-show="alerts.current" ng-click="dismissAlert()">
-                <i class="glyphicon" ng-class="{'glyphicon-ok': alerts.current.type == 'info', 'glyphicon-remove': alerts.current.type == 'error'}"></i>
+                <i class="sap-icon" ng-class="{'sap-icon--accept': alerts.current.type == 'info', 'sap-icon--decline': alerts.current.type == 'error'}"></i>
                 <span>{{alerts.current.message}}</span>
 
                 <div class="pull-right" ng-show="alerts.queue.length > 0">
@@ -107,6 +118,14 @@
         <script src="/webjars/angularjs/1.8.2/angular-cookies.min.js"></script>
         <script src="/webjars/angularjs/1.8.2/angular-sanitize.min.js"></script>
         <script src="/webjars/angularjs/1.8.2/angular-route.min.js"></script>
+
+        <!-- BlimpKit — bundled Angular module that defines every <bk-*> directive.
+             Required by the popup templates migrated as part of the BlimpKit visual
+             alignment effort. Must load before scripts/app.js since the module is
+             listed as a dependency of the `flowableModeler` module declaration. -->
+        <script src="/webjars/angular-aria/angular-aria.min.js"></script>
+        <script src="/webjars/blimpkit__blimpkit/dist/blimpkit.min.js"></script>
+
         <script src="libs/angular-translate_2.15.1/angular-translate.min.js"></script>
         <script src="libs/angular-translate-storage-cookie/angular-translate-storage-cookie.js"></script>
         <script src="libs/angular-translate-loader-static-files/angular-translate-loader-static-files.js"></script>
