@@ -61,6 +61,10 @@ public class JavaEntityManager implements DisposableBean {
 
     private volatile SessionFactory sessionFactory;
 
+    /**
+     * @param dataSourcesManager source of the JDBC {@link DataSource} used by the dynamic
+     *        {@link SessionFactory}
+     */
     @Autowired
     public JavaEntityManager(DataSourcesManager dataSourcesManager) {
         this.dataSourcesManager = dataSourcesManager;
@@ -69,6 +73,8 @@ public class JavaEntityManager implements DisposableBean {
     /**
      * Register (or re-register) an entity class. Triggers a {@link SessionFactory} rebuild.
      *
+     * @param key the registration key (typically {@code <project>::<fqn>})
+     * @param entityClass the loaded entity class
      * @return the resolved {@link RegisteredEntity} metadata after the rebuild
      */
     public RegisteredEntity register(String key, Class<?> entityClass) {
@@ -87,7 +93,12 @@ public class JavaEntityManager implements DisposableBean {
         }
     }
 
-    /** Drop an entity from the runtime registry. The table itself is left in place. */
+    /**
+     * Drop an entity from the runtime registry. The table itself is left in place.
+     *
+     * @param key the registration key to remove
+     * @return the removed entry, or empty if no entry was registered under {@code key}
+     */
     public Optional<RegisteredEntity> unregister(String key) {
         rebuildLock.lock();
         try {
@@ -102,7 +113,12 @@ public class JavaEntityManager implements DisposableBean {
         }
     }
 
-    /** Look up by registry key. */
+    /**
+     * Look up by registry key.
+     *
+     * @param key the registration key
+     * @return the registered entry, or empty if none
+     */
     public Optional<RegisteredEntity> find(String key) {
         return Optional.ofNullable(registered.get(key));
     }
@@ -112,6 +128,9 @@ public class JavaEntityManager implements DisposableBean {
      * {@link RegisteredEntity#entityClass()} matches by identity, falling back to FQN equality so a
      * class loaded in a previous generation of the {@code ClientClassLoader} still resolves to its
      * current registration.
+     *
+     * @param entityClass the entity class to resolve
+     * @return the registered entry, or empty if none matches
      */
     public Optional<RegisteredEntity> findForClass(Class<?> entityClass) {
         for (RegisteredEntity r : registered.values()) {
@@ -129,7 +148,9 @@ public class JavaEntityManager implements DisposableBean {
         return Optional.empty();
     }
 
-    /** Get the current {@link SessionFactory}, lazily creating an empty one if needed. */
+    /**
+     * @return the current {@link SessionFactory}, lazily creating an empty one if needed
+     */
     public SessionFactory getSessionFactory() {
         SessionFactory sf = sessionFactory;
         if (sf == null) {
@@ -146,6 +167,9 @@ public class JavaEntityManager implements DisposableBean {
         return sf;
     }
 
+    /**
+     * @return the number of currently registered entities
+     */
     public int size() {
         return registered.size();
     }
@@ -191,6 +215,9 @@ public class JavaEntityManager implements DisposableBean {
         }
     }
 
+    /**
+     * Close the held {@link SessionFactory} on shutdown.
+     */
     @Override
     public void destroy() {
         if (sessionFactory != null) {

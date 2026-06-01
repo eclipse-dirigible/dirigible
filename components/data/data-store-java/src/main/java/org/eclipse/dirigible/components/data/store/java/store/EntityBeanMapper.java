@@ -40,6 +40,10 @@ public final class EntityBeanMapper {
     /**
      * Copy every persistent field of {@code bean} into a fresh {@link Map}. The id field is also
      * included (Hibernate needs it for {@code update} / {@code merge}).
+     *
+     * @param bean the typed entity bean to convert
+     * @param entity the resolved entity metadata describing {@code bean}'s class
+     * @return a map keyed by property name, ready to hand to Hibernate dynamic-map mode
      */
     public static Map<String, Object> toMap(Object bean, RegisteredEntity entity) {
         Map<String, Object> data = new HashMap<>();
@@ -67,6 +71,12 @@ public final class EntityBeanMapper {
      * Instantiate {@code type} via its no-arg constructor and assign every entry from {@code data} to
      * the matching field. Unknown keys are ignored. Values are coerced where the target field type
      * differs from the JDBC-returned type (e.g. {@code Timestamp} → {@code Instant}).
+     *
+     * @param <T> the entity type
+     * @param type the entity class to instantiate
+     * @param data the Hibernate dynamic-map row keyed by property name
+     * @param entity the resolved entity metadata describing {@code type}
+     * @return a freshly constructed and populated entity instance
      */
     public static <T> T fromMap(Class<T> type, Map<String, Object> data, RegisteredEntity entity) {
         T instance;

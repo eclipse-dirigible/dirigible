@@ -46,6 +46,18 @@ public final class RegisteredEntity {
     /** Field-level audit flags (created/updated at/by). */
     private final AuditFlags audit;
 
+    /**
+     * Capture the resolved metadata for one entity class.
+     *
+     * @param key the logical registration key
+     * @param entityClass the original loaded class
+     * @param entityName the Hibernate entity name
+     * @param tableName the database table name
+     * @param idField the reflective {@code @Id} field
+     * @param idColumn the id column name
+     * @param properties the persistent property metadata
+     * @param audit which property names carry audit semantics
+     */
     public RegisteredEntity(String key, Class<?> entityClass, String entityName, String tableName, Field idField, String idColumn,
             List<PropertyInfo> properties, AuditFlags audit) {
         this.key = key;
@@ -58,39 +70,62 @@ public final class RegisteredEntity {
         this.audit = audit;
     }
 
+    /** @return the logical registration key */
     public String key() {
         return key;
     }
 
+    /** @return the original loaded {@link Class} */
     public Class<?> entityClass() {
         return entityClass;
     }
 
+    /** @return the Hibernate entity name */
     public String entityName() {
         return entityName;
     }
 
+    /** @return the database table name */
     public String tableName() {
         return tableName;
     }
 
+    /** @return the reflective {@code @Id} field */
     public Field idField() {
         return idField;
     }
 
+    /** @return the id column name */
     public String idColumn() {
         return idColumn;
     }
 
+    /** @return the persistent property metadata, in declaration order */
     public List<PropertyInfo> properties() {
         return properties;
     }
 
+    /** @return which property names carry audit semantics */
     public AuditFlags audit() {
         return audit;
     }
 
-    /** One persistent property on the entity. */
+    /**
+     * One persistent property on the entity.
+     *
+     * @param field the reflective field
+     * @param propertyName the Hibernate property name
+     * @param columnName the database column name
+     * @param hibernateType the Hibernate basic-type name
+     * @param length max string length, or {@code null}
+     * @param nullable whether the column accepts nulls
+     * @param precision numeric precision, or {@code null}
+     * @param scale numeric scale, or {@code null}
+     * @param createdAt true if this property carries {@code @CreatedAt} semantics
+     * @param updatedAt true if this property carries {@code @UpdatedAt} semantics
+     * @param createdBy true if this property carries {@code @CreatedBy} semantics
+     * @param updatedBy true if this property carries {@code @UpdatedBy} semantics
+     */
     public record PropertyInfo(Field field, String propertyName, String columnName, String hibernateType, Integer length, boolean nullable,
             Integer precision, Integer scale, boolean createdAt, boolean updatedAt, boolean createdBy, boolean updatedBy) {
     }
@@ -98,8 +133,14 @@ public final class RegisteredEntity {
     /**
      * Convenience flags identifying which property names carry audit semantics. Lets the store fill
      * them in on save/update without re-walking annotations on every call.
+     *
+     * @param createdAtProperty property name carrying {@code @CreatedAt}, or {@code null}
+     * @param updatedAtProperty property name carrying {@code @UpdatedAt}, or {@code null}
+     * @param createdByProperty property name carrying {@code @CreatedBy}, or {@code null}
+     * @param updatedByProperty property name carrying {@code @UpdatedBy}, or {@code null}
      */
     public record AuditFlags(String createdAtProperty, String updatedAtProperty, String createdByProperty, String updatedByProperty) {
+        /** @return whether any audit property is set */
         public boolean any() {
             return createdAtProperty != null || updatedAtProperty != null || createdByProperty != null || updatedByProperty != null;
         }

@@ -32,6 +32,10 @@ public class EntityClassConsumer implements JavaClassConsumer {
 
     private final JavaEntityManager entityManager;
 
+    /**
+     * @param entityManager the manager that owns the Hibernate {@code SessionFactory} and its set of
+     *        registered entities
+     */
     @Autowired
     public EntityClassConsumer(JavaEntityManager entityManager) {
         this.entityManager = entityManager;

@@ -61,6 +61,10 @@ public final class JavaEntityToHbmMapper {
      * Build the descriptor + registered-entity pair for a single entity class. Throws
      * {@link IllegalArgumentException} when the class is not a valid entity (missing {@link Entity}, no
      * {@link Id}, duplicate {@code @Id}, etc.).
+     *
+     * @param key the registration key (typically the entity FQN)
+     * @param entityClass the client class annotated with {@link Entity}
+     * @return the descriptor + registered-entity pair
      */
     public static Result map(String key, Class<?> entityClass) {
         Entity entityAnn = entityClass.getAnnotation(Entity.class);
@@ -241,7 +245,12 @@ public final class JavaEntityToHbmMapper {
                         + "UUID, byte[]");
     }
 
-    /** Result of {@link #map(String, Class)}. */
+    /**
+     * Result of {@link #map(String, Class)}.
+     *
+     * @param descriptor the HBM XML descriptor
+     * @param registered the runtime metadata for the entity
+     */
     public record Result(HbmXmlDescriptor descriptor, RegisteredEntity registered) {
     }
 
