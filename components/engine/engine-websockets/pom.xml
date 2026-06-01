@@ -34,7 +34,6 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-javascript</artifactId>
 		</dependency>
-		
 		<!-- Parser -->
 		<dependency>
 	    	<groupId>org.eclipse.dirigible</groupId>

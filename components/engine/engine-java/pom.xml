@@ -62,6 +62,27 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!--
+          ActiveMQ connection factory used by ListenerClassConsumer to register @Listener-annotated
+          Java classes as JMS message listeners without going through the JS-handler path in
+          ListenersManager.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-listeners</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
+          Extension metadata persistence used by ExtensionClassConsumer to register @Extension
+          contributions in the Dirigible extension registry.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-extensions</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <!-- Tests -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
