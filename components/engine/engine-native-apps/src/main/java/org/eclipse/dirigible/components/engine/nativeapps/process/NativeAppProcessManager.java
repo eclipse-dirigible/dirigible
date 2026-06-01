@@ -121,19 +121,25 @@ public class NativeAppProcessManager {
         Process p = state.getProcess();
         long pid = (p != null) ? p.pid() : -1L;
         LOGGER.info("Stopping native app [{}]: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), pid, state.getPort());
+        // Snapshot the descendant tree FIRST — before anything kills the held root. Two things can
+        // break the parent link, after which descendants() returns an empty list:
+        // (1) the author's lifecycle.stop targets $DIRIGIBLE_NATIVE_APP_PID directly (the safe
+        // pattern this platform encourages), so npm/sh dies before we get a chance to walk;
+        // (2) the platform's own Process.destroy() below.
+        // Shell-based launchers commonly produce chains like `sh → npm → sh → node`, and SIGTERM
+        // to the held root does not always propagate (especially when `exec` rewrites the held PID
+        // into npm, which then forks a fresh sh+node pair that survives the npm exit). After the
+        // root dies the OS reparents the orphans to init/launchd and they are no longer reachable
+        // as descendants of the held handle.
+        List<ProcessHandle> descendants = (p != null) ? p.toHandle()
+                                                         .descendants()
+                                                         .toList()
+                : List.of();
         runStopCommandsBestEffort(app, state.getPort(), pid);
         if (p == null) {
+            killLeftoverDescendants(app, descendants);
             return;
         }
-        // Snapshot the descendant tree BEFORE Process.destroy(). Shell-based launchers commonly
-        // produce chains like `sh → npm → sh → node`, and SIGTERM to the held root does not
-        // always propagate through every link (especially when `exec` rewrites the held PID into
-        // npm, which then spawns a fresh sh+node pair that survives the npm exit). After the root
-        // dies the OS reparents the orphans to init/launchd and they are no longer reachable as
-        // descendants of the held handle. Capture now and clean up at the end.
-        List<ProcessHandle> descendants = p.toHandle()
-                                           .descendants()
-                                           .toList();
         p.destroy();
         try {
             if (!p.waitFor(STOP_GRACE_MS, TimeUnit.MILLISECONDS)) {

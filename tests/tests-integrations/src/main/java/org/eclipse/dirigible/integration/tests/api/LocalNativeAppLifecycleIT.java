@@ -256,6 +256,55 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
         }
     }
 
+    /**
+     * Regression for the case where the author's {@code lifecycle.stop} script kills
+     * {@code $DIRIGIBLE_NATIVE_APP_PID} directly (the safe pattern this platform encourages). With the
+     * held root SIGTERMed by the script, the OS reparents any surviving children to init/launchd
+     * <em>before</em> the platform's own {@code Process.destroy()} runs — at which point
+     * {@code descendants()} on the dead held PID returns empty, and a naive "snapshot after
+     * runStopCommandsBestEffort" would miss the leftover walk and orphan the listener.
+     *
+     * <p>
+     * Live-confirmed footgun: the sample-library-local-native-app sample's
+     * {@code npm stop → kill "$DIRIGIBLE_NATIVE_APP_PID"} would leave the actual Node listener running
+     * and bound to its port. {@code NativeAppProcessManager.stop} therefore snapshots descendants
+     * BEFORE invoking the author script.
+     */
+    @Test
+    @EnabledOnOs({OS.LINUX, OS.MAC})
+    void stop_cleans_descendants_when_author_stop_kills_held_pid() throws Exception {
+        writeFixture("local-orphan-pidstop", shellWrappedFixtureWithPidStop("local-orphan-pidstop"));
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/native-apps-proxy/v1/local-orphan-pidstop/")
+                                                 .then()
+                                                 .statusCode(200),
+                ASSERT_TIMEOUT_SECONDS);
+
+        NativeApp app = service.findByName("local-orphan-pidstop");
+        RuntimeState state = processManager.getState(app)
+                                           .orElseThrow(() -> new AssertionError("RuntimeState missing for [local-orphan-pidstop]."));
+        Process held = state.getProcess();
+        List<ProcessHandle> descendants = held.toHandle()
+                                              .descendants()
+                                              .toList();
+        if (descendants.isEmpty()) {
+            throw new AssertionError("Expected at least one descendant under the held shell PID [" + held.pid() + "].");
+        }
+
+        processManager.stop(app);
+
+        Thread.sleep(500);
+        for (ProcessHandle d : descendants) {
+            if (d.isAlive()) {
+                throw new AssertionError("Descendant PID [" + d.pid() + "] (command [" + d.info()
+                                                                                          .command()
+                                                                                          .orElse("<unknown>")
+                        + "]) survived stop() — author's stop killed the held root and the descendants walk missed the leftovers.");
+            }
+        }
+    }
+
     @Test
     void basic_auth_header_is_injected_for_local_app() {
         writeFixture("local-auth", localAuthFixture());
@@ -362,6 +411,45 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                         ]
                       },
                       "stop": { "commands": [] }
+                    },
+                    "security": null
+                  }
+                }
+                """.formatted(name, name);
+    }
+
+    /**
+     * Like {@link #shellWrappedFixture} but declares a {@code lifecycle.stop} that targets
+     * {@code $DIRIGIBLE_NATIVE_APP_PID} — the safe pattern. Used by
+     * {@code stop_cleans_descendants_when_author_stop_kills_held_pid} to confirm the engine snapshots
+     * descendants BEFORE invoking the author script.
+     */
+    private String shellWrappedFixtureWithPidStop(String name) {
+        return """
+                {
+                  "name": "%s",
+                  "description": "shell-wrapped java server with PID-targeted stop (regression)",
+                  "basePath": "%s",
+                  "type": "local",
+                  "config": {
+                    "lifecycle": {
+                      "start": {
+                        "mode": "lazy",
+                        "commands": [
+                          { "os": "mac",   "executable": "sh",
+                            "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] },
+                          { "os": "linux", "executable": "sh",
+                            "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] }
+                        ]
+                      },
+                      "stop": {
+                        "commands": [
+                          { "os": "mac",   "executable": "sh",
+                            "arguments": [ { "name": "-c", "value": "kill \\"$DIRIGIBLE_NATIVE_APP_PID\\" 2>/dev/null || true" } ] },
+                          { "os": "linux", "executable": "sh",
+                            "arguments": [ { "name": "-c", "value": "kill \\"$DIRIGIBLE_NATIVE_APP_PID\\" 2>/dev/null || true" } ] }
+                        ]
+                      }
                     },
                     "security": null
                   }
