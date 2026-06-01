@@ -49,6 +49,7 @@ import java.util.concurrent.TimeUnit;
 public class NativeAppProcessManager {
 
     public static final String NATIVE_APP_PORT_ENV = "DIRIGIBLE_NATIVE_APP_PORT";
+    public static final String NATIVE_APP_PID_ENV = "DIRIGIBLE_NATIVE_APP_PID";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NativeAppProcessManager.class);
 
@@ -120,7 +121,7 @@ public class NativeAppProcessManager {
         Process p = state.getProcess();
         long pid = (p != null) ? p.pid() : -1L;
         LOGGER.info("Stopping native app [{}]: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), pid, state.getPort());
-        runStopCommandsBestEffort(app, state.getPort());
+        runStopCommandsBestEffort(app, state.getPort(), pid);
         if (p == null) {
             return;
         }
@@ -350,13 +351,20 @@ public class NativeAppProcessManager {
      * {@link Process#destroy()} / {@link Process#destroyForcibly()}, so the process always exits.
      *
      * <p>
-     * The resolved port from the live {@link RuntimeState} is exported to the stop subprocess as
-     * {@value #NATIVE_APP_PORT_ENV}. Without this, an author's stop script that reads the env var (with
-     * a fallback like {@code ${PORT:-8080}}) could resolve to the platform's own port and accidentally
-     * signal the Dirigible JVM. The contract for the stop script is therefore symmetric with the start
-     * script: both see the same {@value #NATIVE_APP_PORT_ENV}.
+     * Two contract env vars are exported on the stop subprocess:
+     * <ul>
+     * <li>{@value #NATIVE_APP_PORT_ENV} — the resolved port (symmetric with the start command). Without
+     * this, an author's stop script that reads the env var with a fallback like {@code ${PORT:-8080}}
+     * could resolve to the platform's own port and accidentally signal the Dirigible JVM.</li>
+     * <li>{@value #NATIVE_APP_PID_ENV} — the held root PID of the spawned process. Authors who need a
+     * custom stop script should target only this PID (e.g. {@code kill "$DIRIGIBLE_NATIVE_APP_PID"})
+     * rather than enumerate PIDs by port (e.g. {@code lsof -ti tcp:"$PORT" | xargs kill}). The latter
+     * matches every PID with a TCP FD on the port, which after a proxy round-trip includes the
+     * Dirigible JVM itself via Spring Cloud Gateway's HttpClient keep-alive — sending SIGTERM to that
+     * PID brings the platform down.</li>
+     * </ul>
      */
-    private void runStopCommandsBestEffort(NativeApp app, int port) {
+    private void runStopCommandsBestEffort(NativeApp app, int port, long pid) {
         NativeAppConfig config = app.getConfig();
         if (config == null) {
             LOGGER.debug("No stop command run for native app [{}]: typed config is unavailable.", app.getName());
@@ -391,8 +399,11 @@ public class NativeAppProcessManager {
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
         pb.redirectErrorStream(true);
-        pb.environment()
-          .put(NATIVE_APP_PORT_ENV, Integer.toString(port));
+        Map<String, String> stopEnv = pb.environment();
+        stopEnv.put(NATIVE_APP_PORT_ENV, Integer.toString(port));
+        if (pid > 0) {
+            stopEnv.put(NATIVE_APP_PID_ENV, Long.toString(pid));
+        }
         List<String> stopTokens = pb.command();
         LOGGER.info("Running stop command for native app [{}] in [{}]: executable [{}] with [{}] argument(s)",
                 LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(workingDir.getAbsolutePath()),

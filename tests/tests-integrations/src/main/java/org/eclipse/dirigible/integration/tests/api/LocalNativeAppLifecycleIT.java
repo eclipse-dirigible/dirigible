@@ -159,10 +159,13 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     }
 
     /**
-     * Regression for the "unpublish kills the JVM" bug: the stop subprocess must receive
-     * {@code DIRIGIBLE_NATIVE_APP_PORT} on its environment, otherwise an author's stop script that
-     * reads the env var with a fallback (e.g. {@code ${PORT:-8080}}) silently resolves to the
-     * platform's own port and signals the Dirigible JVM.
+     * Regression for the "unpublish kills the JVM" bug: the stop subprocess must receive both
+     * {@code DIRIGIBLE_NATIVE_APP_PORT} and {@code DIRIGIBLE_NATIVE_APP_PID} on its environment.
+     * Without the port, an author's stop script that reads it with a POSIX fallback (e.g.
+     * {@code ${PORT:-8080}}) silently resolves to the platform's own port and signals the Dirigible
+     * JVM. Without the PID, a stop script has no safe target — killing "every PID on the port" via
+     * {@code lsof | xargs kill} also catches the JVM's outbound HttpClient keep-alive entry and brings
+     * the platform down.
      */
     @Test
     @EnabledOnOs({OS.LINUX, OS.MAC})
@@ -182,21 +185,25 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                 ASSERT_TIMEOUT_SECONDS);
 
         NativeApp app = service.findByName("local-stop-port");
-        int resolvedPort = processManager.getState(app)
-                                         .orElseThrow(() -> new AssertionError("RuntimeState missing for [local-stop-port]."))
-                                         .getPort();
+        RuntimeState beforeStop = processManager.getState(app)
+                                                .orElseThrow(() -> new AssertionError("RuntimeState missing for [local-stop-port]."));
+        int resolvedPort = beforeStop.getPort();
+        long resolvedPid = beforeStop.getProcess()
+                                     .pid();
 
         // Synchronizer DELETE → processManager.stop(app) → runs lifecycle.stop with the resolved port
-        // exported on the subprocess env. The stop script captures the env var to the marker file.
+        // and held PID exported on the subprocess env. The stop script captures both into the marker
+        // file, one per line.
         removeProjectFiles("local-stop-port");
         synchronizationProcessor.forceProcessSynchronizers();
 
         String captured = Files.readString(marker)
                                .trim();
-        if (!Integer.toString(resolvedPort)
-                    .equals(captured)) {
+        String expected = resolvedPort + "\n" + resolvedPid;
+        if (!expected.equals(captured)) {
             throw new AssertionError("Expected stop subprocess to see DIRIGIBLE_NATIVE_APP_PORT=[" + resolvedPort
-                    + "] but marker file contained [" + captured + "].");
+                    + "] and DIRIGIBLE_NATIVE_APP_PID=[" + resolvedPid + "] (marker contents '" + expected.replace("\n", "\\n")
+                    + "') but marker file contained [" + captured.replace("\n", "\\n") + "].");
         }
     }
 
@@ -363,10 +370,13 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     }
 
     /**
-     * Builds a fixture whose {@code lifecycle.stop} subprocess captures
-     * {@code $DIRIGIBLE_NATIVE_APP_PORT} into the given marker file. Used to assert end-to-end that the
-     * resolved port reaches the stop subprocess via the env var. mac/linux only — the resolver falls
-     * back to {@code Process.destroy()} on Windows since no {@code os: windows} stop entry is provided.
+     * Builds a fixture whose {@code lifecycle.stop} subprocess captures both
+     * {@code $DIRIGIBLE_NATIVE_APP_PORT} and {@code $DIRIGIBLE_NATIVE_APP_PID} into the given marker
+     * file (one per line, in order). Used to assert end-to-end that the resolved port AND held PID
+     * reach the stop subprocess via the contract env vars — both are needed so authors can write safe
+     * stop scripts (target the held PID, not "every PID on this port", which would also kill the
+     * Dirigible JVM via its outbound keep-alive connection). mac/linux only — the resolver falls back
+     * to {@code Process.destroy()} on Windows since no {@code os: windows} stop entry is provided.
      */
     private String stopMarkerFixture(String name, String markerAbsolutePath) {
         // %%s survives String.formatted() and reaches sh as the literal printf format string %s.
@@ -388,16 +398,17 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                       "stop": {
                         "commands": [
                           { "os": "mac",   "executable": "sh",
-                            "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] },
+                            "arguments": [ { "name": "-c", "value": "printf '%%s\\\\n%%s' \\"$DIRIGIBLE_NATIVE_APP_PORT\\" \\"$DIRIGIBLE_NATIVE_APP_PID\\" > %s" } ] },
                           { "os": "linux", "executable": "sh",
-                            "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] }
+                            "arguments": [ { "name": "-c", "value": "printf '%%s\\\\n%%s' \\"$DIRIGIBLE_NATIVE_APP_PORT\\" \\"$DIRIGIBLE_NATIVE_APP_PID\\" > %s" } ] }
                         ]
                       }
                     },
                     "security": null
                   }
                 }
-                """.formatted(name, name, markerAbsolutePath, markerAbsolutePath);
+                """.formatted(
+                name, name, markerAbsolutePath, markerAbsolutePath);
     }
 
     private String baseLocalFixture(String name, String mode, String user, String pass) {
