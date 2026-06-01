@@ -65,8 +65,8 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
         // value so we catch any regression where the theme stops shipping the legacy variables.
         Selenide.$(By.id("canvasSection"))
                 .shouldBe(Condition.visible);
-        Object sapBgColor = Selenide.executeJavaScript(
-                "return getComputedStyle(document.documentElement).getPropertyValue('--background').trim();");
+        Object sapBgColor =
+                Selenide.executeJavaScript("return getComputedStyle(document.documentElement).getPropertyValue('--background').trim();");
         org.junit.jupiter.api.Assertions.assertTrue(sapBgColor != null && !sapBgColor.toString()
                                                                                      .isEmpty(),
                 "--background is undefined inside the BPM editor iframe — theme variables not applied.");
