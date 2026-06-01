@@ -7,8 +7,6 @@
     },
     "devDependencies": {
         "esbuild": "^0.24.0",
-        "typescript": "^5.7.0",
-        "monaco-editor": "^0.40.0",
-        "vscode-languageserver-types": "^3.17.0"
+        "typescript": "^5.7.0"
     }
 }
