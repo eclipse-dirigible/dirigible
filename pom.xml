@@ -819,8 +819,6 @@
                 <maven.javadoc.skip>true</maven.javadoc.skip>
                 <license.skip>true</license.skip>
                 <skip.code.formatting>true</skip.code.formatting>
-                <jdtls.download.skip>true</jdtls.download.skip>
-                <java.debug.plugin.download.skip>true</java.debug.plugin.download.skip>
             </properties>
         </profile>
         <profile>
