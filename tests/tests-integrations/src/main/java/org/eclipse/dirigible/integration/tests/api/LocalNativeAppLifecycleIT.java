@@ -136,6 +136,29 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     }
 
     /**
+     * Locks in the contract that {@code command.dir}, when set, is resolved as a project-root-relative
+     * subpath — so applications whose source lives in a subdirectory (e.g. {@code apps/server/}) are
+     * supported without authors having to embed their own project folder name into the artefact. The
+     * fixture publishes {@code Server.java} into {@code <project>/apps/server/} and sets
+     * {@code command.dir: "apps/server"}; the proxy can only return 200 if the spawn happened in that
+     * subdirectory and the Java single-source compiler picked the file up there.
+     */
+    @Test
+    void start_command_runs_in_command_dir_subpath() {
+        writeFixtureWithServerInSubdir("local-subdir", "apps/server", subdirLazyFixture("local-subdir", "apps/server"));
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/native-apps-proxy/v1/local-subdir/")
+                                                 .then()
+                                                 .statusCode(200),
+                ASSERT_TIMEOUT_SECONDS);
+
+        if (!processManager.isAlive(service.findByName("local-subdir"))) {
+            throw new AssertionError("Native app with command.dir subpath should be alive after first proxy request.");
+        }
+    }
+
+    /**
      * Regression for the "unpublish kills the JVM" bug: the stop subprocess must receive
      * {@code DIRIGIBLE_NATIVE_APP_PORT} on its environment, otherwise an author's stop script that
      * reads the env var with a fallback (e.g. {@code ${PORT:-8080}}) silently resolves to the
@@ -249,6 +272,21 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
         synchronizationProcessor.forceProcessSynchronizers();
     }
 
+    /**
+     * Variant of {@link #writeFixture} that places {@code Server.java} into a project subdirectory
+     * (e.g. {@code apps/server/}) so the matching {@code command.dir} value can exercise the
+     * non-default branch of {@code NativeAppProcessManager.resolveWorkingDir}. The {@code .native-app}
+     * itself stays at the project root so the synchronizer's location handling is identical to every
+     * other fixture.
+     */
+    private void writeFixtureWithServerInSubdir(String name, String dirSubpath, String nativeAppJson) {
+        String javaPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + dirSubpath + "/Server.java";
+        repository.createResource(javaPath, JAVA_SERVER_SOURCE.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        String nativeAppPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + name + ".native-app";
+        repository.createResource(nativeAppPath, nativeAppJson.getBytes(StandardCharsets.UTF_8), false, "application/json", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
     private String lazyFixture(String name) {
         return baseLocalFixture(name, "lazy", null, null);
     }
@@ -259,6 +297,37 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
 
     private String localAuthFixture() {
         return baseLocalFixture("local-auth", "lazy", "alice", "wonderland");
+    }
+
+    /**
+     * Lazy-mode fixture that sets {@code command.dir} on every OS entry to a project-relative subpath
+     * (typically the directory where {@code Server.java} lives). Exercises the platform's
+     * project-root-relative resolution: the resolver joins {@code dir} under the artefact's project
+     * root rather than the registry root.
+     */
+    private String subdirLazyFixture(String name, String dirSubpath) {
+        return """
+                {
+                  "name": "%s",
+                  "description": "local java http server in a project subdirectory",
+                  "basePath": "%s",
+                  "type": "local",
+                  "config": {
+                    "lifecycle": {
+                      "start": {
+                        "mode": "lazy",
+                        "commands": [
+                          { "os": "mac",     "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "linux",   "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "windows", "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] }
+                        ]
+                      },
+                      "stop": { "commands": [] }
+                    },
+                    "security": null
+                  }
+                }
+                """.formatted(name, name, dirSubpath, dirSubpath, dirSubpath);
     }
 
     /**
