@@ -21,8 +21,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * End-to-end IT for the {@code local} native-app kind. Clones
- * {@code dirigiblelabs/sample-library-native-app-nodejs}, publishes it through the IDE, and
- * verifies the platform:
+ * {@code dirigiblelabs/sample-library-local-native-app}, publishes it through the IDE, and verifies
+ * the platform:
  * <ol>
  * <li>Registers the {@code library-admin} role from {@code roles.roles}.</li>
  * <li>Enforces the role on {@code /rest/api/v1} via {@code security.exposedPaths.scopes} —
@@ -70,7 +70,7 @@ public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
 
     @Override
     protected String getRepositoryURL() {
-        return "https://github.com/dirigiblelabs/sample-library-native-app-nodejs.git";
+        return "https://github.com/dirigiblelabs/sample-library-local-native-app.git";
     }
 
     @Override
