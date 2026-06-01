@@ -279,9 +279,9 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                       "start": {
                         "mode": "lazy",
                         "commands": [
-                          { "os": "mac",   "executable": "sh", "dir": "%s",
+                          { "os": "mac",   "executable": "sh",
                             "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] },
-                          { "os": "linux", "executable": "sh", "dir": "%s",
+                          { "os": "linux", "executable": "sh",
                             "arguments": [ { "name": "-c", "value": "java Server.java; true" } ] }
                         ]
                       },
@@ -290,7 +290,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                     "security": null
                   }
                 }
-                """.formatted(name, name, name, name);
+                """.formatted(name, name);
     }
 
     /**
@@ -312,15 +312,15 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                       "start": {
                         "mode": "lazy",
                         "commands": [
-                          { "os": "mac",   "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
-                          { "os": "linux", "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] }
+                          { "os": "mac",   "executable": "java", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "linux", "executable": "java", "arguments": [ { "name": "Server.java", "value": "" } ] }
                         ]
                       },
                       "stop": {
                         "commands": [
-                          { "os": "mac",   "executable": "sh", "dir": "%s",
+                          { "os": "mac",   "executable": "sh",
                             "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] },
-                          { "os": "linux", "executable": "sh", "dir": "%s",
+                          { "os": "linux", "executable": "sh",
                             "arguments": [ { "name": "-c", "value": "printf %%s \\"$DIRIGIBLE_NATIVE_APP_PORT\\" > %s" } ] }
                         ]
                       }
@@ -328,7 +328,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                     "security": null
                   }
                 }
-                """.formatted(name, name, name, name, name, markerAbsolutePath, name, markerAbsolutePath);
+                """.formatted(name, name, markerAbsolutePath, markerAbsolutePath);
     }
 
     private String baseLocalFixture(String name, String mode, String user, String pass) {
@@ -360,9 +360,9 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                       "start": {
                         "mode": "%s",
                         "commands": [
-                          { "os": "mac",     "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
-                          { "os": "linux",   "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] },
-                          { "os": "windows", "executable": "java", "dir": "%s", "arguments": [ { "name": "Server.java", "value": "" } ] }
+                          { "os": "mac",     "executable": "java", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "linux",   "executable": "java", "arguments": [ { "name": "Server.java", "value": "" } ] },
+                          { "os": "windows", "executable": "java", "arguments": [ { "name": "Server.java", "value": "" } ] }
                         ]
                       },
                       "stop": { "commands": [] }
@@ -370,6 +370,6 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
                     "security": %s
                   }
                 }
-                """.formatted(name, name, mode, name, name, name, security);
+                """.formatted(name, name, mode, security);
     }
 }

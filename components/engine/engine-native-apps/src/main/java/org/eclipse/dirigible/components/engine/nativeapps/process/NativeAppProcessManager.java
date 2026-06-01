@@ -28,6 +28,8 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.nio.file.Path;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -198,7 +200,7 @@ public class NativeAppProcessManager {
                                                    + "] has no start command for OS [" + OsCommandResolver.currentOs() + "]"));
 
         int port = PortResolver.resolve(app.getDefaultPort());
-        File workingDir = resolveWorkingDir(command);
+        File workingDir = resolveWorkingDir(app, command);
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
         pb.redirectErrorStream(false);
@@ -217,15 +219,19 @@ public class NativeAppProcessManager {
         try {
             process = pb.start();
         } catch (IOException ex) {
-            throw new IllegalStateException("Failed to start native app [" + app.getName() + "]: " + ex.getMessage(), ex);
+            throw new IllegalStateException(
+                    "Failed to start native app [" + app.getName() + "] in [" + workingDir.getAbsolutePath() + "]: " + ex.getMessage(), ex);
         }
         // Log the PID alongside the port so the operator can correlate later (e.g.
         // `lsof -ti tcp:<port>` / `ps -p <pid>`). The held PID is the immediate child Dirigible
         // spawned — for shell-based launchers this is the wrapper, and the real listener may be
         // a grandchild reached via `exec`. Either way, the OS process tree under this PID covers it.
         LOGGER.info("Native app [{}] spawned: PID [{}], port [{}].", LogSanitizer.sanitize(app.getName()), process.pid(), port);
-        ProcessLogPump.start(app.getName(), process);
-        RuntimeState state = new RuntimeState(process, port, Instant.now());
+        // Build the state first so the stderr pump can tee lines into its ring buffer — the
+        // awaitReady failure path inlines the most recent stderr lines into the exception message
+        // so operators don't have to chase per-app child loggers to find out what went wrong.
+        RuntimeState state = new RuntimeState(process, port, Instant.now(), workingDir);
+        ProcessLogPump.start(app.getName(), process, state::recordStderrLine);
         states.put(app.getId(), state);
         return state;
     }
@@ -234,7 +240,13 @@ public class NativeAppProcessManager {
         long deadline = System.currentTimeMillis() + readyTimeoutMs();
         while (System.currentTimeMillis() < deadline) {
             if (!state.isAlive()) {
-                throw new IllegalStateException("Native app [" + app.getName() + "] exited before it became ready.");
+                // Give the stderr pump a brief moment to flush so the message includes the actual
+                // failure lines from the child rather than an empty tail. The drain thread reads
+                // line-by-line from a closed pipe; under typical Linux/macOS scheduling it finishes
+                // within a few ms of the process exit.
+                drainStderrBriefly();
+                states.remove(app.getId());
+                throw new IllegalStateException(buildPrematureExitMessage(app, state));
             }
             if (isLoopbackPortOpen(state.getPort())) {
                 LOGGER.info("Native app [{}] is ready: PID [{}], port [{}].", app.getName(), state.getProcess()
@@ -253,7 +265,83 @@ public class NativeAppProcessManager {
         state.getProcess()
              .destroy();
         states.remove(app.getId());
-        throw new IllegalStateException("Native app [" + app.getName() + "] did not become ready within " + readyTimeoutMs() + " ms.");
+        throw new IllegalStateException(buildReadyTimeoutMessage(app, state));
+    }
+
+    private static void drainStderrBriefly() {
+        try {
+            Thread.sleep(READY_POLL_INTERVAL_MS);
+        } catch (InterruptedException ie) {
+            Thread.currentThread()
+                  .interrupt();
+        }
+    }
+
+    /**
+     * Builds the IllegalStateException message used when a spawned native-app process exits before its
+     * TCP port becomes reachable. Includes the exit code, elapsed runtime, port, working directory and
+     * the most recent stderr lines captured by {@link ProcessLogPump} — everything an operator needs to
+     * diagnose without chasing per-app child loggers.
+     */
+    private static String buildPrematureExitMessage(NativeApp app, RuntimeState state) {
+        Process p = state.getProcess();
+        long pid = p.pid();
+        int exitCode;
+        try {
+            exitCode = p.exitValue();
+        } catch (IllegalThreadStateException ex) {
+            exitCode = Integer.MIN_VALUE;
+        }
+        long elapsedMs = Duration.between(state.getStartedAt(), Instant.now())
+                                 .toMillis();
+        StringBuilder sb = new StringBuilder();
+        sb.append("Native app [")
+          .append(app.getName())
+          .append("] (PID ")
+          .append(pid)
+          .append(") exited prematurely after ")
+          .append(elapsedMs)
+          .append(" ms")
+          .append(exitCode == Integer.MIN_VALUE ? "" : " with exit code " + exitCode)
+          .append(", before its TCP port [")
+          .append(state.getPort())
+          .append("] became reachable. Working directory: [")
+          .append(state.getWorkingDir()
+                       .getAbsolutePath())
+          .append("]. ");
+        String tail = state.snapshotRecentStderr();
+        if (tail.isEmpty()) {
+            sb.append("No stderr was captured before the process exited — check that the configured executable exists on PATH.");
+        } else {
+            sb.append("Last stderr lines from the child:\n")
+              .append(indent(tail));
+        }
+        sb.append("\nFull live child stdout/stderr stream into loggers 'org.eclipse.dirigible.nativeapps.")
+          .append(app.getName())
+          .append(".stdout' and '.stderr'.");
+        return sb.toString();
+    }
+
+    private static String buildReadyTimeoutMessage(NativeApp app, RuntimeState state) {
+        return "Native app [" + app.getName() + "] (PID " + state.getProcess()
+                                                                 .pid()
+                + ") did not become ready within " + readyTimeoutMs() + " ms; expected a TCP listener on port [" + state.getPort()
+                + "]. Working directory: [" + state.getWorkingDir()
+                                                   .getAbsolutePath()
+                + "]. Verify that the spawned process reads the " + NATIVE_APP_PORT_ENV
+                + " env var and binds to it. Bump DIRIGIBLE_NATIVE_APP_READY_TIMEOUT_MS if a cold-start phase legitimately needs longer "
+                + "(e.g. first-time `npm install`). Live child output streams into loggers 'org.eclipse.dirigible.nativeapps."
+                + app.getName() + ".stdout' and '.stderr'.";
+    }
+
+    private static String indent(String text) {
+        StringBuilder out = new StringBuilder();
+        for (String line : text.split("\n", -1)) {
+            out.append("    ")
+               .append(line)
+               .append('\n');
+        }
+        return out.toString();
     }
 
     /**
@@ -288,24 +376,18 @@ public class NativeAppProcessManager {
             return;
         }
         Command command = stopCmd.get();
-        // If the project directory the stop command needs to run inside is already gone (the
-        // workbench's "unpublish" deletes the project tree before the synchronizer fires DELETE),
-        // the stop script almost certainly can't work — it typically reads package.json /
-        // node_modules from that directory. Falling back to registry root just yields noisy npm
-        // errors like "Missing script: stop". Skip and let Process.destroy() (followed by
-        // destroyForcibly() in stop()) terminate the spawned chain instead.
-        if (command.getDir() != null && !command.getDir()
-                                                .isBlank()) {
-            String registryDiskRoot = repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
-            File requestedDir = new File(registryDiskRoot, command.getDir());
-            if (!requestedDir.exists()) {
-                LOGGER.info(
-                        "Skipping lifecycle.stop for native app [{}] on port [{}]: working directory [{}] no longer exists (project files already removed); terminating via Process.destroy() instead.",
-                        LogSanitizer.sanitize(app.getName()), port, LogSanitizer.sanitize(requestedDir.getAbsolutePath()));
-                return;
-            }
+        // If the project tree is already gone (the workbench's "unpublish" deletes it before the
+        // synchronizer fires DELETE), the stop script almost certainly can't work — it typically
+        // reads package.json / node_modules from there. Skip and let Process.destroy() (followed
+        // by destroyForcibly() in stop()) terminate the spawned chain instead.
+        File projectRoot = resolveProjectRoot(app);
+        if (!projectRoot.exists()) {
+            LOGGER.info(
+                    "Skipping lifecycle.stop for native app [{}] on port [{}]: project directory [{}] no longer exists (files already removed); terminating via Process.destroy() instead.",
+                    LogSanitizer.sanitize(app.getName()), port, LogSanitizer.sanitize(projectRoot.getAbsolutePath()));
+            return;
         }
-        File workingDir = resolveWorkingDir(command);
+        File workingDir = resolveWorkingDir(app, command);
         ProcessBuilder pb = new ProcessBuilder(buildCommandTokens(command));
         pb.directory(workingDir);
         pb.redirectErrorStream(true);
@@ -318,7 +400,7 @@ public class NativeAppProcessManager {
         LOGGER.debug("Native app [{}] full stop command: {}", LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(stopTokens));
         try {
             Process p = pb.start();
-            ProcessLogPump.start(app.getName() + ".stop", p);
+            ProcessLogPump.start(app.getName() + ".stop", p, null);
             if (!p.waitFor(STOP_COMMAND_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
                 LOGGER.warn("Stop command for native app [{}] did not finish within {}ms; forcibly destroying.", app.getName(),
                         STOP_COMMAND_TIMEOUT_MS);
@@ -335,20 +417,60 @@ public class NativeAppProcessManager {
         }
     }
 
-    private File resolveWorkingDir(Command command) {
-        String registryDiskRoot = repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC);
-        File base = new File(registryDiskRoot);
-        if (command.getDir() == null || command.getDir()
-                                               .isBlank()) {
-            return base;
+    /**
+     * Resolves the on-disk working directory for {@code command}.
+     *
+     * <p>
+     * The base is the artefact's own <strong>project root</strong> (derived from
+     * {@link NativeApp#getLocation()}). A null / blank / {@code "."} {@code command.dir} resolves to
+     * the project root itself; otherwise it's joined as a subpath. Authors should not embed the project
+     * folder name into {@code dir} — the platform knows it from the artefact location, and embedding it
+     * makes the artefact brittle to repo renames or clones-under-a-different-name.
+     *
+     * <p>
+     * If the explicitly configured subpath doesn't exist on disk, a WARN is logged with a concrete
+     * remediation hint and the project root is used as a graceful fallback.
+     */
+    private File resolveWorkingDir(NativeApp app, Command command) {
+        File projectRoot = resolveProjectRoot(app);
+        String dir = command.getDir();
+        if (dir == null || dir.isBlank() || ".".equals(dir.trim())) {
+            return projectRoot;
         }
-        File resolved = new File(base, command.getDir());
+        File resolved = new File(projectRoot, dir);
         if (!resolved.exists()) {
-            LOGGER.warn("Working directory [{}] for native app command does not exist; falling back to registry root [{}].",
-                    resolved.getAbsolutePath(), base.getAbsolutePath());
-            return base;
+            LOGGER.warn(
+                    "Native app [{}] declares command.dir [{}] resolving to [{}] which does not exist on disk; "
+                            + "falling back to the project root [{}]. The platform resolves command.dir relative to the artefact's "
+                            + "project root — drop command.dir if your start command should run at the project root, or set it "
+                            + "to a subpath that exists. (Common cause: command.dir was set to the project folder name; that's "
+                            + "no longer needed and breaks when the project is cloned under a different folder.)",
+                    LogSanitizer.sanitize(app.getName()), LogSanitizer.sanitize(dir), LogSanitizer.sanitize(resolved.getAbsolutePath()),
+                    LogSanitizer.sanitize(projectRoot.getAbsolutePath()));
+            return projectRoot;
         }
         return resolved;
+    }
+
+    /**
+     * Returns the on-disk project root for {@code app} — the directory under {@code /registry/public/}
+     * whose name is the first path segment of {@link NativeApp#getLocation()}.
+     */
+    private File resolveProjectRoot(NativeApp app) {
+        String location = app.getLocation();
+        if (location == null || location.isBlank()) {
+            throw new IllegalStateException(
+                    "Native app [" + app.getName() + "] has no location; cannot resolve project root for the working directory.");
+        }
+        Path locationPath = Path.of(location);
+        if (locationPath.getNameCount() == 0) {
+            throw new IllegalStateException("Native app [" + app.getName() + "] has location [" + location
+                    + "] with no project segment; cannot resolve project root.");
+        }
+        String projectName = locationPath.getName(0)
+                                         .toString();
+        File publicRoot = new File(repository.getInternalResourcePath(IRepositoryStructure.PATH_REGISTRY_PUBLIC));
+        return new File(publicRoot, projectName);
     }
 
     private static List<String> buildCommandTokens(Command command) {

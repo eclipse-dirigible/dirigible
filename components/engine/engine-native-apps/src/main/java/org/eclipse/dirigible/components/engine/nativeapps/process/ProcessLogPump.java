@@ -18,10 +18,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Consumer;
 
 /**
  * Drains a child process's stdout/stderr to the platform logger on a daemon thread. Without this
  * the child OS pipes can fill and block the child process indefinitely.
+ *
+ * <p>
+ * Stderr is additionally tee'd into a {@link Consumer} (typically backed by
+ * {@link RuntimeState#recordStderrLine}) so the most recent lines can be included in failure
+ * messages when the child exits prematurely.
  */
 final class ProcessLogPump {
 
@@ -29,11 +35,11 @@ final class ProcessLogPump {
 
     private ProcessLogPump() {}
 
-    static void start(String appName, Process process) {
+    static void start(String appName, Process process, Consumer<String> stderrTap) {
         String logBase = "org.eclipse.dirigible.nativeapps." + appName;
-        Thread out = new Thread(() -> drain(LoggerFactory.getLogger(logBase + ".stdout"), process.getInputStream(), false),
+        Thread out = new Thread(() -> drain(LoggerFactory.getLogger(logBase + ".stdout"), process.getInputStream(), false, null),
                 "native-app-stdout-" + appName + "-" + THREAD_COUNTER.incrementAndGet());
-        Thread err = new Thread(() -> drain(LoggerFactory.getLogger(logBase + ".stderr"), process.getErrorStream(), true),
+        Thread err = new Thread(() -> drain(LoggerFactory.getLogger(logBase + ".stderr"), process.getErrorStream(), true, stderrTap),
                 "native-app-stderr-" + appName + "-" + THREAD_COUNTER.incrementAndGet());
         out.setDaemon(true);
         err.setDaemon(true);
@@ -41,7 +47,7 @@ final class ProcessLogPump {
         err.start();
     }
 
-    private static void drain(Logger logger, InputStream stream, boolean asWarn) {
+    private static void drain(Logger logger, InputStream stream, boolean asWarn, Consumer<String> tap) {
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
@@ -49,6 +55,9 @@ final class ProcessLogPump {
                     logger.warn(line);
                 } else {
                     logger.info(line);
+                }
+                if (tap != null) {
+                    tap.accept(line);
                 }
             }
         } catch (IOException ex) {
