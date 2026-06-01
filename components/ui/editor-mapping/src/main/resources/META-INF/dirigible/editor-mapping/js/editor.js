@@ -491,7 +491,7 @@ angular.module('ui.mapping.modeler', ['blimpKit', 'platformView', 'WorkspaceServ
 			// delete $scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR];
 
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKECOLOR] = '#00cc66';
-			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FONTCOLOR] = 'var(--sapTextColor)';
+			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FONTCOLOR] = 'var(--foreground)';
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_FONTSTYLE] = 0;
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_OPACITY] = '80';
 			$scope.graph.stylesheet.getDefaultVertexStyle()[mxConstants.STYLE_STROKEWIDTH] = '2';

@@ -3,7 +3,7 @@
         <bk-dialog-header title="{{ 'PROPERTY.PROPERTY.EDIT.TITLE' | translate }} &quot;{{ property.title | translate }}&quot;">
             <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
         </bk-dialog-header>
-        <bk-dialog-body class="bk-padding">
+        <bk-dialog-body class="bk-vbox bk-box--gap-m bk-padding-top-bottom--sm" data-container="dialog-body">
             <div class="row row-no-gutter">
                 <div class="col-xs-8">
                     <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>

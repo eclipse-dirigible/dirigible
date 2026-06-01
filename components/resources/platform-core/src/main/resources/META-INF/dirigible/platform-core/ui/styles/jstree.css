@@ -16,7 +16,7 @@
   --jstree-project: url("/services/web/resources/images/jstree/project.svg");
   --jstree-folder: url("/services/web/resources/images/jstree/folder.svg");
   --jstree-file: url("/services/web/resources/images/jstree/file-code.svg");
-  --jstree-menu-arrow-right: url(/services/web/resources/images/jstree/menu-arrow-right.svg);
+  --jstree-menu-arrow-right: url("/services/web/resources/images/jstree/menu-arrow-right.svg");
   --jstree-arrow-down: url("/services/web/resources/images/jstree/arrow-down.svg");
   --jstree-arrow-right: url("/services/web/resources/images/jstree/arrow-right.svg");
   --jstree-arrow-left: url("/services/web/resources/images/jstree/arrow-left.svg");
@@ -34,10 +34,10 @@
 
 /* jsTree fiori theme */
 .jstree-fiori {
-  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
-  font-size: var(--sapFontSize, 0.875rem);
-  background-color: var(--sapList_Background, #fff);
-  color: var(--sapList_TextColor, #32363a);
+  font-family: var(--font-sans, "72", "72full", Arial, Helvetica);
+  font-size: var(--font-size, 0.875rem);
+  background-color: var(--object-background, #fff);
+  color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori--context-menu {
@@ -60,16 +60,16 @@
 }
 
 .jstree .jstree-container-ul>li>.jstree-wholerow {
-  border-bottom: var(--sapList_BorderWidth, 0.0625rem) solid var(--sapList_BorderColor, #e5e5e5);
+  border-bottom: var(--border-width, 0.0625rem) solid var(--border, #dedede);
 }
 
 .jstree .jstree-container-ul>.jstree-node>ul {
-  background: var(--sapList_AlternatingBackground, #f2f2f2);
-  border-bottom: var(--sapList_BorderWidth, 0.0625rem) solid transparent;
+  background: var(--object-background-alt, #f5f6f7);
+  border-bottom: var(--border-width, 0.0625rem) solid transparent;
 }
 
 .jstree-loading:not([aria-busy="true"]) {
-  color: var(--sapList_TextColor, #32363a);
+  color: var(--object-foreground, #303030);
 }
 
 li.jstree-hidden {
@@ -121,7 +121,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 
 .jstree-anchor {
   display: inline-block;
-  color: var(--sapList_TextColor, #32363a);
+  color: var(--object-foreground, #303030);
   white-space: nowrap;
   padding: 0 2rem 0 0;
   margin: 0;
@@ -235,22 +235,22 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 .vakata-context,
 .vakata-context ul {
   position: absolute;
-  background-color: var(--sapList_Background, #fff);
-  font-size: var(--sapFontSize, 0.875rem);
+  background-color: var(--object-background, #fff);
+  font-size: var(--font-size, 0.875rem);
   line-height: var(--sapContent_LineHeight, 1.4);
-  color: var(--sapTextColor, #32363a);
-  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  color: var(--foreground, #303030);
+  font-family: var(--font-sans, "72", "72full", Arial, Helvetica);
   font-weight: 400;
   -webkit-box-sizing: border-box;
   box-sizing: border-box;
   padding: 0;
   margin: -4.85rem 0 0 0;
   border: 0;
-  -webkit-box-shadow: var(--sapContent_Shadow1,
+  -webkit-box-shadow: var(--shadow-sm,
       0 0 0 0.0625rem rgba(0, 0, 0, 0.42),
       0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
-  box-shadow: var(--sapContent_Shadow1, 0 0 0 0.0625rem rgba(0, 0, 0, 0.42), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
-  border-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
+  box-shadow: var(--shadow-sm, 0 0 0 0.0625rem rgba(0, 0, 0, 0.42), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
+  border-radius: var(--radius, 0.75rem);
 }
 
 .vakata-context ul {
@@ -271,17 +271,17 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 .vakata-context li {
   list-style: none;
   display: inline;
-  font-size: var(--sapFontSize, 0.875rem);
+  font-size: var(--font-size, 0.875rem);
   line-height: var(--sapContent_LineHeight, 1.4);
-  color: var(--sapTextColor, #32363a);
-  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  color: var(--foreground, #303030);
+  font-family: var(--font-sans, "72", "72full", Arial, Helvetica);
   font-weight: 400;
   -webkit-box-sizing: border-box;
   box-sizing: border-box;
   padding: 0;
   margin: 0;
   border: 0;
-  background-color: var(--sapList_Background, #fff);
+  background-color: var(--object-background, #fff);
 }
 
 .vakata-context li>a {
@@ -289,39 +289,39 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   padding: 0 1em 0 2em;
   text-decoration: none;
   width: auto;
-  color: var(--sapTextColor, #32363a);
+  color: var(--foreground, #303030);
   white-space: nowrap;
   line-height: 2.4em;
   border-radius: 0;
 }
 
 .vakata-context li:first-child>a {
-  border-top-right-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
-  border-top-left-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
+  border-top-right-radius: var(--radius, 0.75rem);
+  border-top-left-radius: var(--radius, 0.75rem);
 }
 
 .vakata-context li:last-child>a {
-  border-bottom-right-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
-  border-bottom-left-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
+  border-bottom-right-radius: var(--radius, 0.75rem);
+  border-bottom-left-radius: var(--radius, 0.75rem);
 }
 
 .vakata-context li>a:hover {
   position: relative;
-  background-color: var(--sapList_Hover_Background, #f5f5f5);
+  background-color: var(--object-background-hover, #f2f2f2);
 }
 
 .vakata-context li>a:active {
   position: relative;
-  background-color: var(--sapList_Active_Background, #0854a0);
-  color: var(--sapList_Active_TextColor, #fff);
+  background-color: var(--object-background-active, #fff7d9);
+  color: var(--object-foreground, #303030);
 }
 
 .vakata-context li>a:active>i {
-  color: var(--sapList_Active_TextColor, #fff);
+  color: var(--object-foreground, #303030);
 }
 
 .vakata-context li>a:active>.vakata-contextmenu-shortcut {
-  color: var(--sapList_Active_TextColor, #fff);
+  color: var(--object-foreground, #303030);
 }
 
 .vakata-context li>a.vakata-context-parent {
@@ -336,25 +336,25 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 
 .vakata-context .vakata-context-hover>a {
   position: relative;
-  background-color: var(--sapList_Hover_Background, #f5f5f5);
+  background-color: var(--object-background-hover, #f2f2f2);
 }
 
 .vakata-context .vakata-context-separator>a,
 .vakata-context .vakata-context-separator>a:hover {
-  background-color: var(--sapGroup_ContentBorderColor, #d9d9d9);
+  background-color: var(--border, #dedede);
   border: 0;
-  height: var(--sapElement_BorderWidth, 0.0625rem);
-  min-height: var(--sapElement_BorderWidth, 0.0625rem);
-  max-height: var(--sapElement_BorderWidth, 0.0625rem);
+  height: var(--border-width, 0.0625rem);
+  min-height: var(--border-width, 0.0625rem);
+  max-height: var(--border-width, 0.0625rem);
   padding: 0;
   margin: 0;
 }
 
 .vakata-context .vakata-contextmenu-disabled a,
 .vakata-context .vakata-contextmenu-disabled a:hover {
-  color: var(--sapTextColor, #32363a);
+  color: var(--foreground, #303030);
   background-color: transparent;
-  opacity: var(--sapContent_DisabledOpacity, 0.4);
+  opacity: var(--disabled-opacity, 0.5);
   pointer-events: none;
 }
 
@@ -380,8 +380,8 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .vakata-context .vakata-contextmenu-shortcut {
-  font-size: var(--sapFontSize, 0.875rem);
-  color: var(--sapContent_NonInteractiveIconColor, #6a6d70);
+  font-size: var(--font-size, 0.875rem);
+  color: var(--muted-foreground, #606060);
   float: right;
   margin-left: 2rem;
 }
@@ -406,12 +406,12 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   line-height: 2rem;
   margin: 0;
   padding: 0 0.75rem !important;
-  background: var(--sapList_Background, #fff);
-  -webkit-box-shadow: var(--sapContent_Shadow1,
+  background: var(--object-background, #fff);
+  -webkit-box-shadow: var(--shadow-sm,
       0 0 0 0.0625rem rgba(0, 0, 0, 0.42),
       0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
-  box-shadow: var(--sapContent_Shadow1, 0 0 0 0.0625rem rgba(0, 0, 0, 0.42), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
-  border-radius: var(--sapElement_BorderCornerRadius, 0.25rem);
+  box-shadow: var(--shadow-sm, 0 0 0 0.0625rem rgba(0, 0, 0, 0.42), 0 0.125rem 0.5rem 0 rgba(0, 0, 0, 0.3));
+  border-radius: var(--radius, 0.75rem);
 }
 
 #jstree-dnd .jstree-icon,
@@ -426,11 +426,11 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-hovered {
-  background: var(--sapList_Hover_Background, #f5f5f5);
+  background: var(--object-background-hover, #f2f2f2);
 }
 
 .jstree-fiori .jstree-clicked {
-  color: var(--sapList_TextColor, #32363a);
+  color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori .jstree-no-icons .jstree-anchor>.jstree-themeicon {
@@ -438,9 +438,9 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-disabled {
-  color: var(--sapTextColor, #32363a);
+  color: var(--foreground, #303030);
   background-color: transparent;
-  opacity: calc(var(--sapContent_DisabledOpacity, 0.4) + 0.1);
+  opacity: var(--disabled-opacity, 0.5);
 }
 
 .jstree-fiori .jstree-disabled.jstree-hovered {
@@ -452,7 +452,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-disabled>.jstree-icon {
-  opacity: calc(var(--sapContent_DisabledOpacity, 0.4) + 0.1);
+  opacity: var(--disabled-opacity, 0.5);
 }
 
 .jstree-fiori .jstree-search {
@@ -500,16 +500,16 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-wholerow-hovered {
-  background: var(--sapList_Hover_Background, #f5f5f5);
+  background: var(--object-background-hover, #f2f2f2);
 }
 
 .jstree-fiori .jstree-wholerow-clicked {
-  background: var(--sapList_SelectionBackgroundColor, #e5f0fa);
-  border-bottom: var(--sapList_BorderWidth, 0.0625rem) solid var(--sapList_SelectionBorderColor, #0854a0);
+  background: var(--object-background-active, #fff7d9);
+  border-bottom: var(--border-width, 0.0625rem) solid var(--accent, #fecc04);
 }
 
 .jstree-fiori .jstree-clicked .jstree-themeicon-custom {
-  color: var(--sapList_TextColor, #32363a);
+  color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori .jstree-node {
@@ -562,8 +562,8 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   margin: 0.875rem 0.5rem;
   box-sizing: border-box;
   border: 0.125rem transparent solid;
-  border-top: 0.125rem var(--sapList_TextColor, #32363a) solid;
-  border-right: 0.125rem var(--sapList_TextColor, #32363a) solid;
+  border-top: 0.125rem var(--object-foreground, #303030) solid;
+  border-right: 0.125rem var(--object-foreground, #303030) solid;
   border-radius: 50%;
   -webkit-animation: jstreeSpinnerRotate var(--jstree-spinner-animation) infinite linear;
   animation: jstreeSpinnerRotate var(--jstree-spinner-animation) infinite linear;
@@ -615,7 +615,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-arrow-down, url("../fiori/arrow-down.svg"));
   mask-image: var(--jstree-arrow-down, url("../fiori/arrow-down.svg"));
 }
@@ -628,8 +628,8 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   margin: 0.875rem 0.5rem;
   box-sizing: border-box;
   border: 0.125rem transparent solid;
-  border-top: 0.125rem var(--sapList_TextColor, #32363a) solid;
-  border-right: 0.125rem var(--sapList_TextColor, #32363a) solid;
+  border-top: 0.125rem var(--object-foreground, #303030) solid;
+  border-right: 0.125rem var(--object-foreground, #303030) solid;
   border-radius: 50%;
   -webkit-animation: jstreeSpinnerRotate var(--jstree-spinner-animation) infinite linear;
   animation: jstreeSpinnerRotate var(--jstree-spinner-animation) infinite linear;
@@ -655,7 +655,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-arrow-right, url("../fiori/arrow-right.svg"));
   mask-image: var(--jstree-arrow-right, url("../fiori/arrow-right.svg"));
 }
@@ -686,7 +686,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-disabled.jstree-clicked {
-  background: var(--sapList_Background, #fff);
+  background: var(--object-background, #fff);
 }
 
 .jstree-fiori .jstree-checkbox {
@@ -696,7 +696,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-checkbox-unchecked, url("../fiori/checkbox-unchecked.svg"));
   mask-image: var(--jstree-checkbox-unchecked, url("../fiori/checkbox-unchecked.svg"));
 }
@@ -711,7 +711,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-checkbox-checked, url("../fiori/checkbox-checked.svg"));
   mask-image: var(--jstree-checkbox-checked, url("../fiori/checkbox-checked.svg"));
 }
@@ -724,7 +724,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-checkbox-tristate, url("../fiori/checkbox-tristate.svg"));
   mask-image: var(--jstree-checkbox-tristate, url("../fiori/checkbox-tristate.svg"));
 }
@@ -766,7 +766,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 .jstree-fiori-compact .jstree-themeicon-custom {
   background-color: transparent;
   background-image: none;
-  color: var(--sapList_TextColor, #32363a);
+  color: var(--object-foreground, #303030);
   font-size: 1rem;
 }
 
@@ -777,7 +777,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
   -webkit-mask-image: var(--jstree-loader, url("../fiori/loading.svg"));
   mask-image: var(--jstree-loader, url("../fiori/loading.svg"));
 }
@@ -803,13 +803,13 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
   -webkit-mask-image: var(--jstree-file, url("../fiori/file-code.svg"));
   mask-image: var(--jstree-file, url("../fiori/file-code.svg"));
 }
 
 .jstree-fiori .jstree-clicked .jstree-file {
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori .jstree-folder {
@@ -819,13 +819,13 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
   -webkit-mask-image: var(--jstree-folder, url("../fiori/folder.svg"));
   mask-image: var(--jstree-folder, url("../fiori/folder.svg"));
 }
 
 .jstree-fiori .jstree-clicked .jstree-folder {
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori .jstree-project {
@@ -835,7 +835,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
   -webkit-mask-image: var(--jstree-project, url("../fiori/project.svg"));
   mask-image: var(--jstree-project, url("../fiori/project.svg"));
 }
@@ -846,7 +846,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .jstree-fiori .jstree-clicked .jstree-project {
-  background-color: var(--sapList_TextColor, #32363a);
+  background-color: var(--object-foreground, #303030);
 }
 
 .jstree-fiori>.jstree-container-ul>.jstree-node {
@@ -888,7 +888,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-arrow-down, url("../fiori/arrow-down.svg"));
   mask-image: var(--jstree-arrow-down, url("../fiori/arrow-down.svg"));
 }
@@ -900,26 +900,26 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   mask-repeat: no-repeat;
   -webkit-mask-position: center;
   mask-position: center;
-  background-color: var(--sapButton_IconColor, #0854a0);
+  background-color: var(--secondary-foreground, #333333);
   -webkit-mask-image: var(--jstree-arrow-right, url("../fiori/arrow-right.svg"));
   mask-image: var(--jstree-arrow-right, url("../fiori/arrow-right.svg"));
 }
 
 .jstree-fiori .jstree-rename-input {
-  font-size: var(--sapFontSize, 0.875rem);
+  font-size: var(--font-size, 0.875rem);
   line-height: var(--sapContent_LineHeight, 1.4) !important;
-  font-family: var(--sapFontFamily, "72", "72full", Arial, Helvetica);
+  font-family: var(--font-sans, "72", "72full", Arial, Helvetica);
   font-weight: 400;
   box-sizing: border-box !important;
   -webkit-box-sizing: border-box !important;
   margin: 0;
   white-space: nowrap;
   text-overflow: ellipsis;
-  color: var(--sapField_TextColor, #32363a);
+  color: var(--foreground, #303030);
   border-style: solid;
-  border-width: var(--sapField_BorderWidth, 0.0625rem);
-  border-color: var(--sapField_BorderColor, #89919a);
-  border-radius: var(--sapField_BorderCornerRadius, 0.125rem);
+  border-width: var(--border-width, 0.0625rem);
+  border-color: var(--input-border, #cecece);
+  border-radius: var(--radius-control, 0.5rem);
   outline: 0;
   appearance: none;
   -webkit-appearance: none;
@@ -930,7 +930,7 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   padding: 0 0.625rem !important;
   cursor: text;
   overflow: hidden;
-  text-shadow: var(--fdInput_Text_Shadow, none);
+  text-shadow: none;
 }
 
 .jstree-fiori-compact .jstree-rename-input {
@@ -943,14 +943,14 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
   -webkit-box-shadow: none;
   box-shadow: none;
   outline-offset: -0.1875rem !important;
-  outline-width: var(--sapContent_FocusWidth, 0.0625rem) !important;
-  outline-color: var(--sapContent_FocusColor, #000) !important;
-  outline-style: var(--sapContent_FocusStyle, dotted) !important;
+  outline-width: var(--outline-width, 0.0625rem) !important;
+  outline-color: var(--outline, #3b88e5) !important;
+  outline-style: var(--outline-style, dotted) !important;
 }
 
 .jstree-fiori .jstree-rename-input:hover {
-  background-color: var(--sapField_Hover_Background, #fff) !important;
-  border-color: var(--sapField_Hover_BorderColor, #0854a0) !important;
+  background-color: var(--input-background-hover, #fff) !important;
+  border-color: var(--input-border-hover, var(--input-border), #cecece) !important;
 }
 
 /* Dirigible-specific stuff */
@@ -985,11 +985,11 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .dg-jstree--changed {
-  color: var(--sapWarningColor, #df6e0c) !important;
+  color: var(--warning, #e66000) !important;
 }
 
 .dg-jstree--changed>.dg-jstree-dot {
-  background-color: var(--sapWarningColor, #df6e0c);
+  background-color: var(--warning, #e66000);
   border-radius: 50%;
   width: 0.5rem;
   height: 0.5rem;
@@ -998,31 +998,31 @@ li.jstree-loading:not([aria-busy="true"]) .jstree-icon:empty {
 }
 
 .dg-jstree--added {
-  color: var(--sapSuccessColor, #107e3e) !important;
+  color: var(--positive, #26a264) !important;
 }
 
 .dg-jstree--modified {
-  color: var(--sapWarningColor, #df6e0c) !important;
+  color: var(--warning, #e66000) !important;
 }
 
 .dg-jstree--deleted {
-  color: var(--sapErrorColor, #bb0000) !important;
+  color: var(--negative, #e01b24) !important;
 }
 
 .dg-jstree--untracked {
-  color: var(--sapSuccessColor, #107e3e) !important;
+  color: var(--positive, #26a264) !important;
 }
 
 .dg-jstree--conflict {
-  color: var(--sapErrorColor, #bb0000) !important;
+  color: var(--negative, #e01b24) !important;
 }
 
 .dg-jstree--renamed {
-  color: var(--sapSuccessColor, #107e3e) !important;
+  color: var(--positive, #26a264) !important;
 }
 
 .dg-jstree--submodule {
-  color: var(--sapInformationColor, #0a6ed1) !important;
+  color: var(--information, #3b88e5) !important;
 }
 
 @-webkit-keyframes fadeOut {

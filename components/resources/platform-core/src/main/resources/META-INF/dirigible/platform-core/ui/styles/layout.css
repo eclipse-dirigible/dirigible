@@ -24,24 +24,24 @@
 }
 
 .pf-accordion-panel h4 {
-  font-size: var(--sapFontSize);
+  font-size: var(--font-size);
 }
 
 .pf-accordion-panel:not(:last-child) {
-  --fdPanel_Content_Border_Bottom_Color: var(--sapGroup_TitleBorderColor);
+  --fdPanel_Content_Border_Bottom_Color: var(--border);
 }
 
 .pf-accordion-panel[shrink="true"]:last-child .fd-panel__header {
-  border-bottom: none
+  border-bottom: none;
 }
 
 .pf-accordion:not(:has(.pf-accordion-panel[shrink="false"]))>.pf-accordion-panel:last-child .fd-panel__header {
-  border-bottom: .0625rem solid var(--sapGroup_TitleBorderColor);
+  border-bottom: 0.0625rem solid var(--border);
 }
 
 .pf-accordion-panel.fd-panel.fd-panel--compact {
   --fdPanel_Header_Height: var(--bkIconTabBarCompactHeight, 2.375rem);
-  --sapGroup_TitleBackground: var(--sapObjectHeader_Background);
+  --sapGroup_TitleBackground: var(--object-header);
 }
 
 .pf-accordion-panel .fd-panel__content {

@@ -38,13 +38,13 @@
 }
 
 .bk-split .gutter-horizontal {
-    background-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
+    background-color: var(--border, #dedede);
     cursor: col-resize;
     z-index: 1;
 }
 
 .bk-split .gutter-vertical {
-    background-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
+    background-color: var(--border, #dedede);
     cursor: row-resize;
     z-index: 0;
 }
@@ -58,7 +58,7 @@
 }
 
 .bk-split .gutter.gutter-horizontal:hover::after {
-    background-color: var(--sapActiveColor, #0854a0);
+    background-color: var(--secondary-active, #bebebe);
     -webkit-transition: background-color 0.3s ease;
     -o-transition: background-color 0.3s ease;
     transition: background-color 0.3s ease;
@@ -76,7 +76,7 @@
 }
 
 .bk-split .gutter.gutter-vertical:hover::after {
-    background-color: var(--sapActiveColor, #0854a0);
+    background-color: var(--secondary-active, #bebebe);
     -webkit-transition: background-color 0.3s ease;
     -o-transition: background-color 0.3s ease;
     transition: background-color 0.3s ease;

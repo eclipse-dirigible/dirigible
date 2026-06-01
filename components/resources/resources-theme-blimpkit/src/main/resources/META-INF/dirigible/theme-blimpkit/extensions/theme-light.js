@@ -13,9 +13,8 @@ exports.getTheme = () => ({
 	id: 'blimpkit-light',
 	name: 'BlimpKit Light',
 	type: 'light',
-	version: 4,
+	version: 5,
 	links: [
-		'/services/web/theme-blimpkit/css/sap-variables-light.css',
 		'/webjars/blimpkit__blimpkit/dist/css/themes/blimpkit-light.css',
 	]
 });

@@ -10,19 +10,19 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 :root {
-  --ag-background-color: var(--sapList_Background, #fff);
-  --ag-border-color: var(--sapGroup_TitleBorderColor, #d9d9d9);
-  --ag-input-focus-border-color: var(--sapField_Focus_BorderColor, #303030);
-  --ag-row-hover-color: var(--sapList_Hover_Background, #f2f2f2);
-  --ag-selected-row-background-color: var(--sapList_SelectionBackgroundColor, #fff7d9);
-  --ag-header-background-color: var(--sapList_HeaderBackground, #f7f7f7);
-  --ag-odd-row-background-color: var(--sapList_HeaderBackground, #f7f7f7);
-  --ag-control-panel-background-color: var(--sapList_HeaderBackground, #f7f7f7);
-  --ag-alpine-active-color: var(--sapList_Active_TextColor, #303030);
-  --ag-foreground-color: var(--sapTextColor, #303030);
-  --ag-checkbox-background-color: var(--sapField_Background, #fff);
-  --ag-checkbox-checked-color: var(--sapActiveColor, #bebebe);
-  --ag-row-border-color: var(--sapList_BorderColor, #dedede);
+  --ag-background-color: var(--object-background, #fff);
+  --ag-border-color: var(--border, #dedede);
+  --ag-input-focus-border-color: var(--information, #3b88e5);
+  --ag-row-hover-color: var(--object-background-hover, #f2f2f2);
+  --ag-selected-row-background-color: var(--object-background-active, #fff7d9);
+  --ag-header-background-color: var(--table-header, #f6f7f7);
+  --ag-odd-row-background-color: var(--table-header, #f6f7f7);
+  --ag-control-panel-background-color: var(--table-header, #f6f7f7);
+  --ag-alpine-active-color: var(--object-foreground, #303030);
+  --ag-foreground-color: var(--foreground, #303030);
+  --ag-checkbox-background-color: var(--input-background, #fff);
+  --ag-checkbox-checked-color: var(--foreground, #303030);
+  --ag-row-border-color: var(--border, #dedede);
 }
 
 .ag-grid-editor>.ag-root-wrapper {
@@ -36,4 +36,11 @@
 
 .ag-cell-value:empty {
   height: 100%;
+}
+
+.ag-theme-alpine .ag-popup-child:not(.ag-tooltip-custom) {
+  -webkit-box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-md);
+  border-radius: var(--radius);
+  border-width: 0px;
 }

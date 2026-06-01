@@ -4,7 +4,7 @@
             <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
         </bk-dialog-header>
         <bk-dialog-body class="bk-padding">
-            <div class="row row-no-gutter">
+            <div class="bk-vbox bk-box--gap-m bk-padding-top-bottom--sm" data-container="dialog-body">
                 <div class="col-xs-6">
                     <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
                     <div class="pull-right">
