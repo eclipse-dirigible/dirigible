@@ -10,12 +10,12 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 :root {
-    --fill_color: var(--sapField_Background, #fff);
-    --font_color: var(--sapField_TextColor, #303030);
-    --stroke_color: var(--sapField_TextColor, #303030);
+    --fill_color: var(--input-background, #fff);
+    --font_color: var(--foreground, #303030);
+    --stroke_color: var(--foreground, #303030);
     --font: "72", "72full", Arial, Helvetica, sans-serif;
-    --badgePositive: var(--sapPositiveColor, #26a264);
-    --badgeNegative: var(--sapNegativeTextColor, #e01b24);
+    --badgePositive: var(--positive, #26a264);
+    --badgeNegative: var(--negative, #e01b24);
 }
 
 #bpmn-container {
@@ -34,7 +34,7 @@
 }
 
 #bpmn-container .highlight>rect {
-    stroke: var(--sapHighlightColor, #fecc04) !important;
+    stroke: var(--accent, #fecc04) !important;
 }
 
 #bpmn-container .overlay-badge {

@@ -60,16 +60,16 @@ public class BpmnEditorLoadsIT extends UserInterfaceIntegrationTest {
                 .click();
         browser.findElementInAllFrames(By.id("StartNoneEvent"), Condition.visible);
 
-        // The BPM editor's editor-app/theme/*.css references --sap* CSS variables that come from the
-        // active theme's sap-variables-{light,dark}.css. Assert the variable resolves to a non-empty
+        // The BPM editor's editor-app/theme/*.css references CSS variables that come from the
+        // active theme's *-{auto,light,dark}.css file. Assert the variable resolves to a non-empty
         // value so we catch any regression where the theme stops shipping the legacy variables.
         Selenide.$(By.id("canvasSection"))
                 .shouldBe(Condition.visible);
-        Object sapBgColor = Selenide.executeJavaScript(
-                "return getComputedStyle(document.documentElement).getPropertyValue('--sapBackgroundColor').trim();");
+        Object sapBgColor =
+                Selenide.executeJavaScript("return getComputedStyle(document.documentElement).getPropertyValue('--background').trim();");
         org.junit.jupiter.api.Assertions.assertTrue(sapBgColor != null && !sapBgColor.toString()
                                                                                      .isEmpty(),
-                "--sapBackgroundColor is undefined inside the BPM editor iframe — theme variables not applied.");
+                "--background is undefined inside the BPM editor iframe — theme variables not applied.");
 
         // angular-strap was removed during the Angular 1.4.7 -> 1.8.2 migration. Its $modal and
         // $popover services are now provided by scripts/services/{modal,popover}-service.js (each

@@ -78,15 +78,15 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
 
 /* Statusbar */
 .statusbar {
-    background-color: var(--sapInfobar_NonInteractive_Background, #fff);
+    background-color: var(--object-header);
     width: 100%;
     max-width: 100%;
     min-height: var(--status-bar-height);
     max-height: var(--status-bar-height);
     box-sizing: border-box;
-    font-size: var(--sapFontSmallSize, .75rem);
+    font-size: var(--sapFontSmallSize, 0.75rem);
     font-weight: normal;
-    color: var(--fdToolbar_Info_Color, var(--sapTextColor));
+    color: var(--fdToolbar_Info_Color, var(--foreground));
     font-family: var(--sapFontBoldFamily);
     word-break: break-word;
     display: inline-flex;
@@ -166,36 +166,36 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
 }
 
 .statusbar-message {
-    color: var(--sapButton_Information_TextColor, #fff);
-    background-color: var(--sapButton_Information_Background, #3584e4);
+    color: var(--information-foreground);
+    background-color: var(--information);
 }
 
 .statusbar-message .statusbar--icon {
-    color: var(--sapButton_Information_TextColor, #fff);
+    color: var(--information-foreground);
 }
 
 .statusbar-message .statusbar--link:hover {
-    color: var(--sapButton_Information_Hover_TextColor, #fff);
-    background-color: var(--sapButton_Information_Hover_Background, #4990e7);
+    color: var(--information-foreground);
+    background-color: var(--information-hover);
 }
 
 .statusbar-error {
-    color: var(--sapButton_Reject_TextColor, #fff);
-    background-color: var(--sapButton_Reject_Background, #e01b24);
+    color: var(--negative-foreground);
+    background-color: var(--negative);
 }
 
 .statusbar-error .statusbar--icon {
-    color: var(--sapButton_Reject_TextColor, #fff);
+    color: var(--negative-foreground);
 }
 
 .statusbar-error .statusbar--link:hover {
-    color: var(--sapButton_Reject_Hover_TextColor, #fff);
-    background-color: var(--sapButton_Reject_Hover_Background, #e3323a);
+    color: var(--negative-foreground);
+    background-color: var(--negative-hover);
 }
 
 .statusbar-busy {
-    color: var(--sapButton_Attention_TextColor, #fff);
-    background-color: var(--sapButton_Attention_Background, #e97119);
+    color: var(--warning-foreground);
+    background-color: var(--warning);
 }
 
 /* Notification and Exports overlay */
@@ -214,7 +214,7 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
 }
 
 .notification-popover {
-    /* --bkPopoverBody_BackgroundColor: var(--sapBackgroundColor); */
+    /* --bkPopoverBody_BackgroundColor: var(--background); */
     width: 35rem;
     height: auto;
     max-width: 35rem;
@@ -240,7 +240,7 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
 .notification-popover span.bk-center {
     width: 3rem;
     height: 3rem;
-    margin-inline-end: .75rem;
+    margin-inline-end: 0.75rem;
 }
 
 .notification-popover li:last-child {
@@ -248,7 +248,7 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
 }
 
 .notification-popover .is-error-message {
-    color: var(--sapNegativeColor) !important;
+    color: var(--negative) !important;
     word-wrap: break-word;
     white-space: wrap;
 }

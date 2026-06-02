@@ -409,27 +409,25 @@ function configureStylesheet(graph) {
 
 // Function to create the entries in the popupmenu
 function createPopupMenu(editor, graph, menu, cell, evt) {
-	if (cell !== null) {
-		menu.addItem('Properties', 'list-ul', function () {
-			editor.execute('properties', cell);
-		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--list");
+	if (cell === null) return;
 
-		if (cell.style !== 'projection' && cell.style !== 'projectionproperty') {
-			menu.addItem('Move up', 'arrow-up', function () {
-				editor.execute('moveup', cell);
-			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-up");
-
-			menu.addItem('Move down', 'arrow-down', function () {
-				editor.execute('movedown', cell);
-			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-down");
-
-			menu.addItem('Copy', 'copy', function () {
-				editor.execute('copy', cell);
-			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--copy");
-		}
-	}
+	menu.addItem('Properties', 'list-ul', function () {
+		editor.execute('properties', cell);
+	}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--list");
 
 	if (cell.style !== 'projection' && cell.style !== 'projectionproperty') {
+		menu.addItem('Move up', 'arrow-up', function () {
+			editor.execute('moveup', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-up");
+
+		menu.addItem('Move down', 'arrow-down', function () {
+			editor.execute('movedown', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--slim-arrow-down");
+
+		menu.addItem('Copy', 'copy', function () {
+			editor.execute('copy', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--copy");
+
 		menu.addItem('Paste', 'paste', function () {
 			editor.execute('paste', cell);
 		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--paste");
@@ -444,10 +442,8 @@ function createPopupMenu(editor, graph, menu, cell, evt) {
 			editor.execute('redo', cell);
 		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--redo");
 
-		if (cell !== null) {
-			menu.addItem('Delete', 'times', function () {
-				editor.execute('delete', cell);
-			}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--delete");
-		}
+		menu.addItem('Delete', 'times', function () {
+			editor.execute('delete', cell);
+		}).firstChild.firstChild.classList.add("sap-icon", "sap-icon--delete");
 	}
 }

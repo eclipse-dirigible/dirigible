@@ -10,7 +10,7 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 .nv-file-over {
-  background-color: var(--sapNegativeColor, red);
+  background-color: var(--negative);
 }
 
 .docs-file-drop {
@@ -25,11 +25,11 @@
   z-index: 1001;
   width: 100%;
   height: 100%;
-  background-color: var(--sapBaseColor, #E9E9E9);
+  background-color: var(--background);
 }
 
 .docs-file-drop .drop-zone .fd-message-page {
-  border: 0.25rem dashed var(--sapInformativeElementColor, #ccc);
+  border: 0.25rem dashed var(--information);
 }
 
 .drop-zone-backdrop {
