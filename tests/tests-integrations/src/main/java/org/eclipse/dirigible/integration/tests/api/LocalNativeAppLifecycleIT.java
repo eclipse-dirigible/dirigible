@@ -48,7 +48,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
      * Self-contained HTTP server: reads {@code DIRIGIBLE_NATIVE_APP_PORT} from env, replies with a JSON
      * body that echoes the request {@code path} and the inbound {@code Authorization} header so tests
      * can assert basic-auth injection. Written as a Java source file the test publishes alongside the
-     * {@code .native-app} fixture; the lifecycle command runs it via {@code java
+     * {@code .nativeapp} fixture; the lifecycle command runs it via {@code java
      * Server.java}.
      */
     private static final String JAVA_SERVER_SOURCE = """
@@ -92,7 +92,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     private NativeAppService service;
 
     private void removeProjectFiles(String name) {
-        for (String relative : new String[] {"/" + name + "/" + name + ".native-app", "/" + name + "/Server.java"}) {
+        for (String relative : new String[] {"/" + name + "/" + name + ".nativeapp", "/" + name + "/Server.java"}) {
             String path = IRepositoryStructure.PATH_REGISTRY_PUBLIC + relative;
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
@@ -323,7 +323,7 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     private void writeFixture(String name, String nativeAppJson) {
         String javaPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/Server.java";
         repository.createResource(javaPath, JAVA_SERVER_SOURCE.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
-        String nativeAppPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + name + ".native-app";
+        String nativeAppPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + name + ".nativeapp";
         repository.createResource(nativeAppPath, nativeAppJson.getBytes(StandardCharsets.UTF_8), false, "application/json", true);
         synchronizationProcessor.forceProcessSynchronizers();
     }
@@ -331,14 +331,14 @@ class LocalNativeAppLifecycleIT extends IntegrationTest {
     /**
      * Variant of {@link #writeFixture} that places {@code Server.java} into a project subdirectory
      * (e.g. {@code apps/server/}) so the matching {@code command.dir} value can exercise the
-     * non-default branch of {@code NativeAppProcessManager.resolveWorkingDir}. The {@code .native-app}
+     * non-default branch of {@code NativeAppProcessManager.resolveWorkingDir}. The {@code .nativeapp}
      * itself stays at the project root so the synchronizer's location handling is identical to every
      * other fixture.
      */
     private void writeFixtureWithServerInSubdir(String name, String dirSubpath, String nativeAppJson) {
         String javaPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + dirSubpath + "/Server.java";
         repository.createResource(javaPath, JAVA_SERVER_SOURCE.getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
-        String nativeAppPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + name + ".native-app";
+        String nativeAppPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + name + "/" + name + ".nativeapp";
         repository.createResource(nativeAppPath, nativeAppJson.getBytes(StandardCharsets.UTF_8), false, "application/json", true);
         synchronizationProcessor.forceProcessSynchronizers();
     }

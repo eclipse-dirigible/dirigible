@@ -48,10 +48,10 @@ public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
     private static final String READER_PASSWORD = "library-reader-pass";
 
     /**
-     * Values declared in the sample repo's {@code .native-app} via the start-command
-     * {@code arguments[]} ({@code --library-address}, {@code --library-phone}). The IT asserts that GET
-     * {@code /library} returns exactly these values, proving start arguments reach the spawned Node
-     * process and influence its runtime configuration.
+     * Values declared in the sample repo's {@code .nativeapp} via the start-command {@code arguments[]}
+     * ({@code --library-address}, {@code --library-phone}). The IT asserts that GET {@code /library}
+     * returns exactly these values, proving start arguments reach the spawned Node process and
+     * influence its runtime configuration.
      */
     private static final String EXPECTED_LIBRARY_ADDRESS = "42 Wallaby Way, Sydney";
     private static final String EXPECTED_LIBRARY_PHONE = "+61-2-9999-0042";
@@ -91,7 +91,7 @@ public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
 
         restAssuredExecutor.execute(this::exerciseBookCrud, READER_USERNAME, READER_PASSWORD);
 
-        // 3. Independent of CRUD: assert the .native-app's start arguments reached the spawned
+        // 3. Independent of CRUD: assert the .nativeapp's start arguments reached the spawned
         // Node process. Lives outside exerciseBookCrud because it tests the artefact's
         // arguments[] propagation contract, not the book CRUD behaviour.
         restAssuredExecutor.execute(this::assertStartArgumentsReachedNodeProcess, READER_USERNAME, READER_PASSWORD);
@@ -121,7 +121,7 @@ public class SampleLibraryLocalNativeAppIT extends SampleProjectRepositoryIT {
     }
 
     /**
-     * The {@code .native-app}'s {@code lifecycle.start.commands[].arguments[]} include
+     * The {@code .nativeapp}'s {@code lifecycle.start.commands[].arguments[]} include
      * {@code --library-address} / {@code --library-phone}; the Node app surfaces those at
      * {@code /library}. Asserting on the response proves the artefact's {@code arguments[]} entries
      * reach the spawned process and influence its runtime configuration.

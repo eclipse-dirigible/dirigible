@@ -27,7 +27,7 @@ import org.eclipse.dirigible.components.base.artefact.Artefact;
                 @UniqueConstraint(name = "UK_DIRIGIBLE_NATIVE_APPS_BASE_PATH", columnNames = "NATIVE_APP_BASE_PATH")})
 public class NativeApp extends Artefact {
 
-    public static final String ARTEFACT_TYPE = "native-app";
+    public static final String ARTEFACT_TYPE = "nativeapp";
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -36,7 +36,7 @@ import static org.hamcrest.Matchers.containsString;
  * Drives the remote-native-app proxy end-to-end without touching any external network. The fixture
  * lives under {@code src/main/resources/RemoteNativeAppIT/} and is published through the IDE; an
  * in-JVM {@link HttpServer} started in {@link #configure()} stands in for the upstream service and
- * the {@code __UPSTREAM_URL__} placeholder in every {@code .native-app} file is rewritten to the
+ * the {@code __UPSTREAM_URL__} placeholder in every {@code .nativeapp} file is rewritten to the
  * server's loopback URL at copy time.
  *
  * <p>
@@ -153,7 +153,7 @@ class RemoteNativeAppTestProject extends BaseTestProject {
                .then()
                .statusCode(200);
 
-        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/RemoteNativeAppIT/http-bin-app-delete.native-app";
+        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/RemoteNativeAppIT/http-bin-app-delete.nativeapp";
         repository.removeResource(registryPath);
         synchronizationProcessor.forceProcessSynchronizers();
 
