@@ -10,23 +10,43 @@
 package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 
 import static io.restassured.RestAssured.given;
+import static org.awaitility.Awaitility.await;
 import static org.hamcrest.Matchers.containsString;
+
+import java.util.concurrent.TimeUnit;
+
+import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
+import org.junit.jupiter.api.BeforeEach;
+
+import ch.qos.logback.classic.Level;
 
 /**
  * Clones {@code dirigiblelabs/sample-java-entity-decorators}, publishes it through the IDE, and
- * verifies that the {@code @Entity} / {@code @Repository} / {@code @Controller} stack from
- * {@code engine-java} + {@code data-store-java} reads the project's CSVIM-seeded data end-to-end:
- * the {@code SAMPLE_COUNTRY} table is created and populated from {@code data/countries.csv}, the
- * {@code @Inject}-ed {@code CountryRepository} lists those rows through {@code @Get("/")}, a single
- * row is fetched through {@code @Get("/{id}")} / {@code @PathParam}, and the OpenAPI aggregator
- * picks up the controller's routes.
+ * verifies the full {@code engine-java} annotation surface end-to-end:
+ *
+ * <ul>
+ * <li>{@code @Entity} / {@code @Repository} / {@code @Controller} — CSVIM-seeded country CRUD</li>
+ * <li>{@code @Extension} — contribution registered in the Dirigible extension registry</li>
+ * <li>{@code @Scheduled} — Quartz job fires within 10 s and logs a confirmation line</li>
+ * <li>{@code @Listener} — ActiveMQ queue listener receives a message sent by a JS trigger</li>
+ * <li>{@code @Websocket} — handler registered in {@code JavaWebsocketRegistry}</li>
+ * </ul>
  */
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";
 
-    /** Controller base — {@code @Get("/")} lists, {@code @Get("/{id}")} fetches one. */
     private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/demo/CountryController";
+    private static final String EXTENSION_CONSUMER_BASE = "/services/java/" + PROJECT + "/demo/extension/ExtensionConsumer";
+    private static final String WEBSOCKET_STATUS_BASE = "/services/java/" + PROJECT + "/demo/websocket/WebsocketStatus";
+    private static final String LISTENER_TRIGGER = "/services/js/" + PROJECT + "/demo/listener/trigger.mjs";
+
+    private LogsAsserter consoleLogAsserter;
+
+    @BeforeEach
+    void setUpLogAsserter() {
+        consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
+    }
 
     @Override
     protected String getRepositoryURL() {
@@ -35,9 +55,15 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
 
     @Override
     protected void verifyProject() {
+        verifyEntityDecoratorStack();
+        verifyExtensionAnnotation();
+        verifyScheduledAnnotation();
+        verifyListenerAnnotation();
+        verifyWebsocketAnnotation();
+    }
+
+    private void verifyEntityDecoratorStack() {
         restAssuredExecutor.execute(() -> {
-            // GET on the bare base URL → @Get("/") list route. Proves @Inject CountryRepository
-            // resolved and the SAMPLE_COUNTRY table was seeded from data/countries.csv via CSVIM.
             given().when()
                    .get(CONTROLLER_BASE)
                    .then()
@@ -46,16 +72,12 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .body(containsString("Albania"))
                    .body(containsString("Algeria"));
 
-            // GET /{id} — exercises @PathParam binding and JavaRepository.findById against the
-            // seeded COUNTRY_ID primary key (countries.csv assigns Afghanistan id 1).
             given().when()
                    .get(CONTROLLER_BASE + "/1")
                    .then()
                    .statusCode(200)
                    .body(containsString("Afghanistan"));
 
-            // /services/openapi merges every stored OpenAPI artefact; engine-java contributes
-            // one fragment per controller class at registration time.
             given().when()
                    .get("/services/openapi")
                    .then()
@@ -63,6 +85,44 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .body(containsString(CONTROLLER_BASE))
                    .body(containsString(CONTROLLER_BASE + "/{id}"));
         });
+    }
+
+    private void verifyExtensionAnnotation() {
+        // ExtensionClassConsumer must have stored a record with module =
+        // "demo.extension.SampleContribution".
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(EXTENSION_CONSUMER_BASE + "/contributions")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("demo.extension.SampleContribution")));
+    }
+
+    private void verifyScheduledAnnotation() {
+        // CleanupJob fires every second; wait up to 10 s for the first execution log line.
+        await().atMost(10, TimeUnit.SECONDS)
+               .pollInterval(1, TimeUnit.SECONDS)
+               .until(() -> consoleLogAsserter.containsMessage("CleanupJob executed!", Level.INFO));
+    }
+
+    private void verifyListenerAnnotation() {
+        // Trigger sends a message to "java-order-queue"; OrderListener logs the receipt.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(LISTENER_TRIGGER)
+                                                 .then()
+                                                 .statusCode(200));
+
+        await().atMost(10, TimeUnit.SECONDS)
+               .pollInterval(1, TimeUnit.SECONDS)
+               .until(() -> consoleLogAsserter.containsMessage("OrderListener received:", Level.INFO));
+    }
+
+    private void verifyWebsocketAnnotation() {
+        // WebsocketStatus controller queries JavaWebsocketRegistry for the "java-chat" endpoint.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(WEBSOCKET_STATUS_BASE + "/status")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("true")));
     }
 
 }
