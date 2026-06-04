@@ -80,6 +80,14 @@ public class HttpSecurityURIConfigurator {
             "/spring-admin/**", //
             "/actuator/**"};
 
+    /**
+     * Native-app management surface. Any of DEVELOPER, ADMINISTRATOR or OPERATOR may inspect / start /
+     * stop / delete native applications via {@code /services/native-apps/**}.
+     */
+    private static final String[] NATIVE_APPS_MANAGEMENT_PATTERNS = { //
+            "/services/native-apps", //
+            "/services/native-apps/**"};
+
     private final BeanProvider beanProvider;
 
     HttpSecurityURIConfigurator(BeanProvider beanProvider) {
@@ -117,6 +125,10 @@ public class HttpSecurityURIConfigurator {
              // "OPERATOR" role required
              .requestMatchers(OPERATOR_PATTERNS)
              .hasRole(Roles.OPERATOR.getRoleName())
+
+             // Native-apps management: any of DEVELOPER, ADMINISTRATOR, OPERATOR
+             .requestMatchers(NATIVE_APPS_MANAGEMENT_PATTERNS)
+             .hasAnyRole(Roles.DEVELOPER.getRoleName(), Roles.ADMINISTRATOR.getRoleName(), Roles.OPERATOR.getRoleName())
 
              // Authenticated
              .requestMatchers(AUTHENTICATED_PATTERNS)

@@ -74,6 +74,9 @@ public interface SynchronizersOrder {
     /** The proxy. */
     int PROXY = 430;
 
+    /** The native app. */
+    int NATIVE_APP = 440;
+
     /** The openapi. */
     int OPENAPI = 510;
 

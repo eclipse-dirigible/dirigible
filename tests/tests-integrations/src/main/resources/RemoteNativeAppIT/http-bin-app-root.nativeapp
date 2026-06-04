@@ -1,0 +1,10 @@
+{
+  "name": "http-bin-app-root",
+  "description": "Catch-all remote native app (empty basePath) used to assert pass-through behaviour when no named app matches.",
+  "basePath": "",
+  "type": "remote",
+  "config": {
+    "url": "__UPSTREAM_URL__",
+    "security": null
+  }
+}

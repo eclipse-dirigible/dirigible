@@ -43,7 +43,8 @@ public class SecurityIT extends IntegrationTest {
 
     @Test
     void testProtectedEndpointWithoutAuthentication() throws Exception {
-        Set<String> paths = Set.of("/spring-admin", "/actuator/info", "/actuator/sbom", "/actuator/sbom/application");
+        Set<String> paths = Set.of("/spring-admin", "/actuator/info", "/actuator/sbom", "/actuator/sbom/application",
+                "/services/native-apps", "/services/native-apps/123");
         for (String path : paths) {
             mvc.perform(get(path))
                .andExpect(status().isUnauthorized());
@@ -53,7 +54,8 @@ public class SecurityIT extends IntegrationTest {
     @Test
     @WithMockUser(username = "user_without_roles", roles = {"SOME_UNUSED_ROLE"})
     void testProtectedEndpointsWithUnauthorizedUser() throws Exception {
-        Set<String> paths = Set.of("/actuator/info", "/actuator/sbom", "/actuator/sbom/application");
+        Set<String> paths = Set.of("/actuator/info", "/actuator/sbom", "/actuator/sbom/application", "/services/native-apps",
+                "/services/native-apps/123");
         for (String path : paths) {
             mvc.perform(get(path))
                .andExpect(status().isForbidden());
@@ -64,7 +66,7 @@ public class SecurityIT extends IntegrationTest {
     @WithMockUser(username = "operator", roles = {Roles.RoleNames.OPERATOR})
     void testOperatorEndpointIsAccessible() throws Exception {
         Map<String, HttpStatus> paths = Map.of("/spring-admin", HttpStatus.NOT_FOUND, "/actuator/info", HttpStatus.OK, "/actuator/sbom",
-                HttpStatus.OK, "/actuator/sbom/application", HttpStatus.OK);
+                HttpStatus.OK, "/actuator/sbom/application", HttpStatus.OK, "/services/native-apps", HttpStatus.OK);
         for (Map.Entry<String, HttpStatus> entry : paths.entrySet()) {
             mvc.perform(get(entry.getKey()))
                .andExpect(status().is(entry.getValue()
@@ -75,11 +77,20 @@ public class SecurityIT extends IntegrationTest {
     @Test
     @WithMockUser(username = "developer", roles = {Roles.RoleNames.DEVELOPER})
     void testDeveloperEndpointIsAccessible() throws Exception {
-        Set<String> paths = Set.of("/services/ide/123", "/websockets/ide/123");
-        for (String path : paths) {
-            mvc.perform(get(path))
-               .andExpect(status().is(HttpStatus.NOT_FOUND.value()));
+        Map<String, HttpStatus> paths = Map.of("/services/ide/123", HttpStatus.NOT_FOUND, "/websockets/ide/123", HttpStatus.NOT_FOUND,
+                "/services/native-apps", HttpStatus.OK);
+        for (Map.Entry<String, HttpStatus> entry : paths.entrySet()) {
+            mvc.perform(get(entry.getKey()))
+               .andExpect(status().is(entry.getValue()
+                                           .value()));
         }
+    }
+
+    @Test
+    @WithMockUser(username = "administrator", roles = {Roles.RoleNames.ADMINISTRATOR})
+    void testAdministratorCanReadNativeAppsManagement() throws Exception {
+        mvc.perform(get("/services/native-apps"))
+           .andExpect(status().is(HttpStatus.OK.value()));
     }
 
 }

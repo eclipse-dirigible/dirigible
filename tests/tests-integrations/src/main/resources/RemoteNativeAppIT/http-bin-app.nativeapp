@@ -1,0 +1,19 @@
+{
+  "name": "http-bin-app",
+  "description": "Remote native app pointing at the in-JVM upstream stub; whitelist allows /get..delete with no scopes.",
+  "basePath": "http-bin-app",
+  "type": "remote",
+  "config": {
+    "url": "__UPSTREAM_URL__",
+    "security": {
+      "authentication": null,
+      "exposedPaths": [
+        { "path": "/get",    "scopes": [] },
+        { "path": "/post",   "scopes": [] },
+        { "path": "/put",    "scopes": [] },
+        { "path": "/patch",  "scopes": [] },
+        { "path": "/delete", "scopes": [] }
+      ]
+    }
+  }
+}
