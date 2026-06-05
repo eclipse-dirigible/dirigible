@@ -1,0 +1,16 @@
+[
+   {
+      "scope":"orders-manage",
+      "roles":[
+         "sample-app.Orders.OrderFullAccess",
+         "sample-app.Orders.OrderReadOnly"
+      ],
+      "description":"Manage orders"
+   },
+   {
+      "scope":"athena-admin",
+      "roles":[
+         "ADMINISTRATOR"
+      ]
+   }
+]
