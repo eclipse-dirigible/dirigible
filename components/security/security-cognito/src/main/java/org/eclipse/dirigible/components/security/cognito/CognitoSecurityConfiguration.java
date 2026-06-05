@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -31,6 +32,8 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -46,8 +49,12 @@ public class CognitoSecurityConfiguration {
 
     private final boolean trialModeEnabled;
 
-    public CognitoSecurityConfiguration() {
-        trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
+    /** The Cognito JWKS endpoint backing the resource-server (Bearer) JWT decoder. */
+    private final String jwkSetUri;
+
+    public CognitoSecurityConfiguration(@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+        this.trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
+        this.jwkSetUri = jwkSetUri;
     }
 
     /**
@@ -68,8 +75,9 @@ public class CognitoSecurityConfiguration {
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
             })
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(
-                    jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())
+                                                                 .jwtAuthenticationConverter(
+                                                                         jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);
@@ -89,6 +97,25 @@ public class CognitoSecurityConfiguration {
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(scopeRoleJwtAuthoritiesConverter);
         return jwtAuthenticationConverter;
+    }
+
+    /**
+     * Builds the resource-server JWT decoder explicitly from the Cognito JWKS endpoint (default JWS
+     * algorithm RS256).
+     *
+     * <p>
+     * This must be pinned on the configurer rather than relying on a {@link JwtDecoder} bean: the
+     * embedded Spring Authorization Server publishes its own {@code JwtDecoder} (backed by its
+     * in-memory keys), and the Spring Boot OAuth2 resource-server auto-configuration is not on the
+     * classpath, so {@code getBean(JwtDecoder.class)} would otherwise resolve the authorization
+     * server's decoder and reject every Cognito token. Validation (signature/expiry against
+     * {@code jwk-set-uri}) is unchanged.
+     *
+     * @return the Cognito JWKS-backed JWT decoder
+     */
+    private JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri)
+                               .build();
     }
 
     @Bean

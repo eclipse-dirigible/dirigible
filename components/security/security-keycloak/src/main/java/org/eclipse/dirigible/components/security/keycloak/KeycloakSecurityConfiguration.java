@@ -33,8 +33,11 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
@@ -52,8 +55,12 @@ public class KeycloakSecurityConfiguration {
 
     private final boolean trialModeEnabled;
 
-    public KeycloakSecurityConfiguration() {
-        trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
+    /** The Keycloak JWKS endpoint backing the resource-server (Bearer) JWT decoder. */
+    private final String jwkSetUri;
+
+    public KeycloakSecurityConfiguration(@Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
+        this.trialModeEnabled = DirigibleConfig.TRIAL_ENABLED.getBooleanValue();
+        this.jwkSetUri = jwkSetUri;
     }
 
     /**
@@ -78,8 +85,9 @@ public class KeycloakSecurityConfiguration {
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
             })
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(
-                    jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())
+                                                                 .jwtAuthenticationConverter(
+                                                                         jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);
@@ -99,6 +107,25 @@ public class KeycloakSecurityConfiguration {
         JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
         jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(scopeRoleJwtAuthoritiesConverter);
         return jwtAuthenticationConverter;
+    }
+
+    /**
+     * Builds the resource-server JWT decoder explicitly from the Keycloak JWKS endpoint (default JWS
+     * algorithm RS256).
+     *
+     * <p>
+     * This must be pinned on the configurer rather than relying on a {@link JwtDecoder} bean: the
+     * embedded Spring Authorization Server publishes its own {@code JwtDecoder} (backed by its
+     * in-memory keys), and the Spring Boot OAuth2 resource-server auto-configuration is not on the
+     * classpath, so {@code getBean(JwtDecoder.class)} would otherwise resolve the authorization
+     * server's decoder and reject every Keycloak token. Validation (signature/expiry against
+     * {@code jwk-set-uri}) is unchanged.
+     *
+     * @return the Keycloak JWKS-backed JWT decoder
+     */
+    private JwtDecoder jwtDecoder() {
+        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri)
+                               .build();
     }
 
     @Bean
