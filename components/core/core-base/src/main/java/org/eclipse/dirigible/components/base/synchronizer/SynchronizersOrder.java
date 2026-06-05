@@ -23,6 +23,9 @@ public interface SynchronizersOrder {
     /** The role. */
     int ROLE = 30;
 
+    /** The scope. */
+    int SCOPE = 35;
+
     /** The access. */
     int ACCESS = 40;
 

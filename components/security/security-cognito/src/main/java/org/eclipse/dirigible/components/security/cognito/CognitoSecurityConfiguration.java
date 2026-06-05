@@ -19,6 +19,7 @@ import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
+import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +31,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
@@ -56,7 +58,8 @@ public class CognitoSecurityConfiguration {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
+            ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter) throws Exception {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
@@ -65,12 +68,27 @@ public class CognitoSecurityConfiguration {
             .oauth2Login(oauth2 -> {
                 oauth2.userInfoEndpoint(userInfoEndpointConfig -> userInfoEndpointConfig.userAuthoritiesMapper(userAuthoritiesMapper()));
             })
-            .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()))
+            .oauth2ResourceServer(oauth2 -> oauth2.jwt(
+                    jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);
 
         return http.build();
+    }
+
+    /**
+     * Builds the JWT authentication converter that derives Dirigible role authorities from the
+     * validated {@code scope} claim (machine-to-machine / client-credentials tokens). Token validation
+     * is unaffected.
+     *
+     * @param scopeRoleJwtAuthoritiesConverter the scope-to-role authorities converter
+     * @return the JWT authentication converter
+     */
+    private JwtAuthenticationConverter jwtAuthenticationConverter(ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter) {
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(scopeRoleJwtAuthoritiesConverter);
+        return jwtAuthenticationConverter;
     }
 
     @Bean
