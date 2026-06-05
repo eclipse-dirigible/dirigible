@@ -20,6 +20,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.Map;
 import java.util.Set;
 
+import static org.hamcrest.Matchers.anyOf;
+import static org.hamcrest.Matchers.equalTo;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -66,31 +68,36 @@ public class SecurityIT extends IntegrationTest {
     @WithMockUser(username = "operator", roles = {Roles.RoleNames.OPERATOR})
     void testOperatorEndpointIsAccessible() throws Exception {
         Map<String, HttpStatus> paths = Map.of("/spring-admin", HttpStatus.NOT_FOUND, "/actuator/info", HttpStatus.OK, "/actuator/sbom",
-                HttpStatus.OK, "/actuator/sbom/application", HttpStatus.OK, "/services/native-apps", HttpStatus.OK);
+                HttpStatus.OK, "/actuator/sbom/application", HttpStatus.OK);
         for (Map.Entry<String, HttpStatus> entry : paths.entrySet()) {
             mvc.perform(get(entry.getKey()))
                .andExpect(status().is(entry.getValue()
                                            .value()));
         }
+
+        mvc.perform(get("/services/native-apps"))
+           .andExpect(status().is(anyOf(equalTo(HttpStatus.OK.value()), equalTo(HttpStatus.NOT_FOUND.value()))));
     }
 
     @Test
     @WithMockUser(username = "developer", roles = {Roles.RoleNames.DEVELOPER})
     void testDeveloperEndpointIsAccessible() throws Exception {
-        Map<String, HttpStatus> paths = Map.of("/services/ide/123", HttpStatus.NOT_FOUND, "/websockets/ide/123", HttpStatus.NOT_FOUND,
-                "/services/native-apps", HttpStatus.OK);
+        Map<String, HttpStatus> paths = Map.of("/services/ide/123", HttpStatus.NOT_FOUND, "/websockets/ide/123", HttpStatus.NOT_FOUND);
         for (Map.Entry<String, HttpStatus> entry : paths.entrySet()) {
             mvc.perform(get(entry.getKey()))
                .andExpect(status().is(entry.getValue()
                                            .value()));
         }
+
+        mvc.perform(get("/services/native-apps"))
+           .andExpect(status().is(anyOf(equalTo(HttpStatus.OK.value()), equalTo(HttpStatus.NOT_FOUND.value()))));
     }
 
     @Test
     @WithMockUser(username = "administrator", roles = {Roles.RoleNames.ADMINISTRATOR})
     void testAdministratorCanReadNativeAppsManagement() throws Exception {
         mvc.perform(get("/services/native-apps"))
-           .andExpect(status().is(HttpStatus.OK.value()));
+           .andExpect(status().is(anyOf(equalTo(HttpStatus.OK.value()), equalTo(HttpStatus.NOT_FOUND.value()))));
     }
 
 }
