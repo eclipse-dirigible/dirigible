@@ -54,7 +54,7 @@
                 margin-left: 0.25rem;
                 font-size: 0.7em;
             }
-            .jvm-threads-table th.sorted .sort-caret {
+            .jvm-threads-table th .sort-caret.active {
                 opacity: 1;
             }
             .jvm-threads-empty {
@@ -135,26 +135,26 @@
             <table class="jvm-threads-table" bk-table display-mode="compact" outer-borders="none">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell ng-click="setSort('id')" ng-class="{ sorted: sort.key === 'id' }">
-                            # <span class="sort-caret">{{ sortCaret('id') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('id')">
+                            # <span class="sort-caret" ng-class="{ active: sort.key === 'id' }">{{ sortCaret('id') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('name')" ng-class="{ sorted: sort.key === 'name' }">
-                            Name <span class="sort-caret">{{ sortCaret('name') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('name')">
+                            Name <span class="sort-caret" ng-class="{ active: sort.key === 'name' }">{{ sortCaret('name') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('state')" ng-class="{ sorted: sort.key === 'state' }">
-                            State <span class="sort-caret">{{ sortCaret('state') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('state')">
+                            State <span class="sort-caret" ng-class="{ active: sort.key === 'state' }">{{ sortCaret('state') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('daemon')" ng-class="{ sorted: sort.key === 'daemon' }">
-                            Daemon <span class="sort-caret">{{ sortCaret('daemon') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('daemon')">
+                            Daemon <span class="sort-caret" ng-class="{ active: sort.key === 'daemon' }">{{ sortCaret('daemon') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('priority')" ng-class="{ sorted: sort.key === 'priority' }">
-                            Priority <span class="sort-caret">{{ sortCaret('priority') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('priority')">
+                            Priority <span class="sort-caret" ng-class="{ active: sort.key === 'priority' }">{{ sortCaret('priority') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('cpuTimeNanos')" ng-class="{ sorted: sort.key === 'cpuTimeNanos' }">
-                            CPU time <span class="sort-caret">{{ sortCaret('cpuTimeNanos') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('cpuTimeNanos')">
+                            CPU time <span class="sort-caret" ng-class="{ active: sort.key === 'cpuTimeNanos' }">{{ sortCaret('cpuTimeNanos') }}</span>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('userTimeNanos')" ng-class="{ sorted: sort.key === 'userTimeNanos' }">
-                            User time <span class="sort-caret">{{ sortCaret('userTimeNanos') }}</span>
+                        <th bk-table-header-cell ng-click="setSort('userTimeNanos')">
+                            User time <span class="sort-caret" ng-class="{ active: sort.key === 'userTimeNanos' }">{{ sortCaret('userTimeNanos') }}</span>
                         </th>
                         <th bk-table-header-cell class="no-sort">Lock</th>
                         <th bk-table-header-cell class="no-sort">Held by</th>
