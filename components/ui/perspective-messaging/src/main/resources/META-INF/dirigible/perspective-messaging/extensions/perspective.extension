@@ -1,0 +1,5 @@
+{
+    "module": "perspective-messaging/configs/messaging.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Messaging Perspective"
+}

@@ -56,6 +56,10 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ide-monitoring</artifactId>
         </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ide-messaging-monitoring</artifactId>
+        </dependency>
 
         <!-- IDE UI -->
         <dependency>
@@ -89,6 +93,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-perspective-monitoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-perspective-messaging</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
@@ -185,6 +193,14 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-monitoring-metrics</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-messaging-destinations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-messaging-browser</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

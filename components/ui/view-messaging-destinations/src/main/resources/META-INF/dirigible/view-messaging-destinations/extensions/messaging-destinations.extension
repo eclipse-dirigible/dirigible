@@ -1,0 +1,5 @@
+{
+    "module": "view-messaging-destinations/configs/messaging-destinations-view.js",
+    "extensionPoint": "platform-views",
+    "description": "Messaging Destinations View"
+}

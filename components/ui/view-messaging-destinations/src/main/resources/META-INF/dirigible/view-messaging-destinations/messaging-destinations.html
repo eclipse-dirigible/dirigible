@@ -1,0 +1,255 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="messagingDestinations" ng-controller="MessagingDestinationsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-messaging-destinations/configs/messaging-destinations-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .mq-toolbar-sub {
+                font-size: 0.7rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .mq-filters {
+                padding: 0.4rem 0.5rem;
+                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
+                background: var(--sapList_HeaderBackground, transparent);
+            }
+            .mq-group {
+                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
+            }
+            .mq-group:last-child {
+                border-bottom: none;
+            }
+            .mq-group-title {
+                display: flex;
+                justify-content: space-between;
+                padding: 0.35rem 0.75rem;
+                font-weight: 600;
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                background: var(--sapList_HeaderBackground, transparent);
+            }
+            .mq-row {
+                display: flex;
+                align-items: center;
+                padding: 0.3rem 0.75rem;
+                cursor: pointer;
+                gap: 0.5rem;
+                border-left: 3px solid transparent;
+            }
+            .mq-row:hover {
+                background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+            }
+            .mq-row.selected {
+                background: var(--sapList_SelectionBackgroundColor, rgba(0, 102, 204, 0.08));
+                border-left-color: var(--sapSelectedColor, #0070f2);
+            }
+            .mq-row .mq-row-icon {
+                color: var(--sapContent_LabelColor, #6a6d70);
+                flex-shrink: 0;
+                font-size: 0.9rem;
+            }
+            .mq-row .mq-row-name {
+                flex: 1;
+                font-size: 0.8125rem;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .mq-row .mq-row-count {
+                font-size: 0.75rem;
+                font-weight: 600;
+                color: var(--sapTextColor, #303030);
+                flex-shrink: 0;
+            }
+            .mq-row .mq-row-count.zero {
+                color: var(--sapContent_LabelColor, #6a6d70);
+                font-weight: normal;
+            }
+            .mq-empty {
+                padding: 1rem 0.75rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                font-size: 0.8125rem;
+                text-align: center;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" type="solid">
+            <bk-toolbar-label>Destinations</bk-toolbar-label>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="mq-toolbar-sub" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
+                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
+                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+        </bk-toolbar>
+
+        <div class="mq-filters">
+            <bk-input compact="true" type="search" ng-model="filterText" ng-change="applyFilter()" placeholder="Filter by name..."></bk-input>
+        </div>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load destinations</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
+            <div class="mq-group">
+                <div class="mq-group-title">
+                    <span>Queues</span>
+                    <span>{{ filteredQueues.length }} / {{ summary.queues.length || 0 }}</span>
+                </div>
+                <div class="mq-row" ng-repeat="q in filteredQueues track by q.name" ng-class="{ selected: isSelected(q) }" ng-click="select(q)">
+                    <bk-icon class="mq-row-icon" glyph="sap-icon--inbox"></bk-icon>
+                    <span class="mq-row-name" title="{{ q.name }}">{{ q.name }}</span>
+                    <span class="mq-row-count" ng-class="{ zero: !q.size }">{{ q.size }}</span>
+                </div>
+                <div class="mq-empty" ng-if="!filteredQueues.length && !loading">No queues</div>
+            </div>
+            <div class="mq-group">
+                <div class="mq-group-title">
+                    <span>Topics</span>
+                    <span>{{ filteredTopics.length }} / {{ summary.topics.length || 0 }}</span>
+                </div>
+                <div class="mq-row" ng-repeat="t in filteredTopics track by t.name" ng-class="{ selected: isSelected(t) }" ng-click="select(t)">
+                    <bk-icon class="mq-row-icon" glyph="sap-icon--megaphone"></bk-icon>
+                    <span class="mq-row-name" title="{{ t.name }}">{{ t.name }}</span>
+                    <span class="mq-row-count" ng-class="{ zero: !t.consumerCount }">{{ t.consumerCount }}</span>
+                </div>
+                <div class="mq-empty" ng-if="!filteredTopics.length && !loading">No topics</div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            const messagingDestinationsApp = angular.module('messagingDestinations', ['platformView', 'blimpKit']);
+            messagingDestinationsApp.constant('MessageHub', new MessageHubApi());
+            messagingDestinationsApp.controller('MessagingDestinationsController', ($scope, $http, $interval, MessageHub) => {
+                const endpoint = '/services/ide/messaging-monitoring/summary';
+                const TOPIC_SELECTED = 'messaging.destination.selected';
+                const TOPIC_CHANGED = 'messaging.broker.changed';
+                const TOPIC_REQUEST = 'messaging.destination.selection.request';
+
+                $scope.summary = { queues: [], topics: [] };
+                $scope.filteredQueues = [];
+                $scope.filteredTopics = [];
+                $scope.lastUpdated = null;
+                $scope.errorMessage = '';
+                $scope.loading = false;
+                $scope.autoRefresh = true;
+                $scope.filterText = '';
+                $scope.selected = null;
+                let timer = null;
+
+                const findInSummary = (type, name) => {
+                    const pool = type === 'queue' ? $scope.summary.queues : $scope.summary.topics;
+                    for (const entry of (pool || [])) {
+                        if (entry.name === name) return entry;
+                    }
+                    return null;
+                };
+
+                $scope.refresh = () => {
+                    $scope.loading = true;
+                    $http.get(endpoint).then((response) => {
+                        const data = response.data || { queues: [], topics: [] };
+                        $scope.summary = data;
+                        $scope.lastUpdated = new Date();
+                        $scope.errorMessage = '';
+                        $scope.loading = false;
+                        $scope.applyFilter();
+                        MessageHub.postMessage({ topic: TOPIC_CHANGED, data: data });
+                        if ($scope.selected) {
+                            const refreshed = findInSummary($scope.selected.type, $scope.selected.name);
+                            if (refreshed) {
+                                $scope.selected = refreshed;
+                                MessageHub.postMessage({ topic: TOPIC_SELECTED, data: refreshed });
+                            } else {
+                                $scope.selected = null;
+                                MessageHub.postMessage({ topic: TOPIC_SELECTED, data: { cleared: true } });
+                            }
+                        }
+                    }, (error) => {
+                        console.error(error);
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.toggleAutoRefresh = () => {
+                    $scope.autoRefresh = !$scope.autoRefresh;
+                    $scope.restartTimer();
+                };
+
+                $scope.restartTimer = () => {
+                    if (timer) { $interval.cancel(timer); timer = null; }
+                    if ($scope.autoRefresh) {
+                        timer = $interval($scope.refresh, 5000);
+                    }
+                };
+
+                $scope.applyFilter = () => {
+                    const needle = ($scope.filterText || '').trim().toLowerCase();
+                    const matches = (item) => !needle || (item.name && item.name.toLowerCase().indexOf(needle) !== -1);
+                    $scope.filteredQueues = ($scope.summary.queues || []).filter(matches);
+                    $scope.filteredTopics = ($scope.summary.topics || []).filter(matches);
+                };
+
+                $scope.isSelected = (item) => $scope.selected && $scope.selected.name === item.name && $scope.selected.type === item.type;
+
+                $scope.select = (item) => {
+                    $scope.selected = item;
+                    MessageHub.postMessage({ topic: TOPIC_SELECTED, data: item });
+                };
+
+                const requestListener = MessageHub.addMessageListener({
+                    topic: TOPIC_REQUEST,
+                    handler: () => {
+                        MessageHub.postMessage({ topic: TOPIC_CHANGED, data: $scope.summary });
+                        if ($scope.selected) {
+                            MessageHub.postMessage({ topic: TOPIC_SELECTED, data: $scope.selected });
+                        }
+                    }
+                });
+
+                const refreshListener = MessageHub.addMessageListener({
+                    topic: 'messaging.broker.refresh',
+                    handler: () => { $scope.refresh(); }
+                });
+
+                $scope.$on('$destroy', () => {
+                    if (timer) { $interval.cancel(timer); timer = null; }
+                    MessageHub.removeMessageListener(requestListener);
+                    MessageHub.removeMessageListener(refreshListener);
+                });
+
+                $scope.refresh();
+                $scope.restartTimer();
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>
