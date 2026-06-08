@@ -92,7 +92,7 @@
 
     <body class="bk-vbox">
         <bk-toolbar compact="true" type="solid">
-            <bk-toolbar-label>JVM Monitoring</bk-toolbar-label>
+            <bk-toolbar-label>Monitoring</bk-toolbar-label>
             <bk-toolbar-spacer></bk-toolbar-spacer>
             <span class="jvm-tile-sub" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
             <bk-toolbar-separator></bk-toolbar-separator>
@@ -110,7 +110,7 @@
         </bk-toolbar>
 
         <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
-            <bk-message-page-title>Unable to load JVM metrics</bk-message-page-title>
+            <bk-message-page-title>Unable to load monitoring metrics</bk-message-page-title>
             <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
         </bk-message-page>
 
@@ -214,30 +214,6 @@
                 </tbody>
             </table>
 
-            <div class="jvm-section-title">Blocked / waiting threads ({{ (snapshot.threads.blockedOrWaiting || []).length }})</div>
-            <table bk-table display-mode="compact" outer-borders="none">
-                <thead bk-table-header sticky="false" interactive="false">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>#</th>
-                        <th bk-table-header-cell>Name</th>
-                        <th bk-table-header-cell>State</th>
-                        <th bk-table-header-cell>Lock</th>
-                        <th bk-table-header-cell>Held by</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="t in snapshot.threads.blockedOrWaiting track by t.id" hoverable="true" activable="false">
-                        <td bk-table-cell fit-content="true">{{ t.id }}</td>
-                        <td bk-table-cell>{{ t.name }}</td>
-                        <td bk-table-cell><span class="jvm-state-pill jvm-state-{{t.state}}">{{ t.state }}</span></td>
-                        <td bk-table-cell>{{ t.lockName || '-' }}</td>
-                        <td bk-table-cell>{{ t.lockOwnerName ? (t.lockOwnerName + ' (#' + t.lockOwnerId + ')') : '-' }}</td>
-                    </tr>
-                    <tr bk-table-row ng-if="!(snapshot.threads.blockedOrWaiting && snapshot.threads.blockedOrWaiting.length)">
-                        <td bk-table-cell colspan="5" style="text-align: center; color: var(--sapContent_LabelColor, #6a6d70)">No blocked or waiting threads.</td>
-                    </tr>
-                </tbody>
-            </table>
         </div>
 
         <script type="text/javascript">

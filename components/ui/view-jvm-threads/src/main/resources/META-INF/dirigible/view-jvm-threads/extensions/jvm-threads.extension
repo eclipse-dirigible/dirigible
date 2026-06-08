@@ -1,0 +1,5 @@
+{
+    "module": "view-jvm-threads/configs/jvm-threads-view.js",
+    "extensionPoint": "platform-views",
+    "description": "JVM Threads View"
+}

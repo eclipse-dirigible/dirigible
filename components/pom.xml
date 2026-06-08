@@ -142,6 +142,7 @@
         <module>ui/perspective-documents</module>
         <module>ui/perspective-database</module>
         <module>ui/perspective-operations</module>
+        <module>ui/perspective-monitoring</module>
         <module>ui/perspective-jobs</module>
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
@@ -166,6 +167,7 @@
         <module>ui/view-translation</module>
         <module>ui/view-artefacts</module>
         <module>ui/view-jvm-monitoring</module>
+        <module>ui/view-jvm-threads</module>
         <module>ui/view-configurations</module>
         <module>ui/view-data-structures</module>
         <module>ui/view-extensions</module>
@@ -843,6 +845,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-perspective-monitoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-perspective-jobs</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -956,6 +963,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-jvm-monitoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-jvm-threads</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

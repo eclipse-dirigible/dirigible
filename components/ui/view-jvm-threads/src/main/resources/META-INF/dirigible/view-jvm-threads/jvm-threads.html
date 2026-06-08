@@ -1,0 +1,302 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jvmThreads" ng-controller="JvmThreadsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-jvm-threads/configs/jvm-threads-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .jvm-threads-filters {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 0.5rem;
+                align-items: center;
+                padding: 0.5rem 0.75rem;
+                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
+                background: var(--sapList_HeaderBackground, transparent);
+            }
+            .jvm-threads-filters .filter-label {
+                font-size: 0.75rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                margin-right: 0.25rem;
+            }
+            .jvm-threads-count {
+                font-size: 0.75rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                margin-left: auto;
+            }
+            .jvm-threads-table th {
+                cursor: pointer;
+                user-select: none;
+                white-space: nowrap;
+            }
+            .jvm-threads-table th.no-sort {
+                cursor: default;
+            }
+            .jvm-threads-table th .sort-caret {
+                opacity: 0.4;
+                margin-left: 0.25rem;
+                font-size: 0.7em;
+            }
+            .jvm-threads-table th.sorted .sort-caret {
+                opacity: 1;
+            }
+            .jvm-threads-empty {
+                padding: 1rem;
+                text-align: center;
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .jvm-state-pill {
+                display: inline-block;
+                padding: 1px 6px;
+                border-radius: 9999px;
+                font-size: 0.7rem;
+                font-weight: 600;
+                color: #fff;
+            }
+            .jvm-state-RUNNABLE { background: #2c8a3f; }
+            .jvm-state-BLOCKED { background: #b00; }
+            .jvm-state-WAITING { background: #1c81bf; }
+            .jvm-state-TIMED_WAITING { background: #6c8ebf; }
+            .jvm-state-NEW { background: #888; }
+            .jvm-state-TERMINATED { background: #444; }
+            .jvm-mono {
+                font-family: "72Mono-Regular", "Courier New", monospace;
+                font-size: 0.85em;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" type="solid">
+            <bk-toolbar-label>Threads</bk-toolbar-label>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="jvm-threads-count" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
+                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
+                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+            <bk-select compact="true" ng-model="refreshIntervalSeconds" ng-change="restartTimer()" dropdown-fixed="true" style="min-width: 110px">
+                <bk-option text="Every 2s" value="2"></bk-option>
+                <bk-option text="Every 5s" value="5"></bk-option>
+                <bk-option text="Every 10s" value="10"></bk-option>
+                <bk-option text="Every 30s" value="30"></bk-option>
+            </bk-select>
+        </bk-toolbar>
+
+        <div class="jvm-threads-filters">
+            <span class="filter-label">Name</span>
+            <bk-input compact="true" type="search" ng-model="filters.name" ng-change="applyFilters()" placeholder="Filter by name..." style="min-width: 200px"></bk-input>
+
+            <span class="filter-label">State</span>
+            <bk-select compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 150px">
+                <bk-option text="All states" value=""></bk-option>
+                <bk-option ng-repeat="s in states" text="{{s}}" value="{{s}}"></bk-option>
+            </bk-select>
+
+            <span class="filter-label">Daemon</span>
+            <bk-select compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 120px">
+                <bk-option text="All" value=""></bk-option>
+                <bk-option text="User only" value="user"></bk-option>
+                <bk-option text="Daemon only" value="daemon"></bk-option>
+            </bk-select>
+
+            <bk-button compact="true" state="transparent" glyph="sap-icon--clear-filter" label="Clear" title="Clear all filters" ng-click="clearFilters()" ng-disabled="!hasActiveFilters()"></bk-button>
+
+            <span class="jvm-threads-count">
+                Showing {{ filteredThreads.length }} of {{ threads.length }} thread{{ threads.length === 1 ? '' : 's' }}
+            </span>
+        </div>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load threads</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
+            <table class="jvm-threads-table" bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="true" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell ng-click="setSort('id')" ng-class="{ sorted: sort.key === 'id' }">
+                            # <span class="sort-caret">{{ sortCaret('id') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('name')" ng-class="{ sorted: sort.key === 'name' }">
+                            Name <span class="sort-caret">{{ sortCaret('name') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('state')" ng-class="{ sorted: sort.key === 'state' }">
+                            State <span class="sort-caret">{{ sortCaret('state') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('daemon')" ng-class="{ sorted: sort.key === 'daemon' }">
+                            Daemon <span class="sort-caret">{{ sortCaret('daemon') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('priority')" ng-class="{ sorted: sort.key === 'priority' }">
+                            Priority <span class="sort-caret">{{ sortCaret('priority') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('cpuTimeNanos')" ng-class="{ sorted: sort.key === 'cpuTimeNanos' }">
+                            CPU time <span class="sort-caret">{{ sortCaret('cpuTimeNanos') }}</span>
+                        </th>
+                        <th bk-table-header-cell ng-click="setSort('userTimeNanos')" ng-class="{ sorted: sort.key === 'userTimeNanos' }">
+                            User time <span class="sort-caret">{{ sortCaret('userTimeNanos') }}</span>
+                        </th>
+                        <th bk-table-header-cell class="no-sort">Lock</th>
+                        <th bk-table-header-cell class="no-sort">Held by</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="t in filteredThreads track by t.id" hoverable="true" activable="false">
+                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ t.id }}</td>
+                        <td bk-table-cell>{{ t.name }}</td>
+                        <td bk-table-cell><span class="jvm-state-pill jvm-state-{{t.state}}">{{ t.state }}</span></td>
+                        <td bk-table-cell fit-content="true">{{ t.daemon ? 'yes' : 'no' }}</td>
+                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ t.priority >= 0 ? t.priority : '-' }}</td>
+                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ formatDurationNanos(t.cpuTimeNanos) }}</td>
+                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ formatDurationNanos(t.userTimeNanos) }}</td>
+                        <td bk-table-cell>{{ t.lockName || '-' }}</td>
+                        <td bk-table-cell>{{ t.lockOwnerName ? (t.lockOwnerName + ' (#' + t.lockOwnerId + ')') : '-' }}</td>
+                    </tr>
+                    <tr bk-table-row ng-if="!filteredThreads.length && !loading">
+                        <td bk-table-cell colspan="9" class="jvm-threads-empty">
+                            {{ threads.length ? 'No threads match the current filters.' : 'No threads to display.' }}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <script type="text/javascript">
+            angular.module('jvmThreads', ['platformView', 'blimpKit'])
+                .controller('JvmThreadsController', ($scope, $http, $interval, $filter) => {
+                    const endpoint = '/services/ide/monitoring/threads';
+                    const orderBy = $filter('orderBy');
+
+                    $scope.threads = [];
+                    $scope.filteredThreads = [];
+                    $scope.lastUpdated = null;
+                    $scope.errorMessage = '';
+                    $scope.loading = false;
+                    $scope.autoRefresh = true;
+                    $scope.refreshIntervalSeconds = '5';
+                    $scope.states = ['RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'NEW', 'TERMINATED'];
+                    $scope.filters = { name: '', state: '', daemon: '' };
+                    $scope.sort = { key: 'id', reverse: false };
+                    let timer = null;
+
+                    $scope.refresh = () => {
+                        $scope.loading = true;
+                        $http.get(endpoint).then((response) => {
+                            $scope.threads = Array.isArray(response.data) ? response.data : [];
+                            $scope.lastUpdated = new Date();
+                            $scope.errorMessage = '';
+                            $scope.loading = false;
+                            $scope.applyFilters();
+                        }, (error) => {
+                            console.error(error);
+                            $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                            $scope.loading = false;
+                        });
+                    };
+
+                    $scope.toggleAutoRefresh = () => {
+                        $scope.autoRefresh = !$scope.autoRefresh;
+                        $scope.restartTimer();
+                    };
+
+                    $scope.restartTimer = () => {
+                        if (timer) {
+                            $interval.cancel(timer);
+                            timer = null;
+                        }
+                        if ($scope.autoRefresh) {
+                            const seconds = parseInt($scope.refreshIntervalSeconds, 10) || 5;
+                            timer = $interval($scope.refresh, seconds * 1000);
+                        }
+                    };
+
+                    $scope.applyFilters = () => {
+                        const nameNeedle = ($scope.filters.name || '').trim().toLowerCase();
+                        const stateNeedle = $scope.filters.state || '';
+                        const daemonNeedle = $scope.filters.daemon || '';
+                        const filtered = $scope.threads.filter((t) => {
+                            if (nameNeedle && (!t.name || t.name.toLowerCase().indexOf(nameNeedle) === -1)) {
+                                return false;
+                            }
+                            if (stateNeedle && t.state !== stateNeedle) {
+                                return false;
+                            }
+                            if (daemonNeedle === 'daemon' && !t.daemon) {
+                                return false;
+                            }
+                            if (daemonNeedle === 'user' && t.daemon) {
+                                return false;
+                            }
+                            return true;
+                        });
+                        $scope.filteredThreads = orderBy(filtered, $scope.sort.key, $scope.sort.reverse);
+                    };
+
+                    $scope.setSort = (key) => {
+                        if ($scope.sort.key === key) {
+                            $scope.sort.reverse = !$scope.sort.reverse;
+                        } else {
+                            $scope.sort.key = key;
+                            $scope.sort.reverse = false;
+                        }
+                        $scope.applyFilters();
+                    };
+
+                    $scope.sortCaret = (key) => {
+                        if ($scope.sort.key !== key) return '⇅';
+                        return $scope.sort.reverse ? '▼' : '▲';
+                    };
+
+                    $scope.hasActiveFilters = () => Boolean($scope.filters.name || $scope.filters.state || $scope.filters.daemon);
+
+                    $scope.clearFilters = () => {
+                        $scope.filters.name = '';
+                        $scope.filters.state = '';
+                        $scope.filters.daemon = '';
+                        $scope.applyFilters();
+                    };
+
+                    $scope.formatDurationNanos = (nanos) => {
+                        if (nanos === null || nanos === undefined || nanos < 0) return '-';
+                        const ms = nanos / 1e6;
+                        if (ms < 1) return ms.toFixed(3) + ' ms';
+                        if (ms < 1000) return ms.toFixed(1) + ' ms';
+                        const s = ms / 1000;
+                        if (s < 60) return s.toFixed(2) + ' s';
+                        const mins = Math.floor(s / 60);
+                        const secs = (s - mins * 60).toFixed(0);
+                        return mins + 'm ' + secs + 's';
+                    };
+
+                    $scope.$on('$destroy', () => {
+                        if (timer) { $interval.cancel(timer); timer = null; }
+                    });
+
+                    $scope.refresh();
+                    $scope.restartTimer();
+                });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

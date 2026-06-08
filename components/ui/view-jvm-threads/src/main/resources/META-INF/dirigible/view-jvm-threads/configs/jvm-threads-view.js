@@ -10,12 +10,12 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const viewData = {
-    id: 'jvm-monitoring',
-    label: 'Monitoring',
+    id: 'jvm-threads',
+    label: 'Threads',
     region: 'center',
     lazyLoad: true,
     autoFocusTab: false,
-    path: '/services/web/view-jvm-monitoring/jvm-monitoring.html'
+    path: '/services/web/view-jvm-threads/jvm-threads.html'
 };
 if (typeof exports !== 'undefined') {
     exports.getView = () => viewData;

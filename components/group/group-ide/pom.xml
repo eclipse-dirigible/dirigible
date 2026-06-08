@@ -88,6 +88,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-perspective-monitoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-perspective-jobs</artifactId>
         </dependency>
         <dependency>
@@ -173,6 +177,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-jvm-monitoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-jvm-threads</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

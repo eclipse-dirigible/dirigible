@@ -9,14 +9,11 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const viewData = {
-    id: 'jvm-monitoring',
-    label: 'Monitoring',
-    region: 'center',
-    lazyLoad: true,
-    autoFocusTab: false,
-    path: '/services/web/view-jvm-monitoring/jvm-monitoring.html'
-};
-if (typeof exports !== 'undefined') {
-    exports.getView = () => viewData;
-}
+exports.getMenu = () => ({
+	perspectiveId: 'monitoring',
+	include: {
+		window: true,
+		help: true,
+	},
+	items: []
+});

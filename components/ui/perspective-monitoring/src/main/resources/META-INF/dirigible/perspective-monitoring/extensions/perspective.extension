@@ -1,0 +1,5 @@
+{
+    "module": "perspective-monitoring/configs/monitoring.js",
+    "extensionPoint": "platform-perspectives",
+    "description": "Monitoring Perspective"
+}

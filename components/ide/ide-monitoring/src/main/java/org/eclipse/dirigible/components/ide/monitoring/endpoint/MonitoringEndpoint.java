@@ -9,9 +9,12 @@
  */
 package org.eclipse.dirigible.components.ide.monitoring.endpoint;
 
+import java.util.List;
+
 import jakarta.annotation.security.RolesAllowed;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot;
+import org.eclipse.dirigible.components.ide.monitoring.dto.ThreadDetail;
 import org.eclipse.dirigible.components.ide.monitoring.service.MonitoringService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -36,5 +39,10 @@ public class MonitoringEndpoint {
     @GetMapping(value = "/metrics", produces = "application/json")
     public ResponseEntity<MonitoringSnapshot> metrics() {
         return ResponseEntity.ok(monitoringService.snapshot());
+    }
+
+    @GetMapping(value = "/threads", produces = "application/json")
+    public ResponseEntity<List<ThreadDetail>> threads() {
+        return ResponseEntity.ok(monitoringService.threads());
     }
 }

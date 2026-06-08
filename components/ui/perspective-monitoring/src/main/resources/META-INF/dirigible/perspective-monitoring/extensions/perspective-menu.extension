@@ -1,0 +1,5 @@
+{
+    "module": "perspective-monitoring/configs/perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Monitoring perspective menu"
+}

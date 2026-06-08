@@ -12,24 +12,24 @@
 
 -->
 <!DOCTYPE html>
-<html lang="en" ng-app="operations" ng-controller="OperationsController" xmlns="http://www.w3.org/1999/xhtml">
+<html lang="en" ng-app="monitoring" ng-controller="MonitoringController" xmlns="http://www.w3.org/1999/xhtml">
 
     <head>
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title config-title></title>
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
-        <script type="text/javascript" src="/services/web/perspective-operations/configs/operations.js"></script>
+        <script type="text/javascript" src="/services/web/perspective-monitoring/configs/monitoring.js"></script>
         <meta name="platform-links" category="ng-view,ng-perspective">
     </head>
 
     <body>
         <layout config="::layoutConfig"></layout>
         <script type="text/javascript">
-            angular.module('operations', ['platformView', 'platformLayout', 'blimpKit'])
-                .controller('OperationsController', ($scope) => {
+            angular.module('monitoring', ['platformView', 'platformLayout', 'blimpKit'])
+                .controller('MonitoringController', ($scope) => {
                     $scope.layoutConfig = {
-                        views: ['registry', 'repository', 'extensions', 'configurations', 'artefacts', 'jobs', 'listeners', 'tables', 'views', 'websockets', 'logs', 'loggers', 'console'],
+                        views: ['jvm-monitoring', 'jvm-threads'],
                         viewSettings: {},
                         layoutSettings: {
                             leftPaneMinSize: 340

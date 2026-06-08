@@ -9,14 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const viewData = {
-    id: 'jvm-monitoring',
-    label: 'Monitoring',
-    region: 'center',
-    lazyLoad: true,
-    autoFocusTab: false,
-    path: '/services/web/view-jvm-monitoring/jvm-monitoring.html'
+const perspectiveData = {
+	id: 'monitoring',
+	label: 'Monitoring',
+	path: '/services/web/perspective-monitoring/index.html',
+	order: 998,
+	icon: '/services/web/perspective-monitoring/images/monitoring.svg',
 };
 if (typeof exports !== 'undefined') {
-    exports.getView = () => viewData;
+	exports.getPerspective = () => perspectiveData;
 }

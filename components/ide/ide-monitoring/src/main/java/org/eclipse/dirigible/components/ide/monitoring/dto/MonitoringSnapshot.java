@@ -35,10 +35,7 @@ public record MonitoringSnapshot(long timestamp, RuntimeInfo runtime, CpuInfo cp
     }
 
     public record ThreadsInfo(int liveCount, int daemonCount, int peakCount, long totalStartedCount, int deadlockedCount,
-            Map<String, Integer> countsByState, List<BlockedThreadInfo> blockedOrWaiting) {
-    }
-
-    public record BlockedThreadInfo(long id, String name, String state, String lockName, String lockOwnerName, Long lockOwnerId) {
+            Map<String, Integer> countsByState) {
     }
 
     public record GcInfo(String name, long collectionCount, long collectionTimeMillis, List<String> memoryPoolNames) {

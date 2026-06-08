@@ -20,12 +20,13 @@ import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot;
-import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.BlockedThreadInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.CpuInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.GcInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.MemoryInfo;
@@ -33,6 +34,7 @@ import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.Me
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.MemoryUsageInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.RuntimeInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.ThreadsInfo;
+import org.eclipse.dirigible.components.ide.monitoring.dto.ThreadDetail;
 import org.springframework.stereotype.Service;
 
 /**
@@ -48,6 +50,36 @@ public class MonitoringService {
     public MonitoringSnapshot snapshot() {
         return new MonitoringSnapshot(System.currentTimeMillis(), collectRuntime(), collectCpu(), collectMemory(), collectThreads(),
                 collectGc());
+    }
+
+    /**
+     * Returns a detailed view of every live thread in the JVM, suitable for the Threads view's
+     * filtering and sorting. The Monitoring snapshot intentionally omits this list to keep its payload
+     * small for the auto-refresh polling on the dashboard.
+     */
+    public List<ThreadDetail> threads() {
+        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+        long[] ids = threads.getAllThreadIds();
+        if (ids.length == 0) {
+            return Collections.emptyList();
+        }
+        Map<Long, Thread> liveThreads = indexLiveThreads();
+        boolean cpuTimeSupported = threads.isThreadCpuTimeSupported() && threads.isThreadCpuTimeEnabled();
+        ThreadInfo[] infos = threads.getThreadInfo(ids, 0);
+        List<ThreadDetail> details = new ArrayList<>(infos.length);
+        for (ThreadInfo info : infos) {
+            if (info == null) {
+                continue;
+            }
+            Thread live = liveThreads.get(info.getThreadId());
+            long cpuNanos = cpuTimeSupported ? threads.getThreadCpuTime(info.getThreadId()) : -1L;
+            long userNanos = cpuTimeSupported ? threads.getThreadUserTime(info.getThreadId()) : -1L;
+            details.add(new ThreadDetail(info.getThreadId(), info.getThreadName(), info.getThreadState()
+                                                                                       .name(),
+                    live != null && live.isDaemon(), live != null ? live.getPriority() : -1, cpuNanos, userNanos, info.getLockName(),
+                    info.getLockOwnerName(), info.getLockOwnerId() == -1 ? null : info.getLockOwnerId()));
+        }
+        return details;
     }
 
     private RuntimeInfo collectRuntime() {
@@ -82,24 +114,20 @@ public class MonitoringService {
     private ThreadsInfo collectThreads() {
         ThreadMXBean threads = ManagementFactory.getThreadMXBean();
         Map<String, Integer> byState = emptyStateCounts();
-        List<BlockedThreadInfo> blockedOrWaiting = new ArrayList<>();
         long[] ids = threads.getAllThreadIds();
         ThreadInfo[] infos = threads.getThreadInfo(ids, 0);
         for (ThreadInfo info : infos) {
             if (info == null) {
                 continue;
             }
-            Thread.State state = info.getThreadState();
-            byState.merge(state.name(), 1, Integer::sum);
-            if (state == Thread.State.BLOCKED || state == Thread.State.WAITING || state == Thread.State.TIMED_WAITING) {
-                blockedOrWaiting.add(new BlockedThreadInfo(info.getThreadId(), info.getThreadName(), state.name(), info.getLockName(),
-                        info.getLockOwnerName(), info.getLockOwnerId() == -1 ? null : info.getLockOwnerId()));
-            }
+            byState.merge(info.getThreadState()
+                              .name(),
+                    1, Integer::sum);
         }
         long[] deadlocked = threads.findDeadlockedThreads();
         int deadlockedCount = deadlocked == null ? 0 : deadlocked.length;
         return new ThreadsInfo(threads.getThreadCount(), threads.getDaemonThreadCount(), threads.getPeakThreadCount(),
-                threads.getTotalStartedThreadCount(), deadlockedCount, byState, blockedOrWaiting);
+                threads.getTotalStartedThreadCount(), deadlockedCount, byState);
     }
 
     private List<GcInfo> collectGc() {
@@ -108,6 +136,23 @@ public class MonitoringService {
             result.add(new GcInfo(gc.getName(), gc.getCollectionCount(), gc.getCollectionTime(), Arrays.asList(gc.getMemoryPoolNames())));
         }
         return result;
+    }
+
+    /**
+     * Snapshots the live {@link Thread} set so we can read per-thread attributes (daemon, priority)
+     * that are not exposed on {@link ThreadInfo}.
+     */
+    private static Map<Long, Thread> indexLiveThreads() {
+        Thread[] all = new Thread[Thread.activeCount() * 2];
+        int actual = Thread.enumerate(all);
+        Map<Long, Thread> byId = new HashMap<>(actual);
+        for (int i = 0; i < actual; i++) {
+            Thread t = all[i];
+            if (t != null) {
+                byId.put(t.getId(), t);
+            }
+        }
+        return byId;
     }
 
     private static MemoryUsageInfo toUsage(MemoryUsage usage) {

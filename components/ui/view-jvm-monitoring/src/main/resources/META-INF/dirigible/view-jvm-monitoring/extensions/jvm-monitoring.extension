@@ -1,5 +1,5 @@
 {
     "module": "view-jvm-monitoring/configs/jvm-monitoring-view.js",
     "extensionPoint": "platform-views",
-    "description": "JVM Monitoring View"
+    "description": "Monitoring View"
 }
