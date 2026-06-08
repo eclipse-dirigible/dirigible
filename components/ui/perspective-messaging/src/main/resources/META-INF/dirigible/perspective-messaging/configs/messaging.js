@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'messaging',
 	label: 'Messaging',
 	path: '/services/web/perspective-messaging/index.html',
-	order: 1110,
+	order: 1010,
 	icon: '/services/web/perspective-messaging/images/messaging.svg',
 };
 if (typeof exports !== 'undefined') {
