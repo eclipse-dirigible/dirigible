@@ -14,7 +14,7 @@ const perspectiveData = {
 	label: 'Git',
 	path: '/services/web/perspective-git/index.html',
 	icon: '/services/web/perspective-git/images/git.svg',
-	order: 105,
+	order: 110,
 };
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;

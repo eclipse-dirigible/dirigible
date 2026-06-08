@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'documentStorage',
 	label: 'Documents',
 	path: '/services/web/documents/index.html',
-	order: 150,
+	order: 300,
 	icon: '/services/web/documents/images/documents.svg',
 };
 const viewData = {

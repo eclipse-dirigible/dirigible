@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'monitoring',
 	label: 'Monitoring',
 	path: '/services/web/perspective-monitoring/index.html',
-	order: 998,
+	order: 1100,
 	icon: '/services/web/perspective-monitoring/images/monitoring.svg',
 };
 if (typeof exports !== 'undefined') {

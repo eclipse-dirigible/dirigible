@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'security',
 	label: 'Security',
 	path: '/services/web/perspective-security/index.html',
-	order: 998,
+	order: 600,
 	icon: '/services/web/perspective-security/images/security.svg',
 };
 if (typeof exports !== 'undefined') {

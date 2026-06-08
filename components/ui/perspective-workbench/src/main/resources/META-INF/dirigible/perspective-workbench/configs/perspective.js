@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'workbench',
 	label: 'Workbench',
 	path: '/services/web/perspective-workbench/index.html',
-	order: 1,
+	order: 100,
 	icon: '/services/web/perspective-workbench/images/workbench.svg',
 };
 if (typeof exports !== 'undefined') {

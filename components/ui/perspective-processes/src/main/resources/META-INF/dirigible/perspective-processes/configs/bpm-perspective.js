@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'bpm-workspace',
 	label: 'Processes Workspace',
 	path: '/services/web/perspective-processes/processes.html',
-	order: 820,
+	order: 400,
 	icon: '/services/web/perspective-processes/images/process.svg',
 };
 if (typeof exports !== 'undefined') {
