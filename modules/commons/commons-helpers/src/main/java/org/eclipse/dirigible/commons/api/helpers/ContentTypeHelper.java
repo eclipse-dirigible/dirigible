@@ -473,6 +473,9 @@ public class ContentTypeHelper {
     /** The Constant APPLICATION_JSON_ROLES. */
     public static final String APPLICATION_JSON_ROLES = "application/json+roles";
 
+    /** The Constant APPLICATION_JSON_SCOPES. */
+    public static final String APPLICATION_JSON_SCOPES = "application/json+scopes";
+
     /** The Constant APPLICATION_JSON_CSVIM. */
     public static final String APPLICATION_JSON_CSVIM = "application/json+csvim";
 
@@ -710,6 +713,7 @@ public class ContentTypeHelper {
         TEXT_CONTENT_TYPES.put("extension", APPLICATION_JSON_EXTENSION); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("access", APPLICATION_JSON_ACCESS); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("roles", APPLICATION_JSON_ROLES); //$NON-NLS-1$
+        TEXT_CONTENT_TYPES.put("scopes", APPLICATION_JSON_SCOPES); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("hdbti", APPLICATION_HDBTI); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("csvim", APPLICATION_JSON_CSVIM); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("command", APPLICATION_JSON_COMMAND); //$NON-NLS-1$

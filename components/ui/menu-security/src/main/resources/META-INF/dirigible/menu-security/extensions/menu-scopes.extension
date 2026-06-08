@@ -1,0 +1,5 @@
+{
+    "module": "menu-security/templates/menu-scopes.js",
+    "extensionPoint": "platform-templates-menu",
+    "description": "Scopes Definitions Workbench New Menu Extension"
+}
