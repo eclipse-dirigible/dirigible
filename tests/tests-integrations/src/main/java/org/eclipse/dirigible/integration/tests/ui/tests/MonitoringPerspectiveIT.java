@@ -53,16 +53,18 @@ public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
         browser.clickOnElementById(PERSPECTIVE_ID);
 
         // The Metrics view (left region) is the first to load — assert its accordion-panel title
-        // (the layout's h4) and one of its group titles. Threads/Classes are the only groups
-        // guaranteed to be present on every JVM. "Metrics" appears as the toolbar label inside
-        // the view iframe too, so we anchor on the panel title (h4) to avoid the duplicate match.
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.HEADER4, "Metrics");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Classes");
+        // (the layout's h4) and one of its group titles. Classes is one of the few groups guaranteed
+        // to be present on every JVM. Use exact-text matching so ancestor divs that contain the
+        // text as part of a larger accumulated string (e.g. "ClassesLoaded39461…") don't trip the
+        // at-most-one-element check inside findOptionalElementInAllFrames.
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Metrics");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Classes");
 
-        // The Monitoring view (center region) auto-loads alongside Counters. The "Heap" tile label
-        // is a stable, unique anchor that proves the dashboard rendered without races.
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Heap");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Memory pools");
+        // The Monitoring view (center region) auto-loads alongside Counters. "Heap" is a stable
+        // tile label and "Memory pools" is the section header above the per-pool table; both are
+        // leaf divs whose own text is exactly the assertion string.
+        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Heap");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Memory pools");
     }
 
     @Test
