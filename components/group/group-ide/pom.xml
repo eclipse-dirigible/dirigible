@@ -184,6 +184,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-monitoring-metrics</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-data-structures</artifactId>
         </dependency>
         <dependency>

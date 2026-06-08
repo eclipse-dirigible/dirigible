@@ -108,15 +108,15 @@
 
             <span class="filter-label">State</span>
             <bk-select compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 150px">
-                <bk-option text="All states" value=""></bk-option>
-                <bk-option ng-repeat="s in states" text="{{s}}" value="{{s}}"></bk-option>
+                <bk-option text="All states" value="''"></bk-option>
+                <bk-option ng-repeat="s in states track by $index" text="{{s}}" value="s"></bk-option>
             </bk-select>
 
             <span class="filter-label">Daemon</span>
             <bk-select compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 120px">
-                <bk-option text="All" value=""></bk-option>
-                <bk-option text="User only" value="user"></bk-option>
-                <bk-option text="Daemon only" value="daemon"></bk-option>
+                <bk-option text="All" value="''"></bk-option>
+                <bk-option text="User only" value="'user'"></bk-option>
+                <bk-option text="Daemon only" value="'daemon'"></bk-option>
             </bk-select>
 
             <bk-button compact="true" state="transparent" glyph="sap-icon--clear-filter" label="Clear" title="Clear all filters" ng-click="clearFilters()" ng-disabled="!hasActiveFilters()"></bk-button>

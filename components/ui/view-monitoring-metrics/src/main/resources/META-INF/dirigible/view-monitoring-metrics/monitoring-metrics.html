@@ -1,0 +1,160 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="monitoringMetrics" ng-controller="MonitoringMetricsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-monitoring-metrics/configs/monitoring-metrics-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .metrics-toolbar-sub {
+                font-size: 0.7rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .metrics-group {
+                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
+            }
+            .metrics-group:last-child {
+                border-bottom: none;
+            }
+            .metrics-group-title {
+                padding: 0.4rem 0.75rem;
+                font-weight: 600;
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                background: var(--sapList_HeaderBackground, transparent);
+            }
+            .metrics-row {
+                display: flex;
+                align-items: baseline;
+                justify-content: space-between;
+                padding: 0.25rem 0.75rem;
+                font-size: 0.8125rem;
+                gap: 0.5rem;
+            }
+            .metrics-row:hover {
+                background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
+            }
+            .metrics-name {
+                color: var(--sapTextColor, #303030);
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+            }
+            .metrics-value {
+                font-weight: 600;
+                flex-shrink: 0;
+            }
+            .metrics-value .metrics-max {
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .metrics-empty {
+                padding: 1rem 0.75rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+                font-size: 0.8125rem;
+                text-align: center;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" type="solid">
+            <bk-toolbar-label>Metrics</bk-toolbar-label>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="metrics-toolbar-sub" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
+                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
+                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+        </bk-toolbar>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load metrics</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
+            <div class="metrics-group" ng-repeat="group in metrics.groups track by group.title">
+                <div class="metrics-group-title">{{ group.title }}</div>
+                <div class="metrics-row" ng-repeat="item in group.items track by $index">
+                    <span class="metrics-name" title="{{ item.name }}">{{ item.name }}</span>
+                    <span class="metrics-value">
+                        {{ item.value | number }}<span class="metrics-max" ng-if="item.max !== null && item.max !== undefined"> / {{ item.max | number }}</span>
+                    </span>
+                </div>
+                <div class="metrics-empty" ng-if="!group.items.length">No items</div>
+            </div>
+            <div class="metrics-empty" ng-if="!metrics.groups.length && !loading">No metrics available.</div>
+        </div>
+
+        <script type="text/javascript">
+            angular.module('monitoringMetrics', ['platformView', 'blimpKit'])
+                .controller('MonitoringMetricsController', ($scope, $http, $interval) => {
+                    const endpoint = '/services/ide/monitoring/counts';
+                    $scope.metrics = { groups: [] };
+                    $scope.lastUpdated = null;
+                    $scope.errorMessage = '';
+                    $scope.loading = false;
+                    $scope.autoRefresh = true;
+                    let timer = null;
+
+                    $scope.refresh = () => {
+                        $scope.loading = true;
+                        $http.get(endpoint).then((response) => {
+                            $scope.metrics = response.data || { groups: [] };
+                            $scope.lastUpdated = new Date();
+                            $scope.errorMessage = '';
+                            $scope.loading = false;
+                        }, (error) => {
+                            console.error(error);
+                            $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                            $scope.loading = false;
+                        });
+                    };
+
+                    $scope.toggleAutoRefresh = () => {
+                        $scope.autoRefresh = !$scope.autoRefresh;
+                        $scope.restartTimer();
+                    };
+
+                    $scope.restartTimer = () => {
+                        if (timer) {
+                            $interval.cancel(timer);
+                            timer = null;
+                        }
+                        if ($scope.autoRefresh) {
+                            timer = $interval($scope.refresh, 5000);
+                        }
+                    };
+
+                    $scope.$on('$destroy', () => {
+                        if (timer) { $interval.cancel(timer); timer = null; }
+                    });
+
+                    $scope.refresh();
+                    $scope.restartTimer();
+                });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

@@ -13,6 +13,7 @@ import java.util.List;
 
 import jakarta.annotation.security.RolesAllowed;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.ide.monitoring.dto.CountMetrics;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot;
 import org.eclipse.dirigible.components.ide.monitoring.dto.ThreadDetail;
 import org.eclipse.dirigible.components.ide.monitoring.service.MonitoringService;
@@ -44,5 +45,10 @@ public class MonitoringEndpoint {
     @GetMapping(value = "/threads", produces = "application/json")
     public ResponseEntity<List<ThreadDetail>> threads() {
         return ResponseEntity.ok(monitoringService.threads());
+    }
+
+    @GetMapping(value = "/counts", produces = "application/json")
+    public ResponseEntity<CountMetrics> counts() {
+        return ResponseEntity.ok(monitoringService.counts());
     }
 }

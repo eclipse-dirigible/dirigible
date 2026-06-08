@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.ide.monitoring.service;
 
+import java.lang.management.ClassLoadingMXBean;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
 import java.lang.management.MemoryMXBean;
@@ -20,12 +21,20 @@ import java.lang.management.ThreadInfo;
 import java.lang.management.ThreadMXBean;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.zaxxer.hikari.HikariDataSource;
+import com.zaxxer.hikari.HikariPoolMXBean;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourceInitializer;
+import org.eclipse.dirigible.components.database.DirigibleDataSource;
+import org.eclipse.dirigible.components.ide.monitoring.dto.CountMetrics;
+import org.eclipse.dirigible.components.ide.monitoring.dto.CountMetrics.MetricGroup;
+import org.eclipse.dirigible.components.ide.monitoring.dto.CountMetrics.NamedCount;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.CpuInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.GcInfo;
@@ -35,6 +44,8 @@ import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.Me
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.RuntimeInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.MonitoringSnapshot.ThreadsInfo;
 import org.eclipse.dirigible.components.ide.monitoring.dto.ThreadDetail;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
@@ -43,6 +54,14 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class MonitoringService {
+
+    private static final Logger logger = LoggerFactory.getLogger(MonitoringService.class);
+
+    private final DataSourceInitializer dataSourceInitializer;
+
+    public MonitoringService(DataSourceInitializer dataSourceInitializer) {
+        this.dataSourceInitializer = dataSourceInitializer;
+    }
 
     // CPU-load accessors live on com.sun.management.OperatingSystemMXBean rather than the platform
     // interface; we invoke them reflectively so the module has no hard dependency on the Sun bean.
@@ -80,6 +99,26 @@ public class MonitoringService {
                     info.getLockOwnerName(), info.getLockOwnerId() == -1 ? null : info.getLockOwnerId()));
         }
         return details;
+    }
+
+    /**
+     * Collects count-only runtime metrics grouped by subsystem (threads, classloader, database pools,
+     * OS). Designed for the Counters view, which renders a compact vertical list of name/value pairs
+     * and auto-refreshes alongside the Monitoring dashboard.
+     */
+    public CountMetrics counts() {
+        List<MetricGroup> groups = new ArrayList<>();
+        groups.add(collectThreadCounts());
+        groups.add(collectClassLoadingCounts());
+        MetricGroup os = collectOsCounts();
+        if (os != null) {
+            groups.add(os);
+        }
+        MetricGroup pools = collectDataSourcePoolCounts();
+        if (pools != null) {
+            groups.add(pools);
+        }
+        return new CountMetrics(System.currentTimeMillis(), groups);
     }
 
     private RuntimeInfo collectRuntime() {
@@ -138,6 +177,107 @@ public class MonitoringService {
         return result;
     }
 
+    private MetricGroup collectThreadCounts() {
+        ThreadMXBean threads = ManagementFactory.getThreadMXBean();
+        Map<String, Integer> byState = emptyStateCounts();
+        long[] ids = threads.getAllThreadIds();
+        ThreadInfo[] infos = threads.getThreadInfo(ids, 0);
+        for (ThreadInfo info : infos) {
+            if (info == null) {
+                continue;
+            }
+            byState.merge(info.getThreadState()
+                              .name(),
+                    1, Integer::sum);
+        }
+        long[] deadlocked = threads.findDeadlockedThreads();
+        int deadlockedCount = deadlocked == null ? 0 : deadlocked.length;
+        List<NamedCount> items = new ArrayList<>();
+        items.add(new NamedCount("Live", threads.getThreadCount(), null));
+        items.add(new NamedCount("Daemon", threads.getDaemonThreadCount(), null));
+        items.add(new NamedCount("Peak", threads.getPeakThreadCount(), null));
+        items.add(new NamedCount("Started total", threads.getTotalStartedThreadCount(), null));
+        items.add(new NamedCount("Deadlocked", deadlockedCount, null));
+        for (Map.Entry<String, Integer> entry : byState.entrySet()) {
+            items.add(new NamedCount(entry.getKey(), entry.getValue(), null));
+        }
+        return new MetricGroup("Threads", items);
+    }
+
+    private MetricGroup collectClassLoadingCounts() {
+        ClassLoadingMXBean classLoading = ManagementFactory.getClassLoadingMXBean();
+        List<NamedCount> items = List.of(new NamedCount("Loaded", classLoading.getLoadedClassCount(), null),
+                new NamedCount("Loaded total", classLoading.getTotalLoadedClassCount(), null),
+                new NamedCount("Unloaded total", classLoading.getUnloadedClassCount(), null));
+        return new MetricGroup("Classes", items);
+    }
+
+    /**
+     * Open-file-descriptor counts come from {@code com.sun.management.UnixOperatingSystemMXBean}, which
+     * is only present on Unix-family JVMs. Returns {@code null} on platforms (Windows) where neither
+     * accessor exists, so the UI simply omits the group.
+     */
+    private MetricGroup collectOsCounts() {
+        OperatingSystemMXBean os = ManagementFactory.getOperatingSystemMXBean();
+        long openFds = readLong(os, "getOpenFileDescriptorCount");
+        long maxFds = readLong(os, "getMaxFileDescriptorCount");
+        if (openFds < 0 && maxFds < 0) {
+            return null;
+        }
+        List<NamedCount> items = new ArrayList<>();
+        if (openFds >= 0) {
+            items.add(new NamedCount("Open file descriptors", openFds, maxFds >= 0 ? maxFds : null));
+        }
+        items.add(new NamedCount("Available processors", os.getAvailableProcessors(), null));
+        return new MetricGroup("Operating system", items);
+    }
+
+    /**
+     * Iterates every initialized Dirigible data source and reads its HikariCP pool MX bean. The
+     * resulting {@link MetricGroup} carries one named-count per (data-source, metric) pair so the UI
+     * can render them under a single "Database pools" heading; returns {@code null} when no pool is
+     * initialized so the group is omitted entirely.
+     */
+    private MetricGroup collectDataSourcePoolCounts() {
+        Collection<DirigibleDataSource> dataSources = dataSourceInitializer.getInitializedDataSources();
+        if (dataSources.isEmpty()) {
+            return null;
+        }
+        List<NamedCount> items = new ArrayList<>();
+        for (DirigibleDataSource dataSource : dataSources) {
+            HikariPoolStats stats = readHikariPoolStats(dataSource);
+            if (stats == null) {
+                continue;
+            }
+            String name = dataSource.getName();
+            Long maxPoolSize = stats.maxPoolSize >= 0 ? (long) stats.maxPoolSize : null;
+            items.add(new NamedCount(name + " · active", stats.active, maxPoolSize));
+            items.add(new NamedCount(name + " · idle", stats.idle, null));
+            items.add(new NamedCount(name + " · total", stats.total, maxPoolSize));
+            items.add(new NamedCount(name + " · awaiting", stats.awaiting, null));
+        }
+        if (items.isEmpty()) {
+            return null;
+        }
+        return new MetricGroup("Database pools", items);
+    }
+
+    private static HikariPoolStats readHikariPoolStats(DirigibleDataSource dataSource) {
+        try {
+            HikariDataSource hikari = dataSource.unwrap(HikariDataSource.class);
+            HikariPoolMXBean mx = hikari.getHikariPoolMXBean();
+            if (mx == null) {
+                return null;
+            }
+            return new HikariPoolStats(mx.getActiveConnections(), mx.getIdleConnections(), mx.getTotalConnections(),
+                    mx.getThreadsAwaitingConnection(), hikari.getMaximumPoolSize());
+        } catch (Exception ex) {
+            logger.debug("Skipping pool stats for data source [{}] — pool is not a HikariDataSource or is closed", dataSource.getName(),
+                    ex);
+            return null;
+        }
+    }
+
     /**
      * Snapshots the live {@link Thread} set so we can read per-thread attributes (daemon, priority)
      * that are not exposed on {@link ThreadInfo}.
@@ -184,5 +324,23 @@ public class MonitoringService {
         } catch (ReflectiveOperationException ex) {
             return Double.NaN;
         }
+    }
+
+    /**
+     * Reflective accessor for long-returning MXBean methods. Returns {@code -1} if the method is
+     * missing or the call throws — the caller treats negative values as "unsupported".
+     */
+    private static long readLong(Object bean, String methodName) {
+        try {
+            Object value = bean.getClass()
+                               .getMethod(methodName)
+                               .invoke(bean);
+            return value instanceof Number number ? number.longValue() : -1L;
+        } catch (ReflectiveOperationException ex) {
+            return -1L;
+        }
+    }
+
+    private record HikariPoolStats(int active, int idle, int total, int awaiting, int maxPoolSize) {
     }
 }

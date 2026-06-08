@@ -106,6 +106,19 @@ public class DataSourceInitializer implements DisposableBean {
     }
 
     /**
+     * Returns a snapshot of every currently initialized data source. The returned collection is
+     * detached from the underlying registry, so callers may iterate it without holding the registry
+     * lock.
+     *
+     * @return the initialized data sources at the moment of the call
+     */
+    public Collection<DirigibleDataSource> getInitializedDataSources() {
+        synchronized (DATASOURCES) {
+            return new ArrayList<>(DATASOURCES.values());
+        }
+    }
+
+    /**
      * Inits the data source.
      *
      * @param dataSource the data source

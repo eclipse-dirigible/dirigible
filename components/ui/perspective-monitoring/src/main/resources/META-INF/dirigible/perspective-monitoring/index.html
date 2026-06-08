@@ -29,7 +29,7 @@
             angular.module('monitoring', ['platformView', 'platformLayout', 'blimpKit'])
                 .controller('MonitoringController', ($scope) => {
                     $scope.layoutConfig = {
-                        views: ['jvm-monitoring', 'jvm-threads'],
+                        views: ['monitoring-metrics', 'jvm-monitoring', 'jvm-threads'],
                         viewSettings: {},
                         layoutSettings: {
                             leftPaneMinSize: 340

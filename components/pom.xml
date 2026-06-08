@@ -168,6 +168,7 @@
         <module>ui/view-artefacts</module>
         <module>ui/view-jvm-monitoring</module>
         <module>ui/view-jvm-threads</module>
+        <module>ui/view-monitoring-metrics</module>
         <module>ui/view-configurations</module>
         <module>ui/view-data-structures</module>
         <module>ui/view-extensions</module>
@@ -968,6 +969,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-jvm-threads</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-monitoring-metrics</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
