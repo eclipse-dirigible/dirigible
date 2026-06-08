@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.nativeapps.process;
 
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.Command;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.CommandArgument;
@@ -16,7 +17,6 @@ import org.eclipse.dirigible.components.engine.nativeapps.domain.Lifecycle;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeApp;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppConfig;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppKind;
-import org.eclipse.dirigible.components.engine.nativeapps.util.LogSanitizer;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.slf4j.Logger;

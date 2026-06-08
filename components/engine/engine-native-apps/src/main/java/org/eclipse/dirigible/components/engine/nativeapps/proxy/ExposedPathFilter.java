@@ -10,11 +10,11 @@
 package org.eclipse.dirigible.components.engine.nativeapps.proxy;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.ExposedPath;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeApp;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.NativeAppConfig;
 import org.eclipse.dirigible.components.engine.nativeapps.domain.Security;
-import org.eclipse.dirigible.components.engine.nativeapps.util.LogSanitizer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.server.mvc.common.MvcUtils;

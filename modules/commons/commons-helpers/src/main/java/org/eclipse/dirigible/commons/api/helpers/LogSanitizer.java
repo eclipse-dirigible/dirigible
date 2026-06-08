@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.components.engine.nativeapps.util;
+package org.eclipse.dirigible.commons.api.helpers;
 
 /**
  * Strips control characters (CR/LF/etc.) from values before they are interleaved with platform log
@@ -15,9 +15,9 @@ package org.eclipse.dirigible.components.engine.nativeapps.util;
  * {@code Logger.info/debug/...}, so a CR/LF in the input cannot forge a synthetic log entry.
  *
  * <p>
- * CodeQL "Log Injection" findings on native-apps loggers (HTTP {@code remoteUser}, request paths,
- * artefact-author-controlled fields, env-driven config) route through this helper. Keep using it in
- * new logging sites that touch inbound HTTP / artefact fields.
+ * CodeQL "Log Injection" findings on platform loggers (HTTP path/query/header values,
+ * artefact-author-controlled fields, env-driven config) should route through this helper. Keep
+ * using it in new logging sites that touch inbound HTTP or artefact fields.
  */
 public final class LogSanitizer {
 

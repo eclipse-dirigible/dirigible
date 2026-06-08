@@ -13,6 +13,7 @@ import java.util.List;
 import java.util.Map;
 
 import jakarta.annotation.security.RolesAllowed;
+import org.eclipse.dirigible.commons.api.helpers.LogSanitizer;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.BrokerSummary;
 import org.eclipse.dirigible.components.ide.messaging.monitoring.dto.MessageDetail;
@@ -68,7 +69,7 @@ public class MessagingMonitoringEndpoint {
         } catch (RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {
-            logger.warn("Failed to purge queue [{}]", queueName, ex);
+            logger.warn("Failed to purge queue [{}]", LogSanitizer.sanitize(queueName), ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to purge queue: " + ex.getMessage(), ex);
         }
     }
@@ -85,7 +86,8 @@ public class MessagingMonitoringEndpoint {
         } catch (RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {
-            logger.warn("Failed to remove message [{}] from queue [{}]", messageId, queueName, ex);
+            logger.warn("Failed to remove message [{}] from queue [{}]", LogSanitizer.sanitize(messageId), LogSanitizer.sanitize(queueName),
+                    ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to remove message: " + ex.getMessage(), ex);
         }
     }
@@ -103,7 +105,7 @@ public class MessagingMonitoringEndpoint {
         } catch (RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {
-            logger.warn("Failed to remove queue [{}]", queueName, ex);
+            logger.warn("Failed to remove queue [{}]", LogSanitizer.sanitize(queueName), ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to remove queue: " + ex.getMessage(), ex);
         }
     }
@@ -121,7 +123,7 @@ public class MessagingMonitoringEndpoint {
         } catch (RuntimeException ex) {
             throw ex;
         } catch (Exception ex) {
-            logger.warn("Failed to remove topic [{}]", topicName, ex);
+            logger.warn("Failed to remove topic [{}]", LogSanitizer.sanitize(topicName), ex);
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to remove topic: " + ex.getMessage(), ex);
         }
     }
