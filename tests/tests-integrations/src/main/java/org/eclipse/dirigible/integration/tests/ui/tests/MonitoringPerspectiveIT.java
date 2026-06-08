@@ -52,9 +52,11 @@ public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
         Browser browser = ide.getBrowser();
         browser.clickOnElementById(PERSPECTIVE_ID);
 
-        // The Metrics view (left region) is the first to load — assert its toolbar label and one of
-        // its group titles. Threads is the only group guaranteed to be present on every JVM.
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Metrics");
+        // The Metrics view (left region) is the first to load — assert its accordion-panel title
+        // (the layout's h4) and one of its group titles. Threads/Classes are the only groups
+        // guaranteed to be present on every JVM. "Metrics" appears as the toolbar label inside
+        // the view iframe too, so we anchor on the panel title (h4) to avoid the duplicate match.
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.HEADER4, "Metrics");
         browser.assertElementExistsByTypeAndContainsText(HtmlElementType.DIV, "Classes");
 
         // The Monitoring view (center region) auto-loads alongside Counters. The "Heap" tile label
