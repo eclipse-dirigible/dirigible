@@ -1,0 +1,340 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="jvmMonitoring" ng-controller="JvmMonitoringController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-jvm-monitoring/configs/jvm-monitoring-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .jvm-tiles {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+                gap: 0.75rem;
+                padding: 0.75rem;
+            }
+            .jvm-tile {
+                border: 1px solid var(--sapList_BorderColor, #d9d9d9);
+                border-radius: 0.25rem;
+                padding: 0.75rem 1rem;
+                background: var(--sapTile_Background, var(--sapBaseColor, #fff));
+                display: flex;
+                flex-direction: column;
+                gap: 0.25rem;
+            }
+            .jvm-tile-label {
+                font-size: 0.75rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .jvm-tile-value {
+                font-size: 1.5rem;
+                font-weight: 600;
+            }
+            .jvm-tile-sub {
+                font-size: 0.75rem;
+                color: var(--sapContent_LabelColor, #6a6d70);
+            }
+            .jvm-bar {
+                height: 6px;
+                background: var(--sapNeutralBackground, #e5e5e5);
+                border-radius: 3px;
+                overflow: hidden;
+                margin-top: 0.25rem;
+            }
+            .jvm-bar-fill {
+                height: 100%;
+                background: var(--sapInformativeColor, #1c81bf);
+                transition: width 200ms ease;
+            }
+            .jvm-bar-fill.warn { background: var(--sapCriticalColor, #df8a16); }
+            .jvm-bar-fill.danger { background: var(--sapNegativeColor, #b00); }
+            .jvm-section-title {
+                padding: 0.5rem 0.75rem;
+                font-weight: 600;
+                font-size: 0.875rem;
+                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
+                background: var(--sapList_HeaderBackground, transparent);
+            }
+            .jvm-state-pill {
+                display: inline-block;
+                padding: 1px 6px;
+                border-radius: 9999px;
+                font-size: 0.7rem;
+                font-weight: 600;
+                color: #fff;
+            }
+            .jvm-state-RUNNABLE { background: #2c8a3f; }
+            .jvm-state-BLOCKED { background: #b00; }
+            .jvm-state-WAITING { background: #1c81bf; }
+            .jvm-state-TIMED_WAITING { background: #6c8ebf; }
+            .jvm-state-NEW { background: #888; }
+            .jvm-state-TERMINATED { background: #444; }
+            .jvm-error { padding: 1rem; color: var(--sapNegativeColor, #b00); }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" type="solid">
+            <bk-toolbar-label>JVM Monitoring</bk-toolbar-label>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="jvm-tile-sub" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
+                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
+                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+            <bk-select compact="true" ng-model="refreshIntervalSeconds" ng-change="restartTimer()" dropdown-fixed="true" style="min-width: 110px">
+                <bk-option text="Every 2s" value="2"></bk-option>
+                <bk-option text="Every 5s" value="5"></bk-option>
+                <bk-option text="Every 10s" value="10"></bk-option>
+                <bk-option text="Every 30s" value="30"></bk-option>
+            </bk-select>
+        </bk-toolbar>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load JVM metrics</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
+            <div class="jvm-tiles">
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">CPU — process</div>
+                    <div class="jvm-tile-value">{{ formatPercent(snapshot.cpu.processCpuLoad) }}</div>
+                    <div class="jvm-tile-sub">System: {{ formatPercent(snapshot.cpu.systemCpuLoad) }} · Load avg: {{ formatLoad(snapshot.cpu.systemLoadAverage) }}</div>
+                    <div class="jvm-bar"><div class="jvm-bar-fill" ng-class="loadClass(snapshot.cpu.processCpuLoad)" ng-style="{ width: barPercent(snapshot.cpu.processCpuLoad) }"></div></div>
+                </div>
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">Heap</div>
+                    <div class="jvm-tile-value">{{ formatBytes(snapshot.memory.heap.used) }}</div>
+                    <div class="jvm-tile-sub">of {{ formatBytes(snapshot.memory.heap.max) }} max · committed {{ formatBytes(snapshot.memory.heap.committed) }}</div>
+                    <div class="jvm-bar"><div class="jvm-bar-fill" ng-class="loadClass(heapRatio())" ng-style="{ width: barPercent(heapRatio()) }"></div></div>
+                </div>
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">Non-heap</div>
+                    <div class="jvm-tile-value">{{ formatBytes(snapshot.memory.nonHeap.used) }}</div>
+                    <div class="jvm-tile-sub">committed {{ formatBytes(snapshot.memory.nonHeap.committed) }} · max {{ formatBytes(snapshot.memory.nonHeap.max) }}</div>
+                </div>
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">Threads</div>
+                    <div class="jvm-tile-value">{{ snapshot.threads.liveCount }}</div>
+                    <div class="jvm-tile-sub">daemon {{ snapshot.threads.daemonCount }} · peak {{ snapshot.threads.peakCount }} · started {{ snapshot.threads.totalStartedCount }}</div>
+                    <div class="jvm-tile-sub" ng-if="snapshot.threads.deadlockedCount > 0" style="color: var(--sapNegativeColor, #b00)">
+                        <bk-icon glyph="sap-icon--warning"></bk-icon> {{ snapshot.threads.deadlockedCount }} deadlocked
+                    </div>
+                </div>
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">Uptime</div>
+                    <div class="jvm-tile-value">{{ formatDuration(snapshot.runtime.uptimeMillis) }}</div>
+                    <div class="jvm-tile-sub">started {{ snapshot.runtime.startTime | date:'yyyy-MM-dd HH:mm:ss' }}</div>
+                </div>
+                <div class="jvm-tile">
+                    <div class="jvm-tile-label">VM</div>
+                    <div class="jvm-tile-value" style="font-size: 1rem">Java {{ snapshot.runtime.javaVersion }}</div>
+                    <div class="jvm-tile-sub">{{ snapshot.runtime.vmName }} · pid {{ snapshot.runtime.pid }}</div>
+                    <div class="jvm-tile-sub">{{ snapshot.runtime.osName }} {{ snapshot.runtime.osVersion }} ({{ snapshot.runtime.osArch }}) · {{ snapshot.runtime.availableProcessors }} cores</div>
+                </div>
+            </div>
+
+            <div class="jvm-section-title">Threads by state</div>
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="false" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>State</th>
+                        <th bk-table-header-cell>Count</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="(state, count) in snapshot.threads.countsByState track by state" hoverable="true" activable="false">
+                        <td bk-table-cell><span class="jvm-state-pill jvm-state-{{state}}">{{ state }}</span></td>
+                        <td bk-table-cell>{{ count }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="jvm-section-title">Memory pools</div>
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="false" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Pool</th>
+                        <th bk-table-header-cell>Type</th>
+                        <th bk-table-header-cell>Used</th>
+                        <th bk-table-header-cell>Committed</th>
+                        <th bk-table-header-cell>Max</th>
+                        <th bk-table-header-cell>Peak used</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="pool in snapshot.memory.pools track by pool.name" hoverable="true" activable="false">
+                        <td bk-table-cell>{{ pool.name }}</td>
+                        <td bk-table-cell>{{ pool.type }}</td>
+                        <td bk-table-cell>{{ formatBytes(pool.usage.used) }}</td>
+                        <td bk-table-cell>{{ formatBytes(pool.usage.committed) }}</td>
+                        <td bk-table-cell>{{ formatBytes(pool.usage.max) }}</td>
+                        <td bk-table-cell>{{ formatBytes(pool.peakUsage.used) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="jvm-section-title">Garbage collectors</div>
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="false" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>Collections</th>
+                        <th bk-table-header-cell>Total time</th>
+                        <th bk-table-header-cell>Pools</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="gc in snapshot.gc track by gc.name" hoverable="true" activable="false">
+                        <td bk-table-cell>{{ gc.name }}</td>
+                        <td bk-table-cell>{{ gc.collectionCount }}</td>
+                        <td bk-table-cell>{{ formatDuration(gc.collectionTimeMillis) }}</td>
+                        <td bk-table-cell>{{ gc.memoryPoolNames.join(', ') }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="jvm-section-title">Blocked / waiting threads ({{ (snapshot.threads.blockedOrWaiting || []).length }})</div>
+            <table bk-table display-mode="compact" outer-borders="none">
+                <thead bk-table-header sticky="false" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Name</th>
+                        <th bk-table-header-cell>State</th>
+                        <th bk-table-header-cell>Lock</th>
+                        <th bk-table-header-cell>Held by</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="t in snapshot.threads.blockedOrWaiting track by t.id" hoverable="true" activable="false">
+                        <td bk-table-cell fit-content="true">{{ t.id }}</td>
+                        <td bk-table-cell>{{ t.name }}</td>
+                        <td bk-table-cell><span class="jvm-state-pill jvm-state-{{t.state}}">{{ t.state }}</span></td>
+                        <td bk-table-cell>{{ t.lockName || '-' }}</td>
+                        <td bk-table-cell>{{ t.lockOwnerName ? (t.lockOwnerName + ' (#' + t.lockOwnerId + ')') : '-' }}</td>
+                    </tr>
+                    <tr bk-table-row ng-if="!(snapshot.threads.blockedOrWaiting && snapshot.threads.blockedOrWaiting.length)">
+                        <td bk-table-cell colspan="5" style="text-align: center; color: var(--sapContent_LabelColor, #6a6d70)">No blocked or waiting threads.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <script type="text/javascript">
+            angular.module('jvmMonitoring', ['platformView', 'blimpKit'])
+                .controller('JvmMonitoringController', ($scope, $http, $interval) => {
+                    const endpoint = '/services/ide/monitoring/metrics';
+                    $scope.snapshot = null;
+                    $scope.lastUpdated = null;
+                    $scope.errorMessage = '';
+                    $scope.loading = false;
+                    $scope.autoRefresh = true;
+                    $scope.refreshIntervalSeconds = '5';
+                    let timer = null;
+
+                    $scope.refresh = () => {
+                        $scope.loading = true;
+                        $http.get(endpoint).then((response) => {
+                            $scope.snapshot = response.data;
+                            $scope.lastUpdated = new Date();
+                            $scope.errorMessage = '';
+                            $scope.loading = false;
+                        }, (error) => {
+                            console.error(error);
+                            $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                            $scope.loading = false;
+                        });
+                    };
+
+                    $scope.toggleAutoRefresh = () => {
+                        $scope.autoRefresh = !$scope.autoRefresh;
+                        $scope.restartTimer();
+                    };
+
+                    $scope.restartTimer = () => {
+                        if (timer) {
+                            $interval.cancel(timer);
+                            timer = null;
+                        }
+                        if ($scope.autoRefresh) {
+                            const seconds = parseInt($scope.refreshIntervalSeconds, 10) || 5;
+                            timer = $interval($scope.refresh, seconds * 1000);
+                        }
+                    };
+
+                    $scope.formatBytes = (n) => {
+                        if (n === null || n === undefined || n < 0) return '-';
+                        const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                        let i = 0;
+                        let v = n;
+                        while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+                        return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
+                    };
+                    $scope.formatPercent = (v) => {
+                        if (v === null || v === undefined || isNaN(v) || v < 0) return '-';
+                        return (v * 100).toFixed(1) + '%';
+                    };
+                    $scope.formatLoad = (v) => {
+                        if (v === null || v === undefined || v < 0) return '-';
+                        return v.toFixed(2);
+                    };
+                    $scope.formatDuration = (ms) => {
+                        if (ms === null || ms === undefined) return '-';
+                        const s = Math.floor(ms / 1000);
+                        const days = Math.floor(s / 86400);
+                        const hours = Math.floor((s % 86400) / 3600);
+                        const mins = Math.floor((s % 3600) / 60);
+                        const secs = s % 60;
+                        if (days > 0) return `${days}d ${hours}h ${mins}m`;
+                        if (hours > 0) return `${hours}h ${mins}m ${secs}s`;
+                        if (mins > 0) return `${mins}m ${secs}s`;
+                        return `${secs}s`;
+                    };
+                    $scope.barPercent = (ratio) => {
+                        if (ratio === null || ratio === undefined || isNaN(ratio) || ratio < 0) return '0%';
+                        return Math.min(100, Math.max(0, ratio * 100)).toFixed(1) + '%';
+                    };
+                    $scope.loadClass = (ratio) => {
+                        if (ratio === null || ratio === undefined || isNaN(ratio) || ratio < 0) return '';
+                        if (ratio >= 0.9) return 'danger';
+                        if (ratio >= 0.75) return 'warn';
+                        return '';
+                    };
+                    $scope.heapRatio = () => {
+                        const heap = $scope.snapshot && $scope.snapshot.memory && $scope.snapshot.memory.heap;
+                        if (!heap || heap.max <= 0) return 0;
+                        return heap.used / heap.max;
+                    };
+
+                    $scope.$on('$destroy', () => {
+                        if (timer) { $interval.cancel(timer); timer = null; }
+                    });
+
+                    $scope.refresh();
+                    $scope.restartTimer();
+                });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

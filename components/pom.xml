@@ -95,6 +95,7 @@
         <module>ide/ide-java-debug</module>
         <module>ide/ide-problems</module>
         <module>ide/ide-logs</module>
+        <module>ide/ide-monitoring</module>
 
         <!-- API -->
         <module>api/api-modules-javascript</module>
@@ -164,6 +165,7 @@
         <module>ui/view-transfer</module>
         <module>ui/view-translation</module>
         <module>ui/view-artefacts</module>
+        <module>ui/view-jvm-monitoring</module>
         <module>ui/view-configurations</module>
         <module>ui/view-data-structures</module>
         <module>ui/view-extensions</module>
@@ -783,6 +785,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ide-monitoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ide-junit-results</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -944,6 +951,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-artefacts</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-jvm-monitoring</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
