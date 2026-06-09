@@ -67,7 +67,7 @@
             </h2>
             <bk-list ng-if="filteredTopics.length" compact="true">
                 <bk-list-item interactive="true" ng-repeat="t in filteredTopics track by t.name" selected="isSelected(t)" ng-click="select(t)">
-                    <bk-list-icon glyph="sap-icon--megaphone"></bk-list-icon>
+                    <bk-list-icon glyph="sap-icon--marketing-campaign"></bk-list-icon>
                     <bk-list-title class="bk-font--normal" title="{{ t.name }}">{{ t.name }}</bk-list-title>
                     <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !t.consumerCount }">{{ t.consumerCount }}</bk-list-secondary>
                 </bk-list-item>
