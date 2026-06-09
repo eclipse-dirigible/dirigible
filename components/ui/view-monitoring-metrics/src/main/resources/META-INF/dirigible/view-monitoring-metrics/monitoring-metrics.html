@@ -42,14 +42,14 @@
         <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage">
             <div ng-if="metrics.groups.length" ng-repeat="group in metrics.groups track by group.title">
                 <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none">{{ group.title }}</h2>
-                <bk-list ng-if="group.items.length">
-                    <bk-list-item style="height: 2rem" interactive="true" ng-repeat="item in group.items track by $index">
+                <bk-list ng-if="group.items.length" compact="true">
+                    <bk-list-item interactive="true" ng-repeat="item in group.items track by $index">
                         <bk-list-title class="bk-font--normal">{{ item.name }}</bk-list-title>
                         <bk-list-secondary class="bk-font--bold">{{ item.value | number }}<span class="bk-text--subtitle" ng-if="item.max !== null && item.max !== undefined"> / {{ item.max | number }}</span></bk-list-secondary>
                     </bk-list-item>
                 </bk-list>
-                <bk-list ng-if="!group.items.length">
-                    <bk-list-item style="height: 2rem">
+                <bk-list ng-if="!group.items.length" compact="true">
+                    <bk-list-item>
                         <bk-list-title class="bk-font--normal">No items</bk-list-title>
                     </bk-list-item>
                 </bk-list>
