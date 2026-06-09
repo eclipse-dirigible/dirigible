@@ -199,7 +199,7 @@
                         </div>
 
                         <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Body</h4>
-                        <pre class="mqb-body bk-font--mono bk-padding--tiny fd-margin--none" style="white-space: pre-wrap; word-break: break-word;">{{ selectedMessage.body || '' }}</pre>
+                        <pre class="mqb-body bk-font--mono bk-padding--tiny fd-margin--none" style="white-space: pre-wrap; word-break: break-word;" ng-bind="selectedMessage.body"></pre>
                         <p ng-if="selectedMessage.bodyTruncated" class="bk-color--critical bk-font--small fd-margin--none">Body preview truncated.</p>
                     </div>
                 </div>
