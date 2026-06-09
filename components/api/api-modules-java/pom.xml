@@ -37,15 +37,16 @@
 
         <!--
           API facades the SDK delegates to. Compile-scope so the SDK classes resolve at javac
-          time.
-
-          api-bpm is intentionally NOT listed here even though sdk.bpm.* delegates to BpmFacade.
-          api-bpm transitively pulls engine-bpm-flowable → engine-java, and engine-java depends
-          on this module for the org.eclipse.dirigible.sdk.* annotations — adding api-bpm here
-          would form the cycle engine-java → api-modules-java → api-bpm → engine-bpm-flowable
-          → engine-java. sdk.bpm.* uses runtime reflection on BpmFacade instead; the runtime
-          fat jar pulls api-bpm in via group-api.
+          time. The cycle that previously prevented us from listing api-bpm here was broken by
+          extracting ClientClassLoader / ClientClassLoaderHolder out of engine-java into
+          components/core/core-java; engine-bpm-flowable now depends on core-java instead of
+          engine-java, so api-bpm no longer transitively drags engine-java in.
         -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-bpm</artifactId>
+            <version>${project.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-cache</artifactId>

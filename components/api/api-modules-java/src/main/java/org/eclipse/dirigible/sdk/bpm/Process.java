@@ -10,24 +10,28 @@
 package org.eclipse.dirigible.sdk.bpm;
 
 import java.util.Map;
-import org.eclipse.dirigible.sdk.bpm.internal.BpmFacadeBridge;
+import org.eclipse.dirigible.components.api.bpm.BpmFacade;
+import org.eclipse.dirigible.components.engine.bpm.flowable.config.BpmProviderFlowable;
 
 /**
  * Start, inspect, and steer Flowable process instances from Java code. The static helpers cover the
  * everyday surface — starting a process by definition key, reading and writing instance variables,
  * correlating message events; anything else (sub-process trees, history queries, advanced delegate
- * state) is one step away through the underlying Flowable {@code ProcessEngine}, which you can
- * reach via the {@code BpmFacade.getEngine()} bridge inside platform code.
+ * state) is one step away through the underlying Flowable {@link BpmProviderFlowable} returned by
+ * {@link #getEngine()}.
  * <p>
  * Variables are exchanged as native Java values — strings, numbers, booleans, and JSON-friendly
  * {@link Map}s land in Flowable's variable store unchanged. Use this together with the
- * {@code .bpmn} synchronizer for steady-state processes; the
- * {@link org.eclipse.dirigible.sdk.bpm.Deployer Deployer} helper covers programmatic deployment
- * when you need it.
+ * {@code .bpmn} synchronizer for steady-state processes; the {@link Deployer} helper covers
+ * programmatic deployment when you need it.
  */
 public final class Process {
 
     private Process() {}
+
+    public static BpmProviderFlowable getEngine() {
+        return BpmFacade.getEngine();
+    }
 
     /**
      * Starts a new instance of the process definition with the given key. {@code businessKey} is the
@@ -36,37 +40,35 @@ public final class Process {
      * instance id.
      */
     public static String start(String key, String businessKey, String parametersJson) {
-        return BpmFacadeBridge.invoke("startProcess", new Class<?>[] {String.class, String.class, String.class}, key, businessKey,
-                parametersJson);
+        return BpmFacade.startProcess(key, businessKey, parametersJson);
     }
 
     public static void setProcessInstanceName(String processInstanceId, String name) {
-        BpmFacadeBridge.invoke("setProcessInstanceName", new Class<?>[] {String.class, String.class}, processInstanceId, name);
+        BpmFacade.setProcessInstanceName(processInstanceId, name);
     }
 
     public static void updateBusinessKey(String processInstanceId, String businessKey) {
-        BpmFacadeBridge.invoke("updateBusinessKey", new Class<?>[] {String.class, String.class}, processInstanceId, businessKey);
+        BpmFacade.updateBusinessKey(processInstanceId, businessKey);
     }
 
     public static void updateBusinessStatus(String processInstanceId, String businessStatus) {
-        BpmFacadeBridge.invoke("updateBusinessStatus", new Class<?>[] {String.class, String.class}, processInstanceId, businessStatus);
+        BpmFacade.updateBusinessStatus(processInstanceId, businessStatus);
     }
 
     public static Object getVariable(String processInstanceId, String variableName) {
-        return BpmFacadeBridge.invoke("getVariable", new Class<?>[] {String.class, String.class}, processInstanceId, variableName);
+        return BpmFacade.getVariable(processInstanceId, variableName);
     }
 
     public static Map<String, Object> getVariables(String processInstanceId) {
-        return BpmFacadeBridge.invoke("getVariables", new Class<?>[] {String.class}, processInstanceId);
+        return BpmFacade.getVariables(processInstanceId);
     }
 
     public static void setVariable(String processInstanceId, String variableName, Object value) {
-        BpmFacadeBridge.invoke("setVariable", new Class<?>[] {String.class, String.class, Object.class}, processInstanceId, variableName,
-                value);
+        BpmFacade.setVariable(processInstanceId, variableName, value);
     }
 
     public static void removeVariable(String processInstanceId, String variableName) {
-        BpmFacadeBridge.invoke("removeVariable", new Class<?>[] {String.class, String.class}, processInstanceId, variableName);
+        BpmFacade.removeVariable(processInstanceId, variableName);
     }
 
     /**
@@ -74,7 +76,6 @@ public final class Process {
      * intermediate-message catch event. The execution is resumed transactionally.
      */
     public static void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
-        BpmFacadeBridge.invoke("correlateMessageEvent", new Class<?>[] {String.class, String.class, Map.class}, processInstanceId,
-                messageName, variables);
+        BpmFacade.correlateMessageEvent(processInstanceId, messageName, variables);
     }
 }

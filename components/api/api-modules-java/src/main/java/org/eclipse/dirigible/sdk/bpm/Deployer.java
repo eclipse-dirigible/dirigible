@@ -9,7 +9,7 @@
  */
 package org.eclipse.dirigible.sdk.bpm;
 
-import org.eclipse.dirigible.sdk.bpm.internal.BpmFacadeBridge;
+import org.eclipse.dirigible.components.api.bpm.BpmFacade;
 
 /**
  * Programmatic Flowable process deployer — sibling to the {@code .bpmn} synchronizer for the cases
@@ -34,7 +34,7 @@ public final class Deployer {
      * Flowable deployment id.
      */
     public static String deployProcess(String location) {
-        return BpmFacadeBridge.invoke("deployProcess", new Class<?>[] {String.class}, location);
+        return BpmFacade.deployProcess(location);
     }
 
     /**
@@ -43,7 +43,7 @@ public final class Deployer {
      * {@link #deleteProcess(String, String)} for instance-level cleanup.
      */
     public static void undeployProcess(String deploymentId) {
-        BpmFacadeBridge.invoke("undeployProcess", new Class<?>[] {String.class}, deploymentId);
+        BpmFacade.undeployProcess(deploymentId);
     }
 
     /**
@@ -51,6 +51,6 @@ public final class Deployer {
      * tables and the BPM perspective).
      */
     public static void deleteProcess(String processInstanceId, String reason) {
-        BpmFacadeBridge.invoke("deleteProcess", new Class<?>[] {String.class, String.class}, processInstanceId, reason);
+        BpmFacade.deleteProcess(processInstanceId, reason);
     }
 }

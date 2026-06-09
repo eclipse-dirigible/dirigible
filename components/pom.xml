@@ -29,6 +29,7 @@
         <module>core/core-project</module>
         <module>core/core-tenants</module>
         <module>core/core-tracing</module>
+        <module>core/core-java</module>
 
         <!-- Security -->
         <module>security/security-basic</module>
@@ -524,6 +525,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-core-base</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-core-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

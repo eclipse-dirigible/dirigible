@@ -35,10 +35,19 @@
         </dependency>
 
         <!--
+          ClientClassLoader + ClientClassLoaderHolder. Hosted in core-java so engine-bpm-flowable
+          can resolve client classes through the same holder without taking a compile dep on the
+          whole engine-java module.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-java</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
           Java SDK published to client .java code. Holds the annotations consumed by the
           ClassConsumer chain below (@Controller, @Get, @Inject, @Roles, @Scheduled, ...).
-          Pulled in compile-scope; the SDK module deliberately excludes api-bpm to avoid the
-          cycle engine-java → api-modules-java → api-bpm → engine-bpm-flowable → engine-java.
         -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

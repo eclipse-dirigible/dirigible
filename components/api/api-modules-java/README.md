@@ -144,6 +144,20 @@ convention is `@Inject CountryRepository` inside a `@Controller`.
 
 Pulled into the runnable jar transitively from `components/group/group-api` (so any deployment
 that uses the standard API group gets the Java SDK without extra configuration). `engine-java`
-adds an explicit dependency so the SDK classes appear on the compile classpath that `javac` sees
-when synchronizing client `.java` files. See `JavaSynchronizer#finishing` and `ClassPathIndex` for
-how the platform classpath is wired into the in-process compiler.
+declares an explicit compile dependency so the SDK classes — both facades and annotations — are
+on the classpath that `javac` sees when synchronizing client `.java` files. See
+`JavaSynchronizer#finishing` and `ClassPathIndex` for how the platform classpath is wired into
+the in-process compiler.
+
+### Why `components/core/core-java` exists
+
+The SDK module depends on `api-bpm` (so `sdk.bpm.*` calls `BpmFacade` directly), and `api-bpm`
+depends on `engine-bpm-flowable`. If `engine-bpm-flowable` also depended on the full
+`engine-java`, the graph would close into a cycle the moment `engine-java` started using SDK
+annotations: `engine-java → api-modules-java → api-bpm → engine-bpm-flowable → engine-java`.
+
+The fix is to extract the only pieces `engine-bpm-flowable` actually needs from
+`engine-java`'s runtime package — `ClientClassLoader` and `ClientClassLoaderHolder` — into a
+small leaf module, `components/core/core-java`. `engine-bpm-flowable` now depends on that
+module instead of the full engine. `engine-java` also depends on `core-java`, but the two
+no longer share a dependency cycle.

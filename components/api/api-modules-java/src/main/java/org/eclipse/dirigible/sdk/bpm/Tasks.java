@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.sdk.bpm;
 
 import java.util.Map;
-import org.eclipse.dirigible.sdk.bpm.internal.BpmFacadeBridge;
+import org.eclipse.dirigible.components.api.bpm.BpmFacade;
 
 /**
  * Helpers for the Flowable user-task layer — list outstanding tasks for the calling user, read and
@@ -31,23 +31,23 @@ public final class Tasks {
      * caller.
      */
     public static String list() {
-        return BpmFacadeBridge.invoke("getTasks", new Class<?>[0]);
+        return BpmFacade.getTasks();
     }
 
     public static Object getVariable(String taskId, String name) {
-        return BpmFacadeBridge.invoke("getTaskVariable", new Class<?>[] {String.class, String.class}, taskId, name);
+        return BpmFacade.getTaskVariable(taskId, name);
     }
 
     public static Map<String, Object> getVariables(String taskId) {
-        return BpmFacadeBridge.invoke("getTaskVariables", new Class<?>[] {String.class}, taskId);
+        return BpmFacade.getTaskVariables(taskId);
     }
 
     public static void setVariable(String taskId, String name, Object value) {
-        BpmFacadeBridge.invoke("setTaskVariable", new Class<?>[] {String.class, String.class, Object.class}, taskId, name, value);
+        BpmFacade.setTaskVariable(taskId, name, value);
     }
 
     public static void setVariables(String taskId, Map<String, Object> variables) {
-        BpmFacadeBridge.invoke("setTaskVariables", new Class<?>[] {String.class, Map.class}, taskId, variables);
+        BpmFacade.setTaskVariables(taskId, variables);
     }
 
     /**
@@ -55,6 +55,6 @@ public final class Tasks {
      * {@code null} for {@code variablesJson} leaves the existing scope untouched.
      */
     public static void complete(String taskId, String variablesJson) {
-        BpmFacadeBridge.invoke("completeTask", new Class<?>[] {String.class, String.class}, taskId, variablesJson);
+        BpmFacade.completeTask(taskId, variablesJson);
     }
 }
