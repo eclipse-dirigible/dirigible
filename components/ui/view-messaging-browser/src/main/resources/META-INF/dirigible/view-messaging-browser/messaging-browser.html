@@ -192,9 +192,8 @@
                         <div ng-if="propertyEntries(selectedMessage).length" class="bk-vbox bk-box--gap">
                             <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Properties</h4>
                             <div class="mqb-kv">
-                                <ng-container ng-repeat="entry in propertyEntries(selectedMessage) track by entry.key">
-                                    <span class="bk-text--subtitle">{{ entry.key }}</span><span class="bk-font--mono">{{ entry.value }}</span>
-                                </ng-container>
+                                <span class="bk-text--subtitle" ng-repeat-start="entry in propertyEntries(selectedMessage) track by entry.key">{{ entry.key }}</span>
+                                <span class="bk-font--mono" ng-repeat-end>{{ entry.value }}</span>
                             </div>
                         </div>
 
