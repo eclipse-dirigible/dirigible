@@ -14,7 +14,7 @@ const perspectiveData = {
 	label: 'Tracing',
 	path: '/services/web/perspective-tracing/index.html',
 	icon: '/services/web/perspective-tracing/images/tracing.svg',
-	order: 998,
+	order: 1000,
 };
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;

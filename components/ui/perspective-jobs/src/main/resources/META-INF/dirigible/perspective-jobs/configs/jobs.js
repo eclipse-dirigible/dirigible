@@ -13,7 +13,7 @@ const perspectiveData = {
     id: 'jobs',
     label: 'Jobs',
     path: '/services/web/perspective-jobs/index.html',
-    order: 750,
+    order: 450,
     icon: '/services/web/perspective-jobs/images/jobs.svg',
 };
 if (typeof exports !== 'undefined') {

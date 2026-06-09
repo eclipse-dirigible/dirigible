@@ -14,7 +14,7 @@ const perspectiveData = {
 	label: 'Database',
 	path: '/services/web/perspective-database/index.html',
 	icon: '/services/web/perspective-database/images/database.svg',
-	order: 110,
+	order: 200,
 };
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;

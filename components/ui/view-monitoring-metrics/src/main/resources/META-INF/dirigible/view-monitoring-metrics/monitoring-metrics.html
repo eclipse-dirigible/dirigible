@@ -1,0 +1,111 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="monitoringMetrics" ng-controller="MonitoringMetricsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-monitoring-metrics/configs/monitoring-metrics-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" has-title="false">
+            <span>Metrics</span>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="bk-text--subtitle bk-font--small">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+        </bk-toolbar>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load metrics</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage">
+            <div ng-if="metrics.groups.length" ng-repeat="group in metrics.groups track by group.title">
+                <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none">{{ group.title }}</h2>
+                <bk-list ng-if="group.items.length" compact="true">
+                    <bk-list-item interactive="true" ng-repeat="item in group.items track by $index">
+                        <bk-list-title class="bk-font--normal">{{ item.name }}</bk-list-title>
+                        <bk-list-secondary class="bk-font--bold">{{ item.value | number }}<span class="bk-text--subtitle" ng-if="item.max !== null && item.max !== undefined"> / {{ item.max | number }}</span></bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+                <bk-list ng-if="!group.items.length" compact="true">
+                    <bk-list-item>
+                        <bk-list-title class="bk-font--normal">No items</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </div>
+            <p ng-if="!metrics.groups.length && !loading" class="bk-font--large bk-flex-1 bk-center">No metrics available.</p>
+        </div>
+
+        <script type="text/javascript">
+            angular.module('monitoringMetrics', ['platformView', 'blimpKit'])
+                .controller('MonitoringMetricsController', ($scope, $http, $interval) => {
+                    const endpoint = '/services/ide/monitoring/counts';
+                    $scope.metrics = { groups: [] };
+                    $scope.lastUpdated = null;
+                    $scope.errorMessage = '';
+                    $scope.loading = false;
+                    $scope.autoRefresh = true;
+                    let timer = null;
+
+                    $scope.refresh = () => {
+                        $scope.loading = true;
+                        $http.get(endpoint).then((response) => {
+                            $scope.metrics = response.data || { groups: [] };
+                            $scope.lastUpdated = new Date();
+                            $scope.errorMessage = '';
+                            $scope.loading = false;
+                        }, (error) => {
+                            console.error(error);
+                            $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                            $scope.loading = false;
+                        });
+                    };
+
+                    $scope.toggleAutoRefresh = () => {
+                        $scope.autoRefresh = !$scope.autoRefresh;
+                        $scope.restartTimer();
+                    };
+
+                    $scope.restartTimer = () => {
+                        if (timer) {
+                            $interval.cancel(timer);
+                            timer = null;
+                        }
+                        if ($scope.autoRefresh) {
+                            timer = $interval($scope.refresh, 5000);
+                        }
+                    };
+
+                    $scope.$on('$destroy', () => {
+                        if (timer) { $interval.cancel(timer); timer = null; }
+                    });
+
+                    $scope.refresh();
+                    $scope.restartTimer();
+                });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

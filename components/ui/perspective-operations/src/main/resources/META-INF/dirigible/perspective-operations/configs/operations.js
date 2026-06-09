@@ -13,7 +13,7 @@ const perspectiveData = {
 	id: 'operations',
 	label: 'Operations',
 	path: '/services/web/perspective-operations/index.html',
-	order: 999,
+	order: 900,
 	icon: '/services/web/perspective-operations/images/operations.svg',
 };
 if (typeof exports !== 'undefined') {

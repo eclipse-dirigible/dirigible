@@ -52,7 +52,11 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ide-logs</artifactId>
         </dependency>
-        
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ide-monitoring</artifactId>
+        </dependency>
+
         <!-- IDE UI -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
@@ -81,6 +85,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-perspective-operations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-perspective-monitoring</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
@@ -165,6 +173,18 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-artefacts</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-jvm-monitoring</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-jvm-threads</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-monitoring-metrics</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
