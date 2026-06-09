@@ -21,93 +21,20 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/view-messaging-destinations/configs/messaging-destinations-view.js"></script>
         <meta name="platform-links" category="ng-view">
-        <style>
-            .mq-toolbar-sub {
-                font-size: 0.7rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .mq-filters {
-                padding: 0.4rem 0.5rem;
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .mq-group {
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .mq-group:last-child {
-                border-bottom: none;
-            }
-            .mq-group-title {
-                display: flex;
-                justify-content: space-between;
-                padding: 0.35rem 0.75rem;
-                font-weight: 600;
-                font-size: 0.75rem;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .mq-row {
-                display: flex;
-                align-items: center;
-                padding: 0.3rem 0.75rem;
-                cursor: pointer;
-                gap: 0.5rem;
-                border-left: 3px solid transparent;
-            }
-            .mq-row:hover {
-                background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
-            }
-            .mq-row.selected {
-                background: var(--sapList_SelectionBackgroundColor, rgba(0, 102, 204, 0.08));
-                border-left-color: var(--sapSelectedColor, #0070f2);
-            }
-            .mq-row .mq-row-icon {
-                color: var(--sapContent_LabelColor, #6a6d70);
-                flex-shrink: 0;
-                font-size: 0.9rem;
-            }
-            .mq-row .mq-row-name {
-                flex: 1;
-                font-size: 0.8125rem;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .mq-row .mq-row-count {
-                font-size: 0.75rem;
-                font-weight: 600;
-                color: var(--sapTextColor, #303030);
-                flex-shrink: 0;
-            }
-            .mq-row .mq-row-count.zero {
-                color: var(--sapContent_LabelColor, #6a6d70);
-                font-weight: normal;
-            }
-            .mq-empty {
-                padding: 1rem 0.75rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                font-size: 0.8125rem;
-                text-align: center;
-            }
-        </style>
     </head>
 
     <body class="bk-vbox">
-        <bk-toolbar compact="true" type="solid">
-            <bk-toolbar-label>Destinations</bk-toolbar-label>
+        <bk-toolbar compact="true" has-title="false">
+            <span>Destinations</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <span class="mq-toolbar-sub" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <span class="bk-text--subtitle bk-font--small" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
-            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
-                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
-                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
                 aria-label="Toggle auto-refresh"></bk-button>
         </bk-toolbar>
 
-        <div class="mq-filters">
+        <div class="bk-padding--tiny">
             <bk-input compact="true" type="search" ng-model="filterText" ng-change="applyFilter()" placeholder="Filter by name..."></bk-input>
         </div>
 
@@ -116,31 +43,40 @@
             <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
         </bk-message-page>
 
-        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
-            <div class="mq-group">
-                <div class="mq-group-title">
-                    <span>Queues</span>
-                    <span>{{ filteredQueues.length }} / {{ summary.queues.length || 0 }}</span>
-                </div>
-                <div class="mq-row" ng-repeat="q in filteredQueues track by q.name" ng-class="{ selected: isSelected(q) }" ng-click="select(q)">
-                    <bk-icon class="mq-row-icon" glyph="sap-icon--inbox"></bk-icon>
-                    <span class="mq-row-name" title="{{ q.name }}">{{ q.name }}</span>
-                    <span class="mq-row-count" ng-class="{ zero: !q.size }">{{ q.size }}</span>
-                </div>
-                <div class="mq-empty" ng-if="!filteredQueues.length && !loading">No queues</div>
-            </div>
-            <div class="mq-group">
-                <div class="mq-group-title">
-                    <span>Topics</span>
-                    <span>{{ filteredTopics.length }} / {{ summary.topics.length || 0 }}</span>
-                </div>
-                <div class="mq-row" ng-repeat="t in filteredTopics track by t.name" ng-class="{ selected: isSelected(t) }" ng-click="select(t)">
-                    <bk-icon class="mq-row-icon" glyph="sap-icon--megaphone"></bk-icon>
-                    <span class="mq-row-name" title="{{ t.name }}">{{ t.name }}</span>
-                    <span class="mq-row-count" ng-class="{ zero: !t.consumerCount }">{{ t.consumerCount }}</span>
-                </div>
-                <div class="mq-empty" ng-if="!filteredTopics.length && !loading">No topics</div>
-            </div>
+        <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage">
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
+                <span>Queues</span>
+                <span>{{ filteredQueues.length }} / {{ summary.queues.length || 0 }}</span>
+            </h2>
+            <bk-list ng-if="filteredQueues.length" compact="true">
+                <bk-list-item interactive="true" ng-repeat="q in filteredQueues track by q.name" selected="isSelected(q)" ng-click="select(q)">
+                    <bk-list-icon glyph="sap-icon--inbox"></bk-list-icon>
+                    <bk-list-title class="bk-font--normal" title="{{ q.name }}">{{ q.name }}</bk-list-title>
+                    <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !q.size }">{{ q.size }}</bk-list-secondary>
+                </bk-list-item>
+            </bk-list>
+            <bk-list ng-if="!filteredQueues.length && !loading" compact="true">
+                <bk-list-item>
+                    <bk-list-title class="bk-text--subtitle bk-font--normal">No queues</bk-list-title>
+                </bk-list-item>
+            </bk-list>
+
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
+                <span>Topics</span>
+                <span>{{ filteredTopics.length }} / {{ summary.topics.length || 0 }}</span>
+            </h2>
+            <bk-list ng-if="filteredTopics.length" compact="true">
+                <bk-list-item interactive="true" ng-repeat="t in filteredTopics track by t.name" selected="isSelected(t)" ng-click="select(t)">
+                    <bk-list-icon glyph="sap-icon--megaphone"></bk-list-icon>
+                    <bk-list-title class="bk-font--normal" title="{{ t.name }}">{{ t.name }}</bk-list-title>
+                    <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !t.consumerCount }">{{ t.consumerCount }}</bk-list-secondary>
+                </bk-list-item>
+            </bk-list>
+            <bk-list ng-if="!filteredTopics.length && !loading" compact="true">
+                <bk-list-item>
+                    <bk-list-title class="bk-text--subtitle bk-font--normal">No topics</bk-list-title>
+                </bk-list-item>
+            </bk-list>
         </div>
 
         <script type="text/javascript">

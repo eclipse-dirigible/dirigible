@@ -22,90 +22,33 @@
         <script type="text/javascript" src="/services/web/view-jvm-monitoring/configs/jvm-monitoring-view.js"></script>
         <meta name="platform-links" category="ng-view">
         <style>
-            .jvm-tiles {
+            .jvm-cards {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-                gap: 0.75rem;
-                padding: 0.75rem;
+                grid-template-columns: repeat(auto-fit, minmax(13.75rem, 1fr));
             }
-            .jvm-tile {
-                border: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                border-radius: 0.25rem;
-                padding: 0.75rem 1rem;
-                background: var(--sapTile_Background, var(--sapBaseColor, #fff));
-                display: flex;
-                flex-direction: column;
-                gap: 0.25rem;
-            }
-            .jvm-tile-label {
-                font-size: 0.75rem;
-                letter-spacing: 0.04em;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .jvm-tile-value {
-                font-size: 1.5rem;
-                font-weight: 600;
-            }
-            .jvm-tile-sub {
-                font-size: 0.75rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .jvm-bar {
-                height: 6px;
-                background: var(--sapNeutralBackground, #e5e5e5);
-                border-radius: 3px;
-                overflow: hidden;
-                margin-top: 0.25rem;
-            }
-            .jvm-bar-fill {
-                height: 100%;
-                background: var(--sapInformativeColor, #1c81bf);
-                transition: width 200ms ease;
-            }
-            .jvm-bar-fill.warn { background: var(--sapCriticalColor, #df8a16); }
-            .jvm-bar-fill.danger { background: var(--sapNegativeColor, #b00); }
-            .jvm-section-title {
-                padding: 0.5rem 0.75rem;
-                font-weight: 600;
-                font-size: 0.875rem;
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .jvm-state-pill {
-                display: inline-block;
-                padding: 1px 6px;
-                border-radius: 9999px;
-                font-size: 0.7rem;
-                font-weight: 600;
-                color: #fff;
-            }
-            .jvm-state-RUNNABLE { background: #2c8a3f; }
-            .jvm-state-BLOCKED { background: #b00; }
-            .jvm-state-WAITING { background: #1c81bf; }
-            .jvm-state-TIMED_WAITING { background: #6c8ebf; }
-            .jvm-state-NEW { background: #888; }
-            .jvm-state-TERMINATED { background: #444; }
-            .jvm-error { padding: 1rem; color: var(--sapNegativeColor, #b00); }
+
         </style>
     </head>
 
     <body class="bk-vbox">
-        <bk-toolbar compact="true" type="solid">
-            <bk-toolbar-label>Monitoring</bk-toolbar-label>
+        <bk-toolbar compact="true" has-title="false">
+            <span>Monitoring</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <span class="jvm-tile-sub" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+            <span class="bk-text--subtitle bk-font--small">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
-            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
-                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
-                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
                 aria-label="Toggle auto-refresh"></bk-button>
-            <bk-select compact="true" ng-model="refreshIntervalSeconds" ng-change="restartTimer()" dropdown-fixed="true" style="min-width: 110px">
-                <bk-option text="Every 2s" value="2"></bk-option>
-                <bk-option text="Every 5s" value="5"></bk-option>
-                <bk-option text="Every 10s" value="10"></bk-option>
-                <bk-option text="Every 30s" value="30"></bk-option>
-            </bk-select>
+            <bk-popover>
+                <bk-popover-control>
+                    <bk-button state="transparent" label="{{refreshIntervals[refreshIntervalSeconds]}}" is-menu="true" aria-haspopup="menu" aria-controls="refreshIntervals"></bk-button>
+                </bk-popover-control>
+                <bk-popover-body id="refreshIntervals" align="bottom-right">
+                    <bk-menu aria-label="refresh interval options">
+                        <bk-menu-item title="{{value}}" ng-click="setRefreshInterval(key)" ng-repeat="(key, value) in refreshIntervals track by key"></bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
         </bk-toolbar>
 
         <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
@@ -114,88 +57,105 @@
         </bk-message-page>
 
         <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
-            <div class="jvm-tiles">
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">CPU — process</div>
-                    <div class="jvm-tile-value">{{ formatPercent(snapshot.cpu.processCpuLoad) }}</div>
-                    <div class="jvm-tile-sub">System: {{ formatPercent(snapshot.cpu.systemCpuLoad) }} · Load avg: {{ formatLoad(snapshot.cpu.systemLoadAverage) }}</div>
-                    <div class="jvm-bar"><div class="jvm-bar-fill" ng-class="loadClass(snapshot.cpu.processCpuLoad)" ng-style="{ width: barPercent(snapshot.cpu.processCpuLoad) }"></div></div>
-                </div>
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">Heap</div>
-                    <div class="jvm-tile-value">{{ formatBytes(snapshot.memory.heap.used) }}</div>
-                    <div class="jvm-tile-sub">of {{ formatBytes(snapshot.memory.heap.max) }} max · committed {{ formatBytes(snapshot.memory.heap.committed) }}</div>
-                    <div class="jvm-bar"><div class="jvm-bar-fill" ng-class="loadClass(heapRatio())" ng-style="{ width: barPercent(heapRatio()) }"></div></div>
-                </div>
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">Non-heap</div>
-                    <div class="jvm-tile-value">{{ formatBytes(snapshot.memory.nonHeap.used) }}</div>
-                    <div class="jvm-tile-sub">committed {{ formatBytes(snapshot.memory.nonHeap.committed) }} · max {{ formatBytes(snapshot.memory.nonHeap.max) }}</div>
-                </div>
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">Threads</div>
-                    <div class="jvm-tile-value">{{ snapshot.threads.liveCount }}</div>
-                    <div class="jvm-tile-sub">daemon {{ snapshot.threads.daemonCount }} · peak {{ snapshot.threads.peakCount }} · started {{ snapshot.threads.totalStartedCount }}</div>
-                    <div class="jvm-tile-sub" ng-if="snapshot.threads.deadlockedCount > 0" style="color: var(--sapNegativeColor, #b00)">
-                        <bk-icon glyph="sap-icon--warning"></bk-icon> {{ snapshot.threads.deadlockedCount }} deadlocked
-                    </div>
-                </div>
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">Uptime</div>
-                    <div class="jvm-tile-value">{{ formatDuration(snapshot.runtime.uptimeMillis) }}</div>
-                    <div class="jvm-tile-sub">started {{ snapshot.runtime.startTime | date:'yyyy-MM-dd HH:mm:ss' }}</div>
-                </div>
-                <div class="jvm-tile">
-                    <div class="jvm-tile-label">VM</div>
-                    <div class="jvm-tile-value" style="font-size: 1rem">Java {{ snapshot.runtime.javaVersion }}</div>
-                    <div class="jvm-tile-sub">{{ snapshot.runtime.vmName }} · pid {{ snapshot.runtime.pid }}</div>
-                    <div class="jvm-tile-sub">{{ snapshot.runtime.osName }} {{ snapshot.runtime.osVersion }} ({{ snapshot.runtime.osArch }}) · {{ snapshot.runtime.availableProcessors }} cores</div>
-                </div>
+            <div class="jvm-cards bk-box--gap bk-padding--tiny">
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">CPU - process</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatPercent(snapshot.cpu.processCpuLoad) }}</div>
+                        <div class="bk-text--subtitle bk-font--small">System: {{ formatPercent(snapshot.cpu.systemCpuLoad) }} · Load avg: {{ formatLoad(snapshot.cpu.systemLoadAverage) }}</div>
+                        <bk-progress-indicator current-value="barPercent(snapshot.cpu.processCpuLoad)" no-label="true" state="{{loadClass(snapshot.cpu.processCpuLoad)}}" aria-label="cpu load indicator"></bk-progress-indicator>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Heap</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatBytes(snapshot.memory.heap.used) }}</div>
+                        <div class="bk-text--subtitle bk-font--small">of {{ formatBytes(snapshot.memory.heap.max) }} max · committed {{ formatBytes(snapshot.memory.heap.committed) }}</div>
+                        <bk-progress-indicator current-value="barPercent(heapRatio())" no-label="true" state="loadClass(heapRatio())" aria-label="heap ratio indicator"></bk-progress-indicator>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Non-heap</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatBytes(snapshot.memory.nonHeap.used) }}</div>
+                        <div class="bk-text--subtitle bk-font--small">committed {{ formatBytes(snapshot.memory.nonHeap.committed) }} · max {{ formatBytes(snapshot.memory.nonHeap.max) }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Threads</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ snapshot.threads.liveCount }}</div>
+                        <div class="bk-text--subtitle bk-font--small">daemon {{ snapshot.threads.daemonCount }} · peak {{ snapshot.threads.peakCount }} · started {{ snapshot.threads.totalStartedCount }}</div>
+                        <span ng-if="snapshot.threads.deadlockedCount > 0" class="bk-hbox bk-box--gap">
+                            <span class="bk-font--small sap-icon sap-icon--message-warning bk-color--negative" role="presentation"></span>
+                            <span class="bk-font--small bk-color--negative">{{ snapshot.threads.deadlockedCount }} deadlocked</span>
+                        </span>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Uptime</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatDuration(snapshot.runtime.uptimeMillis) }}</div>
+                        <div class="bk-text--subtitle bk-font--small">started {{ snapshot.runtime.startTime | date:'yyyy-MM-dd HH:mm:ss' }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">VM</div>
+                        <div class="bk-font--h4 bk-font--bold">Java {{ snapshot.runtime.javaVersion }}</div>
+                        <div class="bk-text--subtitle bk-font--small">{{ snapshot.runtime.vmName }} · pid {{ snapshot.runtime.pid }}</div>
+                        <div class="bk-text--subtitle bk-font--small">{{ snapshot.runtime.osName }} {{ snapshot.runtime.osVersion }} ({{ snapshot.runtime.osArch }}) · {{ snapshot.runtime.availableProcessors }} cores</div>
+                    </bk-card-content>
+                </bk-card>
             </div>
 
-            <div class="jvm-section-title">Memory pools</div>
-            <table bk-table display-mode="compact" outer-borders="none">
-                <thead bk-table-header sticky="false" interactive="false">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>Pool</th>
-                        <th bk-table-header-cell>Type</th>
-                        <th bk-table-header-cell>Used</th>
-                        <th bk-table-header-cell>Committed</th>
-                        <th bk-table-header-cell>Max</th>
-                        <th bk-table-header-cell>Peak used</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="pool in snapshot.memory.pools track by pool.name" hoverable="true" activable="false">
-                        <td bk-table-cell>{{ pool.name }}</td>
-                        <td bk-table-cell>{{ pool.type }}</td>
-                        <td bk-table-cell>{{ formatBytes(pool.usage.used) }}</td>
-                        <td bk-table-cell>{{ formatBytes(pool.usage.committed) }}</td>
-                        <td bk-table-cell>{{ formatBytes(pool.usage.max) }}</td>
-                        <td bk-table-cell>{{ formatBytes(pool.peakUsage.used) }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <h2 class="bk-font--normal bk-font--bold fd-padding-begin-end--sm">Memory pools</h2>
+            <div bk-scrollbar>
+                <table bk-table display-mode="compact" outer-borders="horizontal">
+                    <thead bk-table-header sticky="false" interactive="false">
+                        <tr bk-table-row>
+                            <th bk-table-header-cell>Pool</th>
+                            <th bk-table-header-cell>Type</th>
+                            <th bk-table-header-cell>Used</th>
+                            <th bk-table-header-cell>Committed</th>
+                            <th bk-table-header-cell>Max</th>
+                            <th bk-table-header-cell>Peak used</th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body>
+                        <tr bk-table-row ng-repeat="pool in snapshot.memory.pools track by pool.name" hoverable="true" activable="false">
+                            <td bk-table-cell>{{ pool.name }}</td>
+                            <td bk-table-cell>{{ pool.type }}</td>
+                            <td bk-table-cell>{{ formatBytes(pool.usage.used) }}</td>
+                            <td bk-table-cell>{{ formatBytes(pool.usage.committed) }}</td>
+                            <td bk-table-cell>{{ formatBytes(pool.usage.max) }}</td>
+                            <td bk-table-cell>{{ formatBytes(pool.peakUsage.used) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
-            <div class="jvm-section-title">Garbage collectors</div>
-            <table bk-table display-mode="compact" outer-borders="none">
-                <thead bk-table-header sticky="false" interactive="false">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell>Name</th>
-                        <th bk-table-header-cell>Collections</th>
-                        <th bk-table-header-cell>Total time</th>
-                        <th bk-table-header-cell>Pools</th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="gc in snapshot.gc track by gc.name" hoverable="true" activable="false">
-                        <td bk-table-cell>{{ gc.name }}</td>
-                        <td bk-table-cell>{{ gc.collectionCount }}</td>
-                        <td bk-table-cell>{{ formatDuration(gc.collectionTimeMillis) }}</td>
-                        <td bk-table-cell>{{ gc.memoryPoolNames.join(', ') }}</td>
-                    </tr>
-                </tbody>
-            </table>
+            <h2 class="bk-font--normal bk-font--bold fd-padding-begin-end--sm">Garbage collectors</h2>
+            <div bk-scrollbar>
+                <table bk-table display-mode="compact" outer-borders="horizontal">
+                    <thead bk-table-header sticky="false" interactive="false">
+                        <tr bk-table-row>
+                            <th bk-table-header-cell>Name</th>
+                            <th bk-table-header-cell>Collections</th>
+                            <th bk-table-header-cell>Total time</th>
+                            <th bk-table-header-cell>Pools</th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body>
+                        <tr bk-table-row ng-repeat="gc in snapshot.gc track by gc.name" hoverable="true" activable="false">
+                            <td bk-table-cell>{{ gc.name }}</td>
+                            <td bk-table-cell>{{ gc.collectionCount }}</td>
+                            <td bk-table-cell>{{ formatDuration(gc.collectionTimeMillis) }}</td>
+                            <td bk-table-cell>{{ gc.memoryPoolNames.join(', ') }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
 
         </div>
 
@@ -208,7 +168,13 @@
                     $scope.errorMessage = '';
                     $scope.loading = false;
                     $scope.autoRefresh = true;
-                    $scope.refreshIntervalSeconds = '5';
+                    $scope.refreshIntervalSeconds = 5;
+                    $scope.refreshIntervals = {
+                        2: 'Every 2s',
+                        5: 'Every 5s',
+                        10: 'Every 10s',
+                        30: 'Every 30s'
+                    };
                     let timer = null;
 
                     $scope.refresh = () => {
@@ -230,14 +196,18 @@
                         $scope.restartTimer();
                     };
 
+                    $scope.setRefreshInterval = (value) => {
+                        $scope.refreshIntervalSeconds = value;
+                        $scope.restartTimer();
+                    };
+
                     $scope.restartTimer = () => {
                         if (timer) {
                             $interval.cancel(timer);
                             timer = null;
                         }
                         if ($scope.autoRefresh) {
-                            const seconds = parseInt($scope.refreshIntervalSeconds, 10) || 5;
-                            timer = $interval($scope.refresh, seconds * 1000);
+                            timer = $interval($scope.refresh, $scope.refreshIntervalSeconds * 1000);
                         }
                     };
 
@@ -270,13 +240,13 @@
                         return `${secs}s`;
                     };
                     $scope.barPercent = (ratio) => {
-                        if (ratio === null || ratio === undefined || isNaN(ratio) || ratio < 0) return '0%';
-                        return Math.min(100, Math.max(0, ratio * 100)).toFixed(1) + '%';
+                        if (ratio === null || ratio === undefined || isNaN(ratio) || ratio < 0) return 0;
+                        return Math.min(100, Math.max(0, ratio * 100)).toFixed(1);
                     };
                     $scope.loadClass = (ratio) => {
                         if (ratio === null || ratio === undefined || isNaN(ratio) || ratio < 0) return '';
-                        if (ratio >= 0.9) return 'danger';
-                        if (ratio >= 0.75) return 'warn';
+                        if (ratio >= 0.9) return 'negative';
+                        if (ratio >= 0.75) return 'critical';
                         return '';
                     };
                     $scope.heapRatio = () => {

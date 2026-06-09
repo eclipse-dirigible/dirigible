@@ -21,68 +21,16 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/view-monitoring-metrics/configs/monitoring-metrics-view.js"></script>
         <meta name="platform-links" category="ng-view">
-        <style>
-            .metrics-toolbar-sub {
-                font-size: 0.7rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .metrics-group {
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .metrics-group:last-child {
-                border-bottom: none;
-            }
-            .metrics-group-title {
-                padding: 0.4rem 0.75rem;
-                font-weight: 600;
-                font-size: 0.75rem;
-                letter-spacing: 0.04em;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .metrics-row {
-                display: flex;
-                align-items: baseline;
-                justify-content: space-between;
-                padding: 0.25rem 0.75rem;
-                font-size: 0.8125rem;
-                gap: 0.5rem;
-            }
-            .metrics-row:hover {
-                background: var(--sapList_Hover_Background, rgba(0, 0, 0, 0.04));
-            }
-            .metrics-name {
-                color: var(--sapTextColor, #303030);
-                overflow: hidden;
-                text-overflow: ellipsis;
-                white-space: nowrap;
-            }
-            .metrics-value {
-                font-weight: 600;
-                flex-shrink: 0;
-            }
-            .metrics-value .metrics-max {
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .metrics-empty {
-                padding: 1rem 0.75rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                font-size: 0.8125rem;
-                text-align: center;
-            }
-        </style>
     </head>
 
     <body class="bk-vbox">
-        <bk-toolbar compact="true" type="solid">
-            <bk-toolbar-label>Metrics</bk-toolbar-label>
+        <bk-toolbar compact="true" has-title="false">
+            <span>Metrics</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <span class="metrics-toolbar-sub" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <span class="bk-text--subtitle bk-font--small">{{lastUpdated | date:'HH:mm:ss'}}</span>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
-            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
-                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
-                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
                 aria-label="Toggle auto-refresh"></bk-button>
         </bk-toolbar>
 
@@ -91,18 +39,22 @@
             <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
         </bk-message-page>
 
-        <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
-            <div class="metrics-group" ng-repeat="group in metrics.groups track by group.title">
-                <div class="metrics-group-title">{{ group.title }}</div>
-                <div class="metrics-row" ng-repeat="item in group.items track by $index">
-                    <span class="metrics-name" title="{{ item.name }}">{{ item.name }}</span>
-                    <span class="metrics-value">
-                        {{ item.value | number }}<span class="metrics-max" ng-if="item.max !== null && item.max !== undefined"> / {{ item.max | number }}</span>
-                    </span>
-                </div>
-                <div class="metrics-empty" ng-if="!group.items.length">No items</div>
+        <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage">
+            <div ng-if="metrics.groups.length" ng-repeat="group in metrics.groups track by group.title">
+                <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none">{{ group.title }}</h2>
+                <bk-list ng-if="group.items.length" compact="true">
+                    <bk-list-item interactive="true" ng-repeat="item in group.items track by $index">
+                        <bk-list-title class="bk-font--normal">{{ item.name }}</bk-list-title>
+                        <bk-list-secondary class="bk-font--bold">{{ item.value | number }}<span class="bk-text--subtitle" ng-if="item.max !== null && item.max !== undefined"> / {{ item.max | number }}</span></bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+                <bk-list ng-if="!group.items.length" compact="true">
+                    <bk-list-item>
+                        <bk-list-title class="bk-font--normal">No items</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
             </div>
-            <div class="metrics-empty" ng-if="!metrics.groups.length && !loading">No metrics available.</div>
+            <p ng-if="!metrics.groups.length && !loading" class="bk-font--large bk-flex-1 bk-center">No metrics available.</p>
         </div>
 
         <script type="text/javascript">

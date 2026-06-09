@@ -52,19 +52,20 @@ public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
         Browser browser = ide.getBrowser();
         browser.clickOnElementById(PERSPECTIVE_ID);
 
-        // The Metrics view (left region) is the first to load — assert its accordion-panel title
+        // The Metrics view (left region) is the first to load - assert its accordion-panel title
         // (the layout's h4) and one of its group titles. Classes is one of the few groups guaranteed
-        // to be present on every JVM. Use exact-text matching so ancestor divs that contain the
-        // text as part of a larger accumulated string (e.g. "ClassesLoaded39461…") don't trip the
-        // at-most-one-element check inside findOptionalElementInAllFrames.
+        // to be present on every JVM. Group titles render through an h2 ("bk-text--subtitle
+        // bk-font--small") after the BlimpKit cleanup; use exact-text matching so ancestor elements
+        // that accumulate the text into a larger string (e.g. "ClassesLoaded39461...") don't trip
+        // the at-most-one-element check inside findOptionalElementInAllFrames.
         browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER4, "Metrics");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Classes");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER2, "Classes");
 
         // The Monitoring view (center region) auto-loads alongside Counters. "Heap" is a stable
-        // tile label and "Memory pools" is the section header above the per-pool table; both are
-        // leaf divs whose own text is exactly the assertion string.
+        // card label rendered as a leaf div ("bk-text--subtitle bk-font--small"); "Memory pools"
+        // is the section header above the per-pool table, now rendered as an h2 after the cleanup.
         browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Heap");
-        browser.assertElementExistsByTypeAndText(HtmlElementType.DIV, "Memory pools");
+        browser.assertElementExistsByTypeAndText(HtmlElementType.HEADER2, "Memory pools");
     }
 
     @Test

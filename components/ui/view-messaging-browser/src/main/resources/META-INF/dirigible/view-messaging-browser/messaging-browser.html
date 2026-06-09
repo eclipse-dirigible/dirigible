@@ -22,156 +22,22 @@
         <script type="text/javascript" src="/services/web/view-messaging-browser/configs/messaging-browser-view.js"></script>
         <meta name="platform-links" category="ng-view">
         <style>
-            .mqb-empty {
-                padding: 2rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                font-size: 0.875rem;
-                text-align: center;
-            }
-            .mqb-header {
-                padding: 0.75rem 1rem;
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .mqb-header-line {
-                display: flex;
-                align-items: center;
-                gap: 0.5rem;
-                flex-wrap: wrap;
-            }
-            .mqb-name {
-                font-size: 1.05rem;
-                font-weight: 600;
-            }
-            .mqb-type-pill {
-                font-size: 0.7rem;
-                text-transform: uppercase;
-                letter-spacing: 0.05em;
-                padding: 1px 8px;
-                border-radius: 9999px;
-                background: var(--sapNeutralBackground, #e5e5e5);
-                color: var(--sapTextColor, #303030);
-            }
-            .mqb-type-pill.queue { background: #d6e9ff; color: #003c80; }
-            .mqb-type-pill.topic { background: #ffe7c2; color: #6b3a00; }
             .mqb-stats {
                 display: grid;
-                grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-                gap: 0.5rem;
-                margin-top: 0.5rem;
-            }
-            .mqb-stat {
-                border: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                border-radius: 4px;
-                padding: 0.4rem 0.6rem;
-                background: var(--sapTile_Background, var(--sapBaseColor, #fff));
-            }
-            .mqb-stat-label {
-                font-size: 0.7rem;
-                text-transform: uppercase;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                letter-spacing: 0.04em;
-            }
-            .mqb-stat-value {
-                font-size: 1.1rem;
-                font-weight: 600;
-            }
-            .mqb-section-title {
-                padding: 0.4rem 1rem;
-                font-weight: 600;
-                font-size: 0.8rem;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                background: var(--sapList_HeaderBackground, transparent);
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .mqb-msg-row {
-                cursor: pointer;
-            }
-            .mqb-msg-row.selected {
-                background: var(--sapList_SelectionBackgroundColor, rgba(0, 102, 204, 0.08));
-            }
-            .mqb-mono {
-                font-family: "72Mono-Regular", "Courier New", monospace;
-                font-size: 0.85em;
+                grid-template-columns: repeat(auto-fit, minmax(9.375rem, 1fr));
             }
             .mqb-split {
-                display: flex;
-                flex: 1;
+                display: grid;
+                grid-template-columns: minmax(20rem, 3fr) minmax(17.5rem, 2fr);
                 min-height: 0;
-                border-top: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .mqb-split-list {
-                flex: 1 1 60%;
-                min-width: 320px;
-                overflow: auto;
-                border-right: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .mqb-split-detail {
-                flex: 1 1 40%;
-                min-width: 280px;
-                display: flex;
-                flex-direction: column;
-                overflow: hidden;
-            }
-            .mqb-detail-section {
-                padding: 0.5rem 1rem;
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .mqb-detail-section h4 {
-                margin: 0 0 0.25rem;
-                font-size: 0.75rem;
-                font-weight: 600;
-                text-transform: uppercase;
-                letter-spacing: 0.04em;
-                color: var(--sapContent_LabelColor, #6a6d70);
             }
             .mqb-kv {
                 display: grid;
-                grid-template-columns: 140px 1fr;
-                gap: 2px 8px;
-                font-size: 0.8rem;
-            }
-            .mqb-kv > .k {
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .mqb-kv > .v {
-                word-break: break-all;
+                grid-template-columns: 8.75rem 1fr;
+                gap: 0.125rem 0.5rem;
             }
             .mqb-body {
-                flex: 1 1 auto;
-                overflow: auto;
-                margin: 0;
-                padding: 0.5rem 1rem;
-                white-space: pre-wrap;
-                word-break: break-word;
-                font-family: "72Mono-Regular", "Courier New", monospace;
-                font-size: 0.8rem;
-                background: var(--sapList_AlternatingBackground, #f7f7f7);
-            }
-            .mqb-truncated-warning {
-                padding: 0.25rem 1rem;
-                font-size: 0.75rem;
-                color: var(--sapCriticalColor, #df8a16);
-                border-top: 1px solid var(--sapList_BorderColor, #d9d9d9);
-            }
-            .mqb-toolbar-sub {
-                font-size: 0.7rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .mqb-table-empty {
-                text-align: center;
-                padding: 1rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .mqb-error {
-                padding: 0.5rem 1rem;
-                font-size: 0.8rem;
-                color: var(--sapNegativeColor, #b00);
+                background: var(--object-background-alt);
             }
         </style>
     </head>
@@ -182,78 +48,95 @@
             <bk-message-page-subtitle>Pick a queue or topic from the left to inspect its messages and counters.</bk-message-page-subtitle>
         </bk-message-page>
 
-        <div class="bk-vbox" ng-if="selected" style="height: 100%">
-            <div class="mqb-header">
-                <div class="mqb-header-line">
-                    <span class="mqb-type-pill" ng-class="selected.type">{{ selected.type }}</span>
-                    <span class="mqb-name">{{ selected.name }}</span>
-                    <span class="mqb-toolbar-sub" ng-show="lastUpdated">· Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
-                    <div style="flex: 1"></div>
-                    <bk-button compact="true" state="transparent" glyph="sap-icon--refresh" label="Refresh" ng-click="refresh()" ng-disabled="loading"></bk-button>
-                    <bk-button compact="true" state="transparent" glyph="sap-icon--delete" label="Purge messages"
-                        ng-click="purge()" ng-disabled="!isQueue() || !selected.size || loading" title="Discard all pending messages on this queue"></bk-button>
-                    <bk-button compact="true" state="negative" glyph="sap-icon--decline" label="Delete destination"
-                        ng-click="deleteDestination()" ng-disabled="loading"
-                        title="Remove this {{ selected.type }} from the broker (only allowed when no consumers are attached)"></bk-button>
-                </div>
-                <div class="mqb-stats">
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Pending</div>
-                        <div class="mqb-stat-value">{{ selected.size | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Enqueued</div>
-                        <div class="mqb-stat-value">{{ selected.enqueueCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Dequeued</div>
-                        <div class="mqb-stat-value">{{ selected.dequeueCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Dispatched</div>
-                        <div class="mqb-stat-value">{{ selected.dispatchCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Inflight</div>
-                        <div class="mqb-stat-value">{{ selected.inflightCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Expired</div>
-                        <div class="mqb-stat-value">{{ selected.expiredCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Consumers</div>
-                        <div class="mqb-stat-value">{{ selected.consumerCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat">
-                        <div class="mqb-stat-label">Producers</div>
-                        <div class="mqb-stat-value">{{ selected.producerCount | number }}</div>
-                    </div>
-                    <div class="mqb-stat" ng-if="selected.memoryUsageBytes >= 0">
-                        <div class="mqb-stat-label">Memory</div>
-                        <div class="mqb-stat-value">{{ formatBytes(selected.memoryUsageBytes) }}<span ng-if="selected.memoryUsageLimit > 0" class="mqb-toolbar-sub"> / {{ formatBytes(selected.memoryUsageLimit) }}</span></div>
-                    </div>
-                </div>
+        <div class="bk-vbox bk-full-height" ng-if="selected">
+            <bk-toolbar compact="true" has-title="false">
+                <span bk-object-status status="{{ isQueue() ? 'informative' : '' }}" text="{{ selected.type }}" inverted="true" style="white-space: nowrap;"></span>
+                <span class="bk-font--large bk-font--bold">{{ selected.name }}</span>
+                <span class="bk-text--subtitle bk-font--small" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button compact="true" state="transparent" glyph="sap-icon--refresh" label="Refresh" ng-click="refresh()" ng-disabled="loading"></bk-button>
+                <bk-button compact="true" state="transparent" glyph="sap-icon--delete" label="Purge messages"
+                    ng-click="purge()" ng-disabled="!isQueue() || !selected.size || loading" title="Discard all pending messages on this queue"></bk-button>
+                <bk-button compact="true" state="negative" glyph="sap-icon--decline" label="Delete destination"
+                    ng-click="deleteDestination()" ng-disabled="loading"
+                    title="Remove this {{ selected.type }} from the broker (only allowed when no consumers are attached)"></bk-button>
+            </bk-toolbar>
+
+            <div class="mqb-stats bk-box--gap bk-padding--tiny">
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Pending</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.size | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Enqueued</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.enqueueCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Dequeued</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.dequeueCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Dispatched</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.dispatchCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Inflight</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.inflightCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Expired</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.expiredCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Consumers</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.consumerCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Producers</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.producerCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card" ng-if="selected.memoryUsageBytes >= 0">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Memory</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatBytes(selected.memoryUsageBytes) }}<span ng-if="selected.memoryUsageLimit > 0" class="bk-text--subtitle bk-font--small"> / {{ formatBytes(selected.memoryUsageLimit) }}</span></div>
+                    </bk-card-content>
+                </bk-card>
             </div>
 
-            <div class="mqb-section-title">
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
                 <span>
                     Messages
-                    <span class="mqb-toolbar-sub" ng-if="isQueue()">— browse without consuming</span>
+                    <span class="bk-text--subtitle bk-font--small" ng-if="isQueue()">- browse without consuming</span>
                 </span>
-                <span class="mqb-toolbar-sub" ng-show="messages && messages.length !== undefined">{{ messages.length }} loaded</span>
-            </div>
+                <span class="bk-text--subtitle bk-font--small" ng-show="messages && messages.length !== undefined">{{ messages.length }} loaded</span>
+            </h2>
 
-            <div class="mqb-error" ng-if="errorMessage">{{ errorMessage }}</div>
+            <p ng-if="errorMessage" class="bk-color--negative bk-padding--tiny fd-margin--none">{{ errorMessage }}</p>
 
-            <div class="mqb-empty" ng-if="!isQueue()">
-                Topics in JMS do not retain non-persistent messages. Use the broker stats above to monitor subscribers and traffic.
-                Send a sample message via <code class="mqb-mono">messaging.sendToTopic(...)</code> to verify a topic is alive.
-            </div>
+            <bk-message-page glyph="sap-icon--bell" ng-if="!isQueue()">
+                <bk-message-page-title>Topics do not retain messages</bk-message-page-title>
+                <bk-message-page-subtitle>JMS topics do not retain non-persistent messages. Use the broker stats above to monitor subscribers and traffic. Send a sample message via <code class="bk-font--mono">messaging.sendToTopic(...)</code> to verify a topic is alive.</bk-message-page-subtitle>
+            </bk-message-page>
 
-            <div class="mqb-split" ng-if="isQueue()">
-                <div class="mqb-split-list">
-                    <table bk-table display-mode="compact" outer-borders="none">
+            <div class="mqb-split bk-flex-1" ng-if="isQueue()">
+                <div bk-scrollbar>
+                    <table bk-table display-mode="compact" outer-borders="top">
                         <thead bk-table-header sticky="true" interactive="false">
                             <tr bk-table-row>
                                 <th bk-table-header-cell>Message ID</th>
@@ -265,60 +148,59 @@
                             </tr>
                         </thead>
                         <tbody bk-table-body>
-                            <tr bk-table-row ng-repeat="msg in messages track by msg.id" hoverable="true" activable="false"
-                                class="mqb-msg-row" ng-class="{ selected: selectedMessage && selectedMessage.id === msg.id }"
+                            <tr bk-table-row ng-repeat="msg in messages track by msg.id" hoverable="true" activable="true"
+                                selected="selectedMessage && selectedMessage.id === msg.id"
                                 ng-click="selectMessage(msg)">
-                                <td bk-table-cell class="mqb-mono" title="{{ msg.id }}">{{ shortId(msg.id) }}</td>
+                                <td bk-table-cell class="bk-font--mono" title="{{ msg.id }}">{{ shortId(msg.id) }}</td>
                                 <td bk-table-cell fit-content="true">{{ msg.timestamp ? (msg.timestamp | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
                                 <td bk-table-cell fit-content="true">{{ msg.bodyKind }}</td>
-                                <td bk-table-cell fit-content="true" class="mqb-mono">{{ formatBytes(msg.sizeBytes) }}</td>
-                                <td bk-table-cell fit-content="true" class="mqb-mono">{{ msg.priority }}</td>
-                                <td bk-table-cell fit-content="true" class="mqb-mono">{{ msg.redeliveryCounter }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ formatBytes(msg.sizeBytes) }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ msg.priority }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ msg.redeliveryCounter }}</td>
                             </tr>
                             <tr bk-table-row ng-if="!messages.length && !loading">
-                                <td bk-table-cell colspan="6" class="mqb-table-empty">No pending messages.</td>
+                                <td bk-table-cell no-data="true">No pending messages.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <div class="mqb-split-detail">
-                    <div class="mqb-empty" ng-if="!selectedMessage">Select a message to inspect its headers, properties and body.</div>
+                <div bk-scrollbar class="bk-vbox">
+                    <bk-message-page glyph="sap-icon--inspect" ng-if="!selectedMessage">
+                        <bk-message-page-title>No message selected</bk-message-page-title>
+                        <bk-message-page-subtitle>Select a message to inspect its headers, properties and body.</bk-message-page-subtitle>
+                    </bk-message-page>
 
-                    <div class="mqb-detail-section" ng-if="selectedMessage">
-                        <h4>Message
+                    <div ng-if="selectedMessage" class="bk-padding--tiny bk-vbox bk-box--gap">
+                        <div class="bk-hbox bk-box--items-center bk-box--space-between bk-box--gap">
+                            <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Message</h4>
                             <bk-button compact="true" state="transparent" glyph="sap-icon--delete" label="Remove"
-                                ng-click="deleteMessage(selectedMessage)" title="Remove this message from the queue"
-                                style="float: right; margin-top: -4px"></bk-button>
-                        </h4>
-                        <div class="mqb-kv">
-                            <span class="k">ID</span><span class="v mqb-mono">{{ selectedMessage.id }}</span>
-                            <span class="k">Correlation</span><span class="v mqb-mono">{{ selectedMessage.correlationId || '-' }}</span>
-                            <span class="k">Type</span><span class="v">{{ selectedMessage.bodyKind }}<span ng-if="selectedMessage.type"> ({{ selectedMessage.type }})</span></span>
-                            <span class="k">Timestamp</span><span class="v">{{ selectedMessage.timestamp ? (selectedMessage.timestamp | date:'yyyy-MM-dd HH:mm:ss.sss') : '-' }}</span>
-                            <span class="k">Expiration</span><span class="v">{{ selectedMessage.expiration ? (selectedMessage.expiration | date:'yyyy-MM-dd HH:mm:ss') : 'never' }}</span>
-                            <span class="k">Priority</span><span class="v mqb-mono">{{ selectedMessage.priority }}</span>
-                            <span class="k">Redeliveries</span><span class="v mqb-mono">{{ selectedMessage.redeliveryCounter }}</span>
-                            <span class="k">Persistent</span><span class="v">{{ selectedMessage.persistent ? 'yes' : 'no' }}</span>
-                            <span class="k">Size</span><span class="v mqb-mono">{{ formatBytes(selectedMessage.sizeBytes) }}</span>
+                                ng-click="deleteMessage(selectedMessage)" title="Remove this message from the queue"></bk-button>
                         </div>
-                    </div>
-
-                    <div class="mqb-detail-section" ng-if="selectedMessage && propertyEntries(selectedMessage).length">
-                        <h4>Properties</h4>
                         <div class="mqb-kv">
-                            <ng-container ng-repeat="entry in propertyEntries(selectedMessage) track by entry.key">
-                                <span class="k">{{ entry.key }}</span><span class="v mqb-mono">{{ entry.value }}</span>
-                            </ng-container>
+                            <span class="bk-text--subtitle">ID</span><span class="bk-font--mono">{{ selectedMessage.id }}</span>
+                            <span class="bk-text--subtitle">Correlation</span><span class="bk-font--mono">{{ selectedMessage.correlationId || '-' }}</span>
+                            <span class="bk-text--subtitle">Type</span><span>{{ selectedMessage.bodyKind }}<span ng-if="selectedMessage.type"> ({{ selectedMessage.type }})</span></span>
+                            <span class="bk-text--subtitle">Timestamp</span><span>{{ selectedMessage.timestamp ? (selectedMessage.timestamp | date:'yyyy-MM-dd HH:mm:ss.sss') : '-' }}</span>
+                            <span class="bk-text--subtitle">Expiration</span><span>{{ selectedMessage.expiration ? (selectedMessage.expiration | date:'yyyy-MM-dd HH:mm:ss') : 'never' }}</span>
+                            <span class="bk-text--subtitle">Priority</span><span class="bk-font--mono">{{ selectedMessage.priority }}</span>
+                            <span class="bk-text--subtitle">Redeliveries</span><span class="bk-font--mono">{{ selectedMessage.redeliveryCounter }}</span>
+                            <span class="bk-text--subtitle">Persistent</span><span>{{ selectedMessage.persistent ? 'yes' : 'no' }}</span>
+                            <span class="bk-text--subtitle">Size</span><span class="bk-font--mono">{{ formatBytes(selectedMessage.sizeBytes) }}</span>
                         </div>
-                    </div>
 
-                    <div class="mqb-detail-section" ng-if="selectedMessage" style="border-bottom: none; padding-bottom: 0; flex-shrink: 0">
-                        <h4>Body</h4>
-                    </div>
-                    <pre class="mqb-body" ng-if="selectedMessage">{{ selectedMessage.body || '<empty>' }}</pre>
-                    <div class="mqb-truncated-warning" ng-if="selectedMessage && selectedMessage.bodyTruncated">
-                        Body preview truncated.
+                        <div ng-if="propertyEntries(selectedMessage).length" class="bk-vbox bk-box--gap">
+                            <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Properties</h4>
+                            <div class="mqb-kv">
+                                <ng-container ng-repeat="entry in propertyEntries(selectedMessage) track by entry.key">
+                                    <span class="bk-text--subtitle">{{ entry.key }}</span><span class="bk-font--mono">{{ entry.value }}</span>
+                                </ng-container>
+                            </div>
+                        </div>
+
+                        <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Body</h4>
+                        <pre class="mqb-body bk-font--mono bk-padding--tiny fd-margin--none" style="white-space: pre-wrap; word-break: break-word;">{{ selectedMessage.body || '<empty>' }}</pre>
+                        <p ng-if="selectedMessage.bodyTruncated" class="bk-color--critical bk-font--small fd-margin--none">Body preview truncated.</p>
                     </div>
                 </div>
             </div>
@@ -346,7 +228,7 @@
                 $scope.shortId = (id) => {
                     if (!id) return '-';
                     const colon = id.lastIndexOf(':');
-                    return colon >= 0 && colon < id.length - 1 ? id.substring(0, 6) + '…' + id.substring(colon) : id;
+                    return colon >= 0 && colon < id.length - 1 ? id.substring(0, 6) + '...' + id.substring(colon) : id;
                 };
 
                 $scope.formatBytes = (n) => {
