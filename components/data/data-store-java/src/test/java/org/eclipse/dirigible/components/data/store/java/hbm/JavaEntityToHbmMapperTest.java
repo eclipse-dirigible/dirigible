@@ -13,14 +13,14 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import org.eclipse.dirigible.engine.java.annotations.Column;
-import org.eclipse.dirigible.engine.java.annotations.CreatedAt;
-import org.eclipse.dirigible.engine.java.annotations.Entity;
-import org.eclipse.dirigible.engine.java.annotations.GeneratedValue;
-import org.eclipse.dirigible.engine.java.annotations.GenerationType;
-import org.eclipse.dirigible.engine.java.annotations.Id;
-import org.eclipse.dirigible.engine.java.annotations.Table;
-import org.eclipse.dirigible.engine.java.annotations.Transient;
+import org.eclipse.dirigible.sdk.db.Column;
+import org.eclipse.dirigible.sdk.db.CreatedAt;
+import org.eclipse.dirigible.sdk.db.Entity;
+import org.eclipse.dirigible.sdk.db.GeneratedValue;
+import org.eclipse.dirigible.sdk.db.GenerationType;
+import org.eclipse.dirigible.sdk.db.Id;
+import org.eclipse.dirigible.sdk.db.Table;
+import org.eclipse.dirigible.sdk.db.Transient;
 import org.junit.jupiter.api.Test;
 
 class JavaEntityToHbmMapperTest {

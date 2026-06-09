@@ -14,7 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 
-import org.eclipse.dirigible.engine.java.annotations.Scheduled;
+import org.eclipse.dirigible.sdk.job.Scheduled;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;

@@ -11,7 +11,7 @@ package org.eclipse.dirigible.components.data.store.java.repository;
 
 import java.lang.reflect.Constructor;
 
-import org.eclipse.dirigible.engine.java.annotations.Repository;
+import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;

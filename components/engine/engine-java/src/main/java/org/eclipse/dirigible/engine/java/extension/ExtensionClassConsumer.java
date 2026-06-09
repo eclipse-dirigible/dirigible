@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * {@link JavaClassConsumer} that registers client classes annotated with
- * {@link org.eclipse.dirigible.engine.java.annotations.Extension @Extension} as Dirigible extension
+ * {@link org.eclipse.dirigible.sdk.extensions.Extension @Extension} as Dirigible extension
  * contributions persisted via {@link ExtensionService}.
  *
  * <p>
@@ -49,14 +49,13 @@ public class ExtensionClassConsumer implements JavaClassConsumer {
 
     @Override
     public boolean accepts(Class<?> clazz) {
-        return clazz.isAnnotationPresent(org.eclipse.dirigible.engine.java.annotations.Extension.class);
+        return clazz.isAnnotationPresent(org.eclipse.dirigible.sdk.extensions.Extension.class);
     }
 
     @Override
     public void onClassLoaded(LoadedClass info) {
-        org.eclipse.dirigible.engine.java.annotations.Extension ann = info.type()
-                                                                          .getAnnotation(
-                                                                                  org.eclipse.dirigible.engine.java.annotations.Extension.class);
+        org.eclipse.dirigible.sdk.extensions.Extension ann = info.type()
+                                                                 .getAnnotation(org.eclipse.dirigible.sdk.extensions.Extension.class);
 
         String location = locationOf(info.project(), info.fqn());
         try {
@@ -74,9 +73,8 @@ public class ExtensionClassConsumer implements JavaClassConsumer {
 
     @Override
     public void onClassUnloaded(LoadedClass info) {
-        org.eclipse.dirigible.engine.java.annotations.Extension ann = info.type()
-                                                                          .getAnnotation(
-                                                                                  org.eclipse.dirigible.engine.java.annotations.Extension.class);
+        org.eclipse.dirigible.sdk.extensions.Extension ann = info.type()
+                                                                 .getAnnotation(org.eclipse.dirigible.sdk.extensions.Extension.class);
         String location = locationOf(info.project(), info.fqn());
         String key = Extension.ARTEFACT_TYPE + ":" + location + ":" + ann.name();
         try {

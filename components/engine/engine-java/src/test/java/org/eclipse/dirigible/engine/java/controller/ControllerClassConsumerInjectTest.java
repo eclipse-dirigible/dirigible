@@ -18,9 +18,9 @@ import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
 
-import org.eclipse.dirigible.engine.java.annotations.Inject;
-import org.eclipse.dirigible.engine.java.annotations.http.Controller;
-import org.eclipse.dirigible.engine.java.annotations.http.Get;
+import org.eclipse.dirigible.sdk.component.Inject;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.engine.java.spi.DependencyResolver;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.Test;

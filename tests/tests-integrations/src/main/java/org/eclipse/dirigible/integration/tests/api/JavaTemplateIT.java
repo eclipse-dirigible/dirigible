@@ -80,13 +80,13 @@ class JavaTemplateIT extends IntegrationTest {
     private static final String ENTITY_SOURCE = """
             package gen.sample.data.books;
 
-            import org.eclipse.dirigible.engine.java.annotations.Column;
-            import org.eclipse.dirigible.engine.java.annotations.Documentation;
-            import org.eclipse.dirigible.engine.java.annotations.Entity;
-            import org.eclipse.dirigible.engine.java.annotations.GeneratedValue;
-            import org.eclipse.dirigible.engine.java.annotations.GenerationType;
-            import org.eclipse.dirigible.engine.java.annotations.Id;
-            import org.eclipse.dirigible.engine.java.annotations.Table;
+            import org.eclipse.dirigible.sdk.db.Column;
+            import org.eclipse.dirigible.sdk.platform.Documentation;
+            import org.eclipse.dirigible.sdk.db.Entity;
+            import org.eclipse.dirigible.sdk.db.GeneratedValue;
+            import org.eclipse.dirigible.sdk.db.GenerationType;
+            import org.eclipse.dirigible.sdk.db.Id;
+            import org.eclipse.dirigible.sdk.db.Table;
 
             @Entity
             @Table(name = "JAVATEMPLATEIT_BOOK")
@@ -109,7 +109,7 @@ class JavaTemplateIT extends IntegrationTest {
             package gen.sample.data.books;
 
             import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
-            import org.eclipse.dirigible.engine.java.annotations.Repository;
+            import org.eclipse.dirigible.sdk.component.Repository;
 
             @Repository
             public class BookRepository extends JavaRepository<BookEntity> {
@@ -126,16 +126,16 @@ class JavaTemplateIT extends IntegrationTest {
             import gen.sample.data.books.BookEntity;
             import gen.sample.data.books.BookRepository;
 
-            import org.eclipse.dirigible.engine.java.annotations.Documentation;
-            import org.eclipse.dirigible.engine.java.annotations.Inject;
-            import org.eclipse.dirigible.engine.java.annotations.http.Body;
-            import org.eclipse.dirigible.engine.java.annotations.http.Controller;
-            import org.eclipse.dirigible.engine.java.annotations.http.Delete;
-            import org.eclipse.dirigible.engine.java.annotations.http.Get;
-            import org.eclipse.dirigible.engine.java.annotations.http.PathParam;
-            import org.eclipse.dirigible.engine.java.annotations.http.Post;
-            import org.eclipse.dirigible.engine.java.annotations.http.Put;
-            import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
+            import org.eclipse.dirigible.sdk.platform.Documentation;
+            import org.eclipse.dirigible.sdk.component.Inject;
+            import org.eclipse.dirigible.sdk.http.Body;
+            import org.eclipse.dirigible.sdk.http.Controller;
+            import org.eclipse.dirigible.sdk.http.Delete;
+            import org.eclipse.dirigible.sdk.http.Get;
+            import org.eclipse.dirigible.sdk.http.PathParam;
+            import org.eclipse.dirigible.sdk.http.Post;
+            import org.eclipse.dirigible.sdk.http.Put;
+            import org.eclipse.dirigible.sdk.http.QueryParam;
             import org.springframework.http.HttpStatus;
             import org.springframework.web.server.ResponseStatusException;
 

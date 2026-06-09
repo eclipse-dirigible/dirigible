@@ -16,10 +16,10 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.data.store.java.hbm.JavaEntityToHbmMapper;
 import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity;
-import org.eclipse.dirigible.engine.java.annotations.Column;
-import org.eclipse.dirigible.engine.java.annotations.Entity;
-import org.eclipse.dirigible.engine.java.annotations.Id;
-import org.eclipse.dirigible.engine.java.annotations.Transient;
+import org.eclipse.dirigible.sdk.db.Column;
+import org.eclipse.dirigible.sdk.db.Entity;
+import org.eclipse.dirigible.sdk.db.Id;
+import org.eclipse.dirigible.sdk.db.Transient;
 import org.junit.jupiter.api.Test;
 
 class EntityBeanMapperTest {

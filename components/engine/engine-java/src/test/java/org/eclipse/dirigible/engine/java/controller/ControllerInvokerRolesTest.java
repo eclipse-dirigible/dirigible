@@ -17,9 +17,9 @@ import static org.mockito.Mockito.when;
 import java.util.Map;
 import java.util.Optional;
 
-import org.eclipse.dirigible.engine.java.annotations.http.Controller;
-import org.eclipse.dirigible.engine.java.annotations.http.Get;
-import org.eclipse.dirigible.engine.java.annotations.http.Roles;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.security.Roles;
 import org.eclipse.dirigible.engine.java.controller.ControllerInvokerBindingTest.FakeResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

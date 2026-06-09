@@ -1044,7 +1044,8 @@ class DirigibleEditor {
                         kind: CK.Snippet,
                         insertTextRules: 4,
                         insertText: [
-                            'import org.eclipse.dirigible.engine.java.annotations.http.*;',
+                            'import org.eclipse.dirigible.sdk.http.*;',
+                            'import org.eclipse.dirigible.sdk.security.Roles;',
                             '',
                             '@Controller',
                             'public class ${1:MyController} {',
@@ -1064,7 +1065,7 @@ class DirigibleEditor {
                         kind: CK.Snippet,
                         insertTextRules: 4,
                         insertText: [
-                            'import org.eclipse.dirigible.engine.java.annotations.*;',
+                            'import org.eclipse.dirigible.sdk.db.*;',
                             '',
                             '@Entity',
                             '@Table(name = "${1:MY_TABLE}")',
@@ -1086,7 +1087,7 @@ class DirigibleEditor {
                         kind: CK.Snippet,
                         insertTextRules: 4,
                         insertText: [
-                            'import org.eclipse.dirigible.engine.java.annotations.Repository;',
+                            'import org.eclipse.dirigible.sdk.component.Repository;',
                             'import org.eclipse.dirigible.components.data.store.java.JavaEntityStore;',
                             'import org.eclipse.dirigible.components.api.platform.BeanProvider;',
                             '',
