@@ -49,18 +49,22 @@
             <bk-input id="i-name" compact="true" type="search" ng-model="filters.name" ng-change="applyFilters()" placeholder="Filter by name..."></bk-input>
 
             <div class="bk-hbox bk-flex--wrap bk-box--items-center bk-box--gap">
-                <label class="bk-text--subtitle" for="i-state">State</label>
-                <bk-select id="i-state" compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 9.375rem">
-                    <bk-option text="All states" value="''"></bk-option>
-                    <bk-option ng-repeat="s in states track by $index" text="{{s}}" value="s"></bk-option>
-                </bk-select>
+                <div class="bk-hbox bk-box--items-center bk-box--gap">
+                    <label class="bk-text--subtitle" for="i-state">State</label>
+                    <bk-select id="i-state" compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 9.375rem">
+                        <bk-option text="All states" value="''"></bk-option>
+                        <bk-option ng-repeat="s in states track by $index" text="{{s}}" value="s"></bk-option>
+                    </bk-select>
+                </div>
 
-                <label class="bk-text--subtitle" for="i-daemon">Daemon</label>
-                <bk-select id="i-daemon" compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 7.5rem">
-                    <bk-option text="All" value="''"></bk-option>
-                    <bk-option text="User only" value="'user'"></bk-option>
-                    <bk-option text="Daemon only" value="'daemon'"></bk-option>
-                </bk-select>
+                <div class="bk-hbox bk-box--items-center bk-box--gap">
+                    <label class="bk-text--subtitle" for="i-daemon">Daemon</label>
+                    <bk-select id="i-daemon" compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 7.5rem">
+                        <bk-option text="All" value="''"></bk-option>
+                        <bk-option text="User only" value="'user'"></bk-option>
+                        <bk-option text="Daemon only" value="'daemon'"></bk-option>
+                    </bk-select>
+                </div>
 
                 <bk-button compact="true" state="transparent" glyph="sap-icon--clear-filter" label="Clear" title="Clear all filters" ng-click="clearFilters()" ng-disabled="!hasActiveFilters()"></bk-button>
 
@@ -130,7 +134,7 @@
                         <td bk-table-cell fit-content="true" class="bk-font--mono">{{ t.id }}</td>
                         <td bk-table-cell>{{ t.name }}</td>
                         <td bk-table-cell>
-                            <span bk-object-status status="{{getObjectState(t.state)}}" text="{{ t.state }}" inverted="true"></span>
+                            <span bk-object-status status="{{getObjectState(t.state)}}" style="white-space: nowrap;" text="{{ t.state }}" inverted="true"></span>
                         </td>
                         <td bk-table-cell fit-content="true">{{ t.daemon ? 'yes' : 'no' }}</td>
                         <td bk-table-cell fit-content="true" class="bk-font--mono">{{ t.priority >= 0 ? t.priority : '-' }}</td>
