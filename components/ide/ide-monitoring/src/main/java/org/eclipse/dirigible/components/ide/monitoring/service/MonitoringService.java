@@ -289,7 +289,7 @@ public class MonitoringService {
         for (int i = 0; i < actual; i++) {
             Thread t = all[i];
             if (t != null) {
-                byId.put(t.getId(), t);
+                byId.put(t.threadId(), t);
             }
         }
         return byId;
