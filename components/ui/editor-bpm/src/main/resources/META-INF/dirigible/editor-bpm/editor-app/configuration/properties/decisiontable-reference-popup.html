@@ -1,74 +1,79 @@
+<div ng-controller="FlowableDecisionTableReferencePopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="900px" window-max-width="90vw" window-min-height="500px">
 
-<div class="modal" ng-controller="FlowableDecisionTableReferencePopupCtrl">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-            <div class="modal-header" ng-if="popup.state == 'decisionTableReference'">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-                <h2>
-                    {{'PROPERTY.DECISIONTABLEREFERENCE.TITLE' | translate}}
-                    <span ng-show="selectedDecisionTable != null"> - {{selectedDecisionTable.name}}</span>
-                    <span ng-show="selectedDecisionTable == null"> - {{'PROPERTY.DECISIONTABLEREFERENCE.EMPTY' | translate}}</span>
+        <bk-dialog-header ng-if="popup.state == 'decisionTableReference'" title="{{ 'PROPERTY.DECISIONTABLEREFERENCE.TITLE' | translate }}{{ selectedDecisionTable ? ' - ' + selectedDecisionTable.name : ' - ' + ('PROPERTY.DECISIONTABLEREFERENCE.EMPTY' | translate) }}">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-header ng-if="popup.state == 'newDecisionTable'" title="{{ 'DECISION-TABLE.POPUP.CREATE-TITLE' | translate }}"></bk-dialog-header>
 
-                </h2>
-            </div>
-            <div class="modal-header" ng-if="popup.state == 'newDecisionTable'"><h2>{{'DECISION-TABLE.POPUP.CREATE-TITLE' | translate}}</h2></div>
-            <div class="modal-body-with-overflow" ng-if="popup.state == 'decisionTableReference'">
-                <div class="detail-group clearfix">
-                    <div class="col-xs-12">
-                        <div class="alert alert-error" ng-show="!state.loadingDecisionTables && state.decisionTableError" translate>PROPERTY.DECISIONTABLEREFERENCE.ERROR.FORM</div>
-                    </div>
+        <bk-dialog-body ng-if="popup.state == 'decisionTableReference'" class="bk-padding">
+            <div class="detail-group clearfix">
+                <div class="col-xs-12">
+                    <bk-message-strip type="error" ng-if="!state.loadingDecisionTables && state.decisionTableError">{{ 'PROPERTY.DECISIONTABLEREFERENCE.ERROR.FORM' | translate }}</bk-message-strip>
                 </div>
-                <div class="detail-group clearfix">
-                    <div class="col-xs-12 editor-item-picker">
-                        <div ng-if="!state.loadingDecisionTables && !state.decisionTableError" class="col-xs-4 editor-item-picker-component" ng-repeat="decisionTable in decisionTables" ng-class="{'selected' : decisionTable.decisionTableId == selectedDecisionTable.decisionTableId}" ng-click="selectDecisionTable(decisionTable, $event)">
-                           <div class="controls">
-                               <input type="checkbox" value="option1" ng-click="selectDecisionTable(decisionTable, $event)" ng-checked="decisionTable.id == selectedDecisionTable.id" />
-                           </div>
-                           <h4>{{decisionTable.name}}</h4>
-                           <img ng-src="{{getModelThumbnailUrl(decisionTable.id)}}" />
-                         </div>
-                         <div ng-show="state.loadingDecisionTables">
-                            <p class="loading" translate>PROPERTY.DECISIONTABLEREFERENCE.DECISIONTABLE.LOADING</p>
-                         </div>
-                         <div ng-show="!state.loadingDecisionTables && decisionTables.length == 0">
-                            <p translate>PROPERTY.DECISIONTABLEREFERENCE.DECISIONTABLE.EMPTY</p>
-                         </div>
+            </div>
+            <div class="detail-group clearfix">
+                <div class="col-xs-12 editor-item-picker">
+                    <div ng-if="!state.loadingDecisionTables && !state.decisionTableError" class="col-xs-4 editor-item-picker-component" ng-repeat="decisionTable in decisionTables" ng-class="{'selected' : decisionTable.decisionTableId == selectedDecisionTable.decisionTableId}" ng-click="selectDecisionTable(decisionTable, $event)">
+                        <div class="controls">
+                            <bk-checkbox id="dt-ref-cb-{{decisionTable.id}}" ng-click="selectDecisionTable(decisionTable, $event)" ng-checked="decisionTable.id == selectedDecisionTable.id"></bk-checkbox>
+                            <bk-checkbox-label for="dt-ref-cb-{{decisionTable.id}}" empty="true"></bk-checkbox-label>
+                        </div>
+                        <h4>{{ decisionTable.name }}</h4>
+                        <img ng-src="{{ getModelThumbnailUrl(decisionTable.id) }}" />
+                    </div>
+                    <div ng-show="state.loadingDecisionTables">
+                        <p class="loading" translate>PROPERTY.DECISIONTABLEREFERENCE.DECISIONTABLE.LOADING</p>
+                    </div>
+                    <div ng-show="!state.loadingDecisionTables && decisionTables.length == 0">
+                        <p translate>PROPERTY.DECISIONTABLEREFERENCE.DECISIONTABLE.EMPTY</p>
                     </div>
                 </div>
             </div>
-            <div class="modal-body" ng-if="popup.state == 'newDecisionTable'">
-                <p>{{'DECISION-TABLE.POPUP.CREATE-DESCRIPTION' | translate}}</p>
-                <div ng-if="model.errorMessage && model.errorMessage.length > 0" class="alert error" style="font-size: 14px; margin-top:20px">
-                  <div class="popup-error" style="font-size: 14px">
-                    <span class="glyphicon glyphicon-remove-circle"></span>
-                    <span>{{model.errorMessage}}</span>
-                  </div>
-                </div>
-                <div class="form-group">
-                    <label for="newDecisionTableName">{{'DECISION-TABLE.NAME' | translate}}</label>
-                    <input ng-disabled="model.loading" type="text" class="form-control"
-                           id="newDecisionTableName" ng-model="model.decisionTable.name" custom-keys enter-pressed="ok()" auto-focus editor-input-check>
-                </div>
-                <div class="form-group">
-                    <label for="newDecisionTableKey">{{'DECISION-TABLE.KEY' | translate}}</label>
-                    <input ng-disabled="model.loading" type="text" class="form-control"
-                           id="newDecisionTableKey" ng-model="model.decisionTable.key" editor-input-check>
-                </div>
-                <div class="form-group">
-                    <label for="newDecisionTableDescription">{{'DECISION-TABLE.DESCRIPTION' | translate}}</label>
-                    <textarea ng-disabled="model.loading" class="form-control" id="newDecisionTableDescription" rows="5" ng-model="model.decisionTable.description"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer" ng-if="popup.state == 'decisionTableReference'">
-                <button ng-click="cancel()" class="btn btn-primary" translate>GENERAL.ACTION.CANCEL</button>
-            	<button ng-disabled="state.decisionTableError" ng-click="newDecisionTable()" class="btn btn-primary" translate>GENERAL.ACTION.NEW-DECISION-TABLE</button>
-            	<button ng-disabled="!selectedDecisionTable || state.decisionTableError" ng-click="open()" class="btn btn-primary" translate>GENERAL.ACTION.OPEN</button>
-                <button ng-disabled="state.decisionTableError" ng-click="save()" class="btn btn-primary" translate>GENERAL.ACTION.SAVE</button>
-            </div>
-            <div class="modal-footer" ng-if="popup.state == 'newDecisionTable'">
-                <button ng-click="cancel()" class="btn btn-primary" translate>GENERAL.ACTION.CANCEL</button>
-                <button ng-disabled="state.decisionTableError || model.decisionTable.name.length == 0 || model.decisionTable.key.length == 0" ng-click="createDecisionTable()" class="btn btn-primary" translate>GENERAL.ACTION.CREATE-DECISION-TABLE</button>
-            </div>
-        </div>
-    </div>
+        </bk-dialog-body>
+
+        <bk-dialog-body ng-if="popup.state == 'newDecisionTable'" class="bk-padding">
+            <p>{{ 'DECISION-TABLE.POPUP.CREATE-DESCRIPTION' | translate }}</p>
+            <bk-message-strip type="error" ng-if="model.errorMessage && model.errorMessage.length > 0">{{ model.errorMessage }}</bk-message-strip>
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="newDecisionTableName">{{ 'DECISION-TABLE.NAME' | translate }}</bk-form-label>
+                    <bk-input id="newDecisionTableName" type="text" ng-model="model.decisionTable.name" ng-disabled="model.loading" custom-keys enter-pressed="ok()" auto-focus editor-input-check></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="newDecisionTableKey">{{ 'DECISION-TABLE.KEY' | translate }}</bk-form-label>
+                    <bk-input id="newDecisionTableKey" type="text" ng-model="model.decisionTable.key" ng-disabled="model.loading" editor-input-check></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="newDecisionTableDescription">{{ 'DECISION-TABLE.DESCRIPTION' | translate }}</bk-form-label>
+                    <bk-textarea id="newDecisionTableDescription" rows="5" ng-model="model.decisionTable.description" ng-disabled="model.loading"></bk-textarea>
+                </bk-form-item>
+            </bk-form-group>
+        </bk-dialog-body>
+
+        <bk-dialog-footer ng-if="popup.state == 'decisionTableReference'" compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.NEW-DECISION-TABLE' | translate }}" ng-click="newDecisionTable()" ng-disabled="state.decisionTableError"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.OPEN' | translate }}" ng-click="open()" ng-disabled="!selectedDecisionTable || state.decisionTableError"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()" ng-disabled="state.decisionTableError"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+
+        <bk-dialog-footer ng-if="popup.state == 'newDecisionTable'" compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CREATE-DECISION-TABLE' | translate }}" decisive="true" state="emphasized" ng-click="createDecisionTable()" ng-disabled="state.decisionTableError || !model.decisionTable.name || model.decisionTable.name.length == 0 || !model.decisionTable.key || model.decisionTable.key.length == 0"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+
+    </bk-dialog>
 </div>

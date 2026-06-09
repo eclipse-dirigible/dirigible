@@ -18,8 +18,6 @@ var flowableModeler = angular.module('flowableModeler', [
     'ngSanitize',
     'ngRoute',
     'ngDragDrop',
-    'mgcrea.ngStrap',
-    'mgcrea.ngStrap.helpers.dimensions', // Needed for tooltips
     'ui.grid',
     'ui.grid.edit',
     'ui.grid.selection',
@@ -32,7 +30,8 @@ var flowableModeler = angular.module('flowableModeler', [
     'angularSpectrumColorpicker',
     'duScroll',
     'dndLists',
-    'ngHandsontable'
+    'ngHandsontable',
+    'blimpKit'
 ]);
 
 var flowableModule = flowableModeler;
@@ -46,17 +45,28 @@ function setEditorDirtyState(dirty) {
 }
 
 flowableModeler
+    // Re-enable Angular compile-provider flags that the `blimpKit` module disables in
+    // its own .config() block (debugInfoEnabled / commentDirectivesEnabled /
+    // cssClassDirectivesEnabled). The IDE shell keeps them off for production
+    // performance; the editor-bpm app is small, opens infrequently, and the BPMN
+    // integration tests poke into Angular scopes via `angular.element(node).scope()`,
+    // which requires debug info. Re-enabling here is safe because dependency
+    // .config() blocks run before the depending module's — blimpKit's flips run
+    // first, then this block runs and overrides them.
+    .config(['$compileProvider', function ($compileProvider) {
+        $compileProvider.debugInfoEnabled(true);
+        $compileProvider.commentDirectivesEnabled(true);
+        $compileProvider.cssClassDirectivesEnabled(true);
+    }])
     // Initialize routes
-    .config(['$provide', '$routeProvider', '$selectProvider', '$translateProvider', function ($provide, $routeProvider, $selectProvider, $translateProvider) {
+    .config(['$provide', '$routeProvider', '$translateProvider', '$locationProvider', function ($provide, $routeProvider, $translateProvider, $locationProvider) {
+
+        // Angular 1.6+ default hashPrefix changed to '!'. Keep legacy '' so existing
+        // `#/editor/...` URLs (set by the platform IDE iframe) continue to match.
+        $locationProvider.hashPrefix('');
 
         var appResourceRoot = FLOWABLE.CONFIG.webContextRoot + (FLOWABLE.CONFIG.webContextRoot ? '/' : '');
         $provide.value('appResourceRoot', appResourceRoot);
-
-
-        // Override caret for bs-select directive
-        angular.extend($selectProvider.defaults, {
-            caretHtml: '&nbsp;<i class="icon icon-caret-down"></i>'
-        });
 
         $routeProvider
             .when('/processes', {
@@ -115,8 +125,13 @@ flowableModeler
                 templateUrl: 'views/app-definition.html',
                 controller: 'AppDefinitionCtrl'
             })
-            .when('/editor/', {
-                redirectTo: `/editor${editorParams.filePath}`,
+            .when('/editor', {
+                redirectTo: function () {
+                    if (typeof editorParams !== 'undefined' && editorParams && editorParams.filePath) {
+                        return '/editor' + editorParams.filePath;
+                    }
+                    return '/processes';
+                },
             })
             .when('/editor/:workspace/:project/:path*', {
                 templateUrl: appResourceRoot + 'editor-app/editor.html',
@@ -377,8 +392,8 @@ flowableModeler
             //            };
         }
     ])
-    .run(['$rootScope', '$location', '$translate', '$window', '$modal',
-        function ($rootScope, $location, $translate, $window, $modal) {
+    .run(['$rootScope', '$location', '$translate', '$window',
+        function ($rootScope, $location, $translate, $window) {
 
             var fixedUrlPart = '/editor/';
 

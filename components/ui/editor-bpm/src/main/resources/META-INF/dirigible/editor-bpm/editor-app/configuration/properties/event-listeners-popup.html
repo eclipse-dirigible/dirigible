@@ -1,119 +1,115 @@
+<div ng-controller="FlowableEventListenersPopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="900px" window-max-width="92vw" window-min-height="600px">
+        <bk-dialog-header title="{{ 'PROPERTY.PROPERTY.EDIT.TITLE' | translate }} &quot;{{ property.title | translate }}&quot;">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-vbox bk-box--gap-m bk-padding-top-bottom--sm" data-container="dialog-body">
 
-<div class="modal" ng-controller="FlowableEventListenersPopupCtrl">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-                <h2>{{'PROPERTY.PROPERTY.EDIT.TITLE' | translate}} "{{property.title | translate}}"</h2>
-            </div>
-            <div class="modal-body">
-
-                <div class="row row-no-gutter">
-                	<div class="col-xs-10">
-            	        <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
-            	        <div class="pull-right">
-            	            <div class="btn-group">
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.MOVE.UP | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="moveListenerUp()"><i class="glyphicon glyphicon-arrow-up"></i></a>
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.MOVE.DOWN | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="moveListenerDown()"><i class="glyphicon glyphicon-arrow-down"></i></a>
-            	            </div>
-            	            <div class="btn-group">
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.ADD | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="addNewListener()"><i class="glyphicon glyphicon-plus"></i></a>
-            	                <a class="btn btn-icon btn-lg" rel="tooltip" data-title="{{ACTION.REMOVE | translate}}" data-placement="bottom" data-original-title="" title="" ng-click="removeListener()"><i class="glyphicon glyphicon-minus"></i></a>
-            	            </div>
-            	        </div>
-            		</div>
-            	</div>
-
-            	<div class="row row-no-gutter">
-                  <div ng-if="translationsRetrieved" ng-show="selectedListener" class="col-xs-6">
-                    <div class="form-group">
-            	        	<label>{{'PROPERTY.EVENTLISTENERS.EVENTS' | translate}}</label>
-            	            <div ng-repeat="eventDefinition in selectedListener.events">
-            	            	  <select id="eventField" class="form-control" ng-model="eventDefinition.event" ng-change="listenerDetailsChanged()"
-                                          style="display:inline-block; width:80%;margin-bottom: 10px;">
-                                  <option title="{{'EVENT_TYPE.ACTIVITY.COMPENSATE.TOOLTIP' | translate}}">ACTIVITY_COMPENSATE</option>
-                                  <option title="{{'EVENT_TYPE.ACTIVITY.COMPLETED.TOOLTIP' | translate}}">ACTIVITY_COMPLETED</option>
-                                  <option title="bla">ACTIVITY_ERROR_RECEIVED</option>
-                                  <option>ACTIVITY_MESSAGE_RECEIVED</option>
-                                  <option>ACTIVITY_SIGNALED</option>
-                                  <option>ACTIVITY_STARTED</option>
-                                  <option>ENGINE_CLOSED</option>
-                                  <option>ENGINE_CREATED</option>
-                                  <option>ENTITY_ACTIVATED</option>
-                                  <option>ENTITY_CREATED</option>
-                                  <option>ENTITY_DELETED</option>
-                                  <option>ENTITY_INITIALIZED</option>
-                                  <option>ENTITY_SUSPENDED</option>
-                                  <option>ENTITY_UPDATED</option>
-                                  <option>JOB_EXECUTION_FAILURE</option>
-                                  <option>JOB_EXECUTION_SUCCESS</option>
-                                  <option>JOB_RETRIES_DECREMENTED</option>
-                                  <option title="{{'EVENT_TYPE.MEMBERSHIP.CREATED.TOOLTIP' | translate}}">MEMBERSHIP_CREATED</option>
-                                  <option title="{{'EVENT_TYPE.MEMBERSHIP.DELETED.TOOLTIP' | translate}}">MEMBERSHIP_DELETED</option>
-                                  <option title="{{'EVENT_TYPE.MEMBERSHIPS.DELETED.TOOLTIP' | translate}}">MEMBERSHIPS_DELETED</option>
-                                  <option title="{{'EVENT_TYPE.TASK.ASSIGNED.TOOLTIP' | translate}}">TASK_ASSIGNED</option>
-                                  <option title="{{'EVENT_TYPE.TASK.COMPLETED.TOOLTIP' | translate}}">TASK_COMPLETED</option>
-                                  <option>TIMER_FIRED</option>
-                                  <option title="{{'EVENT_TYPE.UNCAUGHT.BPMNERROR.TOOLTIP' | translate}}">UNCAUGHT_BPMN_ERROR</option>
-                                  <option title="{{'EVENT_TYPE.VARIABLE.CREATED.TOOLTIP' | translate}}">VARIABLE_CREATED</option>
-                                  <option title="{{'EVENT_TYPE.VARIABLE.DELETED.TOOLTIP' | translate}}">VARIABLE_DELETED</option>
-                                  <option title="{{'EVENT_TYPE.VARIABLE.UPDATED.TOOLTIP' | translate}}">VARIABLE_UPDATED</option>
-            	               	</select>
-            		            <i ng-if="$index > 0" class="glyphicon glyphicon-minus clickable-property" ng-click="removeEventValue($index)"
-                                   style="margin: 5px 0 5px 10px; font-size: 16px; cursor:pointer;"></i>
-            		            <i class="glyphicon glyphicon-plus clickable-property" ng-click="addEventValue($index)"
-                                   style="margin: 5px 0 5px 10px; font-size: 16px; cursor:pointer;"></i>
-            	            </div>
-
-            	            <div class="form-group" ng-show="selectedListener.event" style="margin-top: 10px;">
-                                <input type="checkbox" id="rethrowField" class="checkbox" ng-model="selectedListener.rethrowEvent" ng-change="listenerDetailsChanged()" style="display:inline-block;"/>
-                                <label for="classField" ng-click="selectedListener.rethrowEvent = !selectedListener.rethrowEvent" style="cursor:pointer;">{{'PROPERTY.EVENTLISTENERS.RETHROW' | translate}}</label>
-                            </div>
-            	       	  </div>
-                     </div>
-                     <div ng-show="selectedListener && selectedListener.events[0].event" class="col-xs-6">
-                     	<div class="form-group" ng-if="!selectedListener.rethrowEvent">
-            		   		<label for="classField"> {{'PROPERTY.EVENTLISTENERS.CLASS' | translate}}</label>
-            		   		<input type="text" id="classField" class="form-control" ng-model="selectedListener.className" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.CLASS.PLACEHOLDER' | translate}}" />
-            			</div>
-            			<div class="form-group" ng-if="!selectedListener.rethrowEvent">
-            		   		<label for="delegateExpressionField">{{'PROPERTY.EVENTLISTENERS.DELEGATEEXPRESSION' | translate}}</label>
-            		   		<input type="text" id="delegateExpressionField" class="form-control" ng-model="selectedListener.delegateExpression" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.DELEGATEEXPRESSION.PLACEHOLDER' | translate}}" />
-            			</div>
-            			<div class="form-group" ng-if="!selectedListener.rethrowEvent">
-            		   		<label for="entityTypeField">{{'PROPERTY.EVENTLISTENERS.ENTITYTYPE' | translate}}</label>
-            		   		<input type="text" id="entityTypeField" class="form-control" ng-model="selectedListener.entityType" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.ENTITYTYPE.PLACEHOLDER' | translate}}" />
-            			</div>
-            			<div class="form-group" ng-if="selectedListener.rethrowEvent">
-            		   		<label for="delegateExpressionField">{{'PROPERTY.EVENTLISTENERS.RETHROWTYPE' | translate}}</label>
-            		   		<select id="rethrowTypeField" class="form-control" ng-model="selectedListener.rethrowType" ng-change="rethrowTypeChanged()">
-                                <option>error</option>
-                                <option>message</option>
-                                <option>signal</option>
-                                <option>globalSignal</option>
-                            </select>
-            			</div>
-            			<div class="form-group" ng-if="selectedListener.rethrowEvent && selectedListener.rethrowType === 'error'">
-            		   		<label for="errorCodeField">{{'PROPERTY.EVENTLISTENERS.ERRORCODE' | translate}}</label>
-            		   		<input type="text" id="errorCodeField" class="form-control" ng-model="selectedListener.errorcode" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.ERRORCODE.PLACEHOLDER' | translate}}" />
-            			</div>
-            			<div class="form-group" ng-if="selectedListener.rethrowEvent && selectedListener.rethrowType === 'message'">
-            		   		<label for="messageNameField">{{'PROPERTY.EVENTLISTENERS.MESSAGENAME' | translate}}</label>
-            		   		<input type="text" id="messageNameField" class="form-control" ng-model="selectedListener.messagename" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.MESSAGENAME.PLACEHOLDER' | translate}}" />
-            			</div>
-            			<div class="form-group" ng-if="selectedListener.rethrowEvent && (selectedListener.rethrowType === 'signal' || selectedListener.rethrowType === 'globalSignal')">
-            		   		<label for="messageNameField">{{'PROPERTY.EVENTLISTENERS.SIGNALNAME' | translate}}</label>
-            		   		<input type="text" id="signalNameField" class="form-control" ng-model="selectedListener.signalname" ng-change="listenerDetailsChanged()" placeholder="{{'PROPERTY.EVENTLISTENERS.SIGNALNAME.PLACEHOLDER' | translate}}" />
-            			</div>
-                     </div>
-                     <div ng-show="!selectedListener" class="col-xs-6 muted no-property-selected" translate>PROPERTY.EVENTLISTENERS.UNSELECTED</div>
+            <div class="row row-no-gutter">
+                <div class="col-xs-10">
+                    <div ng-if="translationsRetrieved" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
+                    <div class="pull-right">
+                        <bk-button glyph="sap-icon--slim-arrow-up" aria-label="{{ 'ACTION.MOVE.UP' | translate }}" title="{{ 'ACTION.MOVE.UP' | translate }}" compact="true" ng-click="moveListenerUp()"></bk-button>
+                        <bk-button glyph="sap-icon--slim-arrow-down" aria-label="{{ 'ACTION.MOVE.DOWN' | translate }}" title="{{ 'ACTION.MOVE.DOWN' | translate }}" compact="true" ng-click="moveListenerDown()"></bk-button>
+                        <bk-button glyph="sap-icon--add" aria-label="{{ 'ACTION.ADD' | translate }}" title="{{ 'ACTION.ADD' | translate }}" compact="true" ng-click="addNewListener()"></bk-button>
+                        <bk-button glyph="sap-icon--less" aria-label="{{ 'ACTION.REMOVE' | translate }}" title="{{ 'ACTION.REMOVE' | translate }}" compact="true" ng-click="removeListener()"></bk-button>
+                    </div>
                 </div>
+            </div>
 
+            <div class="row row-no-gutter">
+                <div ng-if="translationsRetrieved" ng-show="selectedListener" class="col-xs-6">
+                    <bk-form-group>
+                        <bk-form-item>
+                            <bk-form-label>{{ 'PROPERTY.EVENTLISTENERS.EVENTS' | translate }}</bk-form-label>
+                            <div ng-repeat="eventDefinition in selectedListener.events" style="display:flex; align-items:center; gap:8px; margin-bottom:8px;">
+                                <bk-select ng-model="eventDefinition.event" ng-change="listenerDetailsChanged()" dropdown-fixed="true" style="flex:1;">
+                                    <bk-option text="ACTIVITY_COMPENSATE" value="'ACTIVITY_COMPENSATE'" title="{{ 'EVENT_TYPE.ACTIVITY.COMPENSATE.TOOLTIP' | translate }}"></bk-option>
+                                    <bk-option text="ACTIVITY_COMPLETED" value="'ACTIVITY_COMPLETED'" title="{{ 'EVENT_TYPE.ACTIVITY.COMPLETED.TOOLTIP' | translate }}"></bk-option>
+                                    <bk-option text="ACTIVITY_ERROR_RECEIVED" value="'ACTIVITY_ERROR_RECEIVED'"></bk-option>
+                                    <bk-option text="ACTIVITY_MESSAGE_RECEIVED" value="'ACTIVITY_MESSAGE_RECEIVED'"></bk-option>
+                                    <bk-option text="ACTIVITY_SIGNALED" value="'ACTIVITY_SIGNALED'"></bk-option>
+                                    <bk-option text="ACTIVITY_STARTED" value="'ACTIVITY_STARTED'"></bk-option>
+                                    <bk-option text="ENGINE_CLOSED" value="'ENGINE_CLOSED'"></bk-option>
+                                    <bk-option text="ENGINE_CREATED" value="'ENGINE_CREATED'"></bk-option>
+                                    <bk-option text="ENTITY_ACTIVATED" value="'ENTITY_ACTIVATED'"></bk-option>
+                                    <bk-option text="ENTITY_CREATED" value="'ENTITY_CREATED'"></bk-option>
+                                    <bk-option text="ENTITY_DELETED" value="'ENTITY_DELETED'"></bk-option>
+                                    <bk-option text="ENTITY_INITIALIZED" value="'ENTITY_INITIALIZED'"></bk-option>
+                                    <bk-option text="ENTITY_SUSPENDED" value="'ENTITY_SUSPENDED'"></bk-option>
+                                    <bk-option text="ENTITY_UPDATED" value="'ENTITY_UPDATED'"></bk-option>
+                                    <bk-option text="JOB_EXECUTION_FAILURE" value="'JOB_EXECUTION_FAILURE'"></bk-option>
+                                    <bk-option text="JOB_EXECUTION_SUCCESS" value="'JOB_EXECUTION_SUCCESS'"></bk-option>
+                                    <bk-option text="JOB_RETRIES_DECREMENTED" value="'JOB_RETRIES_DECREMENTED'"></bk-option>
+                                    <bk-option text="MEMBERSHIP_CREATED" value="'MEMBERSHIP_CREATED'"></bk-option>
+                                    <bk-option text="MEMBERSHIP_DELETED" value="'MEMBERSHIP_DELETED'"></bk-option>
+                                    <bk-option text="MEMBERSHIPS_DELETED" value="'MEMBERSHIPS_DELETED'"></bk-option>
+                                    <bk-option text="TASK_ASSIGNED" value="'TASK_ASSIGNED'"></bk-option>
+                                    <bk-option text="TASK_COMPLETED" value="'TASK_COMPLETED'"></bk-option>
+                                    <bk-option text="TIMER_FIRED" value="'TIMER_FIRED'"></bk-option>
+                                    <bk-option text="UNCAUGHT_BPMN_ERROR" value="'UNCAUGHT_BPMN_ERROR'"></bk-option>
+                                    <bk-option text="VARIABLE_CREATED" value="'VARIABLE_CREATED'"></bk-option>
+                                    <bk-option text="VARIABLE_DELETED" value="'VARIABLE_DELETED'"></bk-option>
+                                    <bk-option text="VARIABLE_UPDATED" value="'VARIABLE_UPDATED'"></bk-option>
+                                </bk-select>
+                                <bk-button ng-if="$index > 0" glyph="sap-icon--less" aria-label="{{ 'ACTION.REMOVE' | translate }}" title="{{ 'ACTION.REMOVE' | translate }}" compact="true" ng-click="removeEventValue($index)"></bk-button>
+                                <bk-button glyph="sap-icon--add" aria-label="{{ 'ACTION.ADD' | translate }}" title="{{ 'ACTION.ADD' | translate }}" compact="true" ng-click="addEventValue($index)"></bk-button>
+                            </div>
+                        </bk-form-item>
+                        <bk-form-item ng-show="selectedListener.event">
+                            <bk-checkbox id="eventListenerRethrowField" ng-model="selectedListener.rethrowEvent" ng-change="listenerDetailsChanged()"></bk-checkbox>
+                            <bk-checkbox-label for="eventListenerRethrowField">{{ 'PROPERTY.EVENTLISTENERS.RETHROW' | translate }}</bk-checkbox-label>
+                        </bk-form-item>
+                    </bk-form-group>
+                </div>
+                <div ng-show="selectedListener && selectedListener.events[0].event" class="col-xs-6">
+                    <bk-form-group>
+                        <bk-form-item ng-if="!selectedListener.rethrowEvent">
+                            <bk-form-label for="eventListenerClassField">{{ 'PROPERTY.EVENTLISTENERS.CLASS' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerClassField" type="text" ng-model="selectedListener.className" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.CLASS.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item ng-if="!selectedListener.rethrowEvent">
+                            <bk-form-label for="eventListenerDelegateExpressionField">{{ 'PROPERTY.EVENTLISTENERS.DELEGATEEXPRESSION' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerDelegateExpressionField" type="text" ng-model="selectedListener.delegateExpression" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.DELEGATEEXPRESSION.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item ng-if="!selectedListener.rethrowEvent">
+                            <bk-form-label for="eventListenerEntityTypeField">{{ 'PROPERTY.EVENTLISTENERS.ENTITYTYPE' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerEntityTypeField" type="text" ng-model="selectedListener.entityType" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.ENTITYTYPE.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item ng-if="selectedListener.rethrowEvent">
+                            <bk-form-label for="eventListenerRethrowTypeField">{{ 'PROPERTY.EVENTLISTENERS.RETHROWTYPE' | translate }}</bk-form-label>
+                            <bk-select label-id="eventListenerRethrowTypeField" ng-model="selectedListener.rethrowType" ng-change="rethrowTypeChanged()" dropdown-fixed="true">
+                                <bk-option text="error" value="'error'"></bk-option>
+                                <bk-option text="message" value="'message'"></bk-option>
+                                <bk-option text="signal" value="'signal'"></bk-option>
+                                <bk-option text="globalSignal" value="'globalSignal'"></bk-option>
+                            </bk-select>
+                        </bk-form-item>
+                        <bk-form-item ng-if="selectedListener.rethrowEvent && selectedListener.rethrowType === 'error'">
+                            <bk-form-label for="eventListenerErrorCodeField">{{ 'PROPERTY.EVENTLISTENERS.ERRORCODE' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerErrorCodeField" type="text" ng-model="selectedListener.errorcode" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.ERRORCODE.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item ng-if="selectedListener.rethrowEvent && selectedListener.rethrowType === 'message'">
+                            <bk-form-label for="eventListenerMessageNameField">{{ 'PROPERTY.EVENTLISTENERS.MESSAGENAME' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerMessageNameField" type="text" ng-model="selectedListener.messagename" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.MESSAGENAME.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                        <bk-form-item ng-if="selectedListener.rethrowEvent && (selectedListener.rethrowType === 'signal' || selectedListener.rethrowType === 'globalSignal')">
+                            <bk-form-label for="eventListenerSignalNameField">{{ 'PROPERTY.EVENTLISTENERS.SIGNALNAME' | translate }}</bk-form-label>
+                            <bk-input id="eventListenerSignalNameField" type="text" ng-model="selectedListener.signalname" ng-change="listenerDetailsChanged()" placeholder="{{ 'PROPERTY.EVENTLISTENERS.SIGNALNAME.PLACEHOLDER' | translate }}"></bk-input>
+                        </bk-form-item>
+                    </bk-form-group>
+                </div>
+                <div ng-show="!selectedListener" class="col-xs-6 muted no-property-selected" translate>PROPERTY.EVENTLISTENERS.UNSELECTED</div>
             </div>
-            <div class="modal-footer">
-                <button ng-click="cancel()" class="btn btn-primary" translate>ACTION.CANCEL</button>
-                <button ng-click="save()" class="btn btn-primary" translate>ACTION.SAVE</button>
-            </div>
-        </div>
-    </div>
+
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

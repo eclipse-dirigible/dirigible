@@ -33,9 +33,10 @@ angular.module('flowableModeler')
       }
       
       $http({method: 'GET', url: url}).
-        success(function(data, status, headers, config) {
+        then(function(response) {
+          var data = response.data;
           $scope.model.caseModel = data;
-          
+
           $scope.loadVersions();
 
           $scope.model.cmmnDownloadUrl = FLOWABLE.APP_URL.getCmmnModelDownloadUrl($routeParams.modelId, $routeParams.modelHistoryId);
@@ -44,11 +45,11 @@ angular.module('flowableModeler')
     	  $rootScope.$on('$routeChangeStart', function(event, next, current) {
     		  jQuery('.qtip').qtip('destroy', true);
     	  });
-    	  
+
           $timeout(function() {
             jQuery("#cmmnModel").attr('data-model-id', $routeParams.modelId);
             jQuery("#cmmnModel").attr('data-model-type', 'design');
-            
+
             // in case we want to show a historic model, include additional attribute on the div
             if(!$scope.model.caseModel.latestVersion) {
               jQuery("#cmmnModel").attr('data-history-id', $routeParams.modelHistoryId);
@@ -68,7 +69,7 @@ angular.module('flowableModeler')
             });
           });
 
-        }).error(function(data, status, headers, config) {
+        }, function(response) {
           $scope.returnToList();
         });
     };
@@ -87,14 +88,15 @@ angular.module('flowableModeler')
       };
       
       $http({method: 'GET', url: FLOWABLE.APP_URL.getModelHistoriesUrl($scope.model.latestModelId), params: params}).
-      success(function(data, status, headers, config) {
+      then(function(response) {
+        var data = response.data;
         if ($scope.model.caseModel.latestVersion) {
           if (!data.data) {
             data.data = [];
           }
           data.data.unshift($scope.model.caseModel);
         }
-        
+
         $scope.model.versions = data;
       });
     };

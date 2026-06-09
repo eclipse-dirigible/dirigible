@@ -38,7 +38,12 @@ public class RepositoryRegistry implements DependencyResolver {
 
     private final Object writeLock = new Object();
 
-    /** Register a fresh instance under its runtime class. Replaces any prior entry. */
+    /**
+     * Register a fresh instance under its runtime class. Replaces any prior entry.
+     *
+     * @param repoClass the runtime class to key the entry on
+     * @param instance the repository singleton
+     */
     public void register(Class<?> repoClass, Object instance) {
         synchronized (writeLock) {
             Map<Class<?>, Object> next = new LinkedHashMap<>(repositories);
@@ -48,7 +53,11 @@ public class RepositoryRegistry implements DependencyResolver {
         }
     }
 
-    /** Drop the entry for {@code repoClass} if present. */
+    /**
+     * Drop the entry for {@code repoClass} if present.
+     *
+     * @param repoClass the runtime class whose entry should be removed
+     */
     public void unregister(Class<?> repoClass) {
         synchronized (writeLock) {
             Map<Class<?>, Object> next = new LinkedHashMap<>(repositories);
@@ -59,7 +68,9 @@ public class RepositoryRegistry implements DependencyResolver {
         }
     }
 
-    /** Number of registered repositories — useful in tests. */
+    /**
+     * @return the number of registered repositories — useful in tests
+     */
     public int size() {
         return repositories.size();
     }

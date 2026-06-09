@@ -1,18 +1,24 @@
 @font-face {
-  font-family: 'ActivitiModeler';
-  src: url('../fonts/activiti-admin-webfont.eot');
-  src: url('../fonts/activiti-admin-webfont.eot?#iefix') format('embedded-opentype'),
-    url('../fonts/activiti-admin-webfont.woff') format('woff'),
-    url('../fonts/activiti-admin-webfont.ttf') format('truetype'),
-    url('../fonts/activiti-admin-webfont.svg#activitimodelerregular') format('svg');
+  font-family: "ActivitiModeler";
+  src: url("../fonts/activiti-admin-webfont.eot");
+  src:
+    url("../fonts/activiti-admin-webfont.eot?#iefix") format("embedded-opentype"),
+    url("../fonts/activiti-admin-webfont.woff") format("woff"),
+    url("../fonts/activiti-admin-webfont.ttf") format("truetype"),
+    url("../fonts/activiti-admin-webfont.svg#activitimodelerregular") format("svg");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
-  font-family: 'FontAwesome';
-  src: url('../fonts/fontawesome-webfont.eot?v=4.3.0');
-  src: url('../fonts/fontawesome-webfont.eot?#iefix&v=4.3.0') format('embedded-opentype'), url('../fonts/fontawesome-webfont.woff2?v=4.3.0') format('woff2'), url('../fonts/fontawesome-webfont.woff?v=4.3.0') format('woff'), url('../fonts/fontawesome-webfont.ttf?v=4.3.0') format('truetype'), url('../fonts/fontawesome-webfont.svg?v=4.3.0#fontawesomeregular') format('svg');
+  font-family: "FontAwesome";
+  src: url("../fonts/fontawesome-webfont.eot?v=4.3.0");
+  src:
+    url("../fonts/fontawesome-webfont.eot?#iefix&v=4.3.0") format("embedded-opentype"),
+    url("../fonts/fontawesome-webfont.woff2?v=4.3.0") format("woff2"),
+    url("../fonts/fontawesome-webfont.woff?v=4.3.0") format("woff"),
+    url("../fonts/fontawesome-webfont.ttf?v=4.3.0") format("truetype"),
+    url("../fonts/fontawesome-webfont.svg?v=4.3.0#fontawesomeregular") format("svg");
   font-weight: normal;
   font-style: normal;
 }
@@ -23,7 +29,7 @@ body {
 }
 
 .wrapper.full {
-  background-color: var(--sapBackgroundColor, #f7f7f7);
+  background-color: var(--background, #f7f7f7);
   max-width: 100vw !important;
   max-height: 100vh !important;
 }
@@ -39,6 +45,10 @@ body {
   padding-left: 0px;
   padding-right: 0px;
   z-index: 100;
+}
+
+[data-container="dialog-body"] .row {
+  margin: 0px !important;
 }
 
 .editor-item-picker {
@@ -61,8 +71,8 @@ body {
 .subheader {
   height: 44px;
   min-height: 44px !important;
-  background-color: var(--sapToolbar_Background, transparent) !important;
-  border-bottom: solid .0625rem var(--sapGroup_TitleBorderColor, #d9d9d9) !important;
+  background-color: var(--object-header, transparent) !important;
+  border-bottom: solid 0.0625rem var(--border, #dedede) !important;
 }
 
 .editor-toolbar>.btn-group {
@@ -75,37 +85,37 @@ body {
 
 .editor-toolbar .btn.btn-inverse {
   font-size: 20px;
-  color: var(--sapButton_Lite_TextColor, #0854a0);
+  color: var(--secondary-foreground, #333333);
   background-color: var(--sapButton_Lite_Background, transparent);
-  border-color: var(--sapButton_Lite_BorderColor, transparent);
+  border-color: var(--sapButton_Lite_Background, transparent);
   padding: 3px 6px 0px 6px;
   box-shadow: none;
   text-shadow: none;
   text-align: center;
   border-style: solid;
-  border-width: var(--sapButton_BorderWidth, 1px);
+  border-width: var(--border-width, 0.0625rem);
   box-sizing: border-box;
-  margin: 0px 0px 0px .5rem;
+  margin: 0px 0px 0px 0.5rem;
   height: 36px;
   min-width: 36px;
 }
 
 .editor-toolbar .btn.btn-inverse:hover {
-  color: var(--sapButton_Lite_Hover_TextColor, #303030);
-  background-color: var(--sapButton_Lite_Hover_Background, #e6e6e6);
-  border-color: var(--sapButton_Lite_Hover_BorderColor, #d4d4d4);
+  color: var(--secondary-foreground, #333333);
+  background-color: var(--secondary-hover, #dcdcdc);
+  border-color: var(--secondary-border, #cecece);
 }
 
 .editor-toolbar .btn.btn-inverse.pressed {
-  background-color: var(--sapButton_Active_Background, #bebebe);
-  border-color: var(--sapButton_Active_BorderColor, #bebebe);
-  color: var(--sapButton_Active_TextColor, #303030);
+  background-color: var(--secondary-active, #bebebe);
+  border-color: var(--secondary-active-border, #afafaf);
+  color: var(--secondary-foreground, #333333);
 }
 
 .editor-toolbar .btn.btn-inverse:active {
-  background-color: var(--sapButton_Active_Background, #bebebe);
-  border-color: var(--sapButton_Active_BorderColor, #bebebe);
-  color: var(--sapButton_Active_TextColor, #303030);
+  background-color: var(--secondary-active, #bebebe);
+  border-color: var(--secondary-active-border, #afafaf);
+  color: var(--secondary-foreground, #333333);
 }
 
 .editor-toolbar .btn.btn-inverse.disabled,
@@ -114,7 +124,7 @@ body {
 .editor-toolbar .btn.btn-inverse[disabled]:hover {
   background-color: var(--sapButton_Lite_Background, transparent);
   border-color: var(--sapButton_Lite_BorderColor, transparent);
-  opacity: var(--sapContent_DisabledOpacity, 0.5);
+  opacity: var(--disabled-opacity, 0.5);
 }
 
 .editor-toolbar .btn.btn-inverse.separator {
@@ -126,13 +136,13 @@ body {
 }
 
 .editor-toolbar .toolbar-separator {
-  background: var(--sapToolbar_SeparatorColor, #d9d9d9);
+  background: var(--border, #dedede);
   width: 1px;
   height: 30px;
 }
 
 .stencils {
-  border-right: 1pt solid var(--sapList_BorderColor, #dedede);
+  border-right: 1pt solid var(--border, #dedede);
   overflow: auto;
   z-index: 5000;
 }
@@ -158,7 +168,7 @@ body {
   background-color: transparent;
   font-family: Arial, Regular;
   /* font-size: 14px; */
-  color: var(--sapTextColor, #303030);
+  color: var(--foreground, #303030);
 }
 
 .stencil-group>li>span {
@@ -184,7 +194,7 @@ body {
 }
 
 .stencil-group.collapsed>li {
-  color: var(--sapTextColor, #303030);
+  color: var(--foreground, #303030);
 }
 
 .stencil-group.collapsed>li>ul {
@@ -202,10 +212,23 @@ body {
   padding: 5px;
 }
 
+/*
+ * Stencil-palette icons are dark PNG sprites; invert them to white when the editor is in a
+ * dark theme so they stay visible against the dark canvas/panel backgrounds. The class
+ * `dirigible-theme-{light,dark,auto}` is set on <body> by setTheme() in index.html based on
+ * the currently selected Dirigible theme. The OS-level `prefers-color-scheme` is only used
+ * as a fallback for the 'auto' theme so the legacy behaviour is preserved when the user
+ * hasn't explicitly picked a light or dark theme.
+ */
+.dirigible-theme-dark .Oryx_button img,
+.dirigible-theme-dark .stencil-item img {
+  filter: brightness(0) invert(1);
+}
+
 @media (prefers-color-scheme: dark) {
 
-  .Oryx_button img,
-  .stencil-item img {
+  .dirigible-theme-auto .Oryx_button img,
+  .dirigible-theme-auto .stencil-item img {
     filter: brightness(0) invert(1);
   }
 }
@@ -226,12 +249,12 @@ body {
 -------------------------------- */
 div.canvas-wrapper {
   overflow: auto;
-  background-color: var(--sapBackgroundColor, #f7f7f7);
+  background-color: var(--background, #f7f7f7);
 }
 
 .canvas_resize_indicator i {
   font-size: 12px;
-  color: var(--sapButton_TextColor, #303030);
+  color: var(--secondary-foreground, #333333);
   cursor: pointer;
 }
 
@@ -239,9 +262,9 @@ div.canvas-wrapper {
 .canvas_resize_indicator.S,
 .canvas_resize_indicator.E,
 .canvas_resize_indicator.W {
-  background: var(--sapButton_Background, #e6e6e6);
-  border-color: var(--sapButton_BorderColor, #d4d4d4);
-  border-width: var(--sapButton_BorderWidth, .0625rem);
+  background: var(--secondary, #e6e6e6);
+  border-color: var(--button-border, #d4d4d4);
+  border-width: var(--border-width, 0.0625rem);
   border-style: solid;
   height: 18px;
   width: 18px;
@@ -255,7 +278,7 @@ div.canvas-wrapper {
 .canvas_resize_indicator.S:hover,
 .canvas_resize_indicator.E:hover,
 .canvas_resize_indicator.W:hover {
-  background: var(--sapButton_Hover_Background, #dcdcdc);
+  background: var(--secondary-hover, #dcdcdc);
 }
 
 #canvas-grow-N.canvas_resize_indicator,
@@ -284,7 +307,7 @@ div.canvas-wrapper {
 
 .x-panel-body.x-panel-body-noheader.x-panel-body-noborder,
 .ORYX_Editor x-panel {
-  background-color: #F8F8F8;
+  background-color: #f8f8f8;
 }
 
 .canvas-message {
@@ -297,9 +320,9 @@ div.canvas-wrapper {
 
 div.propertySection {
   height: 250px;
-  background-color: var(--sapBackgroundColor, #f7f7f7);
-  border-top: solid var(--sapList_BorderWidth, 0.0625rem) var(--sapList_BorderColor, #dedede);
-  color: var(--sapTextColor, #303030);
+  background-color: var(--background, #f7f7f7);
+  border-top: solid var(--border-width, 0.0625rem) var(--border, #dedede);
+  color: var(--foreground, #303030);
   margin-bottom: 0px;
 }
 
@@ -307,13 +330,13 @@ div.propertySection {
   font-size: 25px;
   font-weight: bold;
   padding: 8px 0 8px 8px;
-  border-bottom: 1px solid var(--sapList_BorderColor, #dedede);
+  border-bottom: 1px solid var(--border, #dedede);
   cursor: pointer;
 }
 
 .selected-item-title a {
   display: block;
-  color: var(--sapTextColor, #303030);
+  color: var(--foreground, #303030);
 }
 
 .selected-item-title .glyphicon {
@@ -323,7 +346,7 @@ div.propertySection {
 
 .selected-item-title a:hover,
 .selected-item-title a:focus {
-  color: var(--sapTextColor, #303030);
+  color: var(--foreground, #303030);
   text-decoration: none;
 }
 
@@ -344,7 +367,7 @@ div.propertySection {
 }
 
 .selected-item-body .property-row:hover {
-  background-color: var(--sapList_Hover_Background, #f2f2f2);
+  background-color: var(--object-background-hover, #f2f2f2);
 }
 
 .selected-item-body {
@@ -355,7 +378,7 @@ div.propertySection {
 
 .propertySection .selected-item-body {
   padding-bottom: 4rem;
-  background-color: var(--sapList_Background, #fff);
+  background-color: var(--object-background, #fff);
 }
 
 .selected-item-body>div {
@@ -409,9 +432,6 @@ div.propertySection {
   margin: 2px 0;
   padding: 0px 5px;
   width: 100%;
-  outline: none;
-  border: none !important;
-  box-shadow: none !important;
 }
 
 .default-grid {
@@ -458,8 +478,8 @@ ul.x-menu-list {
   list-style: none;
   list-style-position: inside;
   width: 200px;
-  background-color: #FFFFFF;
-  border: 1px solid #E1E2E5;
+  background-color: #ffffff;
+  border: 1px solid #e1e2e5;
   -webkit-border-radius: 3px;
   -moz-border-radius: 3px;
   border-radius: 3px;
@@ -477,7 +497,7 @@ li.x-menu-list-item {
 }
 
 li.x-menu-list-item.x-menu-item-active {
-  background-color: #EFEFEF;
+  background-color: #efefef;
 }
 
 li.x-menu-list-item a {
@@ -493,7 +513,7 @@ li.x-menu-list-item.x-menu-item-active a {
 }
 
 .Oryx_button {
-  background-color: var(--sapButton_Background, #e6e6e6);
+  background-color: var(--secondary, #e6e6e6);
 }
 
 .dark-mode .Oryx_button img {
@@ -504,7 +524,7 @@ li.x-menu-list-item.x-menu-item-active a {
   border-radius: 0;
   -webkit-border-radius: 0;
   -moz-border-radius: 3;
-  background-color: var(--sapButton_Hover_Background, #dcdcdc);
+  background-color: var(--secondary-hover, #dcdcdc);
 }
 
 /* Editor icon font */
@@ -512,7 +532,7 @@ li.x-menu-list-item.x-menu-item-active a {
   position: relative;
   top: 1px;
   display: inline-block;
-  font-family: 'ActivitiModeler';
+  font-family: "ActivitiModeler";
   font-style: normal;
   font-weight: 400;
   line-height: 1;
@@ -521,71 +541,71 @@ li.x-menu-list-item.x-menu-item-active a {
 }
 
 .editor-icon-save:before {
-  content: 'a';
+  content: "a";
 }
 
 .editor-icon-edit:before {
-  content: 'b';
+  content: "b";
 }
 
 .editor-icon-cut:before {
-  content: 'c';
+  content: "c";
 }
 
 .editor-icon-copy:before {
-  content: 'd';
+  content: "d";
 }
 
 .editor-icon-paste:before {
-  content: 'e';
+  content: "e";
 }
 
 .editor-icon-delete:before {
-  content: 'f';
+  content: "f";
 }
 
 .editor-icon-redo:before {
-  content: 'h';
+  content: "h";
 }
 
 .editor-icon-undo:before {
-  content: 'g';
+  content: "g";
 }
 
 .editor-icon-same-size:before {
-  content: 'i';
+  content: "i";
 }
 
 .editor-icon-zoom-in:before {
-  content: 'k';
+  content: "k";
 }
 
 .editor-icon-zoom-out:before {
-  content: 'l';
+  content: "l";
 }
 
 .editor-icon-zoom-actual:before {
-  content: 'm';
+  content: "m";
 }
 
 .editor-icon-zoom-fit:before {
-  content: 'j';
+  content: "j";
 }
 
 .editor-icon-bendpoint-add:before {
-  content: 'n';
+  content: "n";
 }
 
 .editor-icon-bendpoint-remove:before {
-  content: 'o';
+  content: "o";
 }
 
 .editor-icon-align-horizontal:before {
-  content: 'p';
+  content: "p";
 }
 
 .editor-icon-align-vertical:before {
-  content: 'q';
+  content: "q";
 }
 
 .formbuilder-validation-error-icon {
@@ -719,7 +739,7 @@ li.x-menu-list-item.x-menu-item-active a {
 
 .decision-table-grid {
   font-size: 13px;
-  line-height: 20px
+  line-height: 20px;
 }
 
 .decision-table-grid .ui-grid-header-cell-wrapper .ui-grid-selection-row-header-buttons {
@@ -782,7 +802,6 @@ li.x-menu-list-item.x-menu-item-active a {
 
   border-bottom: 5px solid rgb(43, 37, 37);
   border-bottom: 5px solid rgba(43, 37, 37, 0.22);
-
 }
 
 .decision-table-grid .ui-grid-pinned-container.ui-grid-pinned-container-left .ui-grid-header-cell:last-child {
@@ -880,8 +899,6 @@ li.x-menu-list-item.x-menu-item-active a {
 hot-table {
   overflow: hidden;
 }
-
-hot-table .column-header {}
 
 hot-table .column-header.label {
   font-size: 14px;
@@ -986,7 +1003,7 @@ hot-table .column-header.label {
 
 #decisionTableGrid .selectedRow {
   background: rgb(0, 140, 186);
-  color: rgb(250, 250, 250)
+  color: rgb(250, 250, 250);
 }
 
 #decision-table-editor,
@@ -1034,7 +1051,6 @@ hot-table .column-header.label {
   border: none;
   box-shadow: none;
   background: transparent none;
-  -webkit-appearance: none;
 }
 
 #decisionTableGrid .input-operator-select :focus {
@@ -1114,7 +1130,7 @@ hot-table .column-header.label {
   border-radius: 20px;
   padding: 2px 0 0;
   display: none;
-  color: #FFF;
+  color: #fff;
   cursor: pointer;
   font-size: 14px;
   font-weight: 300;
@@ -1140,8 +1156,12 @@ hot-table .column-header.label {
 #decision-table-allowed-values td.highlight {
   border-color: #66afe9;
   outline: 0;
-  -webkit-box-shadow: inset 0 1px 1px rgba(0, 0, 0, .075), 0 0 8px rgba(102, 175, 233, .6);
-  box-shadow: inset 0 1px 1px rgba(0, 0, 0, .075), 0 0 8px rgba(102, 175, 233, .6);
+  -webkit-box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.075),
+    0 0 8px rgba(102, 175, 233, 0.6);
+  box-shadow:
+    inset 0 1px 1px rgba(0, 0, 0, 0.075),
+    0 0 8px rgba(102, 175, 233, 0.6);
 }
 
 #decision-table-allowed-values td.remove_container.highlight {
@@ -1201,10 +1221,10 @@ hot-table .column-header.label {
 #paletteSectionFooter {
   height: 50px;
   text-align: center;
-  background-color: var(--sapList_FooterBackground, #f7f7f7);
-  border-top: 1px solid var(--sapList_BorderColor, #dedede);
-  border-right: 1px solid var(--sapList_BorderColor, #dedede);
-  color: var(--sapList_FooterTextColor, #303030);
+  background-color: var(--table-header, #f6f7f7);
+  border-top: 1px solid var(--border, #dedede);
+  border-right: 1px solid var(--border, #dedede);
+  color: var(--table-header-foreground, #333333);
   cursor: pointer;
   bottom: 0;
 }
@@ -1216,14 +1236,14 @@ hot-table .column-header.label {
 #paletteSectionOpen {
   width: 30px;
   height: 50px;
-  background-color: var(--sapList_FooterBackground, #f7f7f7);
+  background-color: var(--table-header, #f6f7f7);
   text-align: center;
   bottom: 1px;
   position: fixed;
   z-index: 101;
-  border-top: 1px solid var(--sapList_BorderColor, #dedede);
-  border-right: 1px solid var(--sapList_BorderColor, #dedede);
-  color: var(--sapList_FooterTextColor, #303030);
+  border-top: 1px solid var(--border, #dedede);
+  border-right: 1px solid var(--border, #dedede);
+  color: var(--table-header-foreground, #333333);
   cursor: pointer;
   left: 0;
 }
@@ -1233,7 +1253,7 @@ hot-table .column-header.label {
 }
 
 .hidden {
-  display: none
+  display: none;
 }
 
 #paletteHelpWrapper {
@@ -1258,16 +1278,16 @@ hot-table .column-header.label {
 /**Process navigator */
 #process-treeview-wrapper {
   height: 200px;
-  background-color: var(--sapBackgroundColor, #f7f7f7);
-  border-right: 1px solid var(--sapList_BorderColor, #dedede);
-  color: var(--sapTextColor, #303030);
+  background-color: var(--background, #f7f7f7);
+  border-right: 1px solid var(--border, #dedede);
+  color: var(--foreground, #303030);
   overflow-y: auto;
 }
 
 .process-treeview-header {
-  background: var(--sapList_TableGroupHeaderBackground, #ebebeb);
-  color: var(--sapList_TableGroupHeaderTextColor, #303030);
-  border: 1px solid var(--sapList_TableGroupHeaderBorderColor, #c3c3c3);
+  background: var(--object-header, #fff);
+  color: var(--object-header-foreground, #333333);
+  border: var(--border-width, 0.0625rem) solid var(--border, #dedede);
   padding: 2px;
   padding-left: 5px;
   font-size: 14px;
@@ -1294,8 +1314,107 @@ hot-table .column-header.label {
   font-style: italic;
 }
 
-.process-treeview-body {}
-
 .current-process {
-  border: 1px solid var(--sapPositiveColor, #26a264);
+  border: var(--border-width, 0.0625rem) solid var(--positive, #26a264);
+}
+
+/* 
+ * ORYX relies on native, unstyled form elements in various places.
+ * This styling brings inputs and textareas in line with the BlimpKit design system.
+ */
+input:not(.fd-input),
+textarea:not(.fd-input) {
+  appearance: none;
+  color: var(--foreground);
+  background-color: var(--input-background);
+  border: var(--border-width) solid var(--input-border);
+  border-radius: var(--radius-control);
+}
+
+input:not(.fd-input):focus-visible,
+textarea:not(.fd-input):focus-visible {
+  outline: var(--outline) var(--outline-style) var(--outline-width);
+  outline-offset: var(--outline-offset);
+}
+
+/*
+ * ui-grid 3.0.0 ships with hard-coded light-mode colors (#fdfdfd / #f3f3f3 alternating
+ * row backgrounds, #d4d4d4 borders, #f0f0ee headers, #c9dde1 selected row) that don't
+ * follow the picked Dirigible theme — dark mode shows white-on-light cells against a
+ * dark dialog, hurting contrast badly. Override with the same `--sap*` variables the
+ * rest of the editor uses; both light and dark theme bundles in theme-blimpkit define
+ * them. Fallbacks match the original ui-grid hard-codes so the panel still renders if
+ * a future theme drops the variables.
+ */
+.ui-grid {
+  background: var(--object-background, #fff);
+  color: var(--object-foreground, var(--foreground, #303030));
+  border: 1px solid var(--border, #dedede);
+}
+
+.ui-grid-header,
+.ui-grid-top-panel,
+.ui-grid-top-panel-background {
+  background: var(--table-header, #f6f7f7) !important;
+  color: var(--table-header-foreground, var(--foreground, #303030));
+  border-color: var(--border, #dedede);
+}
+
+.ui-grid-header-cell,
+.ui-grid-header-cell-wrapper,
+.ui-grid-header-cell-row {
+  background: transparent;
+  color: inherit;
+  border-color: var(--border, #dedede);
+}
+
+.ui-grid-row:nth-child(odd) .ui-grid-cell {
+  background-color: var(--object-background, #fff);
+}
+
+.ui-grid-row:nth-child(even) .ui-grid-cell {
+  background-color: var(--object-background-alt, #f3f3f3);
+}
+
+.ui-grid-row:last-child .ui-grid-cell {
+  border-bottom-color: var(--border, #dedede);
+}
+
+.ui-grid-row .ui-grid-cell.ui-grid-row-header-cell {
+  background-color: var(--table-header, #f6f7f7);
+  border-bottom-color: var(--border, #dedede);
+}
+
+.ui-grid-cell,
+.ui-grid-cell-contents {
+  color: var(--object-foreground, var(--foreground, #303030));
+  border-right-color: var(--border, #dedede);
+}
+
+.ui-grid-row.ui-grid-row-selected>[ui-grid-row]>.ui-grid-cell {
+  background-color: var(--object-background-active, #c9dde1) !important;
+  color: var(--object-foreground, var(--foreground, #303030));
+}
+
+.ui-grid-row-saving .ui-grid-cell {
+  color: var(--muted-foreground, #606060) !important;
+}
+
+.ui-grid-row-dirty .ui-grid-cell {
+  color: var(--sapErrorBackground, #ca4a44);
+}
+
+.ui-grid-row-error .ui-grid-cell {
+  color: var(--negative, #e01b24) !important;
+}
+
+.ui-grid-viewport,
+.ui-grid-canvas,
+.ui-grid-render-container {
+  background: var(--object-background, #fff);
+}
+
+.ui-grid-vertical-bar,
+.ui-grid-scrollbar-placeholder {
+  background-color: var(--border, #dedede);
 }

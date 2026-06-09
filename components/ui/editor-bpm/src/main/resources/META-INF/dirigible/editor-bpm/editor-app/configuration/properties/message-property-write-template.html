@@ -1,4 +1,5 @@
 <div ng-controller="FlowableMessageRefCtrl">
-    <select ng-model="property.value" ng-change="messageChanged()" ng-options="messageDefinition.id as (messageDefinition.name + ' (' + messageDefinition.id + ')') for messageDefinition in messageDefinitions">
-    </select>
+    <bk-select ng-model="property.value" ng-change="messageChanged()" compact="true" dropdown-fixed="true">
+        <bk-option ng-repeat="messageDefinition in messageDefinitions" text="{{ messageDefinition.name }} ({{ messageDefinition.id }})" value="messageDefinition.id"></bk-option>
+    </bk-select>
 </div>

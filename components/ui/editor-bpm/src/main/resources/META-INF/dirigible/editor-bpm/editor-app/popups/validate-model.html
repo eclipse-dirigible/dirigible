@@ -1,18 +1,14 @@
-<div class="modal" tabindex="-1" role="dialog" ng-controller="ValidateModelCtrl">
-	<div class="modal-dialog modal-lg">
-		<div class="modal-content">
-			<div class="modal-header">
-				<h2>{{'MODEL.VALIDATE.TITLE' | translate}}</h2>
-			</div>
-			<div class="modal-body">
-				<div>
-					<div class="alert alert-success" role="alert" ng-show="model.errors.length == 0 && !status.loading">No errors detected.</div>
-					<div ng-show="errorGrid && !status.loading" class="validationGrid" ui-grid="errorGrid" ui-grid-selection></div>
-				</div>
-			</div>
-			<div class="modal-footer">
-				<button type="button" ng-disabled="status.loading" class="btn btn-primary" ng-click="$hide()">Close</button>
-			</div>
-		</div>
-	</div>
+<div ng-controller="ValidateModelCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="700px" window-max-width="90vw" window-min-height="400px">
+        <bk-dialog-header title="{{ 'MODEL.VALIDATE.TITLE' | translate }}"></bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <bk-message-strip type="success" ng-show="model.errors.length == 0 && !status.loading">No errors detected.</bk-message-strip>
+            <div ng-show="errorGrid && !status.loading" class="validationGrid" ui-grid="errorGrid" ui-grid-selection></div>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="Close" decisive="true" ng-click="$hide()" ng-disabled="status.loading"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

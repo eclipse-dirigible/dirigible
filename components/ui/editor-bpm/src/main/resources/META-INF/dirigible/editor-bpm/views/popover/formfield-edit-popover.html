@@ -1,185 +1,157 @@
-<div class="modal">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2 ng-if="formElement.type != 'expression'">{{'FORM-BUILDER.POPUP.EDIT-TITLE' | translate: formElement}}</h2>
-                <h2 ng-if="formElement.type == 'expression'">{{'FORM-BUILDER.POPUP.EXPRESSION-TITLE' | translate}}</h2>
-            </div>
-            <div class="modal-body">
-                <div class="center-pane">
-                    <div class="content">
-                        <div class="clearfix">
-                            <ul class="tabs clearfix">
-                                <li ng-repeat="tab in formTabs" ng-class="{'active': tab.id == activeTab.id}"
-                                    ng-if="!tab.show || tab.show.indexOf(formElement.type) >= 0">
-                                    <a ng-click="tabClicked(tab)">{{tab.title && (tab.title | translate) || tab.name}}</a>
-                                </li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="form-group" ng-if="activeTab.id == 'general' && formElement.type != 'expression'">
-                    <label translate="FORM-BUILDER.COMPONENT.LABEL"></label>
-                    <input type="text" class="form-control" ng-model="formElement.name"
-                           ng-change="formElementNameChanged(formElement)" auto-focus>
-                </div>
-
-                <div class="clearfix" ng-if="activeTab.id == 'general' && formElement.type != 'expression'">
-                    <div class="form-group">
-                        <div class="checkbox">
-                            <label>
-                                <input type="checkbox" ng-model="formElement.overrideId">
-                                {{'FORM-BUILDER.COMPONENT.OVERRIDEID' | translate}}
-                            </label>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label translate="FORM-BUILDER.COMPONENT.ID"></label>
-                        <input type="text" class="form-control" ng-model="formElement.id" ng-disabled="!formElement.overrideId" editor-input-check>
-                    </div>
-
-                    <div ng-show="formElement.type !== 'expression' && formElement.type !== 'hyperlink'">
-                        <div class="row">
-                           <div class="form-group col-md-2">
-                               <div class="checkbox">
-                                   <label>
-                                       <input type="checkbox" ng-model="formElement.required">
-                                       {{'FORM-BUILDER.COMPONENT.REQUIRED' | translate}}
-                                   </label>
-                               </div>
-                            </div>
-                            <div class="form-group col-md-10">
-                               <div class="checkbox">
-                                   <label>
-                                       <input type="checkbox" ng-model="formElement.readOnly">
-                                       {{'FORM-BUILDER.COMPONENT.READONLY' | translate}}
-                                   </label>
-                               </div>                               
-                           </div>
-                        </div>
-                    </div>
-
-                    <div ng-show="formElement.type === 'functional-group' || formElement.type === 'people' || formElement.type === 'dropdown' || formElement.type === 'date' || formElement.type === 'text' || formElement.type === 'multi-line-text' || formElement.type === 'integer' || formElement.type === 'decimal'">
-                        <label translate="FORM-BUILDER.COMPONENT.PLACEHOLDER"></label>
-                        <input type="text" class="form-control" ng-model="formElement.placeholder">
-                    </div>
-                </div>
-
-                <div ng-if="(activeTab.id == 'options') && (formElement.type === 'radio-buttons' || formElement.type === 'dropdown')">
-
-                    <div class="form-group">
-                        <label translate="FORM-BUILDER.COMPONENT.OPTIONS"></label>
-
-                        <div>
-                            <div ng-repeat="option in formElement.options" style="margin-bottom: 5px" class="input-group">
-                                <div class="input-group-addon">
-                                    <input type="radio" ng-model="formElement.value" ng-value="option.name">
-                                </div>
-
-                                <input id="firstDropdownOption" type="text" class="form-control" ng-if="$index == 0" ng-model="option.name" style="background-color: #E6E6E6;">
-                                <input type="text" class="form-control" ng-if="$index > 0" ng-model="option.name">
-
-                                <a class="input-group-addon" ng-if="$index == 0"
-                                   data-placement="left" data-type="info" data-animation="am-fade-and-scale" bs-tooltip="'FORM-BUILDER.COMPONENT.DROPDOWN-EMPTY-VALUE-HELP'|translate">
-                                    <i class="glyphicon glyphicon-question-sign"></i>
-                                </a>
-
-                                <a class="input-group-addon" ng-click="removeOption($index)" ng-if="$index > 1"><i class="icon icon-remove"></i></a>
-                            </div>
-
-                            <div>
-                                <input type="text" class="form-control" placeholder="{{'FORM-BUILDER.COMPONENT.ADD-OPTION' | translate}}" ng-model="newOption.name"
-                                       ng-blur="confirmNewOption($event)" ng-keydown="optionKeyDown($event)">
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <div ng-if="activeTab.id == 'upload' && formElement.type === 'upload'">
-                    <div class="form-group">
-                        <div class="checkbox">
-                            <label>
-                                <input type="checkbox" ng-model="formElement.params.multiple">
-                                {{'FORM-BUILDER.COMPONENT.UPLOAD-ALLOW-MULTIPLE' | translate}}
-                            </label>
-                        </div>
-                    </div>
-                </div>
-
-                <div ng-if="activeTab.id == 'advanced' && (formElement.type === 'text' || formElement.type === 'multi-line-text' || formElement.type === 'decimal' || formElement.type === 'integer')">
-		     <div class="form-group">
-			  <label translate="FORM-BUILDER.COMPONENT.MIN-LENGTH"></label> <input
-				 type="text" number-input-check maxlength="5" class="form-control"
-				 ng-model="formElement.params.minLength">
-		     </div>
-		     <div class="form-group">
-			  <label translate="FORM-BUILDER.COMPONENT.MAX-LENGTH"></label> <input
-			         type="text" number-input-check maxlength="5" class="form-control"
-			         ng-model="formElement.params.maxLength">
-                     </div>
-		     <div class="form-group">
-			  <label translate="FORM-BUILDER.COMPONENT.REGEX-PATTERN"></label>
-				<div class="input-group">
-			            <span class="input-group-addon">/^</span> <input type="text" class="form-control" ng-model="formElement.params.regexPattern">
-				    <span class="input-group-addon">$/</span>
-				</div>
-		    </div>
-                    <div class="row">
-			<div class="col-md-4">
-			    <div class="form-group">
-			        <label translate="FORM-BUILDER.COMPONENT.MASK.TITLE"></label>
-			        <input type="text" class="form-control" ng-model="formElement.params.mask">
-			    </div>
-			</div>
-			<div class="col-md-4">
-			    <div class="form-group">
-			        <label translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.TITLE</label>
-				<ul>
-			   	    <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.NUMBER</span>: <b>9</b></li>
-				    <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.LETTER</span>: <b>A</b></li>
-				    <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.NUMBERORLETTER</span>: <b>*</b></li>
-				    <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.OPTIONAL</span>: <b>?</b></li>
-				    <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.PHONE</span>: <b>(99) 9999-9999</b></li>
-				</ul>
-			   </div>
-			</div>
-		    </div>
-		</div>
-                
-		<div ng-if="activeTab.id == 'advanced' && formElement.type === 'hyperlink'">
-		    <div class="form-group">
-			<label translate="FORM-BUILDER.COMPONENT.HYPERLINK-URL"></label> <input
-			type="text" class="form-control" ng-model="formElement.params.hyperlinkUrl">
-		    </div>
-		</div>	    
-		    
-                <div ng-if="activeTab.id == 'general' && formElement.type === 'expression'">
-                    <div class="form-group">
-                        <label translate="FORM-BUILDER.COMPONENT.EXPRESSION"></label>
-                        <textarea rows="3" ng-model="formElement.expression" class="form-control" id="readonly-text-value"></textarea>
-                        <div class="subtle" translate="FORM-BUILDER.MESSAGE.EXPRESSION-HELP" style="padding: 5px 0 5px 1px;"></div>
-                    </div>
-                    <div class="form-group">
-                    	<label translate="FORM-BUILDER.COMPONENT.SIZE"></label>
-                    	<select class="form-control" ng-model="formElement.params.size">
-                        	<option>1</option>
-                        	<option>2</option>
-                        	<option>3</option>
-                        	<option>4</option>
-                        	<option>5</option>
-                        </select>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <div class="pull-right">
-                    <button type="button" class="btn btn-sm btn-default" ng-click="doneEditing()">
-                        {{'GENERAL.ACTION.CLOSE' | translate}}
-                    </button>
+<bk-dialog visible="modal.visible" window-min-width="700px" window-max-width="92vw" window-min-height="500px">
+    <bk-dialog-header ng-if="formElement.type != 'expression'" title="{{ 'FORM-BUILDER.POPUP.EDIT-TITLE' | translate:formElement }}"></bk-dialog-header>
+    <bk-dialog-header ng-if="formElement.type == 'expression'" title="{{ 'FORM-BUILDER.POPUP.EXPRESSION-TITLE' | translate }}"></bk-dialog-header>
+    <bk-dialog-body class="bk-padding">
+        <div class="center-pane">
+            <div class="content">
+                <div class="clearfix">
+                    <ul class="tabs clearfix">
+                        <li ng-repeat="tab in formTabs" ng-class="{'active': tab.id == activeTab.id}" ng-if="!tab.show || tab.show.indexOf(formElement.type) >= 0">
+                            <a ng-click="tabClicked(tab)">{{ tab.title && (tab.title | translate) || tab.name }}</a>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>
-    </div>
-</div>
+
+        <bk-form-group ng-if="activeTab.id == 'general' && formElement.type != 'expression'">
+            <bk-form-item>
+                <bk-form-label for="formBuilderLabelField">{{ 'FORM-BUILDER.COMPONENT.LABEL' | translate }}</bk-form-label>
+                <bk-input id="formBuilderLabelField" type="text" ng-model="formElement.name" ng-change="formElementNameChanged(formElement)" auto-focus></bk-input>
+            </bk-form-item>
+        </bk-form-group>
+
+        <div ng-if="activeTab.id == 'general' && formElement.type != 'expression'">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-checkbox id="formBuilderOverrideIdField" ng-model="formElement.overrideId"></bk-checkbox>
+                    <bk-checkbox-label for="formBuilderOverrideIdField">{{ 'FORM-BUILDER.COMPONENT.OVERRIDEID' | translate }}</bk-checkbox-label>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderIdField">{{ 'FORM-BUILDER.COMPONENT.ID' | translate }}</bk-form-label>
+                    <bk-input id="formBuilderIdField" type="text" ng-model="formElement.id" ng-disabled="!formElement.overrideId" editor-input-check></bk-input>
+                </bk-form-item>
+            </bk-form-group>
+
+            <bk-form-group ng-show="formElement.type !== 'expression' && formElement.type !== 'hyperlink'">
+                <bk-form-item>
+                    <bk-checkbox id="formBuilderRequiredField" ng-model="formElement.required"></bk-checkbox>
+                    <bk-checkbox-label for="formBuilderRequiredField">{{ 'FORM-BUILDER.COMPONENT.REQUIRED' | translate }}</bk-checkbox-label>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-checkbox id="formBuilderReadOnlyField" ng-model="formElement.readOnly"></bk-checkbox>
+                    <bk-checkbox-label for="formBuilderReadOnlyField">{{ 'FORM-BUILDER.COMPONENT.READONLY' | translate }}</bk-checkbox-label>
+                </bk-form-item>
+            </bk-form-group>
+
+            <bk-form-group ng-show="formElement.type === 'functional-group' || formElement.type === 'people' || formElement.type === 'dropdown' || formElement.type === 'date' || formElement.type === 'text' || formElement.type === 'multi-line-text' || formElement.type === 'integer' || formElement.type === 'decimal'">
+                <bk-form-item>
+                    <bk-form-label for="formBuilderPlaceholderField">{{ 'FORM-BUILDER.COMPONENT.PLACEHOLDER' | translate }}</bk-form-label>
+                    <bk-input id="formBuilderPlaceholderField" type="text" ng-model="formElement.placeholder"></bk-input>
+                </bk-form-item>
+            </bk-form-group>
+        </div>
+
+        <div ng-if="(activeTab.id == 'options') && (formElement.type === 'radio-buttons' || formElement.type === 'dropdown')">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label>{{ 'FORM-BUILDER.COMPONENT.OPTIONS' | translate }}</bk-form-label>
+                    <div ng-repeat="option in formElement.options" style="margin-bottom: 5px; display:flex; align-items:center; gap:8px;">
+                        <bk-radio id="formBuilderOptionRadio{{$index}}" ng-model="formElement.value" ng-value="option.name"></bk-radio>
+                        <bk-input ng-if="$index == 0" id="firstDropdownOption" type="text" ng-model="option.name" style="flex:1; background-color:#E6E6E6;"></bk-input>
+                        <bk-input ng-if="$index > 0" type="text" ng-model="option.name" style="flex:1;"></bk-input>
+                        <bk-button ng-if="$index == 0" glyph="sap-icon--sys-help" aria-label="{{ 'FORM-BUILDER.COMPONENT.DROPDOWN-EMPTY-VALUE-HELP' | translate }}" title="{{ 'FORM-BUILDER.COMPONENT.DROPDOWN-EMPTY-VALUE-HELP' | translate }}" compact="true" state="transparent"></bk-button>
+                        <bk-button ng-if="$index > 1" glyph="sap-icon--decline" aria-label="{{ 'ACTION.REMOVE' | translate }}" title="{{ 'ACTION.REMOVE' | translate }}" compact="true" state="transparent" ng-click="removeOption($index)"></bk-button>
+                    </div>
+                    <bk-input type="text" placeholder="{{ 'FORM-BUILDER.COMPONENT.ADD-OPTION' | translate }}" ng-model="newOption.name" ng-blur="confirmNewOption($event)" ng-keydown="optionKeyDown($event)"></bk-input>
+                </bk-form-item>
+            </bk-form-group>
+        </div>
+
+        <div ng-if="activeTab.id == 'upload' && formElement.type === 'upload'">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-checkbox id="formBuilderUploadMultipleField" ng-model="formElement.params.multiple"></bk-checkbox>
+                    <bk-checkbox-label for="formBuilderUploadMultipleField">{{ 'FORM-BUILDER.COMPONENT.UPLOAD-ALLOW-MULTIPLE' | translate }}</bk-checkbox-label>
+                </bk-form-item>
+            </bk-form-group>
+        </div>
+
+        <div ng-if="activeTab.id == 'advanced' && (formElement.type === 'text' || formElement.type === 'multi-line-text' || formElement.type === 'decimal' || formElement.type === 'integer')">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderMinLengthField">{{ 'FORM-BUILDER.COMPONENT.MIN-LENGTH' | translate }}</bk-form-label>
+                    <bk-input id="formBuilderMinLengthField" type="text" number-input-check maxlength="5" ng-model="formElement.params.minLength"></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderMaxLengthField">{{ 'FORM-BUILDER.COMPONENT.MAX-LENGTH' | translate }}</bk-form-label>
+                    <bk-input id="formBuilderMaxLengthField" type="text" number-input-check maxlength="5" ng-model="formElement.params.maxLength"></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderRegexPatternField">{{ 'FORM-BUILDER.COMPONENT.REGEX-PATTERN' | translate }}</bk-form-label>
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <span>/^</span>
+                        <bk-input id="formBuilderRegexPatternField" type="text" ng-model="formElement.params.regexPattern" style="flex:1;"></bk-input>
+                        <span>$/</span>
+                    </div>
+                </bk-form-item>
+            </bk-form-group>
+            <div class="row">
+                <div class="col-md-4">
+                    <bk-form-group>
+                        <bk-form-item>
+                            <bk-form-label for="formBuilderMaskField">{{ 'FORM-BUILDER.COMPONENT.MASK.TITLE' | translate }}</bk-form-label>
+                            <bk-input id="formBuilderMaskField" type="text" ng-model="formElement.params.mask"></bk-input>
+                        </bk-form-item>
+                    </bk-form-group>
+                </div>
+                <div class="col-md-4">
+                    <bk-form-item>
+                        <bk-form-label translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.TITLE</bk-form-label>
+                        <ul>
+                            <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.NUMBER</span>: <b>9</b></li>
+                            <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.LETTER</span>: <b>A</b></li>
+                            <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.NUMBERORLETTER</span>: <b>*</b></li>
+                            <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.OPTIONAL</span>: <b>?</b></li>
+                            <li><span translate>FORM-BUILDER.COMPONENT.MASK.EXAMPLES.PHONE</span>: <b>(99) 9999-9999</b></li>
+                        </ul>
+                    </bk-form-item>
+                </div>
+            </div>
+        </div>
+
+        <div ng-if="activeTab.id == 'advanced' && formElement.type === 'hyperlink'">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderHyperlinkUrlField">{{ 'FORM-BUILDER.COMPONENT.HYPERLINK-URL' | translate }}</bk-form-label>
+                    <bk-input id="formBuilderHyperlinkUrlField" type="text" ng-model="formElement.params.hyperlinkUrl"></bk-input>
+                </bk-form-item>
+            </bk-form-group>
+        </div>
+
+        <div ng-if="activeTab.id == 'general' && formElement.type === 'expression'">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderExpressionField">{{ 'FORM-BUILDER.COMPONENT.EXPRESSION' | translate }}</bk-form-label>
+                    <bk-textarea id="formBuilderExpressionField" rows="3" ng-model="formElement.expression"></bk-textarea>
+                    <div class="subtle" translate="FORM-BUILDER.MESSAGE.EXPRESSION-HELP" style="padding: 5px 0 5px 1px;"></div>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="formBuilderExpressionSizeField">{{ 'FORM-BUILDER.COMPONENT.SIZE' | translate }}</bk-form-label>
+                    <bk-select label-id="formBuilderExpressionSizeField" ng-model="formElement.params.size" dropdown-fixed="true">
+                        <bk-option text="1" value="'1'"></bk-option>
+                        <bk-option text="2" value="'2'"></bk-option>
+                        <bk-option text="3" value="'3'"></bk-option>
+                        <bk-option text="4" value="'4'"></bk-option>
+                        <bk-option text="5" value="'5'"></bk-option>
+                    </bk-select>
+                </bk-form-item>
+            </bk-form-group>
+        </div>
+    </bk-dialog-body>
+    <bk-dialog-footer compact="true">
+        <bk-bar-element>
+            <bk-button label="{{ 'GENERAL.ACTION.CLOSE' | translate }}" decisive="true" ng-click="doneEditing()"></bk-button>
+        </bk-bar-element>
+    </bk-dialog-footer>
+</bk-dialog>

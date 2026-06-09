@@ -41,6 +41,9 @@ public class RepositoryClassConsumer implements JavaClassConsumer {
 
     private final RepositoryRegistry registry;
 
+    /**
+     * @param registry the registry that stores instantiated {@code @Repository} singletons
+     */
     @Autowired
     public RepositoryClassConsumer(RepositoryRegistry registry) {
         this.registry = registry;

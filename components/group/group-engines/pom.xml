@@ -6,7 +6,7 @@
     <parent>
         <groupId>org.eclipse.dirigible</groupId>
         <artifactId>dirigible-components-parent</artifactId>
-        <version>13.0.0-SNAPSHOT</version>
+        <version>14.0.0-SNAPSHOT</version>
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
@@ -32,6 +32,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-proxy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-native-apps</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

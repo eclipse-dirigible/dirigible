@@ -1,18 +1,18 @@
-
-<div class="modal" ng-controller="FlowableBpmShapeSelectionCtrl">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-                <h2>Change shape to:</h2>
-            </div>
-            <div class="modal-body">
-                <div ng-if="gridOptions" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div> 
-            </div>
-            <div class="modal-footer">
-                <button ng-click="cancel()" class="btn btn-primary" translate>ACTION.CANCEL</button>
-                <button ng-click="select()" class="btn btn-primary" translate>ACTION.SELECT</button>
-            </div>
-        </div>
-    </div>
+<div ng-controller="FlowableBpmShapeSelectionCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="500px" window-max-width="70vw" window-min-height="400px">
+        <bk-dialog-header title="Change shape to:">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <div ng-if="gridOptions" class="kis-listener-grid" ui-grid="gridOptions" ui-grid-selection></div>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.SELECT' | translate }}" decisive="true" state="emphasized" ng-click="select()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

@@ -1,107 +1,78 @@
+<div ng-controller="SaveModelCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="500px" window-max-width="80vw">
+        <bk-dialog-header title="{{ 'MODEL.SAVE.TITLE' | translate }}"></bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
 
-<div class="modal" ng-controller="SaveModelCtrl">
-    <div class="modal-dialog">
-        <div class="modal-content">
-        <div class="modal-header">
-            <h2>{{'MODEL.SAVE.TITLE' | translate}}</h2>
-        </div>
-        <div class="modal-body">
-        	<div ng-if="saveDialog.errorMessage && saveDialog.errorMessage.length > 0" class="alert error" style="font-size: 14px; margin-top:20px">
-                <div class="popup-error" style="font-size: 14px">
-                	<span class="glyphicon glyphicon-remove-circle"></span>
-                	<span>{{saveDialog.errorMessage}}</span>
-              	</div>
-            </div>
-        	<div class="form-group">
-           		<label for="nameField">{{'MODEL.NAME' | translate}}</label>
-        		<input type="text"
-                       ng-disabled="status.loading || (error && error.conflictResolveAction == 'saveAs')"
-                       id="nameField"
-                       class="form-control"
-                       ng-model="saveDialog.name"
-                       auto-focus />
-        	</div>
-        	<div class="form-group">
-           		<label for="keyField">{{'MODEL.KEY' | translate}}</label>
-        		<input type="text"
-                       ng-disabled="status.loading || (error && error.conflictResolveAction == 'saveAs')"
-                       id="keyField"
-                       class="form-control"
-                       ng-model="saveDialog.key" />
-        	</div>
-        	<div class="form-group">
-           		<label for="docTextArea">{{'MODEL.DESCRIPTION' | translate}}</label>
-           		<textarea id="docTextArea" ng-disabled="status.loading" class="form-control" ng-model="saveDialog.description"></textarea>
-        	</div>
-        	<div class="form-group" ng-if="saveDialog.newVersion">
-           		<label for="commentTextArea">{{'MODEL.SAVE.COMMENT' | translate}}</label>
-           		<textarea id="commentTextArea" class="form-control" ng-model="saveDialog.comment" ng-disabled="status.loading"></textarea>
-        	</div>
-        	
-        	<div ng-if="saveDialog.validationErrors" class="alert error" style="font-size: 14px; margin-top:20px">
-        
-                <div class="popup-error" style="font-size: 14px">
-                    <span class="glyphicon glyphicon-remove-circle"></span>
-                    <span>{{'MODEL.VALIDATIONERRORS' | translate:error}}</span>
+            <bk-message-strip type="error" ng-if="saveDialog.errorMessage && saveDialog.errorMessage.length > 0">{{ saveDialog.errorMessage }}</bk-message-strip>
+
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="saveModelNameField">{{ 'MODEL.NAME' | translate }}</bk-form-label>
+                    <bk-input id="saveModelNameField" type="text" ng-model="saveDialog.name" ng-disabled="status.loading || (error && error.conflictResolveAction == 'saveAs')" auto-focus></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="saveModelKeyField">{{ 'MODEL.KEY' | translate }}</bk-form-label>
+                    <bk-input id="saveModelKeyField" type="text" ng-model="saveDialog.key" ng-disabled="status.loading || (error && error.conflictResolveAction == 'saveAs')"></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="saveModelDescriptionField">{{ 'MODEL.DESCRIPTION' | translate }}</bk-form-label>
+                    <bk-textarea id="saveModelDescriptionField" ng-model="saveDialog.description" ng-disabled="status.loading"></bk-textarea>
+                </bk-form-item>
+                <bk-form-item ng-if="saveDialog.newVersion">
+                    <bk-form-label for="saveModelCommentField">{{ 'MODEL.SAVE.COMMENT' | translate }}</bk-form-label>
+                    <bk-textarea id="saveModelCommentField" ng-model="saveDialog.comment" ng-disabled="status.loading"></bk-textarea>
+                </bk-form-item>
+            </bk-form-group>
+
+            <bk-message-strip type="error" ng-if="saveDialog.validationErrors">{{ 'MODEL.VALIDATIONERRORS' | translate:error }}</bk-message-strip>
+
+            <div ng-if="error && error.isConflict && !status.loading">
+                <bk-message-strip type="error">{{ 'MODEL.CONFLICT.WRITE' | translate:error }}</bk-message-strip>
+
+                <div style="margin-top: 12px;">
+                    <div style="font-size: 14px; margin-bottom: 10px">{{ 'MODEL.CONFLICT.WRITE.OPTIONS' | translate }}</div>
+                    <bk-form-group>
+                        <bk-form-item>
+                            <bk-radio id="saveModelConflictOverwrite" name="conflictResolveAction" ng-model="error.conflictResolveAction" ng-value="'overwrite'"></bk-radio>
+                            <bk-radio-label for="saveModelConflictOverwrite">{{ 'MODEL.CONFLICT.WRITE.OPTION.OVERWRITE' | translate }}</bk-radio-label>
+                        </bk-form-item>
+                        <bk-form-item>
+                            <bk-radio id="saveModelConflictDiscard" name="conflictResolveAction" ng-model="error.conflictResolveAction" ng-value="'discardChanges'"></bk-radio>
+                            <bk-radio-label for="saveModelConflictDiscard">{{ 'MODEL.CONFLICT.WRITE.OPTION.DISCARDCHANGES' | translate }}</bk-radio-label>
+                        </bk-form-item>
+                        <bk-form-item>
+                            <bk-radio id="saveModelConflictSaveAs" name="conflictResolveAction" ng-model="error.conflictResolveAction" ng-value="'saveAs'" ng-disabled="account.type != 'enterprise'"></bk-radio>
+                            <bk-radio-label for="saveModelConflictSaveAs">{{ 'MODEL.CONFLICT.WRITE.OPTION.SAVEAS' | translate }}</bk-radio-label>
+                        </bk-form-item>
+                        <bk-form-item>
+                            <bk-radio id="saveModelConflictNewVersion" name="conflictResolveAction" ng-model="error.conflictResolveAction" ng-value="'newVersion'"></bk-radio>
+                            <bk-radio-label for="saveModelConflictNewVersion">{{ 'MODEL.CONFLICT.WRITE.OPTION.NEWVERSION' | translate }}</bk-radio-label>
+                        </bk-form-item>
+                    </bk-form-group>
+
+                    <bk-form-group ng-if="error.conflictResolveAction == 'saveAs'">
+                        <bk-form-item>
+                            <bk-form-label for="saveModelSaveAsField">{{ 'MODEL.CONFLICT.SAVEAS' | translate }}</bk-form-label>
+                            <bk-input id="saveModelSaveAsField" type="text" ng-model="error.saveAs" auto-focus></bk-input>
+                        </bk-form-item>
+                    </bk-form-group>
                 </div>
             </div>
-        
-            <div ng-if="error && error.isConflict && !status.loading" class="alert error" style="font-size: 14px; margin-top:20px">
-        
-                <div class="popup-error" style="font-size: 14px">
-                    <span class="glyphicon glyphicon-remove-circle"></span>
-                    <span>{{'MODEL.CONFLICT.WRITE' | translate:error}}</span>
-                </div>
-        
-                <div>
-        
-                    <div style="font-size: 14px; margin-bottom: 10px">{{'MODEL.CONFLICT.WRITE.OPTIONS' | translate}}</div>
-                    <div class="btn-group" data-toggle="buttons">
-                        <label class="btn btn-danger"
-                               ng-click="error.conflictResolveAction = 'overwrite'">
-                            <input type="radio" name="options" id="option1">
-                            {{'MODEL.CONFLICT.WRITE.OPTION.OVERWRITE' | translate}}
-                        </label>
-                        <label class="btn btn-danger"
-                               ng-click="error.conflictResolveAction = 'discardChanges'">
-                            <input type="radio" name="options" id="option2">
-                            {{'MODEL.CONFLICT.WRITE.OPTION.DISCARDCHANGES' | translate}}
-                        </label>
-                        <label class="btn btn-danger"
-                               ng-click="error.conflictResolveAction = 'saveAs'">
-                            <input type="radio" name="options" id="option3" ng-disabled="account.type != 'enterprise'">
-                            {{'MODEL.CONFLICT.WRITE.OPTION.SAVEAS' | translate}}
-                        </label>
-                        <label class="btn btn-danger"
-                               ng-click="error.conflictResolveAction = 'newVersion'">
-                            <input type="radio" name="options" id="optio43">
-                            {{'MODEL.CONFLICT.WRITE.OPTION.NEWVERSION' | translate}}
-                        </label>
-                    </div>
-        
-                    <div ng-if="error.conflictResolveAction == 'saveAs'" style="margin-top: 10px">
-                        <span>{{'MODEL.CONFLICT.SAVEAS' | translate}}</span>
-                        <input type="text" ng-model="error.saveAs" style="width: 300px" auto-focus>
-                    </div>
-                </div>
-        
-            </div>
-        
-        </div>
-        <div class="modal-footer">
-        
-        	<div class="pull-right">
-            	<button type="button" class="btn" ng-click="close()" ng-disabled="status.loading" translate>ACTION.CANCEL</button>
-            	<button class="btn btn-primary" ng-click="save()" ng-disabled="status.loading || saveDialog.name.length == 0 || saveDialog.key.length == 0" ng-show="!error && !error.isConflict" translate>ACTION.SAVE</button>
-                <button class="btn btn-primary" ng-click="okClicked()" ng-disabled="isOkButtonDisabled()" ng-show="error && error.isConflict" translate>ACTION.OK</button>
-            </div>
-        
-            <div class="pull-right popup-error" ng-if="error && !error.isConflict">
-                <span>{{'MODEL.SAVE.ERROR' | translate}}</span>
-            </div>
-        
-        	<loading></loading>
-        
-        </div>
-    </div>
+
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element ng-if="error && !error.isConflict">
+                <span class="popup-error">{{ 'MODEL.SAVE.ERROR' | translate }}</span>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.CANCEL' | translate }}" ng-click="close()" ng-disabled="status.loading" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element ng-show="!error || !error.isConflict">
+                <bk-button label="{{ 'ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()" ng-disabled="status.loading || !saveDialog.name || saveDialog.name.length == 0 || !saveDialog.key || saveDialog.key.length == 0"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element ng-show="error && error.isConflict">
+                <bk-button label="{{ 'ACTION.OK' | translate }}" decisive="true" state="emphasized" ng-click="okClicked()" ng-disabled="isOkButtonDisabled()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

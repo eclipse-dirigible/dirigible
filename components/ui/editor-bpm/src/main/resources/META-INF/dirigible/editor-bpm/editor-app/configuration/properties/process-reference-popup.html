@@ -1,45 +1,43 @@
-
-<div class="modal" ng-controller="FlowableProcessReferencePopupCtrl">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-			<div class="modal-header">
-			    <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-			    <h2>
-			        {{'PROPERTY.PROCESSREFERENCE.TITLE' | translate}}
-			        <span ng-show="selectedProcess != null"> - {{selectedProcess.name}}</span>
-			        <span ng-show="selectedProcess == null"> - {{'PROPERTY.PROCESSREFERENCE.EMPTY' | translate}}</span> 
-			    
-			    </h2>
-			</div>
-			<div class="modal-body-with-overflow">
-			    <div class="detail-group clearfix">
-                    <div class="col-xs-12">
-			            <div class="alert alert-error" ng-show="(!state.loadingFolders && !state.loadingProcesses) && state.processError" translate>PROPERTY.PROCESSREFERENCE.ERROR.PROCESS</div>
-			        </div>
-			    </div>
-			    <div class="detail-group clearfix">
-                    <div class="col-xs-12 editor-item-picker">
-			            <div ng-if="!state.loadingProcesses && !state.processError" class="col-xs-4 editor-item-picker-component" ng-repeat="processModel in processModels" ng-class="{'selected' : processModel.id == selectedProcess.id}" ng-click="selectProcess(processModel, $event)">
-			               <div class="controls">
-			                   <input type="checkbox" value="option1" ng-click="selectProcess(processModel, $event)" ng-checked="processModel.id == selectedProcess.id" />
-			               </div>
-			               <h4>{{processModel.name}}</h4>
-			               <img src="{{getModelThumbnailUrl(processModel.id)}}" />
-			             </div>
-			             <div ng-show="state.loadingProcesses">
-			               <p class="loading" translate>PROPERTY.PROCESSREFERENCE.PROCESS.LOADING</p>
-			             </div>
-			             <div ng-show="!state.loadingProcesses && processModels.length == 0">
-			                <p translate>PROPERTY.PROCESSREFERENCE.PROCESS.EMPTY</p>
-			             </div>
-			        </div>
-			    </div>
-			</div>
-			<div class="modal-footer">
-			    <button ng-click="close()" class="btn btn-primary" translate>GENERAL.ACTION.CANCEL</button>
-                <button ng-disabled="!selectedProcess || state.processError" ng-click="open()" class="btn btn-primary" translate>GENERAL.ACTION.OPEN</button>
-                <button ng-disabled="state.processError" ng-click="save()" class="btn btn-primary" translate>GENERAL.ACTION.SAVE</button>
-			</div>
-		</div>
-	</div>
+<div ng-controller="FlowableProcessReferencePopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="900px" window-max-width="90vw" window-min-height="500px">
+        <bk-dialog-header title="{{ 'PROPERTY.PROCESSREFERENCE.TITLE' | translate }}{{ selectedProcess ? ' - ' + selectedProcess.name : ' - ' + ('PROPERTY.PROCESSREFERENCE.EMPTY' | translate) }}">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <div class="detail-group clearfix">
+                <div class="col-xs-12">
+                    <bk-message-strip type="error" ng-if="(!state.loadingFolders && !state.loadingProcesses) && state.processError">{{ 'PROPERTY.PROCESSREFERENCE.ERROR.PROCESS' | translate }}</bk-message-strip>
+                </div>
+            </div>
+            <div class="detail-group clearfix">
+                <div class="col-xs-12 editor-item-picker">
+                    <div ng-if="!state.loadingProcesses && !state.processError" class="col-xs-4 editor-item-picker-component" ng-repeat="processModel in processModels" ng-class="{'selected' : processModel.id == selectedProcess.id}" ng-click="selectProcess(processModel, $event)">
+                        <div class="controls">
+                            <bk-checkbox id="process-ref-cb-{{processModel.id}}" ng-click="selectProcess(processModel, $event)" ng-checked="processModel.id == selectedProcess.id"></bk-checkbox>
+                            <bk-checkbox-label for="process-ref-cb-{{processModel.id}}" empty="true"></bk-checkbox-label>
+                        </div>
+                        <h4>{{ processModel.name }}</h4>
+                        <img src="{{ getModelThumbnailUrl(processModel.id) }}" />
+                    </div>
+                    <div ng-show="state.loadingProcesses">
+                        <p class="loading" translate>PROPERTY.PROCESSREFERENCE.PROCESS.LOADING</p>
+                    </div>
+                    <div ng-show="!state.loadingProcesses && processModels.length == 0">
+                        <p translate>PROPERTY.PROCESSREFERENCE.PROCESS.EMPTY</p>
+                    </div>
+                </div>
+            </div>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CANCEL' | translate }}" ng-click="close()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.OPEN' | translate }}" ng-click="open()" ng-disabled="!selectedProcess || state.processError"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()" ng-disabled="state.processError"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

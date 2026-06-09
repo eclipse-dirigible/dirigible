@@ -68,8 +68,6 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import jakarta.annotation.security.RolesAllowed;
 
 /**
@@ -125,12 +123,12 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @throws JsonProcessingException exception
      */
     @GetMapping(value = "/models/{workspace}/{project}/{*path}", produces = "application/json")
-    public ResponseEntity<ObjectNode> getModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
+    public ResponseEntity<String> getModel(@PathVariable("workspace") String workspace, @PathVariable("project") String project,
             @PathVariable("path") String path) throws JsonProcessingException {
 
         path = sanitizePath(path);
 
-        ObjectNode model = bpmService.getModel(workspace, project, path);
+        String model = bpmService.getModel(workspace, project, path);
 
         if (model == null) {
             String error = format("Model in workspace: {0} and project {1} with path {2} does not exist.", workspace, project, path);
@@ -194,9 +192,9 @@ public class BpmFlowableEndpoint extends BaseEndpoint {
      * @throws IOException Signals that an I/O exception has occurred.
      */
     @GetMapping(value = "/stencil-sets", produces = "application/json")
-    public ResponseEntity<JsonNode> getStencilSet() throws IOException {
+    public ResponseEntity<String> getStencilSet() throws IOException {
 
-        JsonNode stencilSets = bpmService.getStencilSet();
+        String stencilSets = bpmService.getStencilSet();
 
         if (stencilSets == null) {
             String error = "Stencil Sets definition does not exist.";

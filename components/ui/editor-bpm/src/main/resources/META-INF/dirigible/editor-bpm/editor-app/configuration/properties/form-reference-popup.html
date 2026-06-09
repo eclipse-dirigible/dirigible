@@ -1,74 +1,79 @@
+<div ng-controller="FlowableFormReferencePopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="900px" window-max-width="90vw" window-min-height="500px">
 
-<div class="modal" ng-controller="FlowableFormReferencePopupCtrl">
-    <div class="modal-dialog modal-wide">
-        <div class="modal-content">
-            <div class="modal-header" ng-if="popup.state != 'newForm'">
-                <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-                <h2>
-                    {{'PROPERTY.FORMREFERENCE.TITLE' | translate}}
-                    <span ng-show="selectedForm != null"> - {{selectedForm.name}}</span>
-                    <span ng-show="selectedForm == null"> - {{'PROPERTY.FORMREFERENCE.EMPTY' | translate}}</span> 
-                
-                </h2>
-            </div>
-            <div class="modal-header" ng-if="popup.state == 'newForm'"><h2>{{'FORM.POPUP.CREATE-TITLE' | translate}}</h2></div>
-            <div class="modal-body-with-overflow" ng-if="popup.state != 'newForm'">
-                <div class="detail-group clearfix">
-                    <div class="col-xs-12">
-                        <div class="alert alert-error" ng-show="!state.loadingForms && state.formError" translate>PROPERTY.FORMREFERENCE.ERROR.FORM</div>
-                    </div>
+        <bk-dialog-header ng-if="popup.state != 'newForm'" title="{{ 'PROPERTY.FORMREFERENCE.TITLE' | translate }}{{ selectedForm ? ' - ' + selectedForm.name : ' - ' + ('PROPERTY.FORMREFERENCE.EMPTY' | translate) }}">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-header ng-if="popup.state == 'newForm'" title="{{ 'FORM.POPUP.CREATE-TITLE' | translate }}"></bk-dialog-header>
+
+        <bk-dialog-body ng-if="popup.state != 'newForm'" class="bk-padding">
+            <div class="detail-group clearfix">
+                <div class="col-xs-12">
+                    <bk-message-strip type="error" ng-if="!state.loadingForms && state.formError">{{ 'PROPERTY.FORMREFERENCE.ERROR.FORM' | translate }}</bk-message-strip>
                 </div>
-                <div class="detail-group clearfix">
-                    <div class="col-xs-12 editor-item-picker">
-                        <div ng-if="!state.loadingForms && !state.formError" class="col-xs-4 editor-item-picker-component" ng-repeat="form in forms" ng-class="{'selected' : form.formId == selectedForm.formId}" ng-click="selectForm(form, $event)">
-                           <div class="controls">
-                               <input type="checkbox" value="option1" ng-click="selectForm(form, $event)" ng-checked="form.id == selectedForm.id" />
-                           </div>
-                           <h4>{{form.name}}</h4>
-                           <img ng-src="{{getModelThumbnailUrl(form.id)}}" />
-                         </div>
-                         <div ng-show="state.loadingForms">
-                            <p class="loading" translate>PROPERTY.FORMREFERENCE.FORM.LOADING</p>
-                         </div>
-                         <div ng-show="!state.loadingForms && forms.length == 0">
-                            <p translate>PROPERTY.FORMREFERENCE.FORM.EMPTY</p>
-                         </div>
+            </div>
+            <div class="detail-group clearfix">
+                <div class="col-xs-12 editor-item-picker">
+                    <div ng-if="!state.loadingForms && !state.formError" class="col-xs-4 editor-item-picker-component" ng-repeat="form in forms" ng-class="{'selected' : form.formId == selectedForm.formId}" ng-click="selectForm(form, $event)">
+                        <div class="controls">
+                            <bk-checkbox id="form-ref-cb-{{form.id}}" ng-click="selectForm(form, $event)" ng-checked="form.id == selectedForm.id"></bk-checkbox>
+                            <bk-checkbox-label for="form-ref-cb-{{form.id}}" empty="true"></bk-checkbox-label>
+                        </div>
+                        <h4>{{ form.name }}</h4>
+                        <img ng-src="{{ getModelThumbnailUrl(form.id) }}" />
+                    </div>
+                    <div ng-show="state.loadingForms">
+                        <p class="loading" translate>PROPERTY.FORMREFERENCE.FORM.LOADING</p>
+                    </div>
+                    <div ng-show="!state.loadingForms && forms.length == 0">
+                        <p translate>PROPERTY.FORMREFERENCE.FORM.EMPTY</p>
                     </div>
                 </div>
             </div>
-            <div class="modal-body" ng-if="popup.state == 'newForm'">
-                <p>{{'FORM.POPUP.CREATE-DESCRIPTION' | translate}}</p>
-                <div ng-if="model.errorMessage && model.errorMessage.length > 0" class="alert error" style="font-size: 14px; margin-top:20px">
-                  <div class="popup-error" style="font-size: 14px">
-                    <span class="glyphicon glyphicon-remove-circle"></span>
-                    <span>{{model.errorMessage}}</span>
-                  </div>
-                </div>
-                <div class="form-group">
-                    <label for="newFormName">{{'FORM.NAME' | translate}}</label>
-                    <input ng-disabled="model.loading" type="text" class="form-control"
-                           id="newFormName" ng-model="model.form.name" custom-keys enter-pressed="ok()" auto-focus editor-input-check>
-                </div>
-                <div class="form-group">
-                    <label for="newFormKey">{{'FORM.KEY' | translate}}</label>
-                    <input ng-disabled="model.loading" type="text" class="form-control"
-                           id="newFormKey" ng-model="model.form.key" editor-input-check>
-                </div>
-                <div class="form-group">
-                    <label for="newFormDescription">{{'FORM.DESCRIPTION' | translate}}</label>
-                    <textarea ng-disabled="model.loading" class="form-control" id="newFormDescription" rows="5" ng-model="model.form.description"></textarea>
-                </div>
-            </div>
-            <div class="modal-footer" ng-if="popup.state != 'newForm'">
-            	<button ng-click="cancel()" class="btn btn-primary" translate>GENERAL.ACTION.CANCEL</button>
-            	<button ng-disabled="state.formError" ng-click="newForm()" class="btn btn-primary" translate>GENERAL.ACTION.NEW-FORM</button>
-            	<button ng-disabled="!selectedForm || state.formError" ng-click="open()" class="btn btn-primary" translate>GENERAL.ACTION.OPEN</button>
-                <button ng-disabled="state.formError" ng-click="save()" class="btn btn-primary" translate>GENERAL.ACTION.SAVE</button>
-            </div>
-            <div class="modal-footer" ng-if="popup.state == 'newForm'">
-                <button ng-click="cancel()" class="btn btn-primary" translate>GENERAL.ACTION.CANCEL</button>
-                <button ng-disabled="state.formError || model.form.name.length == 0 || model.form.key.length == 0" ng-click="createForm()" class="btn btn-primary" translate>GENERAL.ACTION.CREATE-FORM</button>
-            </div>
-        </div>
-    </div>
+        </bk-dialog-body>
+
+        <bk-dialog-body ng-if="popup.state == 'newForm'" class="bk-padding">
+            <p>{{ 'FORM.POPUP.CREATE-DESCRIPTION' | translate }}</p>
+            <bk-message-strip type="error" ng-if="model.errorMessage && model.errorMessage.length > 0">{{ model.errorMessage }}</bk-message-strip>
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="newFormName">{{ 'FORM.NAME' | translate }}</bk-form-label>
+                    <bk-input id="newFormName" type="text" ng-model="model.form.name" ng-disabled="model.loading" custom-keys enter-pressed="ok()" auto-focus editor-input-check></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="newFormKey">{{ 'FORM.KEY' | translate }}</bk-form-label>
+                    <bk-input id="newFormKey" type="text" ng-model="model.form.key" ng-disabled="model.loading" editor-input-check></bk-input>
+                </bk-form-item>
+                <bk-form-item>
+                    <bk-form-label for="newFormDescription">{{ 'FORM.DESCRIPTION' | translate }}</bk-form-label>
+                    <bk-textarea id="newFormDescription" rows="5" ng-model="model.form.description" ng-disabled="model.loading"></bk-textarea>
+                </bk-form-item>
+            </bk-form-group>
+        </bk-dialog-body>
+
+        <bk-dialog-footer ng-if="popup.state != 'newForm'" compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.NEW-FORM' | translate }}" ng-click="newForm()" ng-disabled="state.formError"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.OPEN' | translate }}" ng-click="open()" ng-disabled="!selectedForm || state.formError"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()" ng-disabled="state.formError"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+
+        <bk-dialog-footer ng-if="popup.state == 'newForm'" compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CANCEL' | translate }}" ng-click="cancel()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'GENERAL.ACTION.CREATE-FORM' | translate }}" decisive="true" state="emphasized" ng-click="createForm()" ng-disabled="state.formError || !model.form.name || model.form.name.length == 0 || !model.form.key || model.form.key.length == 0"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+
+    </bk-dialog>
 </div>

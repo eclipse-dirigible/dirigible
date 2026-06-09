@@ -15,8 +15,8 @@ import java.lang.reflect.Type;
  * Describes how a single controller-method parameter should be supplied at invocation time.
  *
  * @param kind binding category (body, path placeholder, query parameter, or context object)
- * @param name placeholder/query-parameter name; {@code null} for {@link Kind#BODY} and
- *        {@link Kind#CTX}
+ * @param name placeholder/query-parameter name; {@code null} for {@link Kind#BODY},
+ *        {@link Kind#CTX_REQUEST}, {@link Kind#CTX_RESPONSE} and {@link Kind#CTX_PARAMS}
  * @param targetType the parameter's declared {@code Class}, used for type coercion and Jackson
  *        deserialization
  * @param genericType the parameter's declared generic {@code Type}, needed for Jackson when the

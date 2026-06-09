@@ -77,10 +77,12 @@ angular.module('flowableModeler')
 		  }
 
 		  $http({method: 'GET', url: FLOWABLE.APP_URL.getModelsUrl(), params: params}).
-		  	then(function(data, status, headers, config) {
+		  	then(function(response) {
+		  		var data = response.data;
 	    		$scope.model.processes = data;
 	    		$scope.model.loading = false;
-	        }, function(data, status, headers, config) {
+	        }, function(response) {
+	           var data = response.data;
 	           console.log('Something went wrong: ' + data);
 	           $scope.model.loading = false;
 	        });
@@ -168,14 +170,15 @@ angular.module('flowableModeler')
         $scope.model.loading = true;
 
         $http({method: 'POST', url: FLOWABLE.APP_URL.getModelsUrl(), data: $scope.model.process}).
-            success(function(data) {
+            then(function(response) {
+                var data = response.data;
                 $scope.$hide();
 
                 $scope.model.loading = false;
                 $rootScope.editorHistory = [];
                 $location.path("/editor/" + data.id);
-            }).
-            error(function(data, status, headers, config) {
+            }, function(response) {
+                var data = response.data;
                 $scope.model.loading = false;
                 $scope.model.errorMessage = data.message;
             });
@@ -221,14 +224,15 @@ angular.module('flowableModeler')
         $scope.model.loading = true;
 
         $http({method: 'POST', url: FLOWABLE.APP_URL.getCloneModelsUrl(), data: $scope.model.process}).
-            success(function(data) {
+            then(function(response) {
+                var data = response.data;
                 $scope.$hide();
 
                 $scope.model.loading = false;
                 $rootScope.editorHistory = [];
                 $location.path("/editor/" + data.id);
-            }).
-            error(function(data, status, headers, config) {
+            }, function(response) {
+                var data = response.data;
                 $scope.model.loading = false;
                 $scope.model.errorMessage = data.message;
             });
@@ -269,13 +273,15 @@ angular.module('flowableModeler')
           }).progress(function(evt) {
               $scope.model.uploadProgress = parseInt(100.0 * evt.loaded / evt.total);
 
-          }).success(function(data) {
+          }).then(function(response) {
+              var data = response.data;
               $scope.model.loading = false;
 
               $location.path("/editor/" + data.id);
               $scope.$hide();
 
-          }).error(function(data) {
+          }, function(response) {
+              var data = response.data;
 
               if (data && data.message) {
                   $scope.model.errorMessage = data.message;

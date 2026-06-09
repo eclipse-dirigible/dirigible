@@ -50,12 +50,21 @@ public class JavaEntityStore {
 
     private final JavaEntityManager entityManager;
 
+    /**
+     * @param entityManager the manager that owns the dynamic Hibernate {@code SessionFactory}
+     */
     @Autowired
     public JavaEntityStore(JavaEntityManager entityManager) {
         this.entityManager = entityManager;
     }
 
-    /** Insert a new entity. The id field is back-filled when a generator produced it. */
+    /**
+     * Insert a new entity. The id field is back-filled when a generator produced it.
+     *
+     * @param <T> the entity type
+     * @param entity the entity to insert
+     * @return the same entity (with any generated identifier populated)
+     */
     public <T> T save(T entity) {
         RegisteredEntity meta = resolve(entity.getClass());
         applyCreateAudit(entity, meta);
@@ -78,7 +87,13 @@ public class JavaEntityStore {
         }
     }
 
-    /** Update an existing entity by id. */
+    /**
+     * Update an existing entity by id.
+     *
+     * @param <T> the entity type
+     * @param entity the entity to update
+     * @return the same entity
+     */
     public <T> T update(T entity) {
         RegisteredEntity meta = resolve(entity.getClass());
         applyUpdateAudit(entity, meta);
@@ -97,12 +112,25 @@ public class JavaEntityStore {
     /**
      * Find by id. Throws {@link IllegalArgumentException} when not found — use {@link #findOne} for the
      * optional variant.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary key
+     * @return the entity
      */
     public <T> T findById(Class<T> type, Object id) {
         return findOne(type, id).orElseThrow(
                 () -> new IllegalArgumentException("No entity [" + type.getSimpleName() + "] with id [" + id + "]"));
     }
 
+    /**
+     * Find by id.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary key
+     * @return the entity, or empty if not found
+     */
     public <T> Optional<T> findOne(Class<T> type, Object id) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
@@ -117,10 +145,22 @@ public class JavaEntityStore {
         }
     }
 
+    /**
+     * @param <T> the entity type
+     * @param type the entity class
+     * @return every entity of the given type
+     */
     public <T> List<T> findAll(Class<T> type) {
         return findAll(type, -1, -1);
     }
 
+    /**
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param limit max rows to return; non-positive means unlimited
+     * @param offset rows to skip; non-positive means none
+     * @return the requested page
+     */
     public <T> List<T> findAll(Class<T> type, int limit, int offset) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
@@ -136,6 +176,12 @@ public class JavaEntityStore {
         }
     }
 
+    /**
+     * Delete an entity instance.
+     *
+     * @param <T> the entity type
+     * @param entity the entity to delete
+     */
     public <T> void delete(T entity) {
         RegisteredEntity meta = resolve(entity.getClass());
         Map<String, Object> data = EntityBeanMapper.toMap(entity, meta);
@@ -147,6 +193,13 @@ public class JavaEntityStore {
         removeById(meta, id);
     }
 
+    /**
+     * Delete an entity by primary key.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary-key value
+     */
     public <T> void deleteById(Class<T> type, Object id) {
         removeById(resolve(type), id);
     }
@@ -168,6 +221,11 @@ public class JavaEntityStore {
         }
     }
 
+    /**
+     * @param <T> the entity type
+     * @param type the entity class
+     * @return the number of stored entities of the given type
+     */
     public <T> long count(Class<T> type) {
         RegisteredEntity meta = resolve(type);
         try (Session session = entityManager.getSessionFactory()
@@ -182,6 +240,12 @@ public class JavaEntityStore {
      * Execute an HQL/JPQL query against the entity. Parameters are bound by name. The query must select
      * map projections (default for dynamic-map entities — {@code from <entityName>} works out of the
      * box).
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param hql the HQL/JPQL query string
+     * @param parameters named parameter bindings; may be {@code null}
+     * @return the query results
      */
     public <T> List<T> query(Class<T> type, String hql, Map<String, Object> parameters) {
         RegisteredEntity meta = resolve(type);
@@ -195,7 +259,9 @@ public class JavaEntityStore {
         }
     }
 
-    /** Number of currently registered entity types — useful in tests. */
+    /**
+     * @return the number of currently registered entity types — useful in tests
+     */
     public int registeredCount() {
         return entityManager.size();
     }

@@ -1,26 +1,23 @@
-<div class="modal" ng-controller="FlowableConditionExpressionPopupCtrl">
-<div class="modal-dialog modal-wide">
-<div class="modal-content">
-<div class="modal-header">
-    <button type="button" class="close" data-dismiss="modal" aria-hidden="true" ng-click="close()">&times;</button>
-    <h2 translate>PROPERTY.SEQUENCEFLOW.CONDITION.TITLE</h2>
-</div>
-<div class="modal-body">
-
-    <div class="detail-group clearfix">
-        
-        <div class="col-xs-12">
-            <label class="col-xs-3">{{'PROPERTY.SEQUENCEFLOW.CONDITION.STATIC' | translate}}</label>
-            <div class="col-xs-9">
-                <textarea class="form-control" ng-model="expression.staticValue" style="width:70%; height:100%; max-width: 100%; max-height: 100%; min-height: 50px"/>
-            </div>
-        </div>
-
-    </div>
-    <div class="modal-footer">
-        <button ng-click="close()" class="btn btn-primary" translate>ACTION.CANCEL</button>
-        <button ng-click="save()" class="btn btn-primary" translate>ACTION.SAVE</button>
-    </div>
-</div>
-</div>
+<div ng-controller="FlowableConditionExpressionPopupCtrl">
+    <bk-dialog visible="modal.visible" window-min-width="600px" window-max-width="80vw">
+        <bk-dialog-header title="{{ 'PROPERTY.SEQUENCEFLOW.CONDITION.TITLE' | translate }}">
+            <bk-button glyph="sap-icon--decline" aria-label="Close" round="true" compact="true" ng-click="close()"></bk-button>
+        </bk-dialog-header>
+        <bk-dialog-body class="bk-padding">
+            <bk-form-group>
+                <bk-form-item>
+                    <bk-form-label for="conditionStaticValueField">{{ 'PROPERTY.SEQUENCEFLOW.CONDITION.STATIC' | translate }}</bk-form-label>
+                    <bk-textarea id="conditionStaticValueField" ng-model="expression.staticValue" rows="6" style="width: 100%; min-height: 120px;"></bk-textarea>
+                </bk-form-item>
+            </bk-form-group>
+        </bk-dialog-body>
+        <bk-dialog-footer compact="true">
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.CANCEL' | translate }}" ng-click="close()" state="transparent"></bk-button>
+            </bk-bar-element>
+            <bk-bar-element>
+                <bk-button label="{{ 'ACTION.SAVE' | translate }}" decisive="true" state="emphasized" ng-click="save()"></bk-button>
+            </bk-bar-element>
+        </bk-dialog-footer>
+    </bk-dialog>
 </div>

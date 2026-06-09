@@ -1,0 +1,21 @@
+{
+  "name": "http-bin-app-auth",
+  "description": "Remote native app whose outbound auth header is injected by Dirigible with basic alice/wonderland.",
+  "basePath": "http-bin-app-auth",
+  "type": "remote",
+  "config": {
+    "url": "__UPSTREAM_URL__",
+    "security": {
+      "authentication": {
+        "type": "basic",
+        "credentials": {
+          "user": "alice",
+          "password": "wonderland"
+        }
+      },
+      "exposedPaths": [
+        { "path": "/get", "scopes": [] }
+      ]
+    }
+  }
+}

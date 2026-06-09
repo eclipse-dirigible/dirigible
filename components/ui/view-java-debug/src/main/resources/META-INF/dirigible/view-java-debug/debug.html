@@ -24,172 +24,109 @@
         <script type="text/javascript" src="js/debug.js"></script>
         <style>
             .dbg-section {
-                display: flex;
-                flex-direction: column;
-                min-height: 0;
-                overflow: hidden;
-                border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                margin: 0 !important;
+                --fdPanel_Header_Height: 1.625rem !important;
             }
-            .dbg-section-grow {
-                flex: 1;
-                min-height: 80px;
+
+            .dbg-section button {
+                --fdButton_Height: 1.25rem !important;
             }
-            .dbg-section-grow.dbg-collapsed {
-                flex: 0 0 auto;
-                min-height: 0;
-            }
-            .dbg-section-header {
-                font-size: 11px;
-                font-weight: bold;
+
+            .dbg-section h3 {
                 text-transform: uppercase;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                padding: 4px 8px;
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                cursor: pointer;
-                user-select: none;
-                flex-shrink: 0;
             }
-            .dbg-section-header:hover {
-                background: var(--sapList_HoverBackground, rgba(0, 0, 0, 0.04));
-            }
-            .dbg-section-body {
-                flex: 1;
-                min-height: 0;
-                overflow: hidden;
-            }
-            .dbg-chevron {
-                font-size: 9px;
-                transition: transform 0.15s;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .dbg-chevron.dbg-open {
-                transform: rotate(90deg);
-            }
-            .dbg-status-bar {
-                padding: 3px 8px;
-                font-size: 11px;
-                font-style: italic;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                border-bottom: 1px solid var(--sapList_BorderColor, #e5e5e5);
-                flex-shrink: 0;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-            .dbg-status-bar.dbg-connected {
-                font-style: normal;
-                color: var(--sapPositiveColor, #256f3a);
-            }
-            .dbg-status-bar.dbg-error {
-                font-style: normal;
-                color: var(--sapNegativeColor, #bb0000);
-            }
+
         </style>
     </head>
 
     <body class="bk-vbox">
         <!-- Toolbar: Attach/Disconnect + step controls -->
         <bk-toolbar compact="true" type="solid">
-            <bk-button glyph="sap-icon--connected" compact="true" state="transparent" title="Attach debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected' || status === 'connecting'"></bk-button>
-            <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected' && status !== 'connecting'"></bk-button>
+            <bk-button glyph="sap-icon--connected" compact="true" state="transparent" title="Connect debugger" aria-label="Attach" ng-click="attach()" ng-disabled="status === 'connected' || status === 'connecting'"></bk-button>
+            <bk-button glyph="sap-icon--disconnected" compact="true" state="transparent" title="Disconnect debugger" aria-label="Disconnect" ng-click="disconnect()" ng-disabled="status !== 'connected' && status !== 'connecting'">
+            </bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue (F5)" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--step-next" compact="true" state="transparent" title="Step Over (F10)" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--pushpin-off" compact="true" state="transparent" title="Step Into (F11)" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
-            <bk-button glyph="sap-icon--undo" compact="true" state="transparent" title="Step Out (Shift+F11)" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--media-play" compact="true" state="transparent" title="Continue" aria-label="Continue" ng-click="dapContinue()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-right" compact="true" state="transparent" title="Step Over" aria-label="Step Over" ng-click="stepOver()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--arrow-bottom" compact="true" state="transparent" title="Step Into" aria-label="Step Into" ng-click="stepIn()" ng-disabled="!isPaused()"></bk-button>
+            <bk-button glyph="sap-icon--forward" compact="true" state="transparent" title="Step Out" aria-label="Step Out" ng-click="stepOut()" ng-disabled="!isPaused()"></bk-button>
             <bk-button glyph="sap-icon--stop" compact="true" state="transparent" title="Stop" aria-label="Stop" ng-click="dapStop()" ng-disabled="status !== 'connected'"></bk-button>
         </bk-toolbar>
 
-        <!-- Status strip — always visible, shows animated message while connecting -->
-        <div class="dbg-status-bar" ng-class="{'dbg-connected': status === 'connected', 'dbg-error': status === 'error'}">
-            <span class="sap-icon--status-positive" ng-if="status === 'connected'" style="margin-right:4px"></span>
-            <span class="sap-icon--status-negative" ng-if="status === 'error'" style="margin-right:4px"></span>
-            {{statusLabel()}}
+        <!-- Status strip — always visible, shows loading animation message while connecting -->
+        <div class="bk-hbox bk-box--gap bk-padding--tiny bk-border--bottom">
+            <bk-loader ng-if="status === 'connecting'"></bk-loader>
+            <span bk-object-status class="bk-font--small" ng-class="{'bk-text--subtitle': status !== 'connected' && status !== 'error', 'bk-font--italic': status === 'connecting'}" status="{{getStatusType()}}" text="{{statusLabel()}}"
+                glyph="{{getStatusGlyph()}}"></span>
         </div>
 
         <!-- Call Stack section -->
-        <div class="dbg-section dbg-section-grow" ng-class="{'dbg-collapsed': !sections.callStack}">
-            <div class="dbg-section-header" ng-click="sections.callStack = !sections.callStack">
-                <span>Call Stack</span>
-                <span class="dbg-chevron sap-icon--navigation-right-arrow" ng-class="{'dbg-open': sections.callStack}"></span>
-            </div>
-            <div class="dbg-section-body">
-                <bk-scrollbar class="bk-full-height">
-                    <table bk-table display-mode="compact" outer-borders="none">
-                        <tbody bk-table-body>
-                            <tr bk-table-row ng-repeat="frame in callStack track by $index" hoverable="true" activable="true" ng-click="selectFrame(frame)" selected="frame === selectedFrame">
-                                <td bk-table-cell>
-                                    <span style="font-family:monospace;font-size:11px;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{frame.name}}</span>
-                                    <span style="font-size:10px;color:var(--sapContent_LabelColor)">{{frame.source && frame.source.name ? frame.source.name : ''}}{{frame.line ? ':' + frame.line : ''}}</span>
-                                </td>
-                            </tr>
-                            <tr ng-if="callStack.length === 0" bk-table-row>
-                                <td bk-table-cell no-data="true">{{status === 'connected' ? 'Running...' : 'Not connected'}}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </bk-scrollbar>
-            </div>
-        </div>
+        <bk-panel class="bk-vbox dbg-section" expanded="sections.callStack" compact="true" ng-style="sections.callStack && {'flex': '1' }">
+            <bk-panel-header class="bk-padding--none">
+                <bk-panel-expand hint="expand panel content"></bk-panel-expand>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Call Stack</h3>
+            </bk-panel-header>
+            <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Call stack section">
+                <bk-list compact="true" ng-if="callStack.length">
+                    <bk-list-item interactive="true" ng-repeat="frame in callStack track by $index" ng-click="selectFrame(frame)" selected="frame === selectedFrame">
+                        <bk-list-title>{{frame.name}}</bk-list-title>
+                        <bk-list-secondary class="bk-text--subtitle bk-center--vertical bk-box--gap">{{frame.source && frame.source.name ? frame.source.name : ''}}<span ng-if="frame.line" bk-object-status text="{{frame.line}}"
+                                inverted="true"></span>
+                        </bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+                <bk-list compact="true" ng-if="callStack.length === 0">
+                    <bk-list-item>
+                        <bk-list-title class="bk-center">{{status === 'connected' ? 'Running...' : 'Not connected'}}</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </bk-panel-content>
+        </bk-panel>
 
         <!-- Variables section -->
-        <div class="dbg-section dbg-section-grow" ng-class="{'dbg-collapsed': !sections.variables}">
-            <div class="dbg-section-header" ng-click="sections.variables = !sections.variables">
-                <span>Variables</span>
-                <span class="dbg-chevron sap-icon--navigation-right-arrow" ng-class="{'dbg-open': sections.variables}"></span>
-            </div>
-            <div class="dbg-section-body">
-                <bk-scrollbar class="bk-full-height">
-                    <table bk-table display-mode="compact" outer-borders="none">
-                        <tbody bk-table-body>
-                            <tr bk-table-row ng-repeat="v in variables track by $index" hoverable="true">
-                                <td bk-table-cell>
-                                    <span style="font-family:monospace;font-size:11px;font-weight:600;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{v.name}}</span>
-                                    <span style="font-family:monospace;font-size:11px">{{v.value}}</span><span ng-if="v.type" style="font-size:10px;color:var(--sapContent_LabelColor)"> : {{v.type}}</span>
-                                </td>
-                            </tr>
-                            <tr ng-if="variables.length === 0" bk-table-row>
-                                <td bk-table-cell no-data="true">{{isPaused() ? 'Select a frame' : 'Not paused'}}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </bk-scrollbar>
-            </div>
-        </div>
+        <bk-panel class="bk-vbox dbg-section" expanded="sections.variables" compact="true" ng-style="sections.variables && {'flex': '1' }">
+            <bk-panel-header class="bk-padding--none">
+                <bk-panel-expand hint="expand panel content"></bk-panel-expand>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Variables</h3>
+            </bk-panel-header>
+            <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Variables section">
+                <bk-list compact="true" ng-if="variables.length">
+                    <bk-list-item ng-repeat="v in variables track by $index">
+                        <bk-list-title>{{v.name}}</bk-list-title>
+                        <bk-list-secondary>{{v.value}}<span ng-if="v.type"> : <span class="bk-text--subtitle">{{v.type}}</span></span></bk-list-secondary>
+                    </bk-list-item>
+                </bk-list>
+                <bk-list compact="true" ng-if="variables.length === 0">
+                    <bk-list-item>
+                        <bk-list-title class="bk-center">{{isPaused() ? 'Select a frame' : 'Not paused'}}</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </bk-panel-content>
+        </bk-panel>
 
         <!-- Breakpoints section -->
-        <div class="dbg-section dbg-section-grow" ng-class="{'dbg-collapsed': !sections.breakpoints}">
-            <div class="dbg-section-header" ng-click="sections.breakpoints = !sections.breakpoints">
-                <span>Breakpoints</span>
-                <div style="display:flex;align-items:center;gap:2px">
-                    <bk-button glyph="sap-icon--clear-all" compact="true" state="transparent" title="Clear all breakpoints" aria-label="Clear all breakpoints" ng-click="clearAllBreakpoints(); $event.stopPropagation()" ng-disabled="bpList.length === 0"></bk-button>
-                    <span class="dbg-chevron sap-icon--navigation-right-arrow" ng-class="{'dbg-open': sections.breakpoints}"></span>
-                </div>
-            </div>
-            <div class="dbg-section-body">
-                <bk-scrollbar class="bk-full-height">
-                    <table bk-table display-mode="compact" outer-borders="none">
-                        <tbody bk-table-body>
-                            <tr bk-table-row ng-repeat="bp in bpList track by $index" hoverable="true">
-                                <td bk-table-cell>
-                                    <span style="font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block">{{bp.file}}:{{bp.line}}</span>
-                                </td>
-                                <td bk-table-cell fit-content="true" activable="true">
-                                    <bk-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" aria-label="Remove breakpoint"></bk-button>
-                                </td>
-                            </tr>
-                            <tr ng-if="bpList.length === 0" bk-table-row>
-                                <td bk-table-cell no-data="true">No breakpoints set</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </bk-scrollbar>
-            </div>
-        </div>
+        <bk-panel class="bk-vbox dbg-section" expanded="sections.breakpoints" compact="true" ng-style="sections.breakpoints && {'flex': '1' }">
+            <bk-panel-header class="bk-padding--none">
+                <bk-panel-expand hint="expand panel content"></bk-panel-expand>
+                <h3 bk-panel-title class="bk-font--small bk-text--subtitle">Breakpoints</h3>
+                <bk-button class="fd-margin-end--tiny" glyph="sap-icon--clear-all" compact="true" state="transparent" title="Clear all breakpoints" aria-label="Clear all breakpoints" ng-click="clearAllBreakpoints()"
+                    ng-disabled="bpList.length === 0"></bk-button>
+            </bk-panel-header>
+            <bk-panel-content class="bk-vbox bk-padding--none bk-full-height bk-border--bottom" bk-scrollbar aria-label="Breakpoints section">
+                <bk-list compact="true" ng-if="bpList.length">
+                    <bk-list-item ng-repeat="bp in bpList track by $index">
+                        <bk-list-title>{{bp.file}}:{{bp.line}}</bk-list-title>
+                        <bk-button bk-list-button glyph="sap-icon--decline" compact="true" state="transparent" ng-click="removeBreakpoint(bp)" title="Remove breakpoint" aria-label="Remove breakpoint"></bk-button>
+                    </bk-list-item>
+                </bk-list>
+                <bk-list compact="true" ng-if="bpList.length === 0">
+                    <bk-list-item>
+                        <bk-list-title class="bk-center">No breakpoints set</bk-list-title>
+                    </bk-list-item>
+                </bk-list>
+            </bk-panel-content>
+        </bk-panel>
 
-        <div style="flex:1"></div>
         <theme></theme>
     </body>
 

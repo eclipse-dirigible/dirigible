@@ -1,4 +1,5 @@
 <div ng-controller="FlowableSignalRefCtrl">
-    <select ng-model="property.value" ng-change="signalChanged()" ng-options="signalDefinition.id as (signalDefinition.name + ' (' + signalDefinition.id + ')') for signalDefinition in signalDefinitions">
-    </select>
+    <bk-select ng-model="property.value" ng-change="signalChanged()" compact="true" dropdown-fixed="true">
+        <bk-option ng-repeat="signalDefinition in signalDefinitions" text="{{ signalDefinition.name }} ({{ signalDefinition.id }})" value="signalDefinition.id"></bk-option>
+    </bk-select>
 </div>
