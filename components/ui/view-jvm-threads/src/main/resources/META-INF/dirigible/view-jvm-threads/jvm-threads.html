@@ -21,109 +21,53 @@
         <title config-title></title>
         <script type="text/javascript" src="/services/web/view-jvm-threads/configs/jvm-threads-view.js"></script>
         <meta name="platform-links" category="ng-view">
-        <style>
-            .jvm-threads-filters {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 0.5rem;
-                align-items: center;
-                padding: 0.5rem 0.75rem;
-                border-bottom: 1px solid var(--sapList_BorderColor, #d9d9d9);
-                background: var(--sapList_HeaderBackground, transparent);
-            }
-            .jvm-threads-filters .filter-label {
-                font-size: 0.75rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                margin-right: 0.25rem;
-            }
-            .jvm-threads-count {
-                font-size: 0.75rem;
-                color: var(--sapContent_LabelColor, #6a6d70);
-                margin-left: auto;
-            }
-            .jvm-threads-table th {
-                cursor: pointer;
-                user-select: none;
-                white-space: nowrap;
-            }
-            .jvm-threads-table th.no-sort {
-                cursor: default;
-            }
-            .jvm-threads-table th .sort-caret {
-                opacity: 0.4;
-                margin-left: 0.25rem;
-                font-size: 0.7em;
-            }
-            .jvm-threads-table th .sort-caret.active {
-                opacity: 1;
-            }
-            .jvm-threads-empty {
-                padding: 1rem;
-                text-align: center;
-                color: var(--sapContent_LabelColor, #6a6d70);
-            }
-            .jvm-state-pill {
-                display: inline-block;
-                padding: 1px 6px;
-                border-radius: 9999px;
-                font-size: 0.7rem;
-                font-weight: 600;
-                color: #fff;
-            }
-            .jvm-state-RUNNABLE { background: #2c8a3f; }
-            .jvm-state-BLOCKED { background: #b00; }
-            .jvm-state-WAITING { background: #1c81bf; }
-            .jvm-state-TIMED_WAITING { background: #6c8ebf; }
-            .jvm-state-NEW { background: #888; }
-            .jvm-state-TERMINATED { background: #444; }
-            .jvm-mono {
-                font-family: "72Mono-Regular", "Courier New", monospace;
-                font-size: 0.85em;
-            }
-        </style>
     </head>
 
     <body class="bk-vbox">
-        <bk-toolbar compact="true" type="solid">
-            <bk-toolbar-label>Threads</bk-toolbar-label>
+        <bk-toolbar compact="true" has-title="false">
+            <span>Threads</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
-            <span class="jvm-threads-count" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+            <span class="bk-text--subtitle bk-font--small">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
-            <bk-button state="transparent" ng-click="toggleAutoRefresh()"
-                glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}"
-                title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
                 aria-label="Toggle auto-refresh"></bk-button>
-            <bk-select compact="true" ng-model="refreshIntervalSeconds" ng-change="restartTimer()" dropdown-fixed="true" style="min-width: 110px">
-                <bk-option text="Every 2s" value="2"></bk-option>
-                <bk-option text="Every 5s" value="5"></bk-option>
-                <bk-option text="Every 10s" value="10"></bk-option>
-                <bk-option text="Every 30s" value="30"></bk-option>
-            </bk-select>
+            <bk-popover>
+                <bk-popover-control>
+                    <bk-button state="transparent" label="{{refreshIntervals[refreshIntervalSeconds]}}" is-menu="true" aria-haspopup="menu" aria-controls="refreshIntervals"></bk-button>
+                </bk-popover-control>
+                <bk-popover-body id="refreshIntervals" align="bottom-right">
+                    <bk-menu aria-label="refresh interval options">
+                        <bk-menu-item title="{{value}}" ng-click="setRefreshInterval(key)" ng-repeat="(key, value) in refreshIntervals track by key"></bk-menu-item>
+                    </bk-menu>
+                </bk-popover-body>
+            </bk-popover>
         </bk-toolbar>
 
-        <div class="jvm-threads-filters">
-            <span class="filter-label">Name</span>
-            <bk-input compact="true" type="search" ng-model="filters.name" ng-change="applyFilters()" placeholder="Filter by name..." style="min-width: 200px"></bk-input>
+        <div class="bk-vbox bk-padding--tiny bk-box--gap">
+            <label class="bk-text--subtitle" for="i-name">Name</label>
+            <bk-input id="i-name" compact="true" type="search" ng-model="filters.name" ng-change="applyFilters()" placeholder="Filter by name..."></bk-input>
 
-            <span class="filter-label">State</span>
-            <bk-select compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 150px">
-                <bk-option text="All states" value="''"></bk-option>
-                <bk-option ng-repeat="s in states track by $index" text="{{s}}" value="s"></bk-option>
-            </bk-select>
+            <div class="bk-hbox bk-flex--wrap bk-box--items-center bk-box--gap">
+                <label class="bk-text--subtitle" for="i-state">State</label>
+                <bk-select id="i-state" compact="true" ng-model="filters.state" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 9.375rem">
+                    <bk-option text="All states" value="''"></bk-option>
+                    <bk-option ng-repeat="s in states track by $index" text="{{s}}" value="s"></bk-option>
+                </bk-select>
 
-            <span class="filter-label">Daemon</span>
-            <bk-select compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 120px">
-                <bk-option text="All" value="''"></bk-option>
-                <bk-option text="User only" value="'user'"></bk-option>
-                <bk-option text="Daemon only" value="'daemon'"></bk-option>
-            </bk-select>
+                <label class="bk-text--subtitle" for="i-daemon">Daemon</label>
+                <bk-select id="i-daemon" compact="true" ng-model="filters.daemon" ng-change="applyFilters()" dropdown-fixed="true" style="min-width: 7.5rem">
+                    <bk-option text="All" value="''"></bk-option>
+                    <bk-option text="User only" value="'user'"></bk-option>
+                    <bk-option text="Daemon only" value="'daemon'"></bk-option>
+                </bk-select>
 
-            <bk-button compact="true" state="transparent" glyph="sap-icon--clear-filter" label="Clear" title="Clear all filters" ng-click="clearFilters()" ng-disabled="!hasActiveFilters()"></bk-button>
+                <bk-button compact="true" state="transparent" glyph="sap-icon--clear-filter" label="Clear" title="Clear all filters" ng-click="clearFilters()" ng-disabled="!hasActiveFilters()"></bk-button>
 
-            <span class="jvm-threads-count">
-                Showing {{ filteredThreads.length }} of {{ threads.length }} thread{{ threads.length === 1 ? '' : 's' }}
-            </span>
+                <div style="flex: 1"></div>
+
+                <span class="bk-text--subtitle bk-font--small">Showing {{ filteredThreads.length }} of {{ threads.length }} thread{{ threads.length === 1 ? '' : 's' }}</span>
+            </div>
         </div>
 
         <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
@@ -132,29 +76,50 @@
         </bk-message-page>
 
         <div bk-scrollbar class="bk-full-height" ng-hide="errorMessage">
-            <table class="jvm-threads-table" bk-table display-mode="compact" outer-borders="none">
+            <table bk-table display-mode="compact" outer-borders="top">
                 <thead bk-table-header sticky="true" interactive="false">
                     <tr bk-table-row>
-                        <th bk-table-header-cell ng-click="setSort('id')">
-                            # <span class="sort-caret" ng-class="{ active: sort.key === 'id' }">{{ sortCaret('id') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('id')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>#</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('id')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('id') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('name')">
-                            Name <span class="sort-caret" ng-class="{ active: sort.key === 'name' }">{{ sortCaret('name') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('name')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>Name</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('name')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('name') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('state')">
-                            State <span class="sort-caret" ng-class="{ active: sort.key === 'state' }">{{ sortCaret('state') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('state')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>State</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('state')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('state') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('daemon')">
-                            Daemon <span class="sort-caret" ng-class="{ active: sort.key === 'daemon' }">{{ sortCaret('daemon') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('daemon')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>Daemon</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('daemon')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('daemon') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('priority')">
-                            Priority <span class="sort-caret" ng-class="{ active: sort.key === 'priority' }">{{ sortCaret('priority') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('priority')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>Priority</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('priority')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('priority') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('cpuTimeNanos')">
-                            CPU time <span class="sort-caret" ng-class="{ active: sort.key === 'cpuTimeNanos' }">{{ sortCaret('cpuTimeNanos') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('cpuTimeNanos')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>CPU time</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('cpuTimeNanos')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('cpuTimeNanos') }}"></span>
+                            </div>
                         </th>
-                        <th bk-table-header-cell ng-click="setSort('userTimeNanos')">
-                            User time <span class="sort-caret" ng-class="{ active: sort.key === 'userTimeNanos' }">{{ sortCaret('userTimeNanos') }}</span>
+                        <th bk-table-header-cell interactive="true" ng-click="setSort('userTimeNanos')">
+                            <div class="bk-hbox bk-box--gap bk-box--space-between bk-box--items-center">
+                                <span>User time</span>
+                                <span class="sap-icon sap-icon--{{sortIcon('userTimeNanos')}} bk-font--normal" role="img" aria-label="{{ sortIconLabel('userTimeNanos') }}"></span>
+                            </div>
                         </th>
                         <th bk-table-header-cell class="no-sort">Lock</th>
                         <th bk-table-header-cell class="no-sort">Held by</th>
@@ -162,20 +127,20 @@
                 </thead>
                 <tbody bk-table-body>
                     <tr bk-table-row ng-repeat="t in filteredThreads track by t.id" hoverable="true" activable="false">
-                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ t.id }}</td>
+                        <td bk-table-cell fit-content="true" class="bk-font--mono">{{ t.id }}</td>
                         <td bk-table-cell>{{ t.name }}</td>
-                        <td bk-table-cell><span class="jvm-state-pill jvm-state-{{t.state}}">{{ t.state }}</span></td>
+                        <td bk-table-cell>
+                            <span bk-object-status status="{{getObjectState(t.state)}}" text="{{ t.state }}" inverted="true"></span>
+                        </td>
                         <td bk-table-cell fit-content="true">{{ t.daemon ? 'yes' : 'no' }}</td>
-                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ t.priority >= 0 ? t.priority : '-' }}</td>
-                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ formatDurationNanos(t.cpuTimeNanos) }}</td>
-                        <td bk-table-cell fit-content="true" class="jvm-mono">{{ formatDurationNanos(t.userTimeNanos) }}</td>
+                        <td bk-table-cell fit-content="true" class="bk-font--mono">{{ t.priority >= 0 ? t.priority : '-' }}</td>
+                        <td bk-table-cell fit-content="true" class="bk-font--mono">{{ formatDurationNanos(t.cpuTimeNanos) }}</td>
+                        <td bk-table-cell fit-content="true" class="bk-font--mono">{{ formatDurationNanos(t.userTimeNanos) }}</td>
                         <td bk-table-cell>{{ t.lockName || '-' }}</td>
                         <td bk-table-cell>{{ t.lockOwnerName ? (t.lockOwnerName + ' (#' + t.lockOwnerId + ')') : '-' }}</td>
                     </tr>
                     <tr bk-table-row ng-if="!filteredThreads.length && !loading">
-                        <td bk-table-cell colspan="9" class="jvm-threads-empty">
-                            {{ threads.length ? 'No threads match the current filters.' : 'No threads to display.' }}
-                        </td>
+                        <td bk-table-cell no-data="true">{{ threads.length ? 'No threads match the current filters.' : 'No threads to display.' }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -193,11 +158,29 @@
                     $scope.errorMessage = '';
                     $scope.loading = false;
                     $scope.autoRefresh = true;
-                    $scope.refreshIntervalSeconds = '5';
+                    $scope.refreshIntervalSeconds = 5;
+                    $scope.refreshIntervals = {
+                        2: 'Every 2s',
+                        5: 'Every 5s',
+                        10: 'Every 10s',
+                        30: 'Every 30s'
+                    };
                     $scope.states = ['RUNNABLE', 'BLOCKED', 'WAITING', 'TIMED_WAITING', 'NEW', 'TERMINATED'];
                     $scope.filters = { name: '', state: '', daemon: '' };
                     $scope.sort = { key: 'id', reverse: false };
                     let timer = null;
+
+                    $scope.getObjectState = (state) => {
+                        if (state === $scope.states[0]) {
+                            return 'positive';
+                        } else if (state === $scope.states[1] || state === $scope.states[5]) {
+                            return 'negative';
+                        } else if (state === $scope.states[2] || state === $scope.states[3]) {
+                            return 'informative';
+                        } else if (state === $scope.states[4]) {
+                            return '';
+                        }
+                    };
 
                     $scope.refresh = () => {
                         $scope.loading = true;
@@ -219,14 +202,18 @@
                         $scope.restartTimer();
                     };
 
+                    $scope.setRefreshInterval = (value) => {
+                        $scope.refreshIntervalSeconds = value;
+                        $scope.restartTimer();
+                    };
+
                     $scope.restartTimer = () => {
                         if (timer) {
                             $interval.cancel(timer);
                             timer = null;
                         }
                         if ($scope.autoRefresh) {
-                            const seconds = parseInt($scope.refreshIntervalSeconds, 10) || 5;
-                            timer = $interval($scope.refresh, seconds * 1000);
+                            timer = $interval($scope.refresh, $scope.refreshIntervalSeconds * 1000);
                         }
                     };
 
@@ -262,9 +249,14 @@
                         $scope.applyFilters();
                     };
 
-                    $scope.sortCaret = (key) => {
-                        if ($scope.sort.key !== key) return '⇅';
-                        return $scope.sort.reverse ? '▼' : '▲';
+                    $scope.sortIcon = (key) => {
+                        if ($scope.sort.key !== key) return 'sort';
+                        return $scope.sort.reverse ? 'down' : 'up';
+                    };
+
+                    $scope.sortIconLabel = (key) => {
+                        if ($scope.sort.key !== key) return 'Sort';
+                        return $scope.sort.reverse ? 'Descending' : 'Ascending';
                     };
 
                     $scope.hasActiveFilters = () => Boolean($scope.filters.name || $scope.filters.state || $scope.filters.daemon);
