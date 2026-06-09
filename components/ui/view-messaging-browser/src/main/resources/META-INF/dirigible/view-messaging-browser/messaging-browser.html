@@ -189,10 +189,10 @@
                             <span class="bk-text--subtitle">Size</span><span class="bk-font--mono">{{ formatBytes(selectedMessage.sizeBytes) }}</span>
                         </div>
 
-                        <div ng-if="propertyEntries(selectedMessage).length" class="bk-vbox bk-box--gap">
+                        <div ng-if="selectedProperties.length" class="bk-vbox bk-box--gap">
                             <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Properties</h4>
                             <div class="mqb-kv">
-                                <span class="bk-text--subtitle" ng-repeat-start="entry in propertyEntries(selectedMessage) track by entry.key">{{ entry.key }}</span>
+                                <span class="bk-text--subtitle" ng-repeat-start="entry in selectedProperties track by entry.key">{{ entry.key }}</span>
                                 <span class="bk-font--mono" ng-repeat-end>{{ entry.value }}</span>
                             </div>
                         </div>
@@ -218,9 +218,16 @@
                 $scope.selected = null;
                 $scope.messages = [];
                 $scope.selectedMessage = null;
+                $scope.selectedProperties = [];
                 $scope.lastUpdated = null;
                 $scope.errorMessage = '';
                 $scope.loading = false;
+
+                $scope.$watch('selectedMessage', (msg) => {
+                    $scope.selectedProperties = (msg && msg.properties)
+                        ? Object.keys(msg.properties).map((k) => ({ key: k, value: msg.properties[k] }))
+                        : [];
+                });
 
                 $scope.isQueue = () => $scope.selected && $scope.selected.type === 'queue';
 
@@ -236,11 +243,6 @@
                     let i = 0; let v = n;
                     while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
                     return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
-                };
-
-                $scope.propertyEntries = (msg) => {
-                    if (!msg || !msg.properties) return [];
-                    return Object.keys(msg.properties).map((k) => ({ key: k, value: msg.properties[k] }));
                 };
 
                 const browseEndpoint = () => `/services/ide/messaging-monitoring/queues/${encodeURIComponent($scope.selected.name)}/messages`;
