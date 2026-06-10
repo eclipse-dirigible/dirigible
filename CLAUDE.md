@@ -219,6 +219,21 @@ Browser (debug.js) ←WebSocket→ JavaDebugWebSocketHandler
 - **Glyph CSS** (`editor.css`): `.debug-breakpoint-glyph` — red circle (14 × 14 px, `border-radius:50%`). `.debug-current-line-glyph` — right-pointing yellow triangle (CSS border trick, `#ffcc00`, 12 × 14 px). `.debug-current-line` — faint yellow line background.
 - **Glyph margin clicks:** `onMouseDown` with `isGlyphMarginLineNumber` toggles breakpoints and posts `java.debug.breakpoints.changed` with the updated lines array for that file.
 
+## Messaging perspective (`ide-messaging-monitoring` + `perspective-messaging`)
+
+A devops/debug surface for the embedded ActiveMQ broker. Three modules cooperate:
+
+- **`components/ide/ide-messaging-monitoring`** — backend service + REST endpoint. Constructor-injects the existing `BrokerService` bean from `engine-listeners` (the broker is started with `useJmx=false` in `MessagingConfig`, so JMX is unavailable — read state directly off the bean instead). `RegionBroker.getDestinationMap()` enumerates queues and topics; `Destination.getDestinationStatistics()` exposes the counters; `Destination.browse()` returns the in-memory pending set without consuming. Endpoints live under `/services/ide/messaging-monitoring/` with `@RolesAllowed({ADMINISTRATOR, DEVELOPER, OPERATOR})`:
+  - `GET /summary` — broker meta + every queue/topic with counters
+  - `GET /queues/{name}/messages?limit=N` — non-destructive browse (capped at 200 by default, body preview at 64 KB)
+  - `DELETE /queues/{name}/messages` — purge
+  - `DELETE /queues/{name}/messages/{messageId}` — remove a single message
+  - `DELETE /queues/{name}` and `DELETE /topics/{name}` — remove the destination (returns 409 if consumers are still attached — `IllegalStateException` translated by the endpoint)
+- **`components/ui/perspective-messaging`** — perspective shell (id `messaging`, order 1010), icon, menu, extensions.
+- **`components/ui/view-messaging-destinations`** (left) and **`components/ui/view-messaging-browser`** (center) — filterable list of destinations and master-detail message inspector. They communicate over `MessageHub` topics `messaging.destination.selected` (selection broadcast), `messaging.destination.selection.request` (browser asks destinations view to re-broadcast on init — fixes the iframe-startup race), and `messaging.broker.refresh` (browser asks destinations view to re-poll after a mutating action). Confirm-dialogs go through `DialogHub.showAlert({type:'confirmation', buttons:[...]})`.
+
+**Topic limitation:** JMS topics do not retain non-persistent messages, so the browser shows live counters but no message list for topics. Message-body decoding prefers `ActiveMQTextMessage.getText()`; for `BytesMessage`-style payloads, the first 64 KB are inspected and rendered as UTF-8 when they look textual, otherwise base64-encoded.
+
 ## External documentation
 
 The user-facing help portal at <https://www.dirigible.io/help/> documents the IDE perspectives (Workbench, Database, Git, Operations, Documents), artefact authoring (Jobs, CSVIM, Entity model, OData, Listeners, Camel routes, BPMN), JS/TS API reference (`/api/`), and deployment guides (Docker, Kubernetes, Cloud Foundry). Useful when reading integration-test fixtures under `tests/tests-integrations/src/main/resources/<TestName>/` or understanding what a given artefact extension is supposed to do.

@@ -1,0 +1,411 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="messagingBrowser" ng-controller="MessagingBrowserController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-messaging-browser/configs/messaging-browser-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .mqb-stats {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(9.375rem, 1fr));
+            }
+            .mqb-split {
+                display: grid;
+                grid-template-columns: minmax(20rem, 3fr) minmax(17.5rem, 2fr);
+                min-height: 0;
+            }
+            .mqb-kv {
+                display: grid;
+                grid-template-columns: 8.75rem 1fr;
+                gap: 0.125rem 0.5rem;
+            }
+            .mqb-body {
+                background: var(--object-background-alt);
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-message-page glyph="sap-icon--message-information" ng-if="!selected">
+            <bk-message-page-title>Select a destination</bk-message-page-title>
+            <bk-message-page-subtitle>Pick a queue or topic from the left to inspect its messages and counters.</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div class="bk-vbox bk-full-height" ng-if="selected">
+            <bk-toolbar compact="true" has-title="false">
+                <span bk-object-status status="{{ isQueue() ? 'informative' : '' }}" text="{{ selected.type }}" inverted="true" style="white-space: nowrap;"></span>
+                <span class="bk-font--large bk-font--bold">{{ selected.name }}</span>
+                <span class="bk-text--subtitle bk-font--small" ng-show="lastUpdated">Last updated {{lastUpdated | date:'HH:mm:ss'}}</span>
+                <bk-toolbar-spacer></bk-toolbar-spacer>
+                <bk-button compact="true" state="transparent" glyph="sap-icon--refresh" label="Refresh" ng-click="refresh()" ng-disabled="loading"></bk-button>
+                <bk-button compact="true" state="transparent" glyph="sap-icon--delete" label="Purge messages"
+                    ng-click="purge()" ng-disabled="!isQueue() || !selected.size || loading" title="Discard all pending messages on this queue"></bk-button>
+                <bk-button compact="true" state="negative" glyph="sap-icon--decline" label="Delete destination"
+                    ng-click="deleteDestination()" ng-disabled="loading"
+                    title="Remove this {{ selected.type }} from the broker (only allowed when no consumers are attached)"></bk-button>
+            </bk-toolbar>
+
+            <div class="mqb-stats bk-box--gap bk-padding--tiny">
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Pending</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.size | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Enqueued</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.enqueueCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Dequeued</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.dequeueCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Dispatched</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.dispatchCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Inflight</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.inflightCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Expired</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.expiredCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Consumers</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.consumerCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Producers</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ selected.producerCount | number }}</div>
+                    </bk-card-content>
+                </bk-card>
+                <bk-card card-type="object" aria-roledescription="card" ng-if="selected.memoryUsageBytes >= 0">
+                    <bk-card-content aria-roledescription="Card content" class="bk-vbox bk-box--gap">
+                        <div class="bk-text--subtitle bk-font--small">Memory</div>
+                        <div class="bk-font--h4 bk-font--bold">{{ formatBytes(selected.memoryUsageBytes) }}<span ng-if="selected.memoryUsageLimit > 0" class="bk-text--subtitle bk-font--small"> / {{ formatBytes(selected.memoryUsageLimit) }}</span></div>
+                    </bk-card-content>
+                </bk-card>
+            </div>
+
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
+                <span>
+                    Messages
+                    <span class="bk-text--subtitle bk-font--small" ng-if="isQueue()">- browse without consuming</span>
+                </span>
+                <span class="bk-text--subtitle bk-font--small" ng-show="messages && messages.length !== undefined">{{ messages.length }} loaded</span>
+            </h2>
+
+            <p ng-if="errorMessage" class="bk-color--negative bk-padding--tiny fd-margin--none">{{ errorMessage }}</p>
+
+            <bk-message-page glyph="sap-icon--bell" ng-if="!isQueue()">
+                <bk-message-page-title>Topics do not retain messages</bk-message-page-title>
+                <bk-message-page-subtitle>JMS topics do not retain non-persistent messages. Use the broker stats above to monitor subscribers and traffic. Send a sample message via <code class="bk-font--mono">messaging.sendToTopic(...)</code> to verify a topic is alive.</bk-message-page-subtitle>
+            </bk-message-page>
+
+            <div class="mqb-split bk-flex-1" ng-if="isQueue()">
+                <div bk-scrollbar>
+                    <table bk-table display-mode="compact" outer-borders="top">
+                        <thead bk-table-header sticky="true" interactive="false">
+                            <tr bk-table-row>
+                                <th bk-table-header-cell>Message ID</th>
+                                <th bk-table-header-cell>Timestamp</th>
+                                <th bk-table-header-cell>Type</th>
+                                <th bk-table-header-cell>Size</th>
+                                <th bk-table-header-cell>Pri</th>
+                                <th bk-table-header-cell>Redeliveries</th>
+                            </tr>
+                        </thead>
+                        <tbody bk-table-body>
+                            <tr bk-table-row ng-repeat="msg in messages track by msg.id" hoverable="true" activable="true"
+                                selected="selectedMessage && selectedMessage.id === msg.id"
+                                ng-click="selectMessage(msg)">
+                                <td bk-table-cell class="bk-font--mono" title="{{ msg.id }}">{{ shortId(msg.id) }}</td>
+                                <td bk-table-cell fit-content="true">{{ msg.timestamp ? (msg.timestamp | date:'yyyy-MM-dd HH:mm:ss') : '-' }}</td>
+                                <td bk-table-cell fit-content="true">{{ msg.bodyKind }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ formatBytes(msg.sizeBytes) }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ msg.priority }}</td>
+                                <td bk-table-cell fit-content="true" class="bk-font--mono">{{ msg.redeliveryCounter }}</td>
+                            </tr>
+                            <tr bk-table-row ng-if="!messages.length && !loading">
+                                <td bk-table-cell no-data="true">No pending messages.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div bk-scrollbar class="bk-vbox">
+                    <bk-message-page glyph="sap-icon--inspect" ng-if="!selectedMessage">
+                        <bk-message-page-title>No message selected</bk-message-page-title>
+                        <bk-message-page-subtitle>Select a message to inspect its headers, properties and body.</bk-message-page-subtitle>
+                    </bk-message-page>
+
+                    <div ng-if="selectedMessage" class="bk-padding--tiny bk-vbox bk-box--gap">
+                        <div class="bk-hbox bk-box--items-center bk-box--space-between bk-box--gap">
+                            <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Message</h4>
+                            <bk-button compact="true" state="transparent" glyph="sap-icon--delete" label="Remove"
+                                ng-click="deleteMessage(selectedMessage)" title="Remove this message from the queue"></bk-button>
+                        </div>
+                        <div class="mqb-kv">
+                            <span class="bk-text--subtitle">ID</span><span class="bk-font--mono">{{ selectedMessage.id }}</span>
+                            <span class="bk-text--subtitle">Correlation</span><span class="bk-font--mono">{{ selectedMessage.correlationId || '-' }}</span>
+                            <span class="bk-text--subtitle">Type</span><span>{{ selectedMessage.bodyKind }}<span ng-if="selectedMessage.type"> ({{ selectedMessage.type }})</span></span>
+                            <span class="bk-text--subtitle">Timestamp</span><span>{{ selectedMessage.timestamp ? (selectedMessage.timestamp | date:'yyyy-MM-dd HH:mm:ss.sss') : '-' }}</span>
+                            <span class="bk-text--subtitle">Expiration</span><span>{{ selectedMessage.expiration ? (selectedMessage.expiration | date:'yyyy-MM-dd HH:mm:ss') : 'never' }}</span>
+                            <span class="bk-text--subtitle">Priority</span><span class="bk-font--mono">{{ selectedMessage.priority }}</span>
+                            <span class="bk-text--subtitle">Redeliveries</span><span class="bk-font--mono">{{ selectedMessage.redeliveryCounter }}</span>
+                            <span class="bk-text--subtitle">Persistent</span><span>{{ selectedMessage.persistent ? 'yes' : 'no' }}</span>
+                            <span class="bk-text--subtitle">Size</span><span class="bk-font--mono">{{ formatBytes(selectedMessage.sizeBytes) }}</span>
+                        </div>
+
+                        <div ng-if="selectedProperties.length" class="bk-vbox bk-box--gap">
+                            <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Properties</h4>
+                            <div class="mqb-kv">
+                                <span class="bk-text--subtitle" ng-repeat-start="entry in selectedProperties track by entry.key">{{ entry.key }}</span>
+                                <span class="bk-font--mono" ng-repeat-end>{{ entry.value }}</span>
+                            </div>
+                        </div>
+
+                        <h4 class="bk-text--subtitle bk-font--small fd-margin--none">Body</h4>
+                        <pre class="mqb-body bk-font--mono bk-padding--tiny fd-margin--none" style="white-space: pre-wrap; word-break: break-word;" ng-bind="selectedMessage.body"></pre>
+                        <p ng-if="selectedMessage.bodyTruncated" class="bk-color--critical bk-font--small fd-margin--none">Body preview truncated.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript">
+            const messagingBrowserApp = angular.module('messagingBrowser', ['platformView', 'blimpKit']);
+            messagingBrowserApp.constant('MessageHub', new MessageHubApi());
+            messagingBrowserApp.constant('Dialogs', new DialogHub());
+            messagingBrowserApp.controller('MessagingBrowserController', ($scope, $http, MessageHub, Dialogs) => {
+                const SUMMARY_ENDPOINT = '/services/ide/messaging-monitoring/summary';
+                const TOPIC_SELECTED = 'messaging.destination.selected';
+                const TOPIC_REQUEST = 'messaging.destination.selection.request';
+                const TOPIC_REFRESH = 'messaging.broker.refresh';
+
+                $scope.selected = null;
+                $scope.messages = [];
+                $scope.selectedMessage = null;
+                $scope.selectedProperties = [];
+                $scope.lastUpdated = null;
+                $scope.errorMessage = '';
+                $scope.loading = false;
+
+                $scope.$watch('selectedMessage', (msg) => {
+                    $scope.selectedProperties = (msg && msg.properties)
+                        ? Object.keys(msg.properties).map((k) => ({ key: k, value: msg.properties[k] }))
+                        : [];
+                });
+
+                $scope.isQueue = () => $scope.selected && $scope.selected.type === 'queue';
+
+                $scope.shortId = (id) => {
+                    if (!id) return '-';
+                    const colon = id.lastIndexOf(':');
+                    return colon >= 0 && colon < id.length - 1 ? id.substring(0, 6) + '...' + id.substring(colon) : id;
+                };
+
+                $scope.formatBytes = (n) => {
+                    if (n === null || n === undefined || n < 0) return '-';
+                    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+                    let i = 0; let v = n;
+                    while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+                    return v.toFixed(v >= 100 || i === 0 ? 0 : 1) + ' ' + units[i];
+                };
+
+                const browseEndpoint = () => `/services/ide/messaging-monitoring/queues/${encodeURIComponent($scope.selected.name)}/messages`;
+
+                $scope.refresh = () => {
+                    if (!$scope.selected) return;
+                    $http.get(SUMMARY_ENDPOINT).then((response) => {
+                        const data = response.data || { queues: [], topics: [] };
+                        const pool = $scope.selected.type === 'queue' ? data.queues : data.topics;
+                        const refreshed = (pool || []).find((d) => d.name === $scope.selected.name);
+                        if (refreshed) {
+                            $scope.selected = refreshed;
+                        }
+                    }, (error) => { console.error(error); });
+
+                    if (!$scope.isQueue()) {
+                        $scope.messages = [];
+                        $scope.lastUpdated = new Date();
+                        return;
+                    }
+                    $scope.loading = true;
+                    $http.get(browseEndpoint()).then((response) => {
+                        $scope.messages = Array.isArray(response.data) ? response.data : [];
+                        $scope.lastUpdated = new Date();
+                        $scope.errorMessage = '';
+                        $scope.loading = false;
+                        if ($scope.selectedMessage) {
+                            const fresh = $scope.messages.find((m) => m.id === $scope.selectedMessage.id);
+                            $scope.selectedMessage = fresh || null;
+                        }
+                    }, (error) => {
+                        console.error(error);
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.selectMessage = (msg) => {
+                    $scope.selectedMessage = msg;
+                };
+
+                $scope.purge = () => {
+                    if (!$scope.isQueue()) return;
+                    Dialogs.showAlert({
+                        title: 'Purge queue',
+                        message: 'Discard ALL pending messages on queue "' + $scope.selected.name + '"? This cannot be undone.',
+                        type: 'confirmation',
+                        buttons: [
+                            { id: 'cancel', label: 'Cancel' },
+                            { id: 'purge', label: 'Purge', type: 'negative' }
+                        ]
+                    }).then((buttonId) => {
+                        if (buttonId !== 'purge') return;
+                        $scope.loading = true;
+                        $http.delete(browseEndpoint()).then((response) => {
+                            $scope.loading = false;
+                            $scope.selectedMessage = null;
+                            const purged = response.data && response.data.purged;
+                            Dialogs.showAlert({
+                                title: 'Queue purged',
+                                message: 'Removed ' + purged + ' message(s) from "' + $scope.selected.name + '".',
+                                type: 'success'
+                            });
+                            MessageHub.postMessage({ topic: TOPIC_REFRESH, data: { source: 'browser-purge' } });
+                            $scope.refresh();
+                        }, (error) => {
+                            $scope.loading = false;
+                            console.error(error);
+                            showError('Failed to purge queue', error);
+                        });
+                    });
+                };
+
+                $scope.deleteMessage = (msg) => {
+                    if (!$scope.isQueue() || !msg) return;
+                    Dialogs.showAlert({
+                        title: 'Remove message',
+                        message: 'Remove message ' + msg.id + ' from queue "' + $scope.selected.name + '"?',
+                        type: 'confirmation',
+                        buttons: [
+                            { id: 'cancel', label: 'Cancel' },
+                            { id: 'remove', label: 'Remove', type: 'negative' }
+                        ]
+                    }).then((buttonId) => {
+                        if (buttonId !== 'remove') return;
+                        $http.delete(`${browseEndpoint()}/${encodeURIComponent(msg.id)}`).then(() => {
+                            if ($scope.selectedMessage && $scope.selectedMessage.id === msg.id) {
+                                $scope.selectedMessage = null;
+                            }
+                            MessageHub.postMessage({ topic: TOPIC_REFRESH, data: { source: 'browser-remove-msg' } });
+                            $scope.refresh();
+                        }, (error) => {
+                            console.error(error);
+                            showError('Failed to remove message', error);
+                        });
+                    });
+                };
+
+                $scope.deleteDestination = () => {
+                    if (!$scope.selected) return;
+                    const type = $scope.selected.type;
+                    Dialogs.showAlert({
+                        title: 'Delete ' + type,
+                        message: 'Remove ' + type + ' "' + $scope.selected.name + '" from the broker? This will fail if subscribers are still attached.',
+                        type: 'confirmation',
+                        buttons: [
+                            { id: 'cancel', label: 'Cancel' },
+                            { id: 'delete', label: 'Delete', type: 'negative' }
+                        ]
+                    }).then((buttonId) => {
+                        if (buttonId !== 'delete') return;
+                        const url = `/services/ide/messaging-monitoring/${type === 'queue' ? 'queues' : 'topics'}/${encodeURIComponent($scope.selected.name)}`;
+                        $http.delete(url).then(() => {
+                            Dialogs.showAlert({
+                                title: 'Deleted',
+                                message: type + ' "' + $scope.selected.name + '" was removed.',
+                                type: 'success'
+                            });
+                            $scope.selected = null;
+                            $scope.messages = [];
+                            $scope.selectedMessage = null;
+                            MessageHub.postMessage({ topic: TOPIC_REFRESH, data: { source: 'browser-delete-dest' } });
+                        }, (error) => {
+                            console.error(error);
+                            showError('Failed to delete ' + type, error);
+                        });
+                    });
+                };
+
+                const showError = (title, error) => {
+                    let message = (error && error.data && (error.data.message || error.data.error)) || (error && error.statusText) || 'Request failed';
+                    Dialogs.showAlert({ title: title, message: message, type: 'error' });
+                };
+
+                const selectionListener = MessageHub.addMessageListener({
+                    topic: TOPIC_SELECTED,
+                    handler: (data) => {
+                        if (!data || data.cleared) {
+                            $scope.selected = null;
+                            $scope.messages = [];
+                            $scope.selectedMessage = null;
+                            $scope.$applyAsync();
+                            return;
+                        }
+                        const changed = !$scope.selected || $scope.selected.name !== data.name || $scope.selected.type !== data.type;
+                        $scope.selected = data;
+                        if (changed) {
+                            $scope.selectedMessage = null;
+                            $scope.messages = [];
+                            $scope.refresh();
+                        }
+                        $scope.$applyAsync();
+                    }
+                });
+
+                MessageHub.postMessage({ topic: TOPIC_REQUEST, data: { source: 'browser-init' } });
+
+                $scope.$on('$destroy', () => {
+                    MessageHub.removeMessageListener(selectionListener);
+                });
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

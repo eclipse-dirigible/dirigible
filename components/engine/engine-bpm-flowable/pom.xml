@@ -55,9 +55,15 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-engine-javascript</artifactId>
         </dependency>
+        <!--
+          Only the ClientClassLoader / ClientClassLoaderHolder primitives are needed here (so
+          DirigibleJavaCallDelegate and ClientAwareClassLoader can resolve client-compiled
+          classes). Pulling in the full engine-java module would close the cycle
+          engine-bpm-flowable → engine-java → api-modules-java → api-bpm → engine-bpm-flowable.
+        -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-engine-java</artifactId>
+            <artifactId>dirigible-components-core-java</artifactId>
         </dependency>
 
         <!-- IDE -->

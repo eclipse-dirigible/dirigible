@@ -11,7 +11,7 @@ package org.eclipse.dirigible.engine.java.websocket;
 
 import java.lang.reflect.Constructor;
 
-import org.eclipse.dirigible.engine.java.annotations.Websocket;
+import org.eclipse.dirigible.sdk.net.Websocket;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;

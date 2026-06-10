@@ -45,7 +45,7 @@ import jakarta.servlet.http.HttpServletResponse;
  * evaluated in order:
  * <ol>
  * <li>Controllers — classes annotated with
- * {@link org.eclipse.dirigible.engine.java.annotations.http.Controller @Controller}. Method-level
+ * {@link org.eclipse.dirigible.sdk.http.Controller @Controller}. Method-level
  * {@code @Get / @Post / @Put / @Patch / @Delete} annotations supply the route suffix. Parameter
  * binding and role checks are handled by {@link ControllerInvoker}.</li>
  * <li>Handlers — classes implementing {@link JavaHandler}. The path after {@code <project>/} is

@@ -339,7 +339,7 @@ export function parseDataTypes(dataType) {
 
 /**
  * Resolves the Java class name to emit for a property, applying the audit-field overrides demanded
- * by org.eclipse.dirigible.engine.java.annotations.{CreatedAt,UpdatedAt,CreatedBy,UpdatedBy}.
+ * by org.eclipse.dirigible.sdk.db.{CreatedAt,UpdatedAt,CreatedBy,UpdatedBy}.
  */
 export function resolveJavaClass(baseJavaClass, auditType) {
     if (auditType === "CREATED_AT" || auditType === "UPDATED_AT") {

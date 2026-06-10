@@ -15,8 +15,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
-import org.eclipse.dirigible.engine.java.annotations.Listener;
-import org.eclipse.dirigible.engine.java.annotations.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;

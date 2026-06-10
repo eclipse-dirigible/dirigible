@@ -24,12 +24,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import org.eclipse.dirigible.engine.java.annotations.http.Body;
-import org.eclipse.dirigible.engine.java.annotations.http.Controller;
-import org.eclipse.dirigible.engine.java.annotations.http.Get;
-import org.eclipse.dirigible.engine.java.annotations.http.PathParam;
-import org.eclipse.dirigible.engine.java.annotations.http.Post;
-import org.eclipse.dirigible.engine.java.annotations.http.QueryParam;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.PathParam;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.QueryParam;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;

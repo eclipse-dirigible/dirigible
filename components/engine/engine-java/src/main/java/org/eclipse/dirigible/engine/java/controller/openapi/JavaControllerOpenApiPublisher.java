@@ -18,7 +18,7 @@ import java.util.UUID;
 
 import org.eclipse.dirigible.components.openapi.domain.OpenAPI;
 import org.eclipse.dirigible.components.openapi.service.OpenAPIService;
-import org.eclipse.dirigible.engine.java.annotations.Documentation;
+import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.engine.java.controller.ControllerEntry;
 import org.eclipse.dirigible.engine.java.controller.ParamBinding;
 import org.eclipse.dirigible.engine.java.controller.Route;

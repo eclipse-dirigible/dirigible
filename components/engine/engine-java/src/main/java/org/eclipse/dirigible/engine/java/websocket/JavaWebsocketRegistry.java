@@ -16,7 +16,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Runtime registry mapping WebSocket endpoint names to the Java handler instances registered via
- * {@link org.eclipse.dirigible.engine.java.annotations.Websocket @Websocket}.
+ * {@link org.eclipse.dirigible.sdk.net.Websocket @Websocket}.
  *
  * <p>
  * {@code WebsocketProcessor} in {@code engine-websockets} optionally injects this bean and routes
@@ -31,7 +31,7 @@ public class JavaWebsocketRegistry {
      * Register a Java websocket handler instance for the given endpoint name.
      *
      * @param endpoint the endpoint name (matches the value of
-     *        {@link org.eclipse.dirigible.engine.java.annotations.Websocket#endpoint()})
+     *        {@link org.eclipse.dirigible.sdk.net.Websocket#endpoint()})
      * @param instance the handler instance
      */
     public void register(String endpoint, Object instance) {

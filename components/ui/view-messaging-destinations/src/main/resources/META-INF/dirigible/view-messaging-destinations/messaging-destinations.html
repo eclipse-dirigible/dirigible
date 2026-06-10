@@ -1,0 +1,191 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="messagingDestinations" ng-controller="MessagingDestinationsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-messaging-destinations/configs/messaging-destinations-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" has-title="false">
+            <span>Destinations</span>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <span class="bk-text--subtitle bk-font--small" ng-show="lastUpdated">{{lastUpdated | date:'HH:mm:ss'}}</span>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh now" aria-label="Refresh now" ng-click="refresh()" ng-disabled="loading"></bk-button>
+            <bk-button state="transparent" ng-click="toggleAutoRefresh()" glyph="{{ autoRefresh ? 'sap-icon--pause' : 'sap-icon--play' }}" title="{{ autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh' }}"
+                aria-label="Toggle auto-refresh"></bk-button>
+        </bk-toolbar>
+
+        <div class="bk-padding--tiny">
+            <bk-input compact="true" type="search" ng-model="filterText" ng-change="applyFilter()" placeholder="Filter by name..."></bk-input>
+        </div>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load destinations</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage">
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
+                <span>Queues</span>
+                <span>{{ filteredQueues.length }} / {{ summary.queues.length || 0 }}</span>
+            </h2>
+            <bk-list ng-if="filteredQueues.length" compact="true">
+                <bk-list-item interactive="true" ng-repeat="q in filteredQueues track by q.name" selected="isSelected(q)" ng-click="select(q)">
+                    <bk-list-icon glyph="sap-icon--inbox"></bk-list-icon>
+                    <bk-list-title class="bk-font--normal" title="{{ q.name }}">{{ q.name }}</bk-list-title>
+                    <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !q.size }">{{ q.size }}</bk-list-secondary>
+                </bk-list-item>
+            </bk-list>
+            <bk-list ng-if="!filteredQueues.length && !loading" compact="true">
+                <bk-list-item>
+                    <bk-list-title class="bk-text--subtitle bk-font--normal">No queues</bk-list-title>
+                </bk-list-item>
+            </bk-list>
+
+            <h2 class="bk-text--subtitle bk-font--small bk-padding--tiny fd-margin--none bk-hbox bk-box--space-between bk-box--items-center">
+                <span>Topics</span>
+                <span>{{ filteredTopics.length }} / {{ summary.topics.length || 0 }}</span>
+            </h2>
+            <bk-list ng-if="filteredTopics.length" compact="true">
+                <bk-list-item interactive="true" ng-repeat="t in filteredTopics track by t.name" selected="isSelected(t)" ng-click="select(t)">
+                    <bk-list-icon glyph="sap-icon--marketing-campaign"></bk-list-icon>
+                    <bk-list-title class="bk-font--normal" title="{{ t.name }}">{{ t.name }}</bk-list-title>
+                    <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !t.consumerCount }">{{ t.consumerCount }}</bk-list-secondary>
+                </bk-list-item>
+            </bk-list>
+            <bk-list ng-if="!filteredTopics.length && !loading" compact="true">
+                <bk-list-item>
+                    <bk-list-title class="bk-text--subtitle bk-font--normal">No topics</bk-list-title>
+                </bk-list-item>
+            </bk-list>
+        </div>
+
+        <script type="text/javascript">
+            const messagingDestinationsApp = angular.module('messagingDestinations', ['platformView', 'blimpKit']);
+            messagingDestinationsApp.constant('MessageHub', new MessageHubApi());
+            messagingDestinationsApp.controller('MessagingDestinationsController', ($scope, $http, $interval, MessageHub) => {
+                const endpoint = '/services/ide/messaging-monitoring/summary';
+                const TOPIC_SELECTED = 'messaging.destination.selected';
+                const TOPIC_CHANGED = 'messaging.broker.changed';
+                const TOPIC_REQUEST = 'messaging.destination.selection.request';
+
+                $scope.summary = { queues: [], topics: [] };
+                $scope.filteredQueues = [];
+                $scope.filteredTopics = [];
+                $scope.lastUpdated = null;
+                $scope.errorMessage = '';
+                $scope.loading = false;
+                $scope.autoRefresh = true;
+                $scope.filterText = '';
+                $scope.selected = null;
+                let timer = null;
+
+                const findInSummary = (type, name) => {
+                    const pool = type === 'queue' ? $scope.summary.queues : $scope.summary.topics;
+                    for (const entry of (pool || [])) {
+                        if (entry.name === name) return entry;
+                    }
+                    return null;
+                };
+
+                $scope.refresh = () => {
+                    $scope.loading = true;
+                    $http.get(endpoint).then((response) => {
+                        const data = response.data || { queues: [], topics: [] };
+                        $scope.summary = data;
+                        $scope.lastUpdated = new Date();
+                        $scope.errorMessage = '';
+                        $scope.loading = false;
+                        $scope.applyFilter();
+                        MessageHub.postMessage({ topic: TOPIC_CHANGED, data: data });
+                        if ($scope.selected) {
+                            const refreshed = findInSummary($scope.selected.type, $scope.selected.name);
+                            if (refreshed) {
+                                $scope.selected = refreshed;
+                                MessageHub.postMessage({ topic: TOPIC_SELECTED, data: refreshed });
+                            } else {
+                                $scope.selected = null;
+                                MessageHub.postMessage({ topic: TOPIC_SELECTED, data: { cleared: true } });
+                            }
+                        }
+                    }, (error) => {
+                        console.error(error);
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.toggleAutoRefresh = () => {
+                    $scope.autoRefresh = !$scope.autoRefresh;
+                    $scope.restartTimer();
+                };
+
+                $scope.restartTimer = () => {
+                    if (timer) { $interval.cancel(timer); timer = null; }
+                    if ($scope.autoRefresh) {
+                        timer = $interval($scope.refresh, 5000);
+                    }
+                };
+
+                $scope.applyFilter = () => {
+                    const needle = ($scope.filterText || '').trim().toLowerCase();
+                    const matches = (item) => !needle || (item.name && item.name.toLowerCase().indexOf(needle) !== -1);
+                    $scope.filteredQueues = ($scope.summary.queues || []).filter(matches);
+                    $scope.filteredTopics = ($scope.summary.topics || []).filter(matches);
+                };
+
+                $scope.isSelected = (item) => $scope.selected && $scope.selected.name === item.name && $scope.selected.type === item.type;
+
+                $scope.select = (item) => {
+                    $scope.selected = item;
+                    MessageHub.postMessage({ topic: TOPIC_SELECTED, data: item });
+                };
+
+                const requestListener = MessageHub.addMessageListener({
+                    topic: TOPIC_REQUEST,
+                    handler: () => {
+                        MessageHub.postMessage({ topic: TOPIC_CHANGED, data: $scope.summary });
+                        if ($scope.selected) {
+                            MessageHub.postMessage({ topic: TOPIC_SELECTED, data: $scope.selected });
+                        }
+                    }
+                });
+
+                const refreshListener = MessageHub.addMessageListener({
+                    topic: 'messaging.broker.refresh',
+                    handler: () => { $scope.refresh(); }
+                });
+
+                $scope.$on('$destroy', () => {
+                    if (timer) { $interval.cancel(timer); timer = null; }
+                    MessageHub.removeMessageListener(requestListener);
+                    MessageHub.removeMessageListener(refreshListener);
+                });
+
+                $scope.refresh();
+                $scope.restartTimer();
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

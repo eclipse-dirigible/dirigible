@@ -10,7 +10,7 @@
 package org.eclipse.dirigible.components.data.store.java.spi;
 
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
-import org.eclipse.dirigible.engine.java.annotations.Entity;
+import org.eclipse.dirigible.sdk.db.Entity;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;

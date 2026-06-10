@@ -27,17 +27,17 @@ import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor;
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor.HbmIdDescriptor;
 import org.eclipse.dirigible.components.data.store.hbm.HbmXmlDescriptor.HbmPropertyDescriptor;
 import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity;
-import org.eclipse.dirigible.engine.java.annotations.Column;
-import org.eclipse.dirigible.engine.java.annotations.CreatedAt;
-import org.eclipse.dirigible.engine.java.annotations.CreatedBy;
-import org.eclipse.dirigible.engine.java.annotations.Entity;
-import org.eclipse.dirigible.engine.java.annotations.GeneratedValue;
-import org.eclipse.dirigible.engine.java.annotations.GenerationType;
-import org.eclipse.dirigible.engine.java.annotations.Id;
-import org.eclipse.dirigible.engine.java.annotations.Table;
-import org.eclipse.dirigible.engine.java.annotations.Transient;
-import org.eclipse.dirigible.engine.java.annotations.UpdatedAt;
-import org.eclipse.dirigible.engine.java.annotations.UpdatedBy;
+import org.eclipse.dirigible.sdk.db.Column;
+import org.eclipse.dirigible.sdk.db.CreatedAt;
+import org.eclipse.dirigible.sdk.db.CreatedBy;
+import org.eclipse.dirigible.sdk.db.Entity;
+import org.eclipse.dirigible.sdk.db.GeneratedValue;
+import org.eclipse.dirigible.sdk.db.GenerationType;
+import org.eclipse.dirigible.sdk.db.Id;
+import org.eclipse.dirigible.sdk.db.Table;
+import org.eclipse.dirigible.sdk.db.Transient;
+import org.eclipse.dirigible.sdk.db.UpdatedAt;
+import org.eclipse.dirigible.sdk.db.UpdatedBy;
 
 /**
  * Reflects over a client class annotated with Dirigible's {@link Entity} and produces:
