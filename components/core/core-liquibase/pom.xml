@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+
+    <parent>
+        <groupId>org.eclipse.dirigible</groupId>
+        <artifactId>dirigible-components-parent</artifactId>
+        <version>14.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
+    </parent>
+
+    <modelVersion>4.0.0</modelVersion>
+    <artifactId>dirigible-components-core-liquibase</artifactId>
+    <packaging>jar</packaging>
+    <name>Components - Core - Liquibase</name>
+    <description>
+        Source of truth for the Dirigible system schema (DIRIGIBLE_*) running in SystemDB.
+        Liquibase JSON changelogs in src/main/resources/db/changelog/ create and version every
+        platform table; Hibernate is reduced to schema validation (DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO
+        defaults to "validate") and no longer issues DDL during application startup.
+        Dynamic user entities (TypeScript @Entity via data-store, Java @Entity via
+        data-store-java) continue to use Hibernate's hbm2ddl=update because their schema is
+        authored by end-user code, not by changelogs.
+    </description>
+
+    <properties>
+        <license.header.location>../../../licensing-header.txt</license.header.location>
+        <parent.pom.folder>../../../</parent.pom.folder>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-liquibase</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+    </dependencies>
+
+</project>
