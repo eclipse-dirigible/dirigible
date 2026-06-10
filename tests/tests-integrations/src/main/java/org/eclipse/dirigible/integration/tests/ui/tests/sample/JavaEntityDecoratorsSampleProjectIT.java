@@ -14,18 +14,12 @@ import static org.hamcrest.Matchers.containsString;
 
 /**
  * Clones {@code dirigiblelabs/sample-java-entity-decorators}, publishes it through the IDE, and
- * verifies that the {@code @Entity} / {@code @Repository} / {@code @Controller} stack from
- * {@code engine-java} + {@code data-store-java} reads the project's CSVIM-seeded data end-to-end:
- * the {@code SAMPLE_COUNTRY} table is created and populated from {@code data/countries.csv}, the
- * {@code @Inject}-ed {@code CountryRepository} lists those rows through {@code @Get("/")}, a single
- * row is fetched through {@code @Get("/{id}")} / {@code @PathParam}, and the OpenAPI aggregator
- * picks up the controller's routes.
+ * verifies the {@code @Entity} / {@code @Repository} / {@code @Controller} annotation stack with
+ * CSVIM-seeded country CRUD and OpenAPI registration.
  */
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";
-
-    /** Controller base — {@code @Get("/")} lists, {@code @Get("/{id}")} fetches one. */
     private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/demo/CountryController";
 
     @Override
@@ -36,8 +30,6 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
     @Override
     protected void verifyProject() {
         restAssuredExecutor.execute(() -> {
-            // GET on the bare base URL → @Get("/") list route. Proves @Inject CountryRepository
-            // resolved and the SAMPLE_COUNTRY table was seeded from data/countries.csv via CSVIM.
             given().when()
                    .get(CONTROLLER_BASE)
                    .then()
@@ -46,16 +38,12 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .body(containsString("Albania"))
                    .body(containsString("Algeria"));
 
-            // GET /{id} — exercises @PathParam binding and JavaRepository.findById against the
-            // seeded COUNTRY_ID primary key (countries.csv assigns Afghanistan id 1).
             given().when()
                    .get(CONTROLLER_BASE + "/1")
                    .then()
                    .statusCode(200)
                    .body(containsString("Afghanistan"));
 
-            // /services/openapi merges every stored OpenAPI artefact; engine-java contributes
-            // one fragment per controller class at registration time.
             given().when()
                    .get("/services/openapi")
                    .then()
