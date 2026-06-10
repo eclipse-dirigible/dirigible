@@ -18,7 +18,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.jdbc.autoconfigure.DataSourceProperties;
 import org.springframework.boot.quartz.autoconfigure.QuartzDataSource;
 import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.DependsOn;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.orm.jpa.JpaTransactionManager;
@@ -69,20 +68,21 @@ public class DataSourceSystemConfig {
     }
 
     /**
-     * Entity manager factory. Schema for SystemDB is owned by {@code core-liquibase} (changelogs under
-     * {@code db/changelog/dirigible-system.json}); Hibernate is configured with {@code hbm2ddl=none} so
-     * it issues no DDL and performs no schema probes at boot — that eliminates the historical
-     * {@code SYS}-lock race when multiple Spring contexts hit the same file-backed H2 during DDL
-     * planning. The {@code @DependsOn("liquibaseSystemDB")} forces Liquibase to apply the changelogs
-     * before this factory wires Hibernate. Override {@code DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO} only as
-     * a temporary escape hatch.
+     * Entity manager factory. The default {@code hbm2ddl=update} stays so any JPA-using module's unit
+     * tests (which boot a slim Spring context without {@code core-liquibase}) can still bootstrap their
+     * schema. When {@code core-liquibase} is on the classpath (the full app),
+     * {@code LiquibaseEntityManagerFactoryDependsOnPostProcessor} forces Liquibase to apply
+     * {@code db/changelog/dirigible-system.json} BEFORE this factory wires Hibernate — by the time
+     * Hibernate's update pass runs, every table already exists and no CREATE statements are emitted,
+     * which is exactly what eliminates the historical SYS-lock race between racing Spring contexts.
+     * Override {@code DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO} only when you specifically need a different
+     * Hibernate mode (e.g. {@code validate} after Liquibase has been adopted).
      *
      * @param dataSource the data source
      * @return the local container entity manager factory bean
      */
     @Primary
     @Bean(name = "entityManagerFactory")
-    @DependsOn("liquibaseSystemDB")
     public LocalContainerEntityManagerFactoryBean entityManagerFactory(@Qualifier("SystemDB") DataSource dataSource) {
         LocalContainerEntityManagerFactoryBean em = new LocalContainerEntityManagerFactoryBean();
         em.setDataSource(dataSource);
@@ -94,7 +94,7 @@ public class DataSourceSystemConfig {
 
         Properties properties = new Properties();
         String configuredDialect = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DIALECT", "org.hibernate.dialect.H2Dialect");
-        String configDDLAuto = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", "none");
+        String configDDLAuto = Configuration.get("DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO", "update");
 
         properties.setProperty("hibernate.dialect", configuredDialect);
         properties.setProperty("hibernate.hbm2ddl.auto", configDDLAuto);

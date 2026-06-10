@@ -16,6 +16,7 @@ import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.boot.jpa.autoconfigure.EntityManagerFactoryDependsOnPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import liquibase.Contexts;
@@ -27,9 +28,11 @@ import liquibase.integration.spring.SpringLiquibase;
 /**
  * Wires Liquibase against the {@code SystemDB} so the DIRIGIBLE_* platform schema is created and
  * versioned by JSON changelogs in {@code db/changelog/} rather than by Hibernate's
- * {@code hbm2ddl=update}. The {@code entityManagerFactory} bean in {@code DataSourceSystemConfig}
- * must {@code @DependsOn("liquibaseSystemDB")} so Hibernate's (validate-only) startup runs after
- * the changelogs have been applied.
+ * {@code hbm2ddl=update}. {@link LiquibaseEntityManagerFactoryDependsOnPostProcessor} adds a
+ * {@code dependsOn("liquibaseSystemDB")} to every {@code EntityManagerFactory} bean at startup so
+ * Hibernate sees the schema only after Liquibase has applied the changelogs. The dependency is
+ * registered from this module — when {@code core-liquibase} is absent (e.g. slim unit-test
+ * contexts), no dependency is declared and the EMF wires normally.
  *
  * <p>
  * Legacy deployments that were originally bootstrapped via {@code hbm2ddl=update} already have
@@ -56,6 +59,20 @@ public class LiquibaseSystemConfig {
         liquibase.setDataSource(systemDB);
         liquibase.setChangeLog(CHANGELOG);
         return liquibase;
+    }
+
+    /**
+     * Dynamically adds {@code dependsOn("liquibaseSystemDB")} to every {@code EntityManagerFactory}
+     * bean so Hibernate's startup runs strictly after Liquibase's changelog application. Modeled on
+     * Spring Boot's own {@code LiquibaseAutoConfiguration} pattern — by living in
+     * {@code core-liquibase} the BFPP is registered only when this module is on the classpath, so slim
+     * unit-test contexts that omit it still boot.
+     */
+    @Configuration
+    static class LiquibaseEntityManagerFactoryDependsOnPostProcessor extends EntityManagerFactoryDependsOnPostProcessor {
+        LiquibaseEntityManagerFactoryDependsOnPostProcessor() {
+            super("liquibaseSystemDB");
+        }
     }
 
     static final class LegacyAwareSpringLiquibase extends SpringLiquibase {
