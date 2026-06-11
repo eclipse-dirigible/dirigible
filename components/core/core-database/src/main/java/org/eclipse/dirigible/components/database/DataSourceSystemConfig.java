@@ -68,7 +68,15 @@ public class DataSourceSystemConfig {
     }
 
     /**
-     * Entity manager factory.
+     * Entity manager factory. The default {@code hbm2ddl=update} stays so any JPA-using module's unit
+     * tests (which boot a slim Spring context without {@code core-liquibase}) can still bootstrap their
+     * schema. When {@code core-liquibase} is on the classpath (the full app),
+     * {@code LiquibaseEntityManagerFactoryDependsOnPostProcessor} forces Liquibase to apply
+     * {@code db/changelog/dirigible-system.json} BEFORE this factory wires Hibernate — by the time
+     * Hibernate's update pass runs, every table already exists and no CREATE statements are emitted,
+     * which is exactly what eliminates the historical SYS-lock race between racing Spring contexts.
+     * Override {@code DIRIGIBLE_DATABASE_SYSTEM_DDL_AUTO} only when you specifically need a different
+     * Hibernate mode (e.g. {@code validate} after Liquibase has been adopted).
      *
      * @param dataSource the data source
      * @return the local container entity manager factory bean
