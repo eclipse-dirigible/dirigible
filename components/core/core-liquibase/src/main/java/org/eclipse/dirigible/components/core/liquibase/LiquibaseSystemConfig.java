@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.core.liquibase;
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.Statement;
 import javax.sql.DataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,22 +36,34 @@ import liquibase.integration.spring.SpringLiquibase;
  * contexts), no dependency is declared and the EMF wires normally.
  *
  * <p>
- * Legacy deployments that were originally bootstrapped via {@code hbm2ddl=update} already have
- * every system table but no {@code DATABASECHANGELOG} entries. {@link #liquibaseSystemDB} extends
- * {@link SpringLiquibase} to detect that case and call
- * {@link Liquibase#changeLogSync(Contexts, LabelExpression)} first — every changeset is recorded as
- * applied without re-running its DDL, preserving the existing data. Fresh deployments fall through
- * to the normal {@code update()} flow and create the schema from scratch.
+ * {@link LegacyAwareSpringLiquibase} handles two non-pristine startup states that would otherwise
+ * make Liquibase blow up trying to recreate tables that are still on disk:
+ * <ul>
+ * <li><b>Legacy production upgrade</b> — {@code DIRIGIBLE_*} tables exist from a previous
+ * {@code hbm2ddl=update}-bootstrapped deployment, but no {@code DATABASECHANGELOG} ledger has ever
+ * been written. The handler calls {@link Liquibase#changeLogSync} so every changeset is recorded as
+ * applied without re-running its DDL, preserving the existing data.</li>
+ * <li><b>Integration-test partial-cleanup state</b> — {@code DirigibleCleaner} between IT classes
+ * issues H2 {@code DROP ALL OBJECTS}, which drops every schema object including
+ * {@code DATABASECHANGELOG}. If a different connection holding stale entries races the drop, or if
+ * a previous test left orphan tables on disk, the next test boots a fresh Liquibase against a DB
+ * where the ledger exists but is empty while artefact tables are still present. The same
+ * {@code changeLogSync} recovery applies. Hibernate's downstream {@code hbm2ddl=update} pass fills
+ * in any genuinely-missing tables (in the rare case the orphans are incomplete).</li>
+ * </ul>
  */
 @Configuration
 public class LiquibaseSystemConfig {
 
     private static final String CHANGELOG = "classpath:db/changelog/dirigible-system.json";
 
-    /** Sentinel table from the very first changeset — if it exists, the schema is already populated. */
+    /**
+     * Sentinel table from the very first changeset — if it exists, the schema has been bootstrapped
+     * before.
+     */
     private static final String SENTINEL_TABLE = "DIRIGIBLE_SECURITY_ACCESS";
 
-    /** Liquibase's tracking table. Absence indicates the schema was bootstrapped some other way. */
+    /** Liquibase's tracking table. */
     private static final String DATABASECHANGELOG_TABLE = "DATABASECHANGELOG";
 
     @Bean
@@ -79,21 +92,47 @@ public class LiquibaseSystemConfig {
 
         private static final Logger logger = LoggerFactory.getLogger(LegacyAwareSpringLiquibase.class);
 
+        /**
+         * JVM-wide lock that serializes Liquibase initialization across every {@code SpringLiquibase} bean
+         * instance in the JVM. The integration suite triggers concurrent context startup/teardown (e.g.
+         * {@code @DirtiesContext} classes whose background threads outlive the context refresh) — two
+         * Liquibase beans initialising against the same file-backed H2 will both try to create
+         * {@code PUBLIC.DATABASECHANGELOG} before Liquibase's own {@code DATABASECHANGELOGLOCK} exists, and
+         * the loser fails with "Table DATABASECHANGELOG already exists". A static monitor on this class
+         * guarantees the bootstrap is serial regardless of Spring context boundaries.
+         */
+        private static final Object BOOTSTRAP_LOCK = new Object();
+
         @Override
         protected void performUpdate(Liquibase liquibase) throws LiquibaseException {
-            if (isLegacyDeployment()) {
-                logger.info("Legacy deployment detected — DIRIGIBLE_* tables already exist but DATABASECHANGELOG is empty; "
-                        + "marking every changeset as applied via changelogSync() to preserve existing data.");
-                liquibase.changeLogSync(new Contexts(getContexts()), new LabelExpression(getLabelFilter()));
+            synchronized (BOOTSTRAP_LOCK) {
+                if (needsChangeLogSync()) {
+                    logger.info("Bootstrapping ledger via Liquibase changeLogSync(): sentinel table is already present and "
+                            + "DATABASECHANGELOG is missing or empty. Every changeset is recorded as applied without re-running its DDL.");
+                    liquibase.changeLogSync(new Contexts(getContexts()), new LabelExpression(getLabelFilter()));
+                }
+                super.performUpdate(liquibase);
             }
-            super.performUpdate(liquibase);
         }
 
-        private boolean isLegacyDeployment() {
+        /**
+         * Returns {@code true} when the SystemDB is in a state that requires marking every changeset as
+         * applied without re-execution: either a legacy production upgrade (sentinel exists, no
+         * {@code DATABASECHANGELOG}), or an integration-test partial-cleanup state (sentinel exists,
+         * {@code DATABASECHANGELOG} exists but is empty). A fresh DB returns {@code false} and falls
+         * through to the normal {@code update()} flow.
+         */
+        private boolean needsChangeLogSync() {
             try (Connection connection = getDataSource().getConnection()) {
-                return tableExists(connection, SENTINEL_TABLE) && !tableExists(connection, DATABASECHANGELOG_TABLE);
+                if (!tableExists(connection, SENTINEL_TABLE)) {
+                    return false;
+                }
+                if (!tableExists(connection, DATABASECHANGELOG_TABLE)) {
+                    return true;
+                }
+                return isEmpty(connection, DATABASECHANGELOG_TABLE);
             } catch (Exception e) {
-                logger.warn("Could not probe for legacy deployment state; proceeding with normal Liquibase update", e);
+                logger.warn("Could not probe SystemDB bootstrap state; proceeding with normal Liquibase update", e);
                 return false;
             }
         }
@@ -108,6 +147,13 @@ public class LiquibaseSystemConfig {
                 }
             }
             return false;
+        }
+
+        private boolean isEmpty(Connection connection, String tableName) throws Exception {
+            try (Statement statement = connection.createStatement();
+                    ResultSet rs = statement.executeQuery("SELECT COUNT(*) FROM " + tableName)) {
+                return rs.next() && rs.getInt(1) == 0;
+            }
         }
     }
 }

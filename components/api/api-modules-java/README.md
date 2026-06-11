@@ -38,7 +38,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. |
 | `db/store`                           | `sdk.db.Store`                                                 | Dynamic-entity Hibernate store. For typed `@Entity` CRUD on client classes, resolve `JavaEntityStore` via `BeanProvider`. |
 | `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. |
-| `extensions/extensions`              | `sdk.extensions.Extensions`                                    |       |
+| `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer the typed `Extensions.find(Class<T>)`; see "Typed extension points" below. |
 | `git/client`                         | `sdk.git.Git`                                                  |       |
 | `http/client`                        | `sdk.http.HttpClient`                                          | Options passed as JSON, same shape as TS. |
 | `http/request`                       | `sdk.http.Request`                                             |       |
@@ -111,12 +111,53 @@ from this module so the SDK surface — facades **and** decorators — has a sin
 | `component/decorators#Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Inject, Repository}`                      |
 | `job/decorators#Scheduled`                 | `org.eclipse.dirigible.sdk.job.Scheduled`                                       |
 | `net/decorators#Websocket`                 | `org.eclipse.dirigible.sdk.net.Websocket`                                       |
-| `extensions/decorators#Extension`          | `org.eclipse.dirigible.sdk.extensions.Extension`                                |
+| `extensions/decorators#Extension`          | `org.eclipse.dirigible.sdk.extensions.{Extension, ExtensionPoint}`               |
 | Message listeners                          | `org.eclipse.dirigible.sdk.messaging.{Listener, ListenerKind}`                  |
 
 Existing import statements that used the old `org.eclipse.dirigible.engine.java.annotations.*`
 paths have been migrated across the codebase (engine-java consumers, data-store-java consumers,
 IT fixtures, IDE snippets, `EntityController.java.template` and the DAO templates).
+
+## Typed extension points
+
+Java `@Extension` does not carry a `to = "<string>"` attribute. Contributions declare the
+extension point they implement as a `Class<?> target()` — the marker `@ExtensionPoint` on the
+target interface documents the contract:
+
+```java
+@ExtensionPoint("Order processors")
+public interface OrderProcessor {
+    void process(Order order);
+}
+
+@Extension(target = OrderProcessor.class, name = "fast")
+public class FastOrderProcessor implements OrderProcessor {
+    public void process(Order order) { ... }
+}
+```
+
+The consumer retrieves implementations as the interface type — no reflection, no `Map<String, ?>`:
+
+```java
+for (OrderProcessor processor : Extensions.find(OrderProcessor.class)) {
+    processor.process(order);
+}
+```
+
+`ExtensionClassConsumer` validates `target.isAssignableFrom(annotatedClass)` at registration —
+a class that declares `@Extension(target = X)` but doesn't actually implement `X` is logged
+and skipped, so a runtime `Extensions.find(X.class)` can never receive an instance that fails
+the cast.
+
+The interface's fully qualified name is the persisted extension-point identifier in the
+`DIRIGIBLE_EXTENSIONS` table. Renaming the interface invalidates every persisted reference, so
+treat the FQN as part of the contract.
+
+Cross-runtime extension points (where TS / JS modules also contribute to the same logical point)
+are not expressible in the typed Java surface — a JS module cannot safely satisfy a Java
+interface contract. Use the TypeScript `@Extension` decorator for those; the legacy string-keyed
+`Extensions.getExtensions(String)` lookup remains available for callers that need to enumerate
+JS contributions.
 
 ## DAO / ORM / Repository builders
 
