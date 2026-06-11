@@ -92,14 +92,27 @@ public class LiquibaseSystemConfig {
 
         private static final Logger logger = LoggerFactory.getLogger(LegacyAwareSpringLiquibase.class);
 
+        /**
+         * JVM-wide lock that serializes Liquibase initialization across every {@code SpringLiquibase} bean
+         * instance in the JVM. The integration suite triggers concurrent context startup/teardown (e.g.
+         * {@code @DirtiesContext} classes whose background threads outlive the context refresh) — two
+         * Liquibase beans initialising against the same file-backed H2 will both try to create
+         * {@code PUBLIC.DATABASECHANGELOG} before Liquibase's own {@code DATABASECHANGELOGLOCK} exists, and
+         * the loser fails with "Table DATABASECHANGELOG already exists". A static monitor on this class
+         * guarantees the bootstrap is serial regardless of Spring context boundaries.
+         */
+        private static final Object BOOTSTRAP_LOCK = new Object();
+
         @Override
         protected void performUpdate(Liquibase liquibase) throws LiquibaseException {
-            if (needsChangeLogSync()) {
-                logger.info("Bootstrapping ledger via Liquibase changeLogSync(): sentinel table is already present and "
-                        + "DATABASECHANGELOG is missing or empty. Every changeset is recorded as applied without re-running its DDL.");
-                liquibase.changeLogSync(new Contexts(getContexts()), new LabelExpression(getLabelFilter()));
+            synchronized (BOOTSTRAP_LOCK) {
+                if (needsChangeLogSync()) {
+                    logger.info("Bootstrapping ledger via Liquibase changeLogSync(): sentinel table is already present and "
+                            + "DATABASECHANGELOG is missing or empty. Every changeset is recorded as applied without re-running its DDL.");
+                    liquibase.changeLogSync(new Contexts(getContexts()), new LabelExpression(getLabelFilter()));
+                }
+                super.performUpdate(liquibase);
             }
-            super.performUpdate(liquibase);
         }
 
         /**

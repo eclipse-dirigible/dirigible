@@ -93,6 +93,8 @@ When you change anything non-trivial, the CI matrix is your safety net: integrat
 
 If you change the sentinel-detection logic (e.g. add a new precondition, change the table name), audit existing deployments — there is no second chance to recover from a misdetection that re-runs a CREATE TABLE on a populated DB.
 
+**`BOOTSTRAP_LOCK` — why `performUpdate` is `synchronized` on a static monitor.** The integration suite has several `@DirtiesContext` classes (e.g. `DatabaseFacadeIT`). Spring tears down the old context but doesn't wait for every background thread that the old context spawned (Quartz workers, synchronization-watcher threads) to finish before refreshing the new context. The new context spins up its own Liquibase bean while a lingering background-thread Liquibase from the previous context is still in `init()`. Both race to `CREATE TABLE PUBLIC.DATABASECHANGELOG` before Liquibase's own `DATABASECHANGELOGLOCK` row exists, and the loser fails with `Table "DATABASECHANGELOG" already exists`. A JVM-wide `synchronized (BOOTSTRAP_LOCK)` in `LegacyAwareSpringLiquibase.performUpdate` makes the bootstrap serial regardless of how many `SpringLiquibase` instances exist concurrently. The lock is dropped immediately after `super.performUpdate` returns, so the cost is just "one Liquibase at a time" — fine, since each instance only runs once per Spring context lifecycle.
+
 ## Regenerating the baseline
 
 You shouldn't need to regenerate the existing 131 changesets — appending new ones is the workflow. If you ever do (e.g. for a schema rewrite), the process is:
