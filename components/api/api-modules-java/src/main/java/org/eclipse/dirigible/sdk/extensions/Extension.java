@@ -15,32 +15,45 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Registers a client Java class as a contribution to a named Dirigible extension point.
+ * Registers a client Java class as a contribution to a typed Dirigible extension point. The class
+ * must implement the {@link #target()} interface; the runtime validates this at registration time
+ * and rejects any class that does not, so consumers can cast results from
+ * {@link Extensions#find(Class)} in a type-safe manner without reflection.
  *
  * <p>
- * The runtime stores an {@code Extension} metadata record that maps the extension point name to
- * this class. Callers that query the extension point (via
- * {@code ExtensionService.findByExtensionPoint}) will receive this record among the results. The
- * class itself is instantiated on demand by the consumer — no specific interface is required.
+ * The {@code target} interface should be marked with {@link ExtensionPoint @ExtensionPoint} and
+ * defines the contract the consumer relies on. Its fully qualified name is used as the extension
+ * point identifier in the {@code DIRIGIBLE_EXTENSIONS} table — renaming the interface invalidates
+ * every persisted reference, so treat the interface FQN as part of the contract.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Extension(name = "my-menu-item", to = "ide-menu")
- * public class MyMenuItem {
- *     public List&lt;Map&lt;String, Object&gt;&gt; getItems() { ... }
+ * {@literal @}ExtensionPoint("Order processors")
+ * public interface OrderProcessor {
+ *     void process(Order order);
+ * }
+ *
+ * {@literal @}Extension(target = OrderProcessor.class, name = "fast-processor")
+ * public class FastOrderProcessor implements OrderProcessor {
+ *     public void process(Order order) { ... }
  * }
  * </pre>
+ *
+ * <p>
+ * Cross-runtime extension points (where TypeScript / JavaScript modules also contribute to the same
+ * logical point) are not expressible in the typed Java surface — a JS module cannot safely satisfy
+ * a Java interface contract. Use the TypeScript {@code @Extension} decorator for those.
  */
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Extension {
 
-    /** Logical name of this extension contribution. */
-    String name();
+    /** The extension point interface this class implements. Must carry {@link ExtensionPoint}. */
+    Class<?> target();
 
-    /** Name of the extension point this class contributes to. */
-    String to();
+    /** Logical name of this contribution. Surfaced in the Extensions UI; not used for lookup. */
+    String name() default "";
 
 }

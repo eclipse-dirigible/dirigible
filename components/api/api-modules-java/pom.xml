@@ -34,6 +34,15 @@
             <artifactId>dirigible-components-core-base</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!--
+          ClientClassLoaderHolder — typed Extensions.find(Class<T>) loads impl FQNs from the active
+          client classloader regardless of where the consumer's interface was defined.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-core-java</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <!--
           API facades the SDK delegates to. Compile-scope so the SDK classes resolve at javac

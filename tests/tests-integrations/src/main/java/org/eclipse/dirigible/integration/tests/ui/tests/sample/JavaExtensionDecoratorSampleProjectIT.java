@@ -24,11 +24,15 @@ public class JavaExtensionDecoratorSampleProjectIT extends SampleProjectReposito
 
     @Override
     protected void verifyProject() {
+        // The typed Extensions.find(SampleExtensionPoint.class) lookup returns
+        // SampleContribution instances; the consumer maps each via describe() so the
+        // /contributions response body carries the contribution's own string. Asserting on
+        // that string also implicitly verifies the cast — only a real implementor reaches it.
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(EXTENSION_CONSUMER_BASE + "/contributions")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(containsString("demo.extension.SampleContribution")));
+                                                 .body(containsString("Hello from SampleContribution!")));
     }
 
 }

@@ -13,6 +13,7 @@ import org.eclipse.dirigible.components.extensions.domain.Extension;
 import org.eclipse.dirigible.components.extensions.service.ExtensionService;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
+import org.eclipse.dirigible.sdk.extensions.ExtensionPoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,14 +26,17 @@ import org.springframework.stereotype.Component;
  * contributions persisted via {@link ExtensionService}.
  *
  * <p>
- * The stored {@link Extension} record uses the class FQN as the module path so callers that query
- * the extension point (e.g. via {@code ExtensionService.findByExtensionPoint}) can identify and
- * instantiate the Java class through {@code JavaClassRegistry} or {@code BeanProvider}.
+ * The extension-point key in the {@code DIRIGIBLE_EXTENSIONS} table is the
+ * {@link org.eclipse.dirigible.sdk.extensions.Extension#target() target}'s fully qualified name.
+ * The {@code module} is the impl class FQN — {@code Extensions.find(Class<T>)} loads it from the
+ * active client classloader, validates {@code isAssignableFrom}, and casts to the target interface,
+ * so consumers never reflect.
  *
  * <p>
- * The location is set to the source {@code .java} file path (following the same convention as
- * {@code JavaControllerOpenApiPublisher}) so the synchronizer's orphan-cleanup pass does not remove
- * the artefact while the source exists.
+ * Registration is validated at class-load time: a class declaring {@code @Extension(target = X)}
+ * that does not actually implement {@code X} is logged and skipped. The target type is also
+ * expected (but not required) to carry {@link ExtensionPoint @ExtensionPoint} — a missing marker is
+ * logged at WARN to flag the convention drift without breaking the registration.
  */
 @Component
 @Order(700)
@@ -57,15 +61,29 @@ public class ExtensionClassConsumer implements JavaClassConsumer {
         org.eclipse.dirigible.sdk.extensions.Extension ann = info.type()
                                                                  .getAnnotation(org.eclipse.dirigible.sdk.extensions.Extension.class);
 
+        Class<?> target = ann.target();
+        if (!target.isAssignableFrom(info.type())) {
+            LOGGER.error("Skipping @Extension [{}]: class does not implement declared target [{}].", info.fqn(), target.getName());
+            return;
+        }
+        if (!target.isAnnotationPresent(ExtensionPoint.class)) {
+            LOGGER.warn("@Extension [{}] targets interface [{}] which is not annotated with @ExtensionPoint — registering anyway.",
+                    info.fqn(), target.getName());
+        }
+
+        String extensionPointFqn = target.getName();
+        String contributionName = ann.name()
+                                     .isEmpty() ? info.fqn() : ann.name();
         String location = locationOf(info.project(), info.fqn());
         try {
-            String key = Extension.ARTEFACT_TYPE + ":" + location + ":" + ann.name();
+            String key = Extension.ARTEFACT_TYPE + ":" + location + ":" + contributionName;
             Extension existing = extensionService.findByKey(key);
-            Extension extension = existing != null ? existing : new Extension(location, ann.name(), null, ann.to(), info.fqn(), null);
-            extension.setExtensionPoint(ann.to());
+            Extension extension =
+                    existing != null ? existing : new Extension(location, contributionName, null, extensionPointFqn, info.fqn(), null);
+            extension.setExtensionPoint(extensionPointFqn);
             extension.setModule(info.fqn());
             extensionService.save(extension);
-            LOGGER.info("Java @Extension [{}] registered for extension point '{}'.", info.fqn(), ann.to());
+            LOGGER.info("Java @Extension [{}] registered for extension point [{}].", info.fqn(), extensionPointFqn);
         } catch (Exception e) {
             LOGGER.error("Failed to register @Extension [{}]: {}", info.fqn(), e.getMessage(), e);
         }
@@ -75,8 +93,10 @@ public class ExtensionClassConsumer implements JavaClassConsumer {
     public void onClassUnloaded(LoadedClass info) {
         org.eclipse.dirigible.sdk.extensions.Extension ann = info.type()
                                                                  .getAnnotation(org.eclipse.dirigible.sdk.extensions.Extension.class);
+        String contributionName = ann.name()
+                                     .isEmpty() ? info.fqn() : ann.name();
         String location = locationOf(info.project(), info.fqn());
-        String key = Extension.ARTEFACT_TYPE + ":" + location + ":" + ann.name();
+        String key = Extension.ARTEFACT_TYPE + ":" + location + ":" + contributionName;
         try {
             Extension existing = extensionService.findByKey(key);
             if (existing != null) {
