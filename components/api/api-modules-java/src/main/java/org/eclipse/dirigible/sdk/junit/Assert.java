@@ -18,7 +18,7 @@ import java.util.Objects;
  * written as plain Java client code.
  * <p>
  * For full-blown test suites — fixtures, parameterised tests, lifecycle hooks, parallel execution —
- * pull JUnit Jupiter into the project and use {@link org.junit.jupiter.api.Assertions} directly.
+ * pull JUnit Jupiter into the project and use {@code org.junit.jupiter.api.Assertions} directly.
  * This class deliberately covers only the small overlap that is identical to the TS
  * {@code @aerokit/sdk/junit} surface.
  */

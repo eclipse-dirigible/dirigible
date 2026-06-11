@@ -24,8 +24,8 @@ import org.eclipse.dirigible.components.api.templates.TemplateEnginesFacade;
  *
  * {@link #generate(String, String)} picks the default engine (Mustache); the named variants are for
  * explicit choice. {@link #generate(String, String, String, String, String)} lets you change the
- * marker pair (defaults are {@code {{}} for Mustache) — useful when the template body itself
- * contains delimiter characters.
+ * marker pair (defaults are <code>&#123;&#123; &#125;&#125;</code> for Mustache) — useful when the
+ * template body itself contains delimiter characters.
  */
 public final class TemplateEngines {
 
