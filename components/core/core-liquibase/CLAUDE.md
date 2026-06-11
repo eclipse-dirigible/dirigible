@@ -17,9 +17,10 @@ Before this module existed, the platform schema was bootstrapped by Hibernate's 
 LiquibaseSystemConfig (@Configuration)
 ├── liquibaseSystemDB             (SpringLiquibase bean, applies the changelog at boot)
 │   └── LegacyAwareSpringLiquibase (extends SpringLiquibase)
-│         performUpdate() → if DIRIGIBLE_SECURITY_ACCESS exists but DATABASECHANGELOG doesn't,
-│                           call changeLogSync() to mark every changeset applied without
-│                           re-running DDL, then fall through to super.performUpdate()
+│         performUpdate() → if sentinel table (DIRIGIBLE_SECURITY_ACCESS) is present AND
+│                           DATABASECHANGELOG is missing OR empty, call changeLogSync()
+│                           to mark every changeset applied without re-running its DDL,
+│                           then fall through to super.performUpdate()
 └── LiquibaseEntityManagerFactoryDependsOnPostProcessor (BFPP)
       extends Spring Boot's EntityManagerFactoryDependsOnPostProcessor("liquibaseSystemDB")
       → dynamically adds dependsOn to every EntityManagerFactory bean at startup,
@@ -85,12 +86,10 @@ When you change anything non-trivial, the CI matrix is your safety net: integrat
 
 ## Legacy-deployment path (`LegacyAwareSpringLiquibase`)
 
-Existing deployments built up via the old `hbm2ddl=update` have every `DIRIGIBLE_*` table but no `DATABASECHANGELOG` ledger. On their first boot with this module:
+`LegacyAwareSpringLiquibase` handles two non-pristine startup states that would otherwise make Liquibase throw "Table already exists" trying to recreate tables still on disk:
 
-1. `performUpdate()` checks for the sentinel `DIRIGIBLE_SECURITY_ACCESS` (every deployment has it; it's the very first artefact synchronizer's table) and the absence of `DATABASECHANGELOG`.
-2. If both hold, it calls `Liquibase.changeLogSync(...)`. Every changeset in the file is recorded as applied without re-running its DDL.
-3. Then it falls through to the normal `super.performUpdate()` which is now a no-op for that DB.
-4. The next startup is indistinguishable from a fresh install — `DATABASECHANGELOG` is populated, the normal update path runs, and any newly-appended changeset gets applied.
+1. **Legacy production upgrade.** Existing deployments built up via the old `hbm2ddl=update` have every `DIRIGIBLE_*` table but no `DATABASECHANGELOG` ledger. The handler detects sentinel `DIRIGIBLE_SECURITY_ACCESS` exists + `DATABASECHANGELOG` is absent, calls `Liquibase.changeLogSync(...)` so every changeset is recorded as applied without re-running its DDL, and the next startup is indistinguishable from a fresh install.
+2. **Integration-test partial-cleanup state.** Between IT classes the test framework's `DirigibleCleaner` runs H2 `DROP ALL OBJECTS` against the SystemDB, which drops every schema object including `DATABASECHANGELOG`. If a different connection holding stale entries races the drop, or a previous test left orphan tables on disk, the next test boots a fresh Liquibase against a DB where the ledger has been re-created (empty) while some artefact tables are still present. The same `changeLogSync` recovery applies — the trigger is sentinel exists + `DATABASECHANGELOG` exists-but-empty. Hibernate's downstream `hbm2ddl=update` pass fills in any genuinely-missing tables in the rare case the orphans are incomplete. (This case nearly emptied a `db-sys-liquibase` PR re-run before the empty-ledger arm was added — every test after `LocalNativeAppLifecycleIT` cascade-failed on `create-DIRIGIBLE_BPMN`.)
 
 If you change the sentinel-detection logic (e.g. add a new precondition, change the table name), audit existing deployments — there is no second chance to recover from a misdetection that re-runs a CREATE TABLE on a populated DB.
 
