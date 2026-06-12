@@ -80,6 +80,7 @@
         <module>engine/engine-websockets</module>
         <module>engine/engine-security</module>
         <module>engine/engine-listeners</module>
+        <module>engine/engine-intent</module>
         <module>engine/engine-odata</module>
         <module>engine/engine-open-telemetry</module>
         <module>engine/engine-camel</module>

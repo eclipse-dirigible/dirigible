@@ -14,6 +14,12 @@ package org.eclipse.dirigible.components.base.synchronizer;
  */
 public interface SynchronizersOrder {
 
+    /**
+     * The intent. Runs first so its regenerated {@code gen/} output is in place for downstream
+     * synchronizers on the next reconciliation cycle.
+     */
+    int INTENT = 5;
+
     /** The extensionpoint. */
     int EXTENSIONPOINT = 10;
 
