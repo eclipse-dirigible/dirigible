@@ -33,6 +33,7 @@ public class IntentModel {
     private List<FormIntent> forms = new ArrayList<>();
     private List<ReportIntent> reports = new ArrayList<>();
     private List<PermissionIntent> permissions = new ArrayList<>();
+    private List<SeedIntent> seeds = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -96,5 +97,13 @@ public class IntentModel {
 
     public void setPermissions(List<PermissionIntent> permissions) {
         this.permissions = permissions == null ? new ArrayList<>() : permissions;
+    }
+
+    public List<SeedIntent> getSeeds() {
+        return seeds;
+    }
+
+    public void setSeeds(List<SeedIntent> seeds) {
+        this.seeds = seeds == null ? new ArrayList<>() : seeds;
     }
 }

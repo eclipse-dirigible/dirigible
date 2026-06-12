@@ -72,7 +72,7 @@ components/engine/engine-intent/
     ├── repository/IntentRepository.java   # Spring Data
     ├── service/IntentService.java         # CRUD via BaseArtefactService
     ├── model/                             # POJOs for the intent document (Gson-mapped after YAML → Map → JSON round-trip)
-    │   ├── IntentModel.java               # root: entities / processes / forms / reports / permissions
+    │   ├── IntentModel.java               # root: entities / processes / forms / reports / permissions / seeds
     │   ├── EntityIntent.java
     │   ├── FieldIntent.java
     │   ├── RelationIntent.java
@@ -80,7 +80,8 @@ components/engine/engine-intent/
     │   ├── StepIntent.java
     │   ├── FormIntent.java
     │   ├── ReportIntent.java
-    │   └── PermissionIntent.java
+    │   ├── PermissionIntent.java
+    │   └── SeedIntent.java
     ├── parser/
     │   ├── IntentParser.java              # YAML → Map (SnakeYAML SafeConstructor) → JSON → IntentModel (Gson) + structural validation
     │   └── IntentValidationException.java # collects every structural issue in one shot
@@ -92,7 +93,8 @@ components/engine/engine-intent/
     │   ├── bpmn/BpmnIntentGenerator.java              # @Order(300); writes gen/<process>.bpmn per process
     │   ├── form/FormIntentGenerator.java              # @Order(400); writes gen/<form>.form per form (typed controls + action buttons + stub code)
     │   ├── report/ReportIntentGenerator.java          # @Order(500); writes gen/<report>.report per report (dimensions + parsed measures)
-    │   └── permission/PermissionIntentGenerator.java  # @Order(600); writes gen/<intent>.roles per intent (deduped role names + descriptions)
+    │   ├── permission/PermissionIntentGenerator.java  # @Order(600); writes gen/<intent>.roles per intent (deduped role names + descriptions)
+    │   └── csvim/CsvimIntentGenerator.java            # @Order(700); writes gen/<seed>.csvim + gen/<seed>.csv per seed
     ├── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
     └── endpoint/IntentEndpoint.java           # /services/ide/intent/* - list projects, fetch parsed intent, fetch raw YAML, force regenerate
 ```
@@ -102,13 +104,14 @@ The IDE perspective lives in two sibling UI modules:
 - `components/ui/perspective-intent` - perspective shell (id `intent`, order 1020, icon a three-node graph SVG). Default region `center`, view `intent-mermaid`.
 - `components/ui/view-intent-mermaid` - read-only Mermaid ER renderer + toolbar (project picker, reload, regenerate, source / diagram toggle). Loads `mermaid@11` from `cdn.jsdelivr.net` (matches the unicons pattern in the rest of the IDE). Server returns parsed `IntentModel` JSON; the view converts to `erDiagram` spec client-side.
 
-Five concrete generators currently live in-module:
+Six concrete generators currently live in-module:
 
 - [`EdmIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/edm/EdmIntentGenerator.java) writes `gen/<intent>.edm` (XML) plus `gen/<intent>.model` (JSON twin) from the entities + relations declared in the intent. Each entity is fleshed out with EDM editor defaults (icons, menu keys, layout type, perspective metadata, widget types) derived from the entity / field names so the produced model is a complete, openable EDM document.
 - [`BpmnIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/bpmn/BpmnIntentGenerator.java) writes one `gen/<process>.bpmn` per process. Minimal Flowable-flavoured BPMN 2.0 - one start event, one end event, the declared steps, and the sequence flows that connect them. Decisions emit an exclusiveGateway with a conditioned outgoing flow to `args.then` and a default fallthrough. **No `bpmndi` diagram block** - Flowable runs without it and the BPMN editor auto-lays out on first edit, which keeps the output deterministic and avoids x/y churn between regenerations.
 - [`FormIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/form/FormIntentGenerator.java) writes one `gen/<form>.form` per form. Controls are typed by looking up each declared field against the bound entity (string/uuid -> input-textfield, text -> input-textarea, integer/decimal -> input-number, boolean -> input-checkbox, date -> input-date, timestamp -> input-datetime-local). Actions become buttons in a trailing `container-hbox`; the button colour is inferred from the action name (approve -> positive, reject/decline/delete/cancel -> negative, save/submit -> emphasized). A stub controller code block declares `on<Action>Clicked` handlers as TODOs - wiring to a backend is left to the downstream template engine or a hand-authored override under `custom/`.
 - [`ReportIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/report/ReportIntentGenerator.java) writes one `gen/<report>.report` per report. Dimensions become columns with `aggregate: NONE`; measures are parsed by the `aggregate(field)` convention (`count(*)`, `sum(total)`, `avg(price)`, `min(...)`, `max(...)`) into columns with the matching aggregate. `baseTable` is the upper-snake of the report's `source` entity name so it lines up with what the EDM generator emits as `dataName`. `query` / `joins` / `filters` / `orders` are left empty - the report editor builds the SQL on open.
 - [`PermissionIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/permission/PermissionIntentGenerator.java) writes `gen/<intent>.roles` from the intent's `permissions` block (deduped by role name). It deliberately does NOT emit `.access` constraints - URL-shaped access rules belong to whichever downstream template materializes the UI for an entity / form / report, because only that template knows the paths it will publish. The `can: [Resource:action, ...]` tokens on each permission are an authoring hint to downstream UI generators about which actions each role may invoke; the actual `<path, method, role>` mapping is the downstream template's contract, not intent's.
+- [`CsvimIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/csvim/CsvimIntentGenerator.java) writes `gen/<seed>.csvim` + `gen/<seed>.csv` per seed. CSVIM defaults match the existing platform samples (`header: true`, `useHeaderNames: true`, field delim `,`, enclosing `"`, `version: 1.0`, schema `PUBLIC`). The CSV header carries the entity's `dataName` columns (upper-snake of the field names, prefixed with the entity's `dataName`); row order matches the entity's declared field order so row authors can omit fields without misaligning columns. Cells containing the delimiter, the quote, or a newline are quoted and inner quotes doubled.
 
 Together they cover every intent block defined today.
 
@@ -119,7 +122,7 @@ Together they cover every intent block defined today.
 | `forms[]` | `gen/<form>.form` | 400 (done) |
 | `reports[]` | `gen/<report>.report` | 500 (done) |
 | `permissions` | `gen/<intent>.roles` | 600 (done) |
-| (future) `seeds[]` | `gen/<seed>.csvim` + `gen/<seed>.csv` | 700 |
+| `seeds[]` | `gen/<seed>.csvim` + `gen/<seed>.csv` | 700 (done) |
 | (future) low-level `schemas[]` | `gen/<schema>.dsm` + `gen/<schema>.schema` | 250 |
 | (future) custom-action `.access` rules | `gen/<intent>.access` | 650 |
 
@@ -200,6 +203,13 @@ reports:
 permissions:
   - { role: Sales,   can: [Customer:read, Customer:write, Order:create] }
   - { role: Manager, can: [Order:approve] }
+
+seeds:
+  - name: countries
+    entity: Country
+    rows:
+      - { id: 1, name: Afghanistan, code2: AF, code3: AFG, numeric: "004" }
+      - { id: 2, name: Albania,     code2: AL, code3: ALB, numeric: "008" }
 ```
 
 Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `decimal`, `boolean`, `date`, `uuid`. Generators map them to JDBC + EDM types. Relation kinds: `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany`. Step kinds: `userTask`, `serviceTask`, `decision`, `script`, `end`.
@@ -236,6 +246,6 @@ Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `deci
 
 **Done:**
 
-- Structural validation on parse: duplicate names, dangling relation / form / report targets, unknown field / relation / step kinds. Surfaced via `IntentValidationException` with the complete list of issues in one error message.
-- All five v1 model-layer generators: `EdmIntentGenerator` (entities -> .edm + .model), `BpmnIntentGenerator` (processes -> .bpmn), `FormIntentGenerator` (forms -> .form), `ReportIntentGenerator` (reports -> .report), `PermissionIntentGenerator` (permissions -> .roles).
-- End-to-end integration test [`IntentEngineIT`](../../../tests/tests-integrations/src/main/java/org/eclipse/dirigible/integration/tests/api/IntentEngineIT.java) covering the full Orders pipeline (4 entities + relations + process with every step kind + 2 forms + report + 3 permission roles) and exercising the REST endpoints. HTTP-only, no Selenide.
+- Structural validation on parse: duplicate names, dangling relation / form / report / seed targets, unknown field / relation / step kinds, multi-PK and empty-seed checks. Surfaced via `IntentValidationException` with the complete list of issues in one error message.
+- All six v1 model-layer generators: `EdmIntentGenerator` (entities -> .edm + .model), `BpmnIntentGenerator` (processes -> .bpmn), `FormIntentGenerator` (forms -> .form), `ReportIntentGenerator` (reports -> .report), `PermissionIntentGenerator` (permissions -> .roles), `CsvimIntentGenerator` (seeds -> .csvim + .csv).
+- End-to-end integration test [`IntentEngineIT`](../../../tests/tests-integrations/src/main/java/org/eclipse/dirigible/integration/tests/api/IntentEngineIT.java) covering the full Orders pipeline (five entities including Country reference data shaped after `codbex/codbex-countries`, Customer -> Country FK relation, process with every step kind, two forms, report, three permission roles, and a seed block shaped after `codbex/codbex-countries-data`) and exercising the REST endpoints. HTTP-only, no Selenide.

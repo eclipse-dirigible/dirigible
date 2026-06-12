@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -88,6 +89,7 @@ public final class IntentParser {
         validateProcesses(model, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
+        validateSeeds(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -217,6 +219,30 @@ public final class IntentParser {
                 issues.add("report [" + report.getName() + "] has no source");
             } else if (!entityNames.contains(report.getSource())) {
                 issues.add("report [" + report.getName() + "] sources from unknown entity [" + report.getSource() + "]");
+            }
+        }
+    }
+
+    private static void validateSeeds(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> seedNames = new HashSet<>();
+        for (SeedIntent seed : model.getSeeds()) {
+            if (seed.getName() == null || seed.getName()
+                                              .isBlank()) {
+                issues.add("seed has no name");
+                continue;
+            }
+            if (!seedNames.add(seed.getName())) {
+                issues.add("duplicate seed [" + seed.getName() + "]");
+            }
+            if (seed.getEntity() == null || seed.getEntity()
+                                                .isBlank()) {
+                issues.add("seed [" + seed.getName() + "] has no entity");
+            } else if (!entityNames.contains(seed.getEntity())) {
+                issues.add("seed [" + seed.getName() + "] targets unknown entity [" + seed.getEntity() + "]");
+            }
+            if (seed.getRows()
+                    .isEmpty()) {
+                issues.add("seed [" + seed.getName() + "] has no rows");
             }
         }
     }

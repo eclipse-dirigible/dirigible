@@ -38,20 +38,29 @@ import org.springframework.beans.factory.annotation.Autowired;
  * into the registry, triggers reconciliation, and asserts the full intent -> model-file pipeline.
  *
  * <p>
- * The intent declares four entities (Customer / Product / Order / OrderItem) with relations in both
- * directions, an OrderApproval process with all step kinds (userTask / decision / serviceTask /
- * end), two forms bound to entities, a report, and three permission roles. Every
- * {@code IntentModel} field defined today is exercised. The test asserts:
+ * The intent declares five entities (Country / Customer / Product / Order / OrderItem) with
+ * relations in both directions (including Customer -> Country reference data shaped after
+ * {@code codbex/codbex-countries}), an OrderApproval process with every step kind (userTask /
+ * decision / serviceTask / end), two forms bound to entities, a report, three permission roles, and
+ * a seed block that preloads three rows into {@code COUNTRY} a-la
+ * {@code codbex/codbex-countries-data}. Every {@code IntentModel} field defined today is exercised.
+ * The test asserts:
  * <ul>
  * <li>the {@link Intent} JPA artefact is persisted via {@link IntentService}</li>
  * <li>the {@code /services/ide/intent/*} REST endpoints list / fetch / source / regenerate the
  * project</li>
  * <li>{@code EdmIntentGenerator} produces a {@code gen/orders.edm} + {@code gen/orders.model} pair
- * containing every entity, every property, and every relation</li>
+ * containing every entity (Country included), every property, and every relation (Customer ->
+ * Country and Order -> Customer are both wired as references rather than free-text strings)</li>
  * <li>{@code BpmnIntentGenerator} produces a {@code gen/OrderApproval.bpmn} with the right BPMN
  * elements for each step kind and the conditioned outgoing flow on the decision</li>
  * <li>{@code FormIntentGenerator} produces a {@code gen/<form>.form} per form with controls typed
  * from the bound entity's fields and action buttons</li>
+ * <li>{@code ReportIntentGenerator} parses {@code aggregate(field)} measure expressions into
+ * columns with the right aggregate</li>
+ * <li>{@code PermissionIntentGenerator} emits the deduped {@code .roles} file</li>
+ * <li>{@code CsvimIntentGenerator} emits {@code gen/countries.csvim} + {@code gen/countries.csv}
+ * with the rows in the entity's declared field order</li>
  * </ul>
  *
  * <p>
@@ -70,16 +79,25 @@ class IntentEngineIT extends IntegrationTest {
             version: 1
 
             entities:
-              - name: Customer
-                description: Buyer account
+              - name: Country
+                description: ISO 3166-1 country reference data (shape borrowed from codbex/codbex-countries)
                 fields:
-                  - { name: id,      type: uuid,    primaryKey: true, generated: true }
-                  - { name: name,    type: string,  required: true, length: 200 }
-                  - { name: email,   type: string,  length: 200 }
-                  - { name: country, type: string,  length: 2 }
-                  - { name: active,  type: boolean, defaultValue: "true" }
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: name,    type: string,  required: true, length: 100 }
+                  - { name: code2,   type: string,  length: 2 }
+                  - { name: code3,   type: string,  length: 3 }
+                  - { name: numeric, type: string,  length: 3 }
+
+              - name: Customer
+                description: Buyer account (Partner-style profile, see codbex/codbex-partners)
+                fields:
+                  - { name: id,     type: uuid,    primaryKey: true, generated: true }
+                  - { name: name,   type: string,  required: true, length: 200 }
+                  - { name: email,  type: string,  length: 200 }
+                  - { name: active, type: boolean, defaultValue: "true" }
                 relations:
-                  - { name: orders, kind: oneToMany, to: Order }
+                  - { name: country, kind: manyToOne, to: Country }
+                  - { name: orders,  kind: oneToMany, to: Order }
 
               - name: Product
                 description: Product catalog entry
@@ -154,6 +172,15 @@ class IntentEngineIT extends IntegrationTest {
               - { role: Sales,         description: Sales staff,    can: [Customer:read, Customer:write, Order:read, Order:create] }
               - { role: Manager,       description: Sales manager,  can: [Order:approve, Order:read] }
               - { role: Administrator, description: System admin,   can: [Customer:write, Product:write, Order:write] }
+
+            seeds:
+              - name: countries
+                entity: Country
+                description: Sample ISO 3166-1 rows (shape borrowed from codbex/codbex-countries-data)
+                rows:
+                  - { id: 1, name: Afghanistan, code2: AF, code3: AFG, numeric: "004" }
+                  - { id: 2, name: Albania,     code2: AL, code3: ALB, numeric: "008" }
+                  - { id: 3, name: Algeria,     code2: DZ, code3: DZA, numeric: "012" }
             """;
 
     @Autowired
@@ -179,6 +206,7 @@ class IntentEngineIT extends IntegrationTest {
         assertFormGenerated();
         assertReportGenerated();
         assertRolesGenerated();
+        assertSeedsGenerated();
         assertRestEndpoints();
     }
 
@@ -214,7 +242,7 @@ class IntentEngineIT extends IntegrationTest {
         IResource edm = repository.getResource(REGISTRY_GEN + "/orders.edm");
         assertTrue(edm.exists(), "gen/orders.edm should be generated");
         String edmXml = new String(edm.getContent(), StandardCharsets.UTF_8);
-        for (String entityName : List.of("Customer", "Product", "Order", "OrderItem")) {
+        for (String entityName : List.of("Country", "Customer", "Product", "Order", "OrderItem")) {
             assertTrue(edmXml.contains("name=\"" + entityName + "\""), "EDM should declare entity [" + entityName + "]");
         }
         assertTrue(edmXml.contains("dataPrimaryKey=\"true\""), "EDM should mark at least one property as primary key");
@@ -223,10 +251,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("widgetType=\"CHECKBOX\""), "EDM should map the boolean field to a CHECKBOX widget");
         assertTrue(edmXml.contains("widgetType=\"TEXTAREA\""), "EDM should map the text field to a TEXTAREA widget");
         assertTrue(edmXml.contains("type=\"PRIMARY\""), "EDM should declare at least one PRIMARY entity");
-        assertTrue(edmXml.contains("type=\"DEPENDENT\""), "EDM should mark Order/OrderItem as DEPENDENT through the manyToOne edges");
+        assertTrue(edmXml.contains("type=\"DEPENDENT\""),
+                "EDM should mark Customer/Order/OrderItem as DEPENDENT through the manyToOne edges");
+        assertTrue(edmXml.contains("referenced=\"Country\""), "EDM should carry the Customer->Country reference relation");
         assertTrue(edmXml.contains("referenced=\"Customer\""), "EDM should carry the Order->Customer relation");
         assertTrue(edmXml.contains("referenced=\"Order\""), "EDM should carry the OrderItem->Order relation");
         assertTrue(edmXml.contains("referenced=\"Product\""), "EDM should carry the OrderItem->Product relation");
+        assertTrue(edmXml.contains("dataName=\"CUSTOMER_COUNTRY\""),
+                "Customer->Country FK should materialize as a CUSTOMER_COUNTRY column on Customer");
 
         IResource modelJson = repository.getResource(REGISTRY_GEN + "/orders.model");
         assertTrue(modelJson.exists(), "gen/orders.model should be generated");
@@ -285,6 +317,26 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"name\":\"total\""), "sum(total) measure should resolve to a column whose name is 'total'");
     }
 
+    private void assertSeedsGenerated() {
+        IResource csvim = repository.getResource(REGISTRY_GEN + "/countries.csvim");
+        assertTrue(csvim.exists(), "gen/countries.csvim should be generated");
+        String csvimBody = new String(csvim.getContent(), StandardCharsets.UTF_8);
+        assertTrue(csvimBody.contains("\"table\":\"COUNTRY\""), "csvim should declare the COUNTRY table");
+        assertTrue(csvimBody.contains("\"schema\":\"PUBLIC\""), "csvim should default the schema to PUBLIC");
+        assertTrue(csvimBody.contains("\"file\":\"/countries.csv\""), "csvim should point at the sibling csv");
+        assertTrue(csvimBody.contains("\"header\":true"), "csvim should declare a header row");
+        assertTrue(csvimBody.contains("\"useHeaderNames\":true"), "csvim should use header names for column mapping");
+
+        IResource csv = repository.getResource(REGISTRY_GEN + "/countries.csv");
+        assertTrue(csv.exists(), "gen/countries.csv should be generated");
+        String csvBody = new String(csv.getContent(), StandardCharsets.UTF_8);
+        assertTrue(csvBody.startsWith("COUNTRY_ID,COUNTRY_NAME,COUNTRY_CODE2,COUNTRY_CODE3,COUNTRY_NUMERIC"),
+                "csv header should carry the upper-snake column names in entity-field order");
+        assertTrue(csvBody.contains("1,Afghanistan,AF,AFG,004"), "csv should include the Afghanistan row");
+        assertTrue(csvBody.contains("2,Albania,AL,ALB,008"), "csv should include the Albania row");
+        assertTrue(csvBody.contains("3,Algeria,DZ,DZA,012"), "csv should include the Algeria row");
+    }
+
     private void assertRolesGenerated() {
         IResource roles = repository.getResource(REGISTRY_GEN + "/orders.roles");
         assertTrue(roles.exists(), "gen/orders.roles should be generated");
@@ -306,7 +358,8 @@ class IntentEngineIT extends IntegrationTest {
                                                  .get("/services/ide/intent/projects/" + PROJECT)
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("entities", hasSize(greaterThanOrEqualTo(4)))
+                                                 .body("entities", hasSize(greaterThanOrEqualTo(5)))
+                                                 .body("entities.name", hasItem("Country"))
                                                  .body("entities.name", hasItem("Customer"))
                                                  .body("entities.name", hasItem("OrderItem"))
                                                  .body("processes", hasSize(1))
@@ -314,7 +367,10 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes[0].steps", hasSize(5))
                                                  .body("forms", hasSize(2))
                                                  .body("reports", hasSize(1))
-                                                 .body("permissions", hasSize(3)));
+                                                 .body("permissions", hasSize(3))
+                                                 .body("seeds", hasSize(1))
+                                                 .body("seeds[0].entity", equalTo("Country"))
+                                                 .body("seeds[0].rows", hasSize(3)));
 
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/ide/intent/projects/" + PROJECT + "/source")
