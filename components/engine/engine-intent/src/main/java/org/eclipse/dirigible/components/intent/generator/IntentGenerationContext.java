@@ -43,6 +43,22 @@ public final class IntentGenerationContext {
         this.repository = repository;
     }
 
+    /**
+     * Project name derived from the project root. The intent location is
+     * {@code /<project>/.../app.intent} inside the repository so the project name is the first
+     * non-empty path segment of {@link #projectRoot}.
+     *
+     * @return the project name, never null but possibly empty for malformed roots
+     */
+    public String getProjectName() {
+        if (projectRoot == null || projectRoot.isEmpty()) {
+            return "";
+        }
+        int start = projectRoot.startsWith("/") ? 1 : 0;
+        int next = projectRoot.indexOf('/', start);
+        return next < 0 ? projectRoot.substring(start) : projectRoot.substring(start, next);
+    }
+
     public Intent getIntent() {
         return intent;
     }
