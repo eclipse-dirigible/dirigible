@@ -44,7 +44,8 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code IntentModel} field defined today is exercised. The test asserts:
  * <ul>
  * <li>the {@link Intent} JPA artefact is persisted via {@link IntentService}</li>
- * <li>the {@code /services/ide/intent/*} REST endpoints list / fetch / source / regenerate the project</li>
+ * <li>the {@code /services/ide/intent/*} REST endpoints list / fetch / source / regenerate the
+ * project</li>
  * <li>{@code EdmIntentGenerator} produces a {@code gen/orders.edm} + {@code gen/orders.model} pair
  * containing every entity, every property, and every relation</li>
  * <li>{@code BpmnIntentGenerator} produces a {@code gen/OrderApproval.bpmn} with the right BPMN
@@ -176,6 +177,8 @@ class IntentEngineIT extends IntegrationTest {
         assertEdmAndModelGenerated();
         assertBpmnGenerated();
         assertFormGenerated();
+        assertReportGenerated();
+        assertRolesGenerated();
         assertRestEndpoints();
     }
 
@@ -266,6 +269,30 @@ class IntentEngineIT extends IntegrationTest {
         String customerBody = new String(customerForm.getContent(), StandardCharsets.UTF_8);
         assertTrue(customerBody.contains("\"controlId\":\"input-checkbox\""),
                 "customer form should map active:boolean to an input-checkbox");
+    }
+
+    private void assertReportGenerated() {
+        IResource report = repository.getResource(REGISTRY_GEN + "/OrdersByCustomer.report");
+        assertTrue(report.exists(), "gen/OrdersByCustomer.report should be generated");
+        String body = new String(report.getContent(), StandardCharsets.UTF_8);
+        assertTrue(body.contains("\"alias\":\"OrdersByCustomer\""), "report should carry the intent name as alias");
+        assertTrue(body.contains("\"baseTable\":\"ORDER\""), "report should map the source entity name to its upper-snake table name");
+        assertTrue(body.contains("\"aggregate\":\"NONE\""), "dimensions should be emitted with aggregate NONE");
+        assertTrue(body.contains("\"aggregate\":\"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
+        assertTrue(body.contains("\"aggregate\":\"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
+        assertTrue(body.contains("\"name\":\"customer.country\""),
+                "dotted dimension paths should be preserved verbatim in the column name");
+        assertTrue(body.contains("\"name\":\"total\""), "sum(total) measure should resolve to a column whose name is 'total'");
+    }
+
+    private void assertRolesGenerated() {
+        IResource roles = repository.getResource(REGISTRY_GEN + "/orders.roles");
+        assertTrue(roles.exists(), "gen/orders.roles should be generated");
+        String body = new String(roles.getContent(), StandardCharsets.UTF_8);
+        assertTrue(body.contains("\"name\":\"Sales\""), "Sales role should be present");
+        assertTrue(body.contains("\"name\":\"Manager\""), "Manager role should be present");
+        assertTrue(body.contains("\"name\":\"Administrator\""), "Administrator role should be present");
+        assertTrue(body.contains("\"description\":\"Sales staff\""), "Role descriptions should be carried through");
     }
 
     private void assertRestEndpoints() {
