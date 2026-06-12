@@ -4,30 +4,46 @@ A single `.intent` YAML file at a project root becomes the source of truth for e
 
 The whole feature lives in `org.eclipse.dirigible.components.intent.*`.
 
-## Two-stage architecture - **read this first**
+## Editor-first architecture - **read this first**
+
+**The intent is an authoring artifact, not a runtime artifact.** The platform draws this line
+sharply and it dictates the whole design: authoring artifacts (`.edm`, `.model`, `.form`,
+`.report`) get **editors in the workspace plus an explicit Generate step**; only runtime artifacts
+(`.roles`, `.bpmn`, `.csvim`, `.table`, jobs, listeners, ...) are reconciled from the registry by
+synchronizers. The `.edm` is the precedent: it has NO synchronizer - and neither does the intent.
+
+The developer workflow (the only flow):
 
 ```
-app.intent (YAML, author-driven by Claude / human / structured panel)
-   ↓  Intent generators (this engine)
-<intent>.edm + <intent>.model     ← entities + relations + UI metadata   (at the project root)
-<process>.bpmn                    ← processes
-<form>.form                       ← forms
-<report>.report                   ← reports
-<intent>.roles + <intent>.access  ← permissions
-<seed>.csvim + <seed>.csv         ← seed data
-<schema>.dsm + <schema>.schema    ← low-level data structures (future)
-   ↓  Existing Dirigible template engine + per-artefact synchronizers
-[Hibernate-mapped tables, generated TS / HTML / Java / SQL artefacts under gen/...]
+1. create a project in your workspace
+2. create app.intent (any *.intent) at the project root, authored by hand / Claude / structured panel
+3. double-click → the Intent Editor opens: editable YAML text left, live read-only diagram right
+   (ER + one flowchart per process + forms/reports/roles/seeds summaries), validation issues inline
+4. click Generate → the six generators write the derived model files NEXT TO app.intent,
+   IN YOUR WORKSPACE PROJECT (nothing is published):
+       <intent>.edm + <intent>.model     ← entities + relations + UI metadata
+       <process>.bpmn                    ← processes
+       <form>.form                       ← forms
+       <report>.report                   ← reports
+       <intent>.roles                    ← permissions
+       <seed>.csvim + <seed>.csv         ← seed data
+5. (follow-up: Generate also chains the model-to-code templates via .gen descriptors)
+6. publish → the registry receives intent + models + generated code together;
+   the per-artefact synchronizers bring the runtime live as for any other project
 ```
 
 **Why the project root and not `gen/`:** the model-to-code templates ("Generate from EDM") treat
 `gen/` as their exclusive output folder and **wipe it on every regeneration** - intent output placed
 there would be destroyed the first time the user generates the application code. The project root is
-where every platform fixture keeps hand-authored model files and the only location the downstream
-template flow is proven to handle; a dedicated `models/` subfolder is a future refinement once the
-templates' handling of model files in subfolders is verified. The folders layer as: `app.intent`
-(authored) + root model files (intent-owned, scrubbed by this engine) → `gen/` (template-owned,
-wiped by the template engine) → `custom/` (hand-written escape hatch, touched by nobody).
+where every real-world codbex application keeps its model files. The folders layer as: `app.intent`
+(authored) + root model files (intent-owned, scrubbed by this engine's Generate) → `gen/`
+(template-owned, wiped by the template engine) → `custom/` (hand-written escape hatch, touched by
+nobody).
+
+The published `app.intent` in the registry is an inert source file (exactly like a published
+`.edm`). Consequence to document, not fix: an intent-only project deployed headlessly (git →
+registry) does not self-materialize - the generated models are committed/published artifacts,
+produced in the workspace.
 
 Intent generators stop at the **model file**. They never emit `Entity.ts`, `Controller.ts`, `Repository.ts`, HTML, Java, or SQL directly - those come from the IDE's existing "Generate from EDM / Schema / BPMN" templates, fed by the model files this engine wrote. That contract is non-negotiable; see "Wrong turns we already made" below.
 
@@ -39,7 +55,7 @@ Distilled from the chat that produced the initial scaffold. Read this BEFORE des
 
 Dirigible is already model-driven (the synchronizer model = "declarations on disk → running app"). Adding an intent layer above EDM/BPMN/form/DSM is the natural next abstraction. The second half of the pipeline (intent → standard models → generated app) reuses what already exists: project templates, decorator-driven scaffolding, the TS/Java SDKs. No new runtime concept - just a new authoring layer above the existing ones.
 
-The dream is "no code, no modelling - just prompt": user describes what they want in natural language to Claude (or any LLM); Claude proposes a patch to `.intent`; the user accepts; the synchronizer regenerates the model files at the project root, and the template engine turns them into the app under `gen/`; Mermaid renders the intent for a quick read-only visual.
+The dream is "no code, no modelling - just prompt": user describes what they want in natural language to Claude (or any LLM); Claude proposes a patch to `.intent`; the user accepts in the Intent Editor; Generate refreshes the model files at the project root, and the template engine turns them into the app under `gen/`; the editor's diagram pane renders the intent for a quick read-only visual at every step.
 
 ### Three things any non-trivial change here must reckon with
 
@@ -68,52 +84,43 @@ These mistakes have been made and reverted. They are documented here so they are
 2. **PermissionIntentGenerator that wrote `.access` constraints with URLs targeting the (also-wrong) generated `Controller.ts` paths.** Same mistake one altitude up: the access URLs were `/services/ts/<project>/gen/<Entity>Controller.ts/*`, which assumed the missing TS controllers existed. The right output for permissions is the same `.roles` + `.access` artefacts but with paths reflecting whatever the EDM template emits, OR (preferred) lean on the `.edm` entity's own `generateDefaultRoles="true"` flag and let the template produce roles + access in lockstep with the generated UI. Not yet implemented; see the follow-up list.
 3. **Generators that wrote `IRepository` paths without the `/registry/public` prefix.** Synchronizer artefact locations are *registry-relative* (`/orders/app.intent` - see `SynchronizationWalker.walk`, which strips the registry folder), but `IRepository` paths are *repository-absolute*. The first regeneration implementation derived the project root straight from the location and wrote `gen/` output to `/orders/gen/...` - i.e. **outside** the registry, where no IT assertion, no Registry view, and crucially no downstream synchronizer would ever see it. The whole two-stage pipeline was dead and the IT could not pass (it was committed red). `IntentRegenerationService.resolveProjectRoot` now prepends `IRepositoryStructure.PATH_REGISTRY_PUBLIC`; the same convention is visible in `SynchronizationProcessor`'s cleanup pass and `CsvimProcessor.getCsvResource`. When in doubt: locations are registry-relative, repository paths are not.
 
+4. **An IntentSynchronizer + JPA artefact for the intent itself.** The first incarnation treated the intent as a runtime artifact: a `BaseSynchronizer` parsed published `.intent` files into a `DIRIGIBLE_INTENTS` table and regenerated the models **in the registry** during reconciliation. Two unfixable consequences: generation happened only after publish (invisible in the Projects view, unusable by the modelers and by "Generate from EDM", which all work on the workspace), and the UI could only be a registry-reading perspective instead of an editor. The platform's own line is: **authoring artifacts (`.edm`, `.form`, `.report`, `.intent`) get editors + an explicit Generate in the workspace; only runtime artifacts get synchronizers** - note the `.edm` has no synchronizer either. The synchronizer, the JPA artefact, and the Mermaid perspective were all removed in favour of `editor-intent` + the parse/generate endpoints. Do not reintroduce them; this separation is hard-won low-code-platform experience.
+
 The general rule the first two violated: **intent generators must never reference paths or routes that belong to the template engine's output**, because the intent layer should be agnostic about which template is selected.
 
 ## Module layout
 
 ```
-components/engine/engine-intent/
-├── pom.xml                                # depends only on core-base, core-database, core-repository
+components/engine/engine-intent/                   # backend: parser + generators + REST services
+├── pom.xml                                # depends on core-base, core-database, core-repository, ide-workspace
 ├── about.html
 ├── CLAUDE.md                              # this file
 └── src/main/java/org/eclipse/dirigible/components/intent/
-    ├── domain/Intent.java                 # JPA entity; ARTEFACT_TYPE = "intent", table DIRIGIBLE_INTENTS
-    ├── repository/IntentRepository.java   # Spring Data
-    ├── service/IntentService.java         # CRUD via BaseArtefactService
-    ├── model/                             # POJOs for the intent document (Gson-mapped after YAML → Map → JSON round-trip)
-    │   ├── IntentModel.java               # root: entities / processes / forms / reports / permissions / seeds
-    │   ├── EntityIntent.java
-    │   ├── FieldIntent.java
-    │   ├── RelationIntent.java
-    │   ├── ProcessIntent.java
-    │   ├── StepIntent.java
-    │   ├── FormIntent.java
-    │   ├── ReportIntent.java
-    │   ├── PermissionIntent.java
-    │   └── SeedIntent.java
+    ├── model/                             # POJOs for the intent document (plain-Gson-mapped after YAML → Map → JSON round-trip)
+    │   ├── IntentModel.java               # root: name / entities / processes / forms / reports / permissions / seeds
+    │   ├── EntityIntent.java / FieldIntent.java / RelationIntent.java
+    │   ├── ProcessIntent.java / StepIntent.java
+    │   └── FormIntent.java / ReportIntent.java / PermissionIntent.java / SeedIntent.java
     ├── parser/
-    │   ├── IntentParser.java              # YAML → Map (SnakeYAML SafeConstructor) → JSON → IntentModel (Gson) + structural validation
+    │   ├── IntentParser.java              # YAML → Map (SnakeYAML SafeConstructor) → JSON → IntentModel (plain Gson) + structural validation
     │   └── IntentValidationException.java # collects every structural issue in one shot
     ├── generator/
     │   ├── IntentTargetGenerator.java     # SPI - one per slice (entities, processes, forms, ...)
-    │   ├── IntentGenerationContext.java   # carries Intent + IntentModel + project paths; writeModelFile() is the only write surface
+    │   ├── IntentGenerationContext.java   # parsed model + target project paths; writeModelFile() is the only write surface
     │   ├── IntentNaming.java              # shared naming: baseName, upperSnake, tableName (<INTENT>_<ENTITY>)
-    │   ├── IntentRegenerationService.java # collects every SPI bean, runs them in @Order, scrubs stale model output
-    │   ├── edm/EdmIntentGenerator.java                # @Order(200); writes <intent>.edm (XML) + <intent>.model (JSON)
-    │   ├── bpmn/BpmnIntentGenerator.java              # @Order(300); writes <process>.bpmn per process
-    │   ├── form/FormIntentGenerator.java              # @Order(400); writes <form>.form per form (typed controls + action buttons + stub code)
-    │   ├── report/ReportIntentGenerator.java          # @Order(500); writes <report>.report per report (dimensions + parsed measures)
-    │   ├── permission/PermissionIntentGenerator.java  # @Order(600); writes <intent>.roles per intent (deduped role names + descriptions)
-    │   └── csvim/CsvimIntentGenerator.java            # @Order(700); writes <seed>.csvim + <seed>.csv per seed
-    ├── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
-    └── endpoint/IntentEndpoint.java           # /services/ide/intent/* - list projects, fetch parsed intent, fetch raw YAML, force regenerate
+    │   ├── IntentGenerationService.java   # runs the SPI beans in @Order, scrubs stale output, returns written/scrubbed
+    │   ├── edm/EdmIntentGenerator.java                # @Order(200); <intent>.edm (XML) + <intent>.model (JSON)
+    │   ├── bpmn/BpmnIntentGenerator.java              # @Order(300); <process>.bpmn per process
+    │   ├── form/FormIntentGenerator.java              # @Order(400); <form>.form per form
+    │   ├── report/ReportIntentGenerator.java          # @Order(500); <report>.report per report
+    │   ├── permission/PermissionIntentGenerator.java  # @Order(600); <intent>.roles
+    │   └── csvim/CsvimIntentGenerator.java            # @Order(700); <seed>.csvim + <seed>.csv per seed
+    └── endpoint/IntentEndpoint.java       # POST /services/ide/intent/parse + /generate (workspace-targeted)
 ```
 
-The IDE perspective lives in two sibling UI modules:
+The editor lives in one sibling UI module:
 
-- `components/ui/perspective-intent` - perspective shell (id `intent`, order 1020, icon a three-node graph SVG). Default region `center`, view `intent-mermaid`.
-- `components/ui/view-intent-mermaid` - read-only Mermaid ER renderer + toolbar (project picker, reload, regenerate, source / diagram toggle). Mermaid is bundled as the `org.webjars.npm:mermaid` dependency and loaded from `/webjars/mermaid/dist/mermaid.min.js` - the platform pattern for third-party frontend libraries (NOT a CDN: nothing else in the IDE loads off-host, and air-gapped deployments must keep working). Server returns parsed `IntentModel` JSON; the view converts to `erDiagram` spec client-side.
+- `components/ui/editor-intent` - registered for content type `application/yaml+intent` (the `intent` extension is mapped in `ContentTypeHelper`) via the `platform-editors` extension point, like every other specialized editor. Split layout: editable plain-text YAML left (Save, ctrl+s, dirty tracking via `LayoutHub`), live diagram right (Mermaid ER + one flowchart per process + forms/reports/roles/seeds summaries), validation issues as an inline strip fed by `POST /parse` on a 600ms debounce. The Generate button calls `POST /generate` and refreshes the project tree via the `projects.tree.refresh` dialog-hub topic (the same mechanism the form-builder uses). Mermaid is bundled as the `org.webjars.npm:mermaid` webjar - never a CDN.
 
 Six concrete generators currently live in-module:
 
@@ -141,32 +148,16 @@ All implementations are Spring `@Component` beans implementing `IntentTargetGene
 
 ## Wiring
 
-- **Artefact type string `intent`, file extension `.intent`, JPA table `DIRIGIBLE_INTENTS`.**
-- **`SynchronizersOrder.INTENT = 5`** - lower than every other artefact (EXTENSIONPOINT = 10 is the previous floor) so the intent's regenerated model files are on disk before any other synchronizer starts the NEXT cycle.
-- **`IntentSynchronizer extends BaseSynchronizer<Intent, Long>`** - single-tenant. Intent itself carries no runtime state; downstream synchronizers handle their own tenancy.
-- **Module registered in:**
-  - `components/pom.xml` (Maven reactor)
-  - `components/group/group-engines/pom.xml` (so `build/application` picks it up via the group aggregator)
+- **No artefact type, no JPA table, no synchronizer.** The intent never touches the database; the `.intent` file in the workspace is the single source of truth.
+- **Content type `application/yaml+intent`** mapped from the `intent` extension in `ContentTypeHelper` (`modules/commons/commons-helpers`) - this is what routes a double-click to the Intent Editor.
+- **Module registered in:** `components/pom.xml` (both `engine/engine-intent` and `ui/editor-intent`), `components/group/group-engines/pom.xml` (engine), `components/group/group-ide/pom.xml` (editor).
 
-## Synchronizer flow
+## Services flow
 
-1. `parseImpl(location, content)` - reads the YAML bytes, persists `Intent` with the raw payload in `INTENT_CONTENT`, marks the intent dirty for `finishing()`. Structural validation is deferred to `IntentParser.parse` in the regeneration pass so that a malformed YAML body doesn't block the artefact from being recorded.
-2. `completeImpl(wrapper, phase)` - pure book-keeping (CREATED / UPDATED / DELETED). No runtime side-effects.
-3. `finishing()` - for every intent marked dirty this cycle, calls `IntentRegenerationService.regenerate(intent)`. Each registered `IntentTargetGenerator` writes its slice through `IntentGenerationContext.writeModelFile`. Failures in one generator are logged and isolated; the others still run.
-4. **Stale-output scrub.** After the generators run, `IntentRegenerationService` deletes model-layer files at the project root that the pass did not re-emit. The extension filter keeps the scrub away from `app.intent`, code files and subfolders (`gen/`, `custom/` - only direct child resources are considered). Removing a process / form / seed from the intent therefore removes its model file on the next regeneration instead of leaving a stale `.bpmn` deployed in Flowable. `cleanupImpl` runs the same scrub with an empty keep-set when the `.intent` file itself is deleted.
-5. **`forceProcessSynchronizers` is reliable now.** It used to silently no-op when the scheduled `SynchronizationJob` was mid-run (a race that flaked `IntentEngineIT` and `LocalNativeAppLifecycleIT`); it now retries until a full pass has actually consumed the force flag, bounded at five minutes. Tests can write a resource, force, and immediately assert.
-
-### Open design question: same-cycle vs next-cycle visibility
-
-`SynchronizationProcessor` walks the repository **once per cycle**, dispatching every file to the first synchronizer whose `isAccepted` matches. Files written **during** the cycle - including everything `IntentRegenerationService` writes - are NOT visible to other synchronizers in the same cycle. They are picked up on the **next** reconciliation.
-
-This is acceptable for the scaffold: developer publishes, intent regenerates, second reconciliation (auto or manual) brings the rest live. UX-wise it is a half-beat behind. Real options to fix:
-
-1. **Pre-pass orchestration.** Have `SynchronizationProcessor` invoke a new "before walk" hook on each synchronizer; `IntentSynchronizer` regenerates there. Cleanest, requires editing `core-initializers`.
-2. **Self-triggered second cycle.** At the end of `IntentSynchronizer.finishing()`, if any intent was dirty, schedule a follow-up `forceProcessSynchronizers()` call. Simple, risks a tight loop if not guarded; use the existing `processing` AtomicBoolean.
-3. **Live with two cycles.** Document it; the IDE "publish" button fires two `forceProcessSynchronizers()` calls back to back.
-
-The skeleton picks option 3 because it is the only one that does not touch other modules. Pick option 1 when the surface is otherwise stable.
+1. `POST /services/ide/intent/parse` (body: raw YAML) - `IntentParser.parse` → `IntentModel` JSON, or `422 {"issues": [...]}` with every structural problem at once. The editor calls this on a debounce to refresh the diagram and the validation strip; nothing is persisted.
+2. `POST /services/ide/intent/generate?workspace=&project=&path=` - resolves the current user's workspace project via `WorkspaceService` (so it is inherently user-scoped), reads the intent file, runs every registered `IntentTargetGenerator` (failures per generator are logged and isolated), then scrubs stale intent-owned files. Returns `{"written": [...], "scrubbed": [...]}`.
+3. **Stale-output scrub.** Model-layer files at the project root that the pass did not re-emit are deleted. The extension filter keeps the scrub away from the `.intent` file itself, code files, and subfolders (`gen/`, `custom/` - only direct child resources are considered). Removing a process / form / seed from the intent removes its model file on the next Generate.
+4. **Generation is idempotent and diff-stable** - identical input produces byte-identical output, and byte-identical content is not rewritten.
 
 ## Intent YAML shape (v1 draft)
 
@@ -257,21 +248,22 @@ Semantics worth knowing:
 
 - `.access` rules from intent. The current PermissionIntentGenerator deliberately emits only `.roles`; URL-shaped constraints (the `<path, method, roles>` table in `.access`) need to know the paths the downstream template engine will publish, so they live with that template. A future pass should either (a) wire intent to feed those paths into the EDM template generator so it can emit the matching `.access`, or (b) add a custom-action `.access` block to intent for non-CRUD operations like {@code Order:approve} where there is no template-owned URL.
 - Lower-priority model-layer generators: DSM / schema / table / view / csvim / csv. The EDM-only entry already covers the same surface implicitly, so these are optional refinements rather than gaps.
-- Trigger the "Generate from EDM" template programmatically on intent change so the developer sees the full app, not just the model files. Today the user has to open the EDM editor and click Generate manually. **The hook is the `.gen` descriptor** that real-world codbex application projects keep next to each model file (`<model>.gen` beside `<model>.model`, one `<form>.gen` per form): it records `templateId`, `filePath`, `genFolderName`, `tablePrefix`, `dataSource` and the perspective layout - exactly the parameters the IDE generation service replays. A future `GenDescriptorIntentGenerator` could emit these with `"tablePrefix": ""` baked in (the prefix already lives in the intent-prefixed `dataName`), making model-to-code generation one click or fully automatic.
+- Chain the model-to-code templates from the editor's Generate button so the developer sees the full app, not just the model files. Today the user opens the generated `.edm`/`.form` and clicks Generate there. **The hook is the `.gen` descriptor** that real-world codbex application projects keep next to each model file (`<model>.gen` beside `<model>.model`, one `<form>.gen` per form): it records `templateId`, `filePath`, `genFolderName`, `tablePrefix`, `dataSource` and the perspective layout - exactly the parameters the IDE generation service replays. A future `GenDescriptorIntentGenerator` could emit these with `"tablePrefix": ""` baked in (the prefix already lives in the intent-prefixed `dataName`), making the editor's Generate chain straight into `GenerateService.generateFromModel(...)` - the exact mechanism the form-builder's Regenerate button already uses (see `editor-form-builder/js/editor.js`).
 - Reference layout: production codbex application projects are the canonical real-world shape this engine generates towards - model files (`<app>.edm`/`.model`, `<process>.bpmn`, `*.form`, `*.report`) at the project root, template output under `gen/`, hand-written BPMN service-task handlers under `tasks/` (our `custom/` concept), generated translation skeletons under `translations/`. Their `.form` files match the FormIntentGenerator output shape key-for-key (`metadata`/`feeds`/`scripts`/`code`/`form`).
 - Translation skeletons (`translations/<locale>/<form>.form.json`, `<model>.model.json`) as an additional intent generator, mirroring the production project layout.
-- Claude chat + patch-preview in the perspective. Needs a separate LLM bridge module (Anthropic API key via `DirigibleConfig`, request shaping, structured-patch responses, accept / reject flow). Out of scope for this PR.
-- Read-only Monaco markers for intent-generated model files so the IDE marks them not-for-editing.
+- Claude chat + patch-preview as a third pane (or dialog) of the Intent Editor. Needs a separate LLM bridge module (Anthropic API key via `DirigibleConfig`, request shaping, structured-patch responses, accept / reject flow). Out of scope for this PR.
+- Mark intent-generated model files as not-for-hand-editing in the IDE (decoration in the Projects view or a banner in the modelers).
 - `/custom/` escape-hatch directory + per-slice hook points in the generators (the generators must learn to preserve `/custom/` files alongside their gen output).
 - `reverse-engineer intent` command for migrating classic projects.
-- Same-cycle visibility (open design question above).
+- A proper code editor for the text pane (Monaco with YAML highlighting) instead of the plain textarea; the split/preview contract stays.
 - Wire the `trigger` block: `onCreate: <Entity>` should start the process when the entity is created (listener or interceptor on the generated persistence layer), `onSchedule` should map to a timer start event or a `.job` artefact.
 
 **Done:**
 
-- Structural validation on parse: duplicate names, dangling relation / form / report / seed targets, unknown field / relation / step kinds, multi-PK and empty-seed checks. Surfaced via `IntentValidationException` with the complete list of issues in one error message.
+- Editor-first architecture: `editor-intent` (split text + live diagram, Save, Generate) registered for `*.intent`; `POST /parse` + workspace-targeted `POST /generate`; no synchronizer, no JPA artefact, nothing in the registry until publish.
+- Structural validation on parse: duplicate names, dangling relation / form / report / seed targets, unknown field / relation / step kinds, decision then/else target checks, multi-PK and empty-seed checks. Surfaced via `IntentValidationException` with the complete list of issues in one error message; the editor shows them inline.
 - All six v1 model-layer generators: `EdmIntentGenerator` (entities -> .edm + .model), `BpmnIntentGenerator` (processes -> .bpmn), `FormIntentGenerator` (forms -> .form), `ReportIntentGenerator` (reports -> .report), `PermissionIntentGenerator` (permissions -> .roles), `CsvimIntentGenerator` (seeds -> .csvim + .csv).
-- Integration test [`IntentEngineIT`](../../../tests/tests-integrations/src/main/java/org/eclipse/dirigible/integration/tests/api/IntentEngineIT.java) covering stage one of the Orders pipeline - intent -> persisted artefact -> generated model files (five entities, composition + association relations, process with every step kind incl. a meaningful then/else decision, two forms, report, roles, seeds), the stale-output scrub on regeneration, model-file cleanup on intent removal, and the REST endpoints. HTTP-only, no Selenide. It asserts the *shape* of the model files; pushing them through the downstream synchronizers/templates (stage two) is not covered yet.
-- Stale-output scrub + gen cleanup on intent deletion (the flat-gen-root ownership contract above).
-- Reliable `forceProcessSynchronizers` (bounded wait instead of silent skip) in `core-initializers`.
+- Integration test [`IntentEngineIT`](../../../tests/tests-integrations/src/main/java/org/eclipse/dirigible/integration/tests/api/IntentEngineIT.java): parse (full model + all-issues-at-once validation), generate into the workspace project with content assertions on every artefact, the stale-output scrub, and 422 on invalid intents. HTTP-only, no Selenide, no synchronization cycles - the whole class runs in under a minute.
+- Stale-output scrub on regeneration (the project-root ownership contract above).
+- Reliable `forceProcessSynchronizers` (bounded wait instead of silent skip) in `core-initializers` - kept even though intent no longer uses it; it fixes a whole class of IT flakes.
 - Mermaid served as a webjar instead of from a CDN.

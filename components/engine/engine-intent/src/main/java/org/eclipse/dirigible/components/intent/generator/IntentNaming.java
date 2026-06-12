@@ -22,9 +22,9 @@ public final class IntentNaming {
     /**
      * The intent's base name used for single-file outputs ({@code <base>.edm}, {@code <base>.roles})
      * and as the physical table-name prefix. The YAML document's own {@code name:} field wins - the
-     * file is conventionally called {@code app.intent}, so the artefact name derived from the file name
-     * ({@code app}) is a poor identity. Falls back to the artefact name, then the project name, then
-     * the literal {@code intent}.
+     * file is conventionally called {@code app.intent}, so the name derived from the file name
+     * ({@code app}) is a poor identity. Falls back to the intent file's base name, then the project
+     * name, then the literal {@code intent}.
      *
      * @param context the generation context
      * @return the base name, never blank
@@ -35,10 +35,9 @@ public final class IntentNaming {
         if (declaredName != null && !declaredName.isBlank()) {
             return declaredName;
         }
-        String intentName = context.getIntent()
-                                   .getName();
-        if (intentName != null && !intentName.isBlank()) {
-            return intentName;
+        String fallbackName = context.getFallbackName();
+        if (fallbackName != null && !fallbackName.isBlank()) {
+            return fallbackName;
         }
         String project = context.getProjectName();
         return project.isEmpty() ? "intent" : project;

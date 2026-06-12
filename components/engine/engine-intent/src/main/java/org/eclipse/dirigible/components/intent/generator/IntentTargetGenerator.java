@@ -17,7 +17,7 @@ package org.eclipse.dirigible.components.intent.generator;
  *
  * <p>
  * Generators are Spring beans, discovered via classpath component scanning and aggregated by
- * {@link IntentRegenerationService}. Order across generators (entities before forms before
+ * {@link IntentGenerationService}. Order across generators (entities before forms before
  * controllers, etc.) is established by {@code @Order} on each implementation.
  */
 public interface IntentTargetGenerator {

@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -89,14 +90,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
                                                     .isBlank()) {
-                LOGGER.warn("Skipping unnamed process in intent [{}]", context.getIntent()
-                                                                              .getName());
+                LOGGER.warn("Skipping unnamed process in intent [{}]", IntentNaming.baseName(context));
                 continue;
             }
             String fileName = process.getName() + ".bpmn";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", process.getName(), context.getIntent()
-                                                                                                                              .getName());
+                LOGGER.warn("Duplicate process [{}] in intent [{}] - keeping the first occurrence", process.getName(),
+                        IntentNaming.baseName(context));
                 continue;
             }
             if (!process.getTrigger()

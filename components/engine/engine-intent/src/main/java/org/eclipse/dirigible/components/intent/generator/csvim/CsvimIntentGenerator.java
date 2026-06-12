@@ -84,8 +84,7 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
                                               .isBlank()) {
-                LOGGER.warn("Skipping unnamed seed in intent [{}]", context.getIntent()
-                                                                           .getName());
+                LOGGER.warn("Skipping unnamed seed in intent [{}]", IntentNaming.baseName(context));
                 continue;
             }
             EntityIntent entity = entitiesByName.get(seed.getEntity());
@@ -95,8 +94,8 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
             }
             String fileName = fileNameOnly(seed.getName());
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate seed [{}] in intent [{}] - keeping the first occurrence", seed.getName(), context.getIntent()
-                                                                                                                        .getName());
+                LOGGER.warn("Duplicate seed [{}] in intent [{}] - keeping the first occurrence", seed.getName(),
+                        IntentNaming.baseName(context));
                 continue;
             }
             context.writeModelFile(fileName + ".csv", renderCsv(orderedFieldsOf(entity), entity, seed));

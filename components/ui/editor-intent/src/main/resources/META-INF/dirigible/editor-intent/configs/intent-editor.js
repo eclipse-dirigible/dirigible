@@ -9,13 +9,13 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const perspectiveData = {
-	id: 'intent',
-	label: 'Intent',
-	path: '/services/web/perspective-intent/index.html',
-	order: 1020,
-	icon: '/services/web/perspective-intent/images/intent.svg',
+const editorData = {
+	id: 'intent-editor',
+	region: 'center',
+	label: 'Intent Editor',
+	path: '/services/web/editor-intent/editor.html',
+	contentTypes: ['application/yaml+intent'],
 };
 if (typeof exports !== 'undefined') {
-	exports.getPerspective = () => perspectiveData;
+	exports.getEditor = () => editorData;
 }

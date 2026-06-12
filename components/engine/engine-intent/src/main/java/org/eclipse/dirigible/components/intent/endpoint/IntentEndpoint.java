@@ -9,128 +9,123 @@
  */
 package org.eclipse.dirigible.components.intent.endpoint;
 
-import java.util.LinkedHashSet;
-import java.util.List;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
-import java.util.Set;
-import java.util.stream.Collectors;
 
 import jakarta.annotation.security.RolesAllowed;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
-import org.eclipse.dirigible.components.intent.domain.Intent;
-import org.eclipse.dirigible.components.intent.generator.IntentRegenerationService;
+import org.eclipse.dirigible.components.ide.workspace.domain.File;
+import org.eclipse.dirigible.components.ide.workspace.domain.Project;
+import org.eclipse.dirigible.components.ide.workspace.domain.Workspace;
+import org.eclipse.dirigible.components.ide.workspace.service.WorkspaceService;
+import org.eclipse.dirigible.components.intent.generator.IntentGenerationService;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
-import org.eclipse.dirigible.components.intent.service.IntentService;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * REST surface for the intent perspective. Reads the persisted {@link Intent} artefacts and the
- * derived {@link IntentModel} tree. Mutating endpoints are limited to manual regeneration; the
- * intent itself is authored through the IDE workspace (or a future Claude bridge) and reconciled
- * via {@code IntentSynchronizer}.
+ * REST surface for the intent editor. The intent is an authoring artifact (like the {@code .edm});
+ * both operations work on the current user's workspace, never on the registry:
+ * <ul>
+ * <li>{@code POST /services/ide/intent/parse} - body is the raw intent YAML; returns the parsed
+ * {@link IntentModel} (drives the editor's live diagram), or {@code 422} with the full list of
+ * structural issues.</li>
+ * <li>{@code POST /services/ide/intent/generate} - generates every derived model file into the
+ * given workspace project (next to the intent file) and scrubs stale output; returns the written
+ * and scrubbed file names.</li>
+ * </ul>
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "intent")
-@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER"})
 public class IntentEndpoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(IntentEndpoint.class);
 
-    private final IntentService intentService;
-    private final IntentRegenerationService regenerationService;
+    private final IntentGenerationService generationService;
+    private final WorkspaceService workspaceService;
 
-    public IntentEndpoint(IntentService intentService, IntentRegenerationService regenerationService) {
-        this.intentService = intentService;
-        this.regenerationService = regenerationService;
+    public IntentEndpoint(IntentGenerationService generationService, WorkspaceService workspaceService) {
+        this.generationService = generationService;
+        this.workspaceService = workspaceService;
     }
 
     /**
-     * List every project that has at least one persisted {@link Intent}. Project name is the first path
-     * segment of the artefact location.
+     * Parse and validate an intent document. The editor calls this on every (debounced) change to
+     * refresh the diagram and surface validation issues without saving.
+     *
+     * @param yaml the raw intent YAML
+     * @return the parsed model, or {@code 422} with {@code {"issues": [...]}} when validation fails
      */
-    @GetMapping(value = "/projects", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<List<String>> projects() {
-        Set<String> projects = new LinkedHashSet<>();
-        for (Intent intent : intentService.getAll()) {
-            String project = projectOf(intent.getLocation());
-            if (project != null) {
-                projects.add(project);
-            }
-        }
-        return ResponseEntity.ok(projects.stream()
-                                         .sorted()
-                                         .collect(Collectors.toList()));
-    }
-
-    /**
-     * Return the parsed intent model for the given project. 404 if the project has no {@code .intent}
-     * on file.
-     */
-    @GetMapping(value = "/projects/{project}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<IntentModel> intent(@PathVariable("project") String project) {
-        Intent intent = findIntent(project);
-        return ResponseEntity.ok(IntentParser.parse(intent.getContent()));
-    }
-
-    /**
-     * Return the raw YAML source of the intent file. Suitable for read-only display in the perspective;
-     * the workspace's normal editor is the authoring path.
-     */
-    @GetMapping(value = "/projects/{project}/source", produces = "text/yaml; charset=UTF-8")
-    public ResponseEntity<String> source(@PathVariable("project") String project) {
-        Intent intent = findIntent(project);
-        return ResponseEntity.ok(intent.getContent() == null ? "" : intent.getContent());
-    }
-
-    /**
-     * Force a regeneration pass for the given project's intent. Useful from the perspective's
-     * Regenerate button: avoids waiting for the next synchronizer cycle.
-     */
-    @PostMapping(value = "/projects/{project}/regenerate", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<Map<String, Object>> regenerate(@PathVariable("project") String project) {
-        Intent intent = findIntent(project);
+    @PostMapping(value = "/parse", consumes = MediaType.TEXT_PLAIN_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> parse(@RequestBody(required = false) String yaml) {
         try {
-            regenerationService.regenerate(intent);
-            return ResponseEntity.ok(Map.of("project", project, "status", "regenerated"));
-        } catch (RuntimeException e) {
-            LOGGER.error("Regeneration failed for project [{}]", project, e);
-            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Regeneration failed: " + e.getMessage(), e);
+            IntentModel model = IntentParser.parse(yaml);
+            return ResponseEntity.ok(model);
+        } catch (IntentValidationException e) {
+            return ResponseEntity.unprocessableEntity()
+                                 .body(Map.of("issues", e.getIssues()));
         }
-    }
-
-    private Intent findIntent(String project) {
-        for (Intent intent : intentService.getAll()) {
-            if (project.equals(projectOf(intent.getLocation()))) {
-                return intent;
-            }
-        }
-        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "No intent for project [" + project + "]");
     }
 
     /**
-     * First non-empty path segment of an artefact location.
+     * Generate the derived model files for the given intent file into its workspace project.
+     *
+     * @param workspace the workspace name, e.g. {@code workspace}
+     * @param project the project name
+     * @param path the intent file path within the project, e.g. {@code app.intent}
+     * @return the written and scrubbed file names, or {@code 422} with the validation issues
      */
-    private static String projectOf(String location) {
-        if (location == null) {
-            return null;
+    @PostMapping(value = "/generate", produces = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<?> generate(@RequestParam("workspace") String workspace, @RequestParam("project") String project,
+            @RequestParam("path") String path) {
+        Workspace workspaceObject = workspaceService.getWorkspace(workspace);
+        if (!workspaceObject.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Workspace [" + workspace + "] does not exist");
         }
-        int start = location.startsWith("/") ? 1 : 0;
-        int end = location.indexOf('/', start);
-        if (end < 0) {
-            return null;
+        Project projectObject = workspaceObject.getProject(project);
+        if (!projectObject.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Project [" + project + "] does not exist");
         }
-        return location.substring(start, end);
+        File intentFile = projectObject.getFile(path);
+        if (!intentFile.exists()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND,
+                    "Intent file [" + path + "] does not exist in project [" + project + "]");
+        }
+        String yaml = new String(intentFile.getContent(), StandardCharsets.UTF_8);
+        try {
+            IntentGenerationService.GenerationResult result =
+                    generationService.generate(yaml, projectObject.getPath(), project, baseName(path));
+            return ResponseEntity.ok(
+                    Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed", result.scrubbed()));
+        } catch (IntentValidationException e) {
+            return ResponseEntity.unprocessableEntity()
+                                 .body(Map.of("issues", e.getIssues()));
+        } catch (RuntimeException e) {
+            LOGGER.error("Intent generation failed for [{}/{}/{}]", workspace, project, path, e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Generation failed: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * The file's base name without path and the {@code .intent} extension - the fallback identity when
+     * the YAML declares no {@code name:}.
+     */
+    private static String baseName(String path) {
+        String fileName = path.substring(path.lastIndexOf('/') + 1);
+        int dot = fileName.lastIndexOf('.');
+        return dot > 0 ? fileName.substring(0, dot) : fileName;
     }
 }

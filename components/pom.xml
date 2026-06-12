@@ -149,7 +149,6 @@
         <module>ui/perspective-operations</module>
         <module>ui/perspective-monitoring</module>
         <module>ui/perspective-messaging</module>
-        <module>ui/perspective-intent</module>
         <module>ui/perspective-jobs</module>
         <module>ui/perspective-security</module>
         <module>ui/perspective-processes</module>
@@ -178,7 +177,7 @@
         <module>ui/view-monitoring-metrics</module>
         <module>ui/view-messaging-destinations</module>
         <module>ui/view-messaging-browser</module>
-        <module>ui/view-intent-mermaid</module>
+        <module>ui/editor-intent</module>
         <module>ui/view-configurations</module>
         <module>ui/view-data-structures</module>
         <module>ui/view-extensions</module>
@@ -886,11 +885,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-perspective-intent</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-perspective-jobs</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1028,7 +1022,7 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-view-intent-mermaid</artifactId>
+                <artifactId>dirigible-components-ui-editor-intent</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

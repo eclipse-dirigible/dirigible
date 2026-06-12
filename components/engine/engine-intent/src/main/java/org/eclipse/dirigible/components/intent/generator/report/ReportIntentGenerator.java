@@ -82,14 +82,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         for (ReportIntent report : model.getReports()) {
             if (report.getName() == null || report.getName()
                                                   .isBlank()) {
-                LOGGER.warn("Skipping unnamed report in intent [{}]", context.getIntent()
-                                                                             .getName());
+                LOGGER.warn("Skipping unnamed report in intent [{}]", IntentNaming.baseName(context));
                 continue;
             }
             String fileName = report.getName() + ".report";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate report [{}] in intent [{}] - keeping the first occurrence", report.getName(), context.getIntent()
-                                                                                                                            .getName());
+                LOGGER.warn("Duplicate report [{}] in intent [{}] - keeping the first occurrence", report.getName(),
+                        IntentNaming.baseName(context));
                 continue;
             }
             Map<String, Object> document = build(context, report);

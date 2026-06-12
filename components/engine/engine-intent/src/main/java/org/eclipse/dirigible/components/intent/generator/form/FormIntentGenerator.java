@@ -20,6 +20,7 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -86,14 +87,13 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
                                               .isBlank()) {
-                LOGGER.warn("Skipping unnamed form in intent [{}]", context.getIntent()
-                                                                           .getName());
+                LOGGER.warn("Skipping unnamed form in intent [{}]", IntentNaming.baseName(context));
                 continue;
             }
             String fileName = form.getName() + ".form";
             if (!seenFiles.add(fileName)) {
-                LOGGER.warn("Duplicate form [{}] in intent [{}] - keeping the first occurrence", form.getName(), context.getIntent()
-                                                                                                                        .getName());
+                LOGGER.warn("Duplicate form [{}] in intent [{}] - keeping the first occurrence", form.getName(),
+                        IntentNaming.baseName(context));
                 continue;
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());

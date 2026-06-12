@@ -1,5 +1,0 @@
-{
-    "module": "perspective-intent/configs/intent.js",
-    "extensionPoint": "platform-perspectives",
-    "description": "Intent Perspective"
-}

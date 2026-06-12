@@ -15,63 +15,59 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.Set;
 
-import org.eclipse.dirigible.components.intent.domain.Intent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
 
 /**
- * Per-regeneration call context handed to every {@link IntentTargetGenerator}. Carries the parsed
- * intent, the originating artefact (for location / key metadata), the project paths inside the
- * Dirigible repository, and the single write entry point {@link #writeModelFile(String, String)}.
+ * Per-generation call context handed to every {@link IntentTargetGenerator}. Carries the parsed
+ * intent model, the target project paths inside the Dirigible repository, and the single write
+ * entry point {@link #writeModelFile(String, String)}.
  *
  * <p>
- * Generators write model files directly at the <b>project root</b> (next to {@code app.intent}) -
- * the location every downstream consumer is proven to handle: the platform fixtures keep
- * hand-authored {@code .edm} / {@code .bpmn} / {@code .form} files there, and the model-to-code
- * templates resolve their output paths relative to it. NOT under {@code gen/}: the templates wipe
- * that folder wholesale on every model-to-code regeneration, so intent output placed there would
- * not survive. A dedicated subfolder (e.g. {@code models/}) is a possible future refinement once
- * the template engine's handling of model files in subfolders is verified. All writes go through
- * {@link #writeModelFile(String, String)}, which records the emitted file names so
- * {@link IntentRegenerationService} can scrub files that a previous regeneration wrote but the
+ * Generation targets the <b>developer's workspace project</b> ({@code /users/<user>/<workspace>/
+ * <project>}) - the intent is an authoring artifact like the {@code .edm}: the developer edits it
+ * in its editor, clicks Generate, reviews the derived model files in the project, and publishes
+ * everything together. Model files are written directly at the project root (next to the
+ * {@code .intent} file) - the location every downstream consumer is proven to handle. NOT under
+ * {@code gen/}: the model-to-code templates wipe that folder wholesale on every regeneration.
+ *
+ * <p>
+ * All writes go through {@link #writeModelFile(String, String)}, which records the emitted file
+ * names so {@link IntentGenerationService} can scrub files that a previous generation wrote but the
  * current one no longer produces.
  */
 public final class IntentGenerationContext {
 
-    /**
-     * Full repository path of the project root, e.g. {@code /registry/public/orders}. Artefact
-     * locations are registry-relative, so the registry prefix is applied by
-     * {@link IntentRegenerationService} before this context is built.
-     */
+    /** Repository path of the target project root, e.g. {@code /users/admin/workspace/my-library}. */
     private final String projectRoot;
 
-    /** Project name - the first path segment of the intent's registry-relative location. */
+    /** The target project name. */
     private final String projectName;
 
-    private final Intent intent;
+    /** Base-name fallback when the intent YAML declares no {@code name:} - the file's base name. */
+    private final String fallbackName;
+
     private final IntentModel model;
     private final IRepository repository;
 
-    /** Bare file names written under {@link #projectRoot} during this regeneration pass. */
+    /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
 
-    IntentGenerationContext(Intent intent, IntentModel model, String projectRoot, String projectName, IRepository repository) {
-        this.intent = intent;
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String fallbackName, IRepository repository) {
         this.model = model;
         this.projectRoot = projectRoot;
         this.projectName = projectName;
+        this.fallbackName = fallbackName;
         this.repository = repository;
     }
 
     /**
      * Write (create or overwrite) a model file at the project root. This is the only write surface
      * generators may use; the emitted file name is recorded for the post-pass scrub of stale output.
-     * Byte-identical content is not rewritten - the synchronizer re-parses every intent each cycle, so
-     * an unconditional write would re-trigger the registry file watcher on every cycle and turn the
-     * scheduled synchronization into a perpetual no-op loop.
+     * Byte-identical content is not rewritten.
      *
-     * @param fileName bare file name including extension, e.g. {@code orders.edm}
+     * @param fileName bare file name including extension, e.g. {@code library.edm}
      * @param content the full file content
      */
     public void writeModelFile(String fileName, String content) {
@@ -101,8 +97,13 @@ public final class IntentGenerationContext {
         return projectName;
     }
 
-    public Intent getIntent() {
-        return intent;
+    /**
+     * Base-name fallback for single-file outputs when the YAML omits {@code name:}.
+     *
+     * @return the intent file's base name, never null
+     */
+    public String getFallbackName() {
+        return fallbackName;
     }
 
     public IntentModel getModel() {
