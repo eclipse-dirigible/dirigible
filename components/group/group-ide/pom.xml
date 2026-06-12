@@ -100,6 +100,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-perspective-intent</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-perspective-jobs</artifactId>
         </dependency>
         <dependency>
@@ -201,6 +205,10 @@
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-messaging-browser</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-intent-mermaid</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

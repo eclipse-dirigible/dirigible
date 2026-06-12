@@ -1,0 +1,207 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="intentMermaid" ng-controller="IntentMermaidController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-intent-mermaid/configs/intent-mermaid-view.js"></script>
+        <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <style>
+            .intent-mermaid-host {
+                background: var(--sapBackgroundColor, #fff);
+                color: var(--sapTextColor, #1d2d3e);
+                padding: 16px;
+            }
+            .intent-mermaid-host svg {
+                max-width: 100%;
+                height: auto;
+            }
+            .intent-source {
+                font-family: var(--sapFontMonoFamily, monospace);
+                font-size: 12px;
+                white-space: pre;
+                color: var(--sapTextColor, #1d2d3e);
+                background: var(--sapList_Background, #f7f7f7);
+                padding: 12px;
+                margin: 0;
+                overflow: auto;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox">
+        <bk-toolbar compact="true" has-title="false">
+            <span>Intent</span>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-select compact="true" ng-model="selectedProject" ng-change="onProjectChange()" placeholder="Select project" dropdown-fixed="true" ng-disabled="!projects.length">
+                <bk-option ng-repeat="p in projects" text="{{p}}" value="p"></bk-option>
+            </bk-select>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Reload" aria-label="Reload" ng-click="reload()" ng-disabled="!selectedProject || loading"></bk-button>
+            <bk-button state="transparent" glyph="sap-icon--synchronize" title="Regenerate gen/" aria-label="Regenerate gen/" ng-click="regenerate()" ng-disabled="!selectedProject || loading"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="transparent" glyph="{{ showSource ? 'sap-icon--show' : 'sap-icon--source-code' }}" title="{{ showSource ? 'Show diagram' : 'Show source' }}" aria-label="Toggle source" ng-click="toggleSource()" ng-disabled="!selectedProject"></bk-button>
+        </bk-toolbar>
+
+        <bk-message-page glyph="sap-icon--idea-wall" ng-if="!projects.length && !errorMessage && !loading">
+            <bk-message-page-title>No intent projects</bk-message-page-title>
+            <bk-message-page-subtitle>Drop an <code>app.intent</code> YAML at a project root and republish.</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="errorMessage">
+            <bk-message-page-title>Unable to load intent</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <div bk-scrollbar class="bk-flex-1 bk-vbox" ng-hide="errorMessage || !projects.length">
+            <div ng-show="!showSource" class="intent-mermaid-host" ng-bind-html="diagramSvg"></div>
+            <pre ng-show="showSource" class="intent-source">{{ sourceYaml }}</pre>
+        </div>
+
+        <script type="text/javascript">
+            const intentMermaidApp = angular.module('intentMermaid', ['platformView', 'blimpKit']);
+            intentMermaidApp.controller('IntentMermaidController', ($scope, $http, $sce) => {
+                const PROJECTS_URL = '/services/ide/intent/projects';
+
+                $scope.projects = [];
+                $scope.selectedProject = null;
+                $scope.intent = null;
+                $scope.diagramSvg = '';
+                $scope.sourceYaml = '';
+                $scope.showSource = false;
+                $scope.errorMessage = '';
+                $scope.loading = false;
+
+                if (window.mermaid && typeof window.mermaid.initialize === 'function') {
+                    window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
+                }
+
+                $scope.loadProjects = () => {
+                    $scope.loading = true;
+                    $http.get(PROJECTS_URL).then((response) => {
+                        $scope.projects = response.data || [];
+                        $scope.loading = false;
+                        if ($scope.projects.length && !$scope.selectedProject) {
+                            $scope.selectedProject = $scope.projects[0];
+                            $scope.onProjectChange();
+                        }
+                    }, (error) => {
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Request failed';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.onProjectChange = () => {
+                    if (!$scope.selectedProject) return;
+                    $scope.loading = true;
+                    const intentUrl = PROJECTS_URL + '/' + encodeURIComponent($scope.selectedProject);
+                    const sourceUrl = intentUrl + '/source';
+                    $http.get(intentUrl).then((response) => {
+                        $scope.intent = response.data || {};
+                        return $http.get(sourceUrl, { transformResponse: (data) => data });
+                    }).then((response) => {
+                        $scope.sourceYaml = response ? response.data : '';
+                        return $scope.render();
+                    }).then(() => {
+                        $scope.loading = false;
+                        $scope.errorMessage = '';
+                    }).catch((error) => {
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Failed to load intent';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.reload = () => $scope.onProjectChange();
+
+                $scope.toggleSource = () => { $scope.showSource = !$scope.showSource; };
+
+                $scope.regenerate = () => {
+                    if (!$scope.selectedProject) return;
+                    $scope.loading = true;
+                    $http.post(PROJECTS_URL + '/' + encodeURIComponent($scope.selectedProject) + '/regenerate').then(() => {
+                        $scope.loading = false;
+                    }, (error) => {
+                        $scope.errorMessage = (error && error.statusText) ? error.statusText : 'Regeneration failed';
+                        $scope.loading = false;
+                    });
+                };
+
+                $scope.render = () => {
+                    if (!window.mermaid || typeof window.mermaid.render !== 'function') {
+                        $scope.diagramSvg = $sce.trustAsHtml('<em>Mermaid not loaded.</em>');
+                        return Promise.resolve();
+                    }
+                    const spec = toMermaidSpec($scope.intent || {});
+                    if (!spec) {
+                        $scope.diagramSvg = $sce.trustAsHtml('<em>This intent has no entities to diagram.</em>');
+                        return Promise.resolve();
+                    }
+                    return window.mermaid.render('intent-mermaid-svg-' + Date.now(), spec).then((result) => {
+                        $scope.diagramSvg = $sce.trustAsHtml(result.svg);
+                        $scope.$applyAsync();
+                    }, (err) => {
+                        const message = err && err.message ? err.message : String(err);
+                        $scope.diagramSvg = $sce.trustAsHtml('<em>Mermaid render failed: ' + escapeHtml(message) + '</em>');
+                    });
+                };
+
+                const escapeHtml = (s) => String(s).replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+
+                const safeName = (s) => String(s || 'UNNAMED').replace(/[^A-Za-z0-9_]/g, '_');
+
+                const cardinality = (kind) => {
+                    switch (kind) {
+                        case 'oneToMany': return '||--o{';
+                        case 'manyToOne': return '}o--||';
+                        case 'oneToOne': return '||--||';
+                        case 'manyToMany': return '}o--o{';
+                        default: return '||--o{';
+                    }
+                };
+
+                const toMermaidSpec = (model) => {
+                    const entities = (model.entities || []).filter(e => e && e.name);
+                    if (!entities.length) return null;
+                    const lines = ['erDiagram'];
+                    for (const entity of entities) {
+                        lines.push('    ' + safeName(entity.name) + ' {');
+                        for (const field of (entity.fields || [])) {
+                            if (!field || !field.name) continue;
+                            const type = (field.type || 'string').replace(/[^A-Za-z0-9_]/g, '_');
+                            const flag = field.primaryKey ? ' PK' : '';
+                            lines.push('        ' + type + ' ' + safeName(field.name) + flag);
+                        }
+                        lines.push('    }');
+                    }
+                    for (const entity of entities) {
+                        for (const relation of (entity.relations || [])) {
+                            if (!relation || !relation.to || !relation.name) continue;
+                            lines.push('    ' + safeName(entity.name) + ' ' + cardinality(relation.kind) + ' ' + safeName(relation.to) + ' : "' + relation.name + '"');
+                        }
+                    }
+                    return lines.join('\n');
+                };
+
+                $scope.loadProjects();
+            });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

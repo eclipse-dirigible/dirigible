@@ -1,0 +1,5 @@
+{
+    "module": "perspective-intent/configs/perspective-menu.js",
+    "extensionPoint": "platform-menus",
+    "description": "Intent perspective menu"
+}

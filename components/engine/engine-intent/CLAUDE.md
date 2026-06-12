@@ -58,10 +58,18 @@ components/engine/engine-intent/
     │   ├── IntentTargetGenerator.java     # SPI - one per slice (entities, processes, forms, ...)
     │   ├── IntentGenerationContext.java   # carries Intent + IntentModel + projectRoot + IRepository
     │   └── IntentRegenerationService.java # collects every SPI bean and runs them in @Order
-    └── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
+    ├── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
+    └── endpoint/IntentEndpoint.java           # /services/ide/intent/* - list projects, fetch parsed intent, fetch raw YAML, force regenerate
 ```
 
-No generator implementations live in this module yet - only the SPI. Concrete generators (entity → `gen/<name>.entity` + `gen/<name>.dsm`, process → `gen/<name>.bpmn`, form → `gen/<name>.form`, report → `gen/<name>.report`, permission → `gen/<name>.roles` + `gen/<name>.access`, controller → `gen/<name>.controller.ts`) belong in follow-up modules or sibling generator packages that depend on this one plus the relevant target artefact module. They are Spring `@Component` beans implementing `IntentTargetGenerator`; ordering via `@Order`.
+The IDE perspective lives in two sibling UI modules:
+
+- `components/ui/perspective-intent` - perspective shell (id `intent`, order 1020, icon a three-node graph SVG). Default region `center`, view `intent-mermaid`.
+- `components/ui/view-intent-mermaid` - read-only Mermaid ER renderer + toolbar (project picker, reload, regenerate, source / diagram toggle). Loads `mermaid@11` from `cdn.jsdelivr.net` (matches the unicons pattern in the rest of the IDE). Server returns parsed `IntentModel` JSON; the view converts to `erDiagram` spec client-side.
+
+One concrete generator currently lives in-module: `generator/entity/EntityIntentGenerator` writes `gen/<EntityName>Entity.ts` per intent entity, in the decorator format that `EntitySynchronizer` (extension `Entity.ts`) picks up. It is the worked example - any further slice generators follow the same pattern.
+
+The remaining concrete generators (process → `gen/<name>.bpmn`, form → `gen/<name>.form`, report → `gen/<name>.report`, permission → `gen/<name>.roles` + `gen/<name>.access`, controller → `gen/<name>.controller.ts`) belong in follow-up modules or sibling generator packages that depend on this one plus the relevant target artefact module. They are Spring `@Component` beans implementing `IntentTargetGenerator`; ordering via `@Order` (`EntityIntentGenerator` sits at 100, so leave room: schema 200, process 300, form 400, etc.).
 
 ## Wiring
 
@@ -158,12 +166,12 @@ Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `deci
 - **Don't reuse the existing modelers for intent projects.** That would re-expose `gen/` as an authoring surface and undo the whole point.
 - **Don't read env vars or system properties directly** - go through `DirigibleConfig` per the platform-wide rule.
 
-## Follow-ups not in this skeleton
+## Follow-ups
 
-- Concrete `IntentTargetGenerator` implementations per slice (entities, processes, forms, reports, permissions, controllers).
-- IDE perspective with Mermaid renderer + Claude chat + patch preview + accept/reject. Lives in `components/ui/perspective-intent` once the generators land.
-- Read-only Monaco model for paths under `**/gen/**`.
-- `/custom/` escape-hatch directory + per-slice hook points in the generators.
+- Remaining concrete generators: schema (DSM), process (BPMN), form, report, permission (roles + access), controller (TS or Java).
+- Claude chat + patch-preview in the perspective. Needs a separate LLM bridge module (Anthropic API key via `DirigibleConfig`, request shaping, structured-patch responses, accept / reject flow). Out of scope for this PR.
+- Read-only Monaco model for paths under `**/gen/**` so the IDE marks them not-for-editing.
+- `/custom/` escape-hatch directory + per-slice hook points in the generators (the generators must learn to preserve `/custom/` files alongside their gen output).
 - `reverse-engineer intent` command for migrating classic projects.
 - Same-cycle visibility (open design question above).
 - Schema validation on parse (currently the parser accepts anything SnakeYAML + Gson can map).
