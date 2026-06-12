@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 
+import org.eclipse.dirigible.sdk.job.JobHandler;
 import org.eclipse.dirigible.sdk.job.Scheduled;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
@@ -31,8 +32,11 @@ import org.springframework.stereotype.Component;
  * cron-triggered tasks.
  *
  * <p>
- * The annotated class must expose a public no-arg {@code run()} method. The class is instantiated
- * once per load cycle; hot-reload cancels the old schedule and re-schedules with the updated class.
+ * The annotated class must expose a public no-arg {@code run()} method. Implementing the optional
+ * {@link JobHandler} interface gives compile-time signature checking and a direct, non-reflective
+ * dispatch path; classes that don't implement it still work — the consumer falls back to looking up
+ * {@code run()} by name and invoking it reflectively. The class is instantiated once per load
+ * cycle; hot-reload cancels the old schedule and re-schedules with the updated class.
  *
  * <p>
  * A dedicated {@link ThreadPoolTaskScheduler} is created and owned by this consumer so that
@@ -66,14 +70,6 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     public void onClassLoaded(LoadedClass info) {
         Scheduled ann = info.type()
                             .getAnnotation(Scheduled.class);
-        Method runMethod;
-        try {
-            runMethod = info.type()
-                            .getMethod("run");
-        } catch (NoSuchMethodException e) {
-            LOGGER.error("@Scheduled class [{}] must expose a public no-arg run() method; skipped.", info.fqn());
-            return;
-        }
 
         Object instance;
         try {
@@ -83,6 +79,29 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         } catch (ReflectiveOperationException e) {
             LOGGER.error("Failed to instantiate @Scheduled class [{}]: {}", info.fqn(), e.getMessage(), e);
             return;
+        }
+
+        // Typed path: skip reflection entirely when the class opted into the JobHandler contract.
+        Runnable task;
+        if (instance instanceof JobHandler typed) {
+            task = () -> {
+                try {
+                    typed.run();
+                } catch (RuntimeException ex) {
+                    LOGGER.error("@Scheduled class [{}] run() threw: {}", info.fqn(), ex.getMessage(), ex);
+                }
+            };
+        } else {
+            Method runMethod;
+            try {
+                runMethod = info.type()
+                                .getMethod("run");
+            } catch (NoSuchMethodException e) {
+                LOGGER.error("@Scheduled class [{}] must implement JobHandler or expose a public no-arg run() method; skipped.",
+                        info.fqn());
+                return;
+            }
+            task = () -> invoke(runMethod, instance, info.fqn());
         }
 
         cancelExisting(info.fqn());
@@ -95,9 +114,10 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
             return;
         }
 
-        ScheduledFuture<?> future = taskScheduler.schedule(() -> invoke(runMethod, instance, info.fqn()), trigger);
+        ScheduledFuture<?> future = taskScheduler.schedule(task, trigger);
         futures.put(info.fqn(), future);
-        LOGGER.info("Scheduled Java class [{}] with cron '{}'.", info.fqn(), ann.expression());
+        LOGGER.info("Scheduled Java class [{}] with cron '{}' ({} dispatch).", info.fqn(), ann.expression(),
+                instance instanceof JobHandler ? "typed" : "reflective");
     }
 
     @Override
