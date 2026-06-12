@@ -88,7 +88,8 @@ components/engine/engine-intent/
     │   ├── IntentTargetGenerator.java     # SPI - one per slice (entities, processes, forms, ...)
     │   ├── IntentGenerationContext.java   # carries Intent + IntentModel + projectRoot + projectName + IRepository
     │   ├── IntentRegenerationService.java # collects every SPI bean and runs them in @Order
-    │   └── edm/EdmIntentGenerator.java    # @Order(200); writes gen/<intent>.edm (XML) + gen/<intent>.model (JSON)
+    │   ├── edm/EdmIntentGenerator.java    # @Order(200); writes gen/<intent>.edm (XML) + gen/<intent>.model (JSON)
+    │   └── bpmn/BpmnIntentGenerator.java  # @Order(300); writes gen/<process>.bpmn per process
     ├── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
     └── endpoint/IntentEndpoint.java           # /services/ide/intent/* - list projects, fetch parsed intent, fetch raw YAML, force regenerate
 ```
@@ -98,14 +99,19 @@ The IDE perspective lives in two sibling UI modules:
 - `components/ui/perspective-intent` - perspective shell (id `intent`, order 1020, icon a three-node graph SVG). Default region `center`, view `intent-mermaid`.
 - `components/ui/view-intent-mermaid` - read-only Mermaid ER renderer + toolbar (project picker, reload, regenerate, source / diagram toggle). Loads `mermaid@11` from `cdn.jsdelivr.net` (matches the unicons pattern in the rest of the IDE). Server returns parsed `IntentModel` JSON; the view converts to `erDiagram` spec client-side.
 
-One concrete generator currently lives in-module: [`EdmIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/edm/EdmIntentGenerator.java) writes `gen/<intent>.edm` (XML) plus `gen/<intent>.model` (JSON twin) from the entities + relations declared in the intent. Each entity is fleshed out with EDM editor defaults (icons, menu keys, layout type, perspective metadata, widget types) derived from the entity / field names so the produced model is a complete, openable EDM document. It is the worked example - additional slice generators follow the same pattern.
+Two concrete generators currently live in-module:
+
+- [`EdmIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/edm/EdmIntentGenerator.java) writes `gen/<intent>.edm` (XML) plus `gen/<intent>.model` (JSON twin) from the entities + relations declared in the intent. Each entity is fleshed out with EDM editor defaults (icons, menu keys, layout type, perspective metadata, widget types) derived from the entity / field names so the produced model is a complete, openable EDM document.
+- [`BpmnIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/bpmn/BpmnIntentGenerator.java) writes one `gen/<process>.bpmn` per process. Minimal Flowable-flavoured BPMN 2.0 - one start event, one end event, the declared steps, and the sequence flows that connect them. Decisions emit an exclusiveGateway with a conditioned outgoing flow to `args.then` and a default fallthrough. **No `bpmndi` diagram block** - Flowable runs without it and the BPMN editor auto-lays out on first edit, which keeps the output deterministic and avoids x/y churn between regenerations.
+
+Together they are the worked examples; additional slice generators follow the same pattern.
 
 The remaining generators each map one intent block to one model-layer extension:
 
-| Intent block | Output | Spring `@Order` (suggested) |
+| Intent block | Output | Spring `@Order` |
 |---|---|---|
 | `entities` | `gen/<intent>.edm` + `gen/<intent>.model` | 200 (done) |
-| `processes[]` | `gen/<process>.bpmn` (one per process) | 300 |
+| `processes[]` | `gen/<process>.bpmn` (one per process) | 300 (done) |
 | `forms[]` | `gen/<form>.form` | 400 |
 | `reports[]` | `gen/<report>.report` | 500 |
 | `permissions` | `gen/<intent>.roles` + `gen/<intent>.access` | 600 |
@@ -213,7 +219,7 @@ Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `deci
 
 ## Follow-ups
 
-- Remaining model-layer generators: BPMN (process), `.form`, `.report`, `.roles` + `.access` (permissions). DSM / schema / table / view / csvim / csv are lower-priority because the EDM the first generator writes already covers the same surface implicitly.
+- Remaining model-layer generators: `.form`, `.report`, `.roles` + `.access` (permissions). DSM / schema / table / view / csvim / csv are lower-priority because the EDM the first generator writes already covers the same surface implicitly.
 - Trigger the "Generate from EDM" template programmatically on intent change so the developer sees the full app, not just the model files. Today the user has to open the EDM editor and click Generate manually.
 - Claude chat + patch-preview in the perspective. Needs a separate LLM bridge module (Anthropic API key via `DirigibleConfig`, request shaping, structured-patch responses, accept / reject flow). Out of scope for this PR.
 - Read-only Monaco model for paths under `**/gen/**` so the IDE marks them not-for-editing.
@@ -225,3 +231,4 @@ Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `deci
 **Done:**
 
 - Structural validation on parse: duplicate names, dangling relation / form / report targets, unknown field / relation / step kinds. Surfaced via `IntentValidationException` with the complete list of issues in one error message.
+- `EdmIntentGenerator` (entities -> .edm + .model) and `BpmnIntentGenerator` (processes -> .bpmn).
