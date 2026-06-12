@@ -89,7 +89,8 @@ components/engine/engine-intent/
     │   ├── IntentGenerationContext.java   # carries Intent + IntentModel + projectRoot + projectName + IRepository
     │   ├── IntentRegenerationService.java # collects every SPI bean and runs them in @Order
     │   ├── edm/EdmIntentGenerator.java    # @Order(200); writes gen/<intent>.edm (XML) + gen/<intent>.model (JSON)
-    │   └── bpmn/BpmnIntentGenerator.java  # @Order(300); writes gen/<process>.bpmn per process
+    │   ├── bpmn/BpmnIntentGenerator.java  # @Order(300); writes gen/<process>.bpmn per process
+    │   └── form/FormIntentGenerator.java  # @Order(400); writes gen/<form>.form per form (typed controls + action buttons + stub code)
     ├── synchronizer/IntentSynchronizer.java   # BaseSynchronizer; regen pass in finishing()
     └── endpoint/IntentEndpoint.java           # /services/ide/intent/* - list projects, fetch parsed intent, fetch raw YAML, force regenerate
 ```
@@ -99,10 +100,11 @@ The IDE perspective lives in two sibling UI modules:
 - `components/ui/perspective-intent` - perspective shell (id `intent`, order 1020, icon a three-node graph SVG). Default region `center`, view `intent-mermaid`.
 - `components/ui/view-intent-mermaid` - read-only Mermaid ER renderer + toolbar (project picker, reload, regenerate, source / diagram toggle). Loads `mermaid@11` from `cdn.jsdelivr.net` (matches the unicons pattern in the rest of the IDE). Server returns parsed `IntentModel` JSON; the view converts to `erDiagram` spec client-side.
 
-Two concrete generators currently live in-module:
+Three concrete generators currently live in-module:
 
 - [`EdmIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/edm/EdmIntentGenerator.java) writes `gen/<intent>.edm` (XML) plus `gen/<intent>.model` (JSON twin) from the entities + relations declared in the intent. Each entity is fleshed out with EDM editor defaults (icons, menu keys, layout type, perspective metadata, widget types) derived from the entity / field names so the produced model is a complete, openable EDM document.
 - [`BpmnIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/bpmn/BpmnIntentGenerator.java) writes one `gen/<process>.bpmn` per process. Minimal Flowable-flavoured BPMN 2.0 - one start event, one end event, the declared steps, and the sequence flows that connect them. Decisions emit an exclusiveGateway with a conditioned outgoing flow to `args.then` and a default fallthrough. **No `bpmndi` diagram block** - Flowable runs without it and the BPMN editor auto-lays out on first edit, which keeps the output deterministic and avoids x/y churn between regenerations.
+- [`FormIntentGenerator`](src/main/java/org/eclipse/dirigible/components/intent/generator/form/FormIntentGenerator.java) writes one `gen/<form>.form` per form. Controls are typed by looking up each declared field against the bound entity (string/uuid -> input-textfield, text -> input-textarea, integer/decimal -> input-number, boolean -> input-checkbox, date -> input-date, timestamp -> input-datetime-local). Actions become buttons in a trailing `container-hbox`; the button colour is inferred from the action name (approve -> positive, reject/decline/delete/cancel -> negative, save/submit -> emphasized). A stub controller code block declares `on<Action>Clicked` handlers as TODOs - wiring to a backend is left to the downstream template engine or a hand-authored override under `custom/`.
 
 Together they are the worked examples; additional slice generators follow the same pattern.
 
@@ -112,7 +114,7 @@ The remaining generators each map one intent block to one model-layer extension:
 |---|---|---|
 | `entities` | `gen/<intent>.edm` + `gen/<intent>.model` | 200 (done) |
 | `processes[]` | `gen/<process>.bpmn` (one per process) | 300 (done) |
-| `forms[]` | `gen/<form>.form` | 400 |
+| `forms[]` | `gen/<form>.form` | 400 (done) |
 | `reports[]` | `gen/<report>.report` | 500 |
 | `permissions` | `gen/<intent>.roles` + `gen/<intent>.access` | 600 |
 | (future) `seeds[]` | `gen/<seed>.csvim` + `gen/<seed>.csv` | 700 |
@@ -231,4 +233,5 @@ Logical field types (`FieldIntent.type`) are: `string`, `text`, `integer`, `deci
 **Done:**
 
 - Structural validation on parse: duplicate names, dangling relation / form / report targets, unknown field / relation / step kinds. Surfaced via `IntentValidationException` with the complete list of issues in one error message.
-- `EdmIntentGenerator` (entities -> .edm + .model) and `BpmnIntentGenerator` (processes -> .bpmn).
+- `EdmIntentGenerator` (entities -> .edm + .model), `BpmnIntentGenerator` (processes -> .bpmn), `FormIntentGenerator` (forms -> .form).
+- End-to-end integration test [`IntentEngineIT`](../../../tests/tests-integrations/src/main/java/org/eclipse/dirigible/integration/tests/api/IntentEngineIT.java) covering the full Orders pipeline (4 entities + relations + process with every step kind + 2 forms + report + 3 permission roles) and exercising the REST endpoints. HTTP-only, no Selenide.
