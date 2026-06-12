@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.intent.generator.form;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -26,16 +25,14 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits one {@code gen/<form>.form} per {@link FormIntent} declared in the intent. The output is
- * the JSON shape consumed by the form-builder editor in the IDE - a {@code form} array of typed
+ * Emits one {@code <form>.form} per {@link FormIntent} declared in the intent. The output is the
+ * JSON shape consumed by the form-builder editor in the IDE - a {@code form} array of typed
  * controls (header, input-textfield / input-number / input-date / input-checkbox, container-hbox
  * with buttons) plus the customary {@code metadata} / {@code feeds} / {@code scripts} /
  * {@code code} companions.
@@ -85,8 +82,6 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             return;
         }
         Map<String, EntityIntent> entitiesByName = indexEntities(model);
-        IRepository repository = context.getRepository();
-        String genRoot = context.getGenRoot();
         Set<String> seenFiles = new HashSet<>();
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
@@ -103,7 +98,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
             Map<String, Object> document = buildForm(form, boundEntity);
-            writeResource(repository, genRoot + "/" + fileName, JsonHelper.toJson(document));
+            context.writeModelFile(fileName, JsonHelper.toJson(document));
         }
     }
 
@@ -340,16 +335,6 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             }
         }
         return out.toString();
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
     }
 
     /**

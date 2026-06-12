@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.intent.generator.report;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -22,19 +21,18 @@ import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits one {@code gen/<report>.report} per {@link ReportIntent} declared in the intent. The output
- * is the JSON shape the report editor in the IDE consumes: an outer record with {@code alias} /
+ * Emits one {@code <report>.report} per {@link ReportIntent} declared in the intent. The output is
+ * the JSON shape the report editor in the IDE consumes: an outer record with {@code alias} /
  * {@code tId} / {@code label} / {@code query} plus a {@code columns} array whose entries carry
  * {@code name} / {@code alias} / {@code type} / {@code aggregate}.
  *
@@ -80,8 +78,6 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                  .isEmpty()) {
             return;
         }
-        IRepository repository = context.getRepository();
-        String genRoot = context.getGenRoot();
         Set<String> seenFiles = new HashSet<>();
         for (ReportIntent report : model.getReports()) {
             if (report.getName() == null || report.getName()
@@ -96,12 +92,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                                                                                                                             .getName());
                 continue;
             }
-            Map<String, Object> document = build(report);
-            writeResource(repository, genRoot + "/" + fileName, JsonHelper.toJson(document));
+            Map<String, Object> document = build(context, report);
+            context.writeModelFile(fileName, JsonHelper.toJson(document));
         }
     }
 
-    private static Map<String, Object> build(ReportIntent report) {
+    private static Map<String, Object> build(IntentGenerationContext context, ReportIntent report) {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("alias", report.getName());
         document.put("tId", translationId(report.getName()));
@@ -112,7 +108,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         if (report.getSource() != null && !report.getSource()
                                                  .isBlank()) {
-            document.put("baseTable", toUpperSnake(report.getSource()));
+            document.put("baseTable", IntentNaming.tableName(context, report.getSource()));
         }
         document.put("query", "");
         document.put("columns", buildColumns(report));
@@ -249,30 +245,5 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
         }
         return out.toString();
-    }
-
-    private static String toUpperSnake(String name) {
-        if (name == null || name.isEmpty()) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder(name.length() + 8);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
-                out.append('_');
-            }
-            out.append(Character.toUpperCase(c));
-        }
-        return out.toString();
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
     }
 }

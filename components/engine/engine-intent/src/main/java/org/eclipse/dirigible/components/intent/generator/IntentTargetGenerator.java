@@ -30,7 +30,7 @@ public interface IntentTargetGenerator {
 
     /**
      * Regenerate this generator's slice of the {@code gen/} output for the given intent. Writes
-     * exclusively under {@link IntentGenerationContext#getGenRoot()}.
+     * exclusively through {@link IntentGenerationContext#writeModelFile(String, String)}.
      *
      * @param context the per-regeneration call context
      */

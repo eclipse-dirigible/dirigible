@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -22,16 +21,14 @@ import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits one {@code gen/<process>.bpmn} per {@link ProcessIntent} declared in the intent. The output
- * is a minimal Flowable-flavoured BPMN 2.0 document:
+ * Emits one {@code <process>.bpmn} (at the project root) per {@link ProcessIntent} declared in the
+ * intent. The output is a minimal Flowable-flavoured BPMN 2.0 document:
  * <ul>
  * <li>one {@code <startEvent>} and one {@code <endEvent>} per process</li>
  * <li>{@code userTask} ->
@@ -39,8 +36,10 @@ import org.springframework.stereotype.Component;
  * <li>{@code serviceTask} / {@code script} ->
  * {@code <serviceTask flowable:delegateExpression="${JSTask}">} with the {@code handler} extension
  * element pointing at {@code args.call}</li>
- * <li>{@code decision} -> {@code <exclusiveGateway>} plus a conditioned outgoing flow to
- * {@code args.then} and a default flow to the next step</li>
+ * <li>{@code decision} -> {@code <exclusiveGateway>} with a conditioned outgoing flow to
+ * {@code args.then} and a default flow to {@code args.else} (falling back to the next step in the
+ * chain when {@code else} is omitted) - so "big orders need CFO review, small ones skip it" is
+ * expressible</li>
  * <li>{@code end} -> the canonical end event (no separate element; the outgoing flow targets the
  * single {@code <endEvent>})</li>
  * </ul>
@@ -56,6 +55,11 @@ import org.springframework.stereotype.Component;
  * URL; the deployment-time form-key resolver maps it to a generated page. {@code args.call} is
  * passed through verbatim - it should reference a hand-authored handler under {@code custom/}, not
  * a template output.
+ *
+ * <p>
+ * The process {@code trigger} block is parsed but not yet consumed - wiring {@code onCreate} /
+ * {@code onSchedule} to process starts belongs to a follow-up; a warning is logged so authors are
+ * not silently surprised.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -81,8 +85,6 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                  .isEmpty()) {
             return;
         }
-        IRepository repository = context.getRepository();
-        String genRoot = context.getGenRoot();
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -97,8 +99,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                                                                                                               .getName());
                 continue;
             }
-            String content = render(process);
-            writeResource(repository, genRoot + "/" + fileName, content);
+            if (!process.getTrigger()
+                        .isEmpty()) {
+                LOGGER.warn("Process [{}] declares a trigger, which is not consumed yet - the process must be started explicitly",
+                        process.getName());
+            }
+            context.writeModelFile(fileName, render(process));
         }
     }
 
@@ -246,23 +252,28 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" name=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" default=\"")
-          .append("flow_")
-          .append(step.getName())
-          .append("_default\"></exclusiveGateway>\n");
+          .append(escapeXmlAttribute("flow_" + step.getName() + "_default"))
+          .append("\"></exclusiveGateway>\n");
     }
 
     /**
      * Emit the sequence flows. The default is a linear chain through {@link #buildEffectiveStepIds}.
-     * Decision steps emit an extra conditioned flow to {@code args.then}; the default chained flow to
-     * the next step in order remains and is marked as the gateway default by ID convention.
+     * Decision steps emit a conditioned flow to {@code args.then} and route their gateway-default flow
+     * to {@code args.else} when declared (so the conditioned branch can actually be skipped); without
+     * an {@code else} the default falls through to the next step in the chain.
      */
     private static void appendSequenceFlows(StringBuilder sb, List<StepIntent> steps, List<String> effectiveIds) {
         for (int i = 0; i < effectiveIds.size() - 1; i++) {
             String source = effectiveIds.get(i);
             String target = effectiveIds.get(i + 1);
             String flowId;
-            if (isDecisionId(source, steps)) {
+            StepIntent decision = decisionOf(source, steps);
+            if (decision != null) {
                 flowId = "flow_" + source + "_default";
+                String elseTarget = stringArg(decision, "else");
+                if (elseTarget != null && !elseTarget.isBlank()) {
+                    target = effectiveTarget(elseTarget, steps);
+                }
             } else {
                 flowId = "flow_" + source + "_" + target;
             }
@@ -289,7 +300,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
               .append("_then\" sourceRef=\"")
               .append(escapeXmlAttribute(step.getName()))
               .append("\" targetRef=\"")
-              .append(escapeXmlAttribute(thenTarget))
+              .append(escapeXmlAttribute(effectiveTarget(thenTarget, steps)))
               .append("\">\n");
             sb.append("      <conditionExpression xsi:type=\"tFormalExpression\"><![CDATA[${")
               .append(condition)
@@ -298,13 +309,30 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    private static boolean isDecisionId(String stepId, List<StepIntent> steps) {
+    /**
+     * Resolve a {@code then}/{@code else} target to its BPMN element id: the literal {@code end} or a
+     * step of kind {@code end} maps to the canonical end event.
+     */
+    private static String effectiveTarget(String targetName, List<StepIntent> steps) {
+        if (END_ID.equalsIgnoreCase(targetName)) {
+            return END_ID;
+        }
         for (StepIntent step : steps) {
-            if (stepId.equals(step.getName()) && "decision".equalsIgnoreCase(step.getKind())) {
-                return true;
+            if (targetName.equals(step.getName()) && "end".equalsIgnoreCase(step.getKind())) {
+                return END_ID;
             }
         }
-        return false;
+        return targetName;
+    }
+
+    /** The decision step with the given id, or null when the id is not a decision. */
+    private static StepIntent decisionOf(String stepId, List<StepIntent> steps) {
+        for (StepIntent step : steps) {
+            if (stepId.equals(step.getName()) && "decision".equalsIgnoreCase(step.getKind())) {
+                return step;
+            }
+        }
+        return null;
     }
 
     private static String stringArg(StepIntent step, String key) {
@@ -345,15 +373,5 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
         }
         return sb.toString();
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
     }
 }

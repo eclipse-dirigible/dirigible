@@ -9,25 +9,22 @@
  */
 package org.eclipse.dirigible.components.intent.generator.csvim;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -36,12 +33,20 @@ import org.springframework.stereotype.Component;
 /**
  * Emits two files per {@link SeedIntent}:
  * <ul>
- * <li>{@code gen/<seed>.csvim} - a CSVIM declaration the platform's {@code CsvimSynchronizer}
- * consumes. References the sibling CSV file by registry-relative path.</li>
- * <li>{@code gen/<seed>.csv} - the CSV body. Header row carries the entity's {@code dataName}
- * columns (upper-snake of the field names), row order matches the entity's declared field order so
- * row authors can omit fields and the column still maps unambiguously.</li>
+ * <li>{@code <seed>.csvim} - a CSVIM declaration the platform's {@code CsvimSynchronizer} consumes.
+ * The {@code file} path is project-qualified ({@code /<project>/<seed>.csv}) because
+ * {@code CsvimProcessor} resolves it against {@code /registry/public}, exactly like the existing
+ * {@code CsvimIT} fixtures do.</li>
+ * <li>{@code <seed>.csv} - the CSV body. Header row carries the entity's column names (upper-snake
+ * of the field names prefixed with the entity name); row order matches the entity's declared field
+ * order so row authors can omit fields and the column still maps unambiguously.</li>
  * </ul>
+ *
+ * <p>
+ * The {@code table} value comes from {@link IntentNaming#tableName} - the same intent-prefixed name
+ * the {@code .edm} declares as {@code dataName}, so the import targets the table the downstream
+ * template will create. Note the table only exists after "Generate from EDM" output is published;
+ * until then the CSVIM import is retried by its own synchronizer.
  *
  * <p>
  * Defaults match the existing {@code CsvimIT} sample: {@code header: true},
@@ -75,8 +80,6 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
             return;
         }
         Map<String, EntityIntent> entitiesByName = indexEntities(model);
-        IRepository repository = context.getRepository();
-        String genRoot = context.getGenRoot();
         Set<String> seenFiles = new HashSet<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
@@ -90,17 +93,14 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Seed [{}] references unknown entity [{}] - skipping", seed.getName(), seed.getEntity());
                 continue;
             }
-            String fileName = seed.getName();
+            String fileName = fileNameOnly(seed.getName());
             if (!seenFiles.add(fileName)) {
                 LOGGER.warn("Duplicate seed [{}] in intent [{}] - keeping the first occurrence", seed.getName(), context.getIntent()
                                                                                                                         .getName());
                 continue;
             }
-            List<FieldIntent> orderedFields = orderedFieldsOf(entity);
-            String csv = renderCsv(orderedFields, entity, seed);
-            String csvim = renderCsvim(seed, entity, fileName);
-            writeResource(repository, genRoot + "/" + fileName + ".csv", csv);
-            writeResource(repository, genRoot + "/" + fileName + ".csvim", csvim);
+            context.writeModelFile(fileName + ".csv", renderCsv(orderedFieldsOf(entity), entity, seed));
+            context.writeModelFile(fileName + ".csvim", renderCsvim(context, seed, entity, fileName));
         }
     }
 
@@ -132,15 +132,15 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
 
     private static String renderCsv(List<FieldIntent> fields, EntityIntent entity, SeedIntent seed) {
         StringBuilder sb = new StringBuilder(256);
-        String entityDataName = toUpperSnake(entity.getName());
+        String entityDataName = IntentNaming.upperSnake(entity.getName());
         for (int i = 0; i < fields.size(); i++) {
             if (i > 0) {
                 sb.append(FIELD_DELIM);
             }
             sb.append(entityDataName)
               .append('_')
-              .append(toUpperSnake(fields.get(i)
-                                         .getName()));
+              .append(IntentNaming.upperSnake(fields.get(i)
+                                                    .getName()));
         }
         sb.append('\n');
         for (Map<String, Object> row : seed.getRows()) {
@@ -174,12 +174,12 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         return QUOTE_DELIM + s.replace(QUOTE_DELIM, QUOTE_DELIM + QUOTE_DELIM) + QUOTE_DELIM;
     }
 
-    private static String renderCsvim(SeedIntent seed, EntityIntent entity, String fileName) {
+    private static String renderCsvim(IntentGenerationContext context, SeedIntent seed, EntityIntent entity, String fileName) {
         Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("table", toUpperSnake(entity.getName()));
+        entry.put("table", IntentNaming.tableName(context, entity.getName()));
         entry.put("schema", seed.getSchema() == null || seed.getSchema()
                                                             .isBlank() ? DEFAULT_SCHEMA : seed.getSchema());
-        entry.put("file", "/" + fileNameOnly(fileName) + ".csv");
+        entry.put("file", "/" + context.getProjectName() + "/" + fileName + ".csv");
         entry.put("header", true);
         entry.put("useHeaderNames", true);
         entry.put("delimField", FIELD_DELIM);
@@ -197,31 +197,5 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
     private static String fileNameOnly(String name) {
         int slash = name.lastIndexOf('/');
         return slash < 0 ? name : name.substring(slash + 1);
-    }
-
-    private static String toUpperSnake(String name) {
-        if (name == null || name.isEmpty()) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder(name.length() + 8);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
-                out.append('_');
-            }
-            out.append(Character.toUpperCase(c));
-        }
-        return out.toString()
-                  .toUpperCase(Locale.ROOT);
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
     }
 }

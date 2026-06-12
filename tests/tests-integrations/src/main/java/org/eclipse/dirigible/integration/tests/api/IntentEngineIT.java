@@ -49,18 +49,18 @@ import org.springframework.beans.factory.annotation.Autowired;
  * <li>the {@link Intent} JPA artefact is persisted via {@link IntentService}</li>
  * <li>the {@code /services/ide/intent/*} REST endpoints list / fetch / source / regenerate the
  * project</li>
- * <li>{@code EdmIntentGenerator} produces a {@code gen/orders.edm} + {@code gen/orders.model} pair
+ * <li>{@code EdmIntentGenerator} produces a {@code orders.edm} + {@code orders.model} pair
  * containing every entity (Country included), every property, and every relation (Customer ->
  * Country and Order -> Customer are both wired as references rather than free-text strings)</li>
- * <li>{@code BpmnIntentGenerator} produces a {@code gen/OrderApproval.bpmn} with the right BPMN
+ * <li>{@code BpmnIntentGenerator} produces a {@code OrderApproval.bpmn} with the right BPMN
  * elements for each step kind and the conditioned outgoing flow on the decision</li>
  * <li>{@code FormIntentGenerator} produces a {@code gen/<form>.form} per form with controls typed
  * from the bound entity's fields and action buttons</li>
  * <li>{@code ReportIntentGenerator} parses {@code aggregate(field)} measure expressions into
  * columns with the right aggregate</li>
  * <li>{@code PermissionIntentGenerator} emits the deduped {@code .roles} file</li>
- * <li>{@code CsvimIntentGenerator} emits {@code gen/countries.csvim} + {@code gen/countries.csv}
- * with the rows in the entity's declared field order</li>
+ * <li>{@code CsvimIntentGenerator} emits {@code countries.csvim} + {@code countries.csv} with the
+ * rows in the entity's declared field order</li>
  * </ul>
  *
  * <p>
@@ -71,7 +71,7 @@ class IntentEngineIT extends IntegrationTest {
     private static final String PROJECT = "orders";
     private static final String INTENT_LOCATION = "/" + PROJECT + "/app.intent";
     private static final String REGISTRY_INTENT = IRepositoryStructure.PATH_REGISTRY_PUBLIC + INTENT_LOCATION;
-    private static final String REGISTRY_GEN = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/gen";
+    private static final String REGISTRY_PROJECT = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT;
 
     private static final String INTENT_YAML = """
             name: orders
@@ -116,7 +116,7 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: status,    type: string,  length: 32 }
                   - { name: total,     type: decimal }
                 relations:
-                  - { name: customer, kind: manyToOne, to: Customer, required: true }
+                  - { name: customer, kind: manyToOne, to: Customer }
                   - { name: items,    kind: oneToMany, to: OrderItem }
 
               - name: OrderItem
@@ -139,7 +139,7 @@ class IntentEngineIT extends IntegrationTest {
                     args: { assignee: order-manager, form: ApproveOrder }
                   - name: bigOrder
                     kind: decision
-                    args: { if: "amount > 10000", then: cfoReview }
+                    args: { if: "amount > 10000", then: cfoReview, else: notifyCustomer }
                   - name: cfoReview
                     kind: userTask
                     args: { assignee: cfo, form: ApproveOrder }
@@ -211,7 +211,31 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
-    void intent_removal_cleans_artefact() {
+    void regeneration_scrubs_stale_gen_files() {
+        repository.createResource(REGISTRY_INTENT, INTENT_YAML.getBytes(StandardCharsets.UTF_8));
+        synchronizationProcessor.forceProcessSynchronizers();
+        assertTrue(repository.getResource(REGISTRY_PROJECT + "/countries.csvim")
+                             .exists(),
+                "seed output should exist after the first publish");
+
+        String withoutSeeds = INTENT_YAML.substring(0, INTENT_YAML.indexOf("seeds:"));
+        repository.getResource(REGISTRY_INTENT)
+                  .setContent(withoutSeeds.getBytes(StandardCharsets.UTF_8));
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        assertTrue(!repository.getResource(REGISTRY_PROJECT + "/countries.csvim")
+                              .exists(),
+                "removing the seed block from the intent should scrub the stale .csvim on regeneration");
+        assertTrue(!repository.getResource(REGISTRY_PROJECT + "/countries.csv")
+                              .exists(),
+                "removing the seed block from the intent should scrub the stale .csv on regeneration");
+        assertTrue(repository.getResource(REGISTRY_PROJECT + "/orders.edm")
+                             .exists(),
+                "still-declared slices must survive the scrub");
+    }
+
+    @Test
+    void intent_removal_cleans_artefact_and_gen_output() {
         repository.createResource(REGISTRY_INTENT, INTENT_YAML.getBytes(StandardCharsets.UTF_8));
         synchronizationProcessor.forceProcessSynchronizers();
         assertTrue(intentService.findByLocation(INTENT_LOCATION)
@@ -219,6 +243,9 @@ class IntentEngineIT extends IntegrationTest {
                                 .findFirst()
                                 .isPresent(),
                 "intent should be persisted after publish");
+        assertTrue(repository.getResource(REGISTRY_PROJECT + "/orders.edm")
+                             .exists(),
+                "model output should exist after publish");
 
         repository.removeResource(REGISTRY_INTENT);
         synchronizationProcessor.forceProcessSynchronizers();
@@ -226,6 +253,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(intentService.findByLocation(INTENT_LOCATION)
                                 .isEmpty(),
                 "intent should be cleaned up after the .intent file is removed and the synchronizer runs");
+        assertTrue(!repository.getResource(REGISTRY_PROJECT + "/orders.edm")
+                              .exists(),
+                "intent-owned model files should not survive their source of truth");
+        assertTrue(!repository.getResource(REGISTRY_PROJECT + "/OrderApproval.bpmn")
+                              .exists(),
+                "per-process model files should be scrubbed on intent removal");
     }
 
     private void assertIntentIsPersisted() {
@@ -239,8 +272,8 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     private void assertEdmAndModelGenerated() {
-        IResource edm = repository.getResource(REGISTRY_GEN + "/orders.edm");
-        assertTrue(edm.exists(), "gen/orders.edm should be generated");
+        IResource edm = repository.getResource(REGISTRY_PROJECT + "/orders.edm");
+        assertTrue(edm.exists(), "orders.edm should be generated");
         String edmXml = new String(edm.getContent(), StandardCharsets.UTF_8);
         for (String entityName : List.of("Country", "Customer", "Product", "Order", "OrderItem")) {
             assertTrue(edmXml.contains("name=\"" + entityName + "\""), "EDM should declare entity [" + entityName + "]");
@@ -252,7 +285,12 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("widgetType=\"TEXTAREA\""), "EDM should map the text field to a TEXTAREA widget");
         assertTrue(edmXml.contains("type=\"PRIMARY\""), "EDM should declare at least one PRIMARY entity");
         assertTrue(edmXml.contains("type=\"DEPENDENT\""),
-                "EDM should mark Customer/Order/OrderItem as DEPENDENT through the manyToOne edges");
+                "EDM should mark OrderItem as DEPENDENT through its required (composition) manyToOne to Order");
+        assertTrue(edmXml.contains("dataName=\"ORDERS_ORDER\""),
+                "EDM dataName should be intent-prefixed (ORDERS_ORDER) to avoid reserved words and cross-project clashes");
+        assertTrue(edmXml.contains("widgetDropDownKey=\"id\""),
+                "dropdown key should be the target entity's actual PK field name (lowercase id), not a hardcoded Id");
+        assertTrue(edmXml.contains("referencedProperty=\"id\""), "relation referencedProperty should be the target's actual PK field name");
         assertTrue(edmXml.contains("referenced=\"Country\""), "EDM should carry the Customer->Country reference relation");
         assertTrue(edmXml.contains("referenced=\"Customer\""), "EDM should carry the Order->Customer relation");
         assertTrue(edmXml.contains("referenced=\"Order\""), "EDM should carry the OrderItem->Order relation");
@@ -260,16 +298,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("dataName=\"CUSTOMER_COUNTRY\""),
                 "Customer->Country FK should materialize as a CUSTOMER_COUNTRY column on Customer");
 
-        IResource modelJson = repository.getResource(REGISTRY_GEN + "/orders.model");
-        assertTrue(modelJson.exists(), "gen/orders.model should be generated");
+        IResource modelJson = repository.getResource(REGISTRY_PROJECT + "/orders.model");
+        assertTrue(modelJson.exists(), "orders.model should be generated");
         String modelBody = new String(modelJson.getContent(), StandardCharsets.UTF_8);
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
+        assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
+        assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
         assertTrue(modelBody.contains("\"OrderItem\""), "model JSON should mention OrderItem");
     }
 
     private void assertBpmnGenerated() {
-        IResource bpmn = repository.getResource(REGISTRY_GEN + "/OrderApproval.bpmn");
-        assertTrue(bpmn.exists(), "gen/OrderApproval.bpmn should be generated");
+        IResource bpmn = repository.getResource(REGISTRY_PROJECT + "/OrderApproval.bpmn");
+        assertTrue(bpmn.exists(), "OrderApproval.bpmn should be generated");
         String body = new String(bpmn.getContent(), StandardCharsets.UTF_8);
         assertTrue(body.contains("<startEvent id=\"start\""), "BPMN should declare a start event");
         assertTrue(body.contains("<endEvent id=\"end\""), "BPMN should declare an end event");
@@ -282,53 +322,60 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("custom/notify-customer.ts"), "BPMN should reference the handler the intent declared verbatim");
         assertTrue(body.contains("conditionExpression"), "BPMN should emit a conditionExpression on the conditioned outgoing flow");
         assertTrue(body.contains("${amount > 10000}"), "BPMN should embed the decision's if expression");
+        assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
+                "the conditioned flow should target the `then` step");
+        assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
+                "the gateway default flow should target the `else` step so small orders skip CFO review");
     }
 
     private void assertFormGenerated() {
-        IResource form = repository.getResource(REGISTRY_GEN + "/ApproveOrder.form");
-        assertTrue(form.exists(), "gen/ApproveOrder.form should be generated");
+        IResource form = repository.getResource(REGISTRY_PROJECT + "/ApproveOrder.form");
+        assertTrue(form.exists(), "ApproveOrder.form should be generated");
         String body = new String(form.getContent(), StandardCharsets.UTF_8);
-        assertTrue(body.contains("\"controlId\":\"header\""), "form should start with a header control");
-        assertTrue(body.contains("\"label\":\"Order Date\""), "form should humanize the orderDate field name to 'Order Date'");
-        assertTrue(body.contains("\"controlId\":\"input-date\""), "form should pick input-date for the orderDate field");
-        assertTrue(body.contains("\"controlId\":\"input-number\""), "form should pick input-number for the total decimal field");
-        assertTrue(body.contains("\"type\":\"positive\""), "form should mark the approve button as positive");
-        assertTrue(body.contains("\"type\":\"negative\""), "form should mark the reject button as negative");
+        assertTrue(body.contains("\"controlId\": \"header\""), "form should start with a header control");
+        assertTrue(body.contains("\"label\": \"Order Date\""), "form should humanize the orderDate field name to 'Order Date'");
+        assertTrue(body.contains("\"controlId\": \"input-date\""), "form should pick input-date for the orderDate field");
+        assertTrue(body.contains("\"controlId\": \"input-number\""), "form should pick input-number for the total decimal field");
+        assertTrue(body.contains("\"type\": \"positive\""), "form should mark the approve button as positive");
+        assertTrue(body.contains("\"type\": \"negative\""), "form should mark the reject button as negative");
         assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler stub");
 
-        IResource customerForm = repository.getResource(REGISTRY_GEN + "/NewCustomer.form");
-        assertTrue(customerForm.exists(), "gen/NewCustomer.form should be generated");
+        IResource customerForm = repository.getResource(REGISTRY_PROJECT + "/NewCustomer.form");
+        assertTrue(customerForm.exists(), "NewCustomer.form should be generated");
         String customerBody = new String(customerForm.getContent(), StandardCharsets.UTF_8);
-        assertTrue(customerBody.contains("\"controlId\":\"input-checkbox\""),
+        assertTrue(customerBody.contains("\"controlId\": \"input-checkbox\""),
                 "customer form should map active:boolean to an input-checkbox");
     }
 
     private void assertReportGenerated() {
-        IResource report = repository.getResource(REGISTRY_GEN + "/OrdersByCustomer.report");
-        assertTrue(report.exists(), "gen/OrdersByCustomer.report should be generated");
+        IResource report = repository.getResource(REGISTRY_PROJECT + "/OrdersByCustomer.report");
+        assertTrue(report.exists(), "OrdersByCustomer.report should be generated");
         String body = new String(report.getContent(), StandardCharsets.UTF_8);
-        assertTrue(body.contains("\"alias\":\"OrdersByCustomer\""), "report should carry the intent name as alias");
-        assertTrue(body.contains("\"baseTable\":\"ORDER\""), "report should map the source entity name to its upper-snake table name");
-        assertTrue(body.contains("\"aggregate\":\"NONE\""), "dimensions should be emitted with aggregate NONE");
-        assertTrue(body.contains("\"aggregate\":\"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
-        assertTrue(body.contains("\"aggregate\":\"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
-        assertTrue(body.contains("\"name\":\"customer.country\""),
+        assertTrue(body.contains("\"alias\": \"OrdersByCustomer\""), "report should carry the intent name as alias");
+        assertTrue(body.contains("\"baseTable\": \"ORDERS_ORDER\""),
+                "report baseTable should carry the same intent-prefixed table name the EDM declares as dataName");
+        assertTrue(body.contains("\"aggregate\": \"NONE\""), "dimensions should be emitted with aggregate NONE");
+        assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
+        assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
+        assertTrue(body.contains("\"name\": \"customer.country\""),
                 "dotted dimension paths should be preserved verbatim in the column name");
-        assertTrue(body.contains("\"name\":\"total\""), "sum(total) measure should resolve to a column whose name is 'total'");
+        assertTrue(body.contains("\"name\": \"total\""), "sum(total) measure should resolve to a column whose name is 'total'");
     }
 
     private void assertSeedsGenerated() {
-        IResource csvim = repository.getResource(REGISTRY_GEN + "/countries.csvim");
-        assertTrue(csvim.exists(), "gen/countries.csvim should be generated");
+        IResource csvim = repository.getResource(REGISTRY_PROJECT + "/countries.csvim");
+        assertTrue(csvim.exists(), "countries.csvim should be generated");
         String csvimBody = new String(csvim.getContent(), StandardCharsets.UTF_8);
-        assertTrue(csvimBody.contains("\"table\":\"COUNTRY\""), "csvim should declare the COUNTRY table");
-        assertTrue(csvimBody.contains("\"schema\":\"PUBLIC\""), "csvim should default the schema to PUBLIC");
-        assertTrue(csvimBody.contains("\"file\":\"/countries.csv\""), "csvim should point at the sibling csv");
-        assertTrue(csvimBody.contains("\"header\":true"), "csvim should declare a header row");
-        assertTrue(csvimBody.contains("\"useHeaderNames\":true"), "csvim should use header names for column mapping");
+        assertTrue(csvimBody.contains("\"table\": \"ORDERS_COUNTRY\""),
+                "csvim should target the same intent-prefixed table name the EDM declares as dataName");
+        assertTrue(csvimBody.contains("\"schema\": \"PUBLIC\""), "csvim should default the schema to PUBLIC");
+        assertTrue(csvimBody.contains("\"file\": \"/orders/countries.csv\""),
+                "csvim file path must be project-qualified - CsvimProcessor resolves it against /registry/public");
+        assertTrue(csvimBody.contains("\"header\": true"), "csvim should declare a header row");
+        assertTrue(csvimBody.contains("\"useHeaderNames\": true"), "csvim should use header names for column mapping");
 
-        IResource csv = repository.getResource(REGISTRY_GEN + "/countries.csv");
-        assertTrue(csv.exists(), "gen/countries.csv should be generated");
+        IResource csv = repository.getResource(REGISTRY_PROJECT + "/countries.csv");
+        assertTrue(csv.exists(), "countries.csv should be generated");
         String csvBody = new String(csv.getContent(), StandardCharsets.UTF_8);
         assertTrue(csvBody.startsWith("COUNTRY_ID,COUNTRY_NAME,COUNTRY_CODE2,COUNTRY_CODE3,COUNTRY_NUMERIC"),
                 "csv header should carry the upper-snake column names in entity-field order");
@@ -338,13 +385,13 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     private void assertRolesGenerated() {
-        IResource roles = repository.getResource(REGISTRY_GEN + "/orders.roles");
-        assertTrue(roles.exists(), "gen/orders.roles should be generated");
+        IResource roles = repository.getResource(REGISTRY_PROJECT + "/orders.roles");
+        assertTrue(roles.exists(), "orders.roles should be generated");
         String body = new String(roles.getContent(), StandardCharsets.UTF_8);
-        assertTrue(body.contains("\"name\":\"Sales\""), "Sales role should be present");
-        assertTrue(body.contains("\"name\":\"Manager\""), "Manager role should be present");
-        assertTrue(body.contains("\"name\":\"Administrator\""), "Administrator role should be present");
-        assertTrue(body.contains("\"description\":\"Sales staff\""), "Role descriptions should be carried through");
+        assertTrue(body.contains("\"name\": \"Sales\""), "Sales role should be present");
+        assertTrue(body.contains("\"name\": \"Manager\""), "Manager role should be present");
+        assertTrue(body.contains("\"name\": \"Administrator\""), "Administrator role should be present");
+        assertTrue(body.contains("\"description\": \"Sales staff\""), "Role descriptions should be carried through");
     }
 
     private void assertRestEndpoints() {

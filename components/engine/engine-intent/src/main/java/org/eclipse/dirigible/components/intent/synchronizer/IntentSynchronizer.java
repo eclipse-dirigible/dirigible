@@ -35,12 +35,12 @@ import org.springframework.stereotype.Component;
 
 /**
  * Synchronizer for {@code .intent} files. Sits at the top of {@link SynchronizersOrder} so its
- * regenerated {@code gen/} output participates in the next reconciliation cycle ahead of the
- * downstream entity / schema / BPMN / form synchronizers.
+ * regenerated model files participates in the next reconciliation cycle ahead of the downstream
+ * entity / schema / BPMN / form synchronizers.
  *
  * <p>
  * The synchronizer itself owns no runtime state - it persists the intent's JSON payload and lets
- * {@link IntentRegenerationService} produce / refresh the gen/ files in {@link #finishing()}.
+ * {@link IntentRegenerationService} produce / refresh the model files in {@link #finishing()}.
  * Lifecycle transitions are pure book-keeping; nothing to start, nothing to stop.
  */
 @Component
@@ -57,7 +57,7 @@ public class IntentSynchronizer extends BaseSynchronizer<Intent, Long> {
     private SynchronizerCallback callback;
 
     /**
-     * Intents that changed in the current cycle and need their gen/ output refreshed in
+     * Intents that changed in the current cycle and need their model output refreshed in
      * {@link #finishing()}. Keyed by location to coalesce repeated parses of the same file.
      */
     private final Map<String, Intent> dirty = new LinkedHashMap<>();
@@ -101,6 +101,7 @@ public class IntentSynchronizer extends BaseSynchronizer<Intent, Long> {
         synchronized (dirty) {
             dirty.put(location, intent);
         }
+        LOGGER.info("Parsed intent [{}] - marked for regeneration", location);
         return List.of(intent);
     }
 
@@ -153,6 +154,7 @@ public class IntentSynchronizer extends BaseSynchronizer<Intent, Long> {
     @Override
     public void cleanupImpl(Intent intent) {
         try {
+            regenerationService.cleanup(intent);
             intentService.delete(intent);
         } catch (RuntimeException e) {
             LOGGER.error("Failed to delete intent [{}]", intent.getLocation(), e);
@@ -196,14 +198,16 @@ public class IntentSynchronizer extends BaseSynchronizer<Intent, Long> {
             try {
                 regenerationService.regenerate(intent);
             } catch (RuntimeException e) {
-                LOGGER.error("Failed to regenerate gen/ for intent [{}]", intent.getLocation(), e);
+                LOGGER.error("Failed to regenerate model files for intent [{}]", intent.getLocation(), e);
             }
         }
     }
 
     /**
-     * Derive a logical name from the file location: strip the path and the {@code .intent} extension,
-     * returning the base name. Used when the intent JSON itself omits the name field.
+     * Derive the artefact name from the file location: strip the path and the {@code .intent}
+     * extension, returning the base name. This is only the artefact's identity in the database - the
+     * generators' output naming prefers the YAML document's own {@code name:} field (see
+     * {@code IntentNaming.baseName}), since the file is conventionally called {@code app.intent}.
      */
     private static String deriveName(String location) {
         int lastSlash = location.lastIndexOf('/');

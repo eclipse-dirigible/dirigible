@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.components.intent.generator.permission;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -18,18 +17,17 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits {@code gen/<intent>.roles} from the intent's {@code permissions}. The roles are deduped by
+ * Emits {@code <intent>.roles} from the intent's {@code permissions}. The roles are deduped by
  * name; the {@code can: [Resource:action, ...]} tokens are NOT translated into {@code .access}
  * constraints here. URL-shaped access constraints belong to the downstream EDM / form / report
  * template generators, which know the paths they will publish; emitting them from the intent layer
@@ -67,9 +65,7 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
                  .isEmpty()) {
             return;
         }
-        String baseName = baseName(context);
-        String path = context.getGenRoot() + "/" + baseName + ".roles";
-        writeResource(context.getRepository(), path, buildRolesJson(model));
+        context.writeModelFile(IntentNaming.baseName(context) + ".roles", buildRolesJson(model));
     }
 
     private static String buildRolesJson(IntentModel model) {
@@ -93,25 +89,5 @@ public class PermissionIntentGenerator implements IntentTargetGenerator {
             roles.add(entry);
         }
         return JsonHelper.toJson(roles);
-    }
-
-    private static String baseName(IntentGenerationContext context) {
-        String intentName = context.getIntent()
-                                   .getName();
-        if (intentName != null && !intentName.isBlank()) {
-            return intentName;
-        }
-        String project = context.getProjectName();
-        return project.isEmpty() ? "intent" : project;
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
     }
 }

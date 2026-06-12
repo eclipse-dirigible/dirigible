@@ -13,6 +13,22 @@
     <artifactId>dirigible-components-ui-view-intent-mermaid</artifactId>
     <packaging>jar</packaging>
 
+    <dependencies>
+        <!-- Only the bundled dist/mermaid.min.js is served; the npm dependency graph behind it
+             carries conflicting version ranges (cose-base), so transitives are excluded wholesale. -->
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>mermaid</artifactId>
+            <version>${mermaid.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+    </dependencies>
+
     <properties>
         <license.header.location>../../../licensing-header.txt</license.header.location>
         <parent.pom.folder>../../../</parent.pom.folder>

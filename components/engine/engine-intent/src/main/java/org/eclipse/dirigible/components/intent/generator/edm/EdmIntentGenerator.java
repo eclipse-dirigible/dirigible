@@ -9,11 +9,10 @@
  */
 package org.eclipse.dirigible.components.intent.generator.edm;
 
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -21,40 +20,48 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
-import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits {@code gen/<intent>.edm} (XML) and its JSON twin {@code gen/<intent>.model} for every
- * intent that declares one or more entities. The pair is the canonical entity-data-model file
- * consumed by the EDM editor in the IDE and by the downstream "Generate from EDM" template engine,
- * which turns the model into UI / Java / SQL artefacts in a second step. The intent layer never
- * emits those second-stage artefacts itself - that contract belongs to the existing template
- * generators.
+ * Emits {@code <intent>.edm} (XML) and its JSON twin {@code <intent>.model} for every intent that
+ * declares one or more entities. The pair is the canonical entity-data-model file consumed by the
+ * EDM editor in the IDE and by the downstream "Generate from EDM" template engine, which turns the
+ * model into UI / Java / SQL artefacts in a second step. The intent layer never emits those
+ * second-stage artefacts itself - that contract belongs to the existing template generators.
  *
  * <p>
- * The intent JSON is intentionally narrower than the EDM XML attribute surface. Everything the EDM
- * editor expects but the intent omits (icons, menu keys, layout type, perspective metadata, widget
- * type) is filled with conservative defaults derived from the entity / field name:
+ * Conventions mirrored from real EDM documents (see
+ * {@code tests-integrations/.../DependsOnScenariosTestProject/sales-order.edm}):
  * <ul>
- * <li>{@code dataName} = upper-snake of the name</li>
- * <li>{@code icon} / {@code perspectiveIcon} =
- * {@code /services/web/resources/unicons/file.svg}</li>
- * <li>{@code type} = {@code PRIMARY}, or {@code DEPENDENT} if another entity owns it via a
- * {@code manyToOne}</li>
- * <li>{@code layoutType} = {@code MANAGE_MASTER} / {@code MANAGE_DETAILS} matching the above</li>
- * <li>{@code widgetType} = derived from field type (TEXTBOX / NUMBER / DATE / CHECKBOX); FK
- * properties get DROPDOWN</li>
+ * <li>{@code dataName} is prefixed with the intent name: {@code <INTENT>_<ENTITY>} (e.g.
+ * {@code ORDERS_COUNTRY}, codbex-style). This keeps physical table names unique across projects and
+ * away from SQL reserved words like {@code ORDER}; the {@code .report} and {@code .csvim}
+ * generators use the same convention so all three artefacts agree on the table name.</li>
+ * <li>A {@code required} {@code manyToOne}/{@code oneToOne} relation is a <b>composition</b>: the
+ * FK property carries the {@code relationship*} attributes, the owning entity becomes
+ * {@code DEPENDENT} with {@code MANAGE_DETAILS} layout and inherits the perspective of its
+ * (transitively resolved) composition parent. An optional relation is an <b>association</b>: a
+ * plain DROPDOWN property, the entity stays {@code PRIMARY} with its own perspective.</li>
+ * <li>Dropdown key / value and the relation's {@code referencedProperty} are derived from the
+ * target entity's actual fields (its primary key and its {@code name}-like field), never
+ * hardcoded.</li>
+ * <li>The {@code .model} JSON carries {@code entities} / {@code perspectives} /
+ * {@code navigations}; relations appear only in the XML as {@code <relation>} elements interleaved
+ * with their owning {@code <entity>}.</li>
  * </ul>
+ * No {@code mxGraphModel} diagram block is emitted - the EDM editor lays out a missing diagram on
+ * first open, which keeps the output deterministic across regenerations.
+ *
+ * <p>
  * Idempotent: identical input always produces byte-identical output.
  */
 @Component
@@ -77,26 +84,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                  .isEmpty()) {
             return;
         }
-        Map<String, Object> root = buildModel(model);
-        String baseName = baseName(context);
-        String genRoot = context.getGenRoot();
-        IRepository repo = context.getRepository();
-        writeResource(repo, genRoot + "/" + baseName + ".model", JsonHelper.toJson(root));
-        writeResource(repo, genRoot + "/" + baseName + ".edm", renderEdmXml(root));
+        String baseName = IntentNaming.baseName(context);
+        EdmDocument document = buildDocument(model, baseName);
+        context.writeModelFile(baseName + ".model", JsonHelper.toJson(document.modelJson));
+        context.writeModelFile(baseName + ".edm", renderEdmXml(document));
     }
 
-    /**
-     * Build the typed map that mirrors the canonical {@code .model} JSON shape. Both the JSON
-     * serializer and the XML renderer consume this same tree, so the two on-disk formats can never
-     * drift.
-     */
-    private static Map<String, Object> buildModel(IntentModel model) {
-        List<EntityIntent> entities = model.getEntities();
-        Set<String> dependentEntities = computeDependents(entities);
+    /** The two views over one model tree: the {@code .model} JSON root and the XML extras. */
+    private static final class EdmDocument {
+        /** Root of the {@code .model} JSON: {@code {model: {entities, perspectives, navigations}}}. */
+        final Map<String, Object> modelJson = new LinkedHashMap<>();
+        /** Top-level {@code <relation>} elements per owning entity name, XML-only. */
+        final Map<String, List<Map<String, Object>>> relationsByEntity = new LinkedHashMap<>();
+    }
 
+    private static EdmDocument buildDocument(IntentModel model, String intentName) {
+        List<EntityIntent> entities = model.getEntities();
+        Map<String, EntityIntent> byName = indexEntities(entities);
+        Map<String, String> compositionParents = computeCompositionParents(entities);
+
+        EdmDocument document = new EdmDocument();
         List<Map<String, Object>> entityList = new ArrayList<>();
-        List<Map<String, Object>> relationList = new ArrayList<>();
-        int order = 1;
+        List<Map<String, Object>> perspectiveList = new ArrayList<>();
+        String tablePrefix = IntentNaming.upperSnake(intentName);
+        int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
             String name = entity.getName();
@@ -104,8 +115,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Skipping unnamed entity in intent");
                 continue;
             }
-            boolean dependent = dependentEntities.contains(name);
-            Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), dependent, order++);
+            boolean dependent = compositionParents.containsKey(name);
+            String perspective = resolvePerspective(name, compositionParents);
+            Map<String, Object> entityMap =
+                    entityDefaults(name, entity.getDescription(), dependent, perspective, tablePrefix, perspectiveOrder);
+            if (!dependent) {
+                perspectiveList.add(perspectiveEntry(name, perspectiveOrder));
+                perspectiveOrder++;
+            }
 
             List<Map<String, Object>> properties = new ArrayList<>();
             for (FieldIntent field : entity.getFields()) {
@@ -115,6 +132,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 }
                 properties.add(propertyMap(name, field));
             }
+            List<Map<String, Object>> relations = new ArrayList<>();
+            boolean compositionAssigned = false;
             for (RelationIntent relation : entity.getRelations()) {
                 if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
                     continue;
@@ -122,41 +141,89 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (relation.getName() == null || relation.getTo() == null) {
                     continue;
                 }
-                properties.add(relationProperty(name, relation));
-                relationList.add(relationLink(name, relation));
+                boolean composition = !compositionAssigned && relation.isRequired();
+                compositionAssigned |= composition;
+                EntityIntent target = byName.get(relation.getTo());
+                properties.add(relationProperty(name, relation, target, composition));
+                relations.add(relationLink(name, relation, target, compositionParents));
             }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
+            if (!relations.isEmpty()) {
+                document.relationsByEntity.put(name, relations);
+            }
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("entities", entityList);
-        if (!relationList.isEmpty()) {
-            body.put("relations", relationList);
+        body.put("perspectives", perspectiveList);
+        body.put("navigations", new ArrayList<>());
+        document.modelJson.put("model", body);
+        return document;
+    }
+
+    private static Map<String, EntityIntent> indexEntities(List<EntityIntent> entities) {
+        Map<String, EntityIntent> index = new HashMap<>();
+        for (EntityIntent entity : entities) {
+            if (entity.getName() != null) {
+                index.put(entity.getName(), entity);
+            }
         }
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("model", body);
-        return root;
+        return index;
     }
 
     /**
-     * Build the set of entity names that are owned by another entity through an outgoing
-     * {@code manyToOne}. Used to decide PRIMARY vs DEPENDENT and MASTER vs DETAILS layouts.
+     * Map each entity to its composition parent: the target of its first {@code required}
+     * {@code manyToOne} / {@code oneToOne} relation. Entities present as keys are DEPENDENT; their
+     * perspective is the parent's, resolved transitively by {@link #resolvePerspective}.
      */
-    private static Set<String> computeDependents(List<EntityIntent> entities) {
-        Map<String, Boolean> result = new HashMap<>();
+    private static Map<String, String> computeCompositionParents(List<EntityIntent> entities) {
+        Map<String, String> parents = new LinkedHashMap<>();
         for (EntityIntent entity : entities) {
+            if (entity.getName() == null) {
+                continue;
+            }
             for (RelationIntent relation : entity.getRelations()) {
-                if ("manyToOne".equals(relation.getKind()) && entity.getName() != null) {
-                    result.put(entity.getName(), true);
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isRequired() && relation.getTo() != null) {
+                    parents.put(entity.getName(), relation.getTo());
+                    break;
                 }
             }
         }
-        return result.keySet();
+        return parents;
     }
 
-    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, int order) {
-        String dataName = toUpperSnake(name);
+    /**
+     * Follow the composition-parent chain to the first PRIMARY entity; that entity's name is the
+     * perspective every entity in the chain lives under. A cycle (mutually required relations) falls
+     * back to the starting entity itself.
+     */
+    private static String resolvePerspective(String entityName, Map<String, String> compositionParents) {
+        String current = entityName;
+        Set<String> visited = new LinkedHashSet<>();
+        while (compositionParents.containsKey(current)) {
+            if (!visited.add(current)) {
+                LOGGER.warn("Composition cycle detected at entity [{}] - keeping its own perspective", entityName);
+                return entityName;
+            }
+            current = compositionParents.get(current);
+        }
+        return current;
+    }
+
+    private static Map<String, Object> perspectiveEntry(String name, int order) {
+        Map<String, Object> perspective = new LinkedHashMap<>();
+        perspective.put("name", name);
+        perspective.put("label", name);
+        perspective.put("icon", DEFAULT_ICON);
+        perspective.put("order", Integer.toString(order));
+        return perspective;
+    }
+
+    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, String perspective,
+            String tablePrefix, int order) {
+        String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
         entity.put("name", name);
         entity.put("dataName", dataName);
@@ -172,8 +239,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("menuLabel", name);
         entity.put("menuIndex", "100");
         entity.put("layoutType", dependent ? "MANAGE_DETAILS" : "MANAGE_MASTER");
-        entity.put("perspectiveName", name);
-        entity.put("perspectiveLabel", name);
+        entity.put("perspectiveName", perspective);
+        entity.put("perspectiveLabel", perspective);
         entity.put("perspectiveHeader", "");
         entity.put("perspectiveIcon", DEFAULT_ICON);
         entity.put("perspectiveOrder", Integer.toString(order));
@@ -185,7 +252,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static Map<String, Object> propertyMap(String entityName, FieldIntent field) {
-        String column = toUpperSnake(entityName) + "_" + toUpperSnake(field.getName());
+        String column = IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(field.getName());
         String dataType = mapDataType(field.getType());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", field.getName());
@@ -200,7 +267,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isPrimaryKey() && field.isGenerated()) {
             p.put("dataAutoIncrement", "true");
         }
-        Integer length = field.getLength() != null ? field.getLength() : defaultLength(dataType);
+        Integer length = fieldLength(field);
         if (length != null && length > 0) {
             p.put("dataLength", length.toString());
         }
@@ -221,45 +288,115 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * FK property added to the owning entity for a {@code manyToOne}/{@code oneToOne} relation. Renders
-     * as a DROPDOWN bound to the target entity's Id/Name.
+     * as a DROPDOWN keyed by the target entity's actual primary-key field and labelled by its
+     * {@code name}-like field. Only the entity's composition relation (its first {@code required}
+     * to-one) carries the {@code relationship*} attributes that make the EDM editor treat the owner as
+     * a detail of the target - further required relations stay plain NOT NULL associations, mirroring
+     * how the EDM editor writes multi-FK entities.
      */
-    private static Map<String, Object> relationProperty(String ownerEntity, RelationIntent relation) {
-        String column = toUpperSnake(ownerEntity) + "_" + toUpperSnake(relation.getName());
+    private static Map<String, Object> relationProperty(String ownerEntity, RelationIntent relation, EntityIntent target,
+            boolean composition) {
+        String column = IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName());
+        FieldIntent targetPk = primaryKeyOf(target);
+        String fkType = targetPk == null ? "INTEGER" : mapDataType(targetPk.getType());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", relation.getName());
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
-        p.put("dataType", "INTEGER");
+        p.put("dataType", fkType);
         p.put("dataNullable", relation.isRequired() ? "false" : "true");
-        p.put("relationshipType", "COMPOSITION");
-        p.put("relationshipCardinality", "1_n");
-        p.put("relationshipName", relation.getName());
+        if ("VARCHAR".equals(fkType) && targetPk != null) {
+            Integer length = fieldLength(targetPk);
+            if (length != null && length > 0) {
+                p.put("dataLength", length.toString());
+            }
+        }
+        if (composition) {
+            p.put("relationshipType", "COMPOSITION");
+            p.put("relationshipCardinality", "1_n");
+            p.put("relationshipName", relation.getName());
+        }
         p.put("widgetType", "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
-        p.put("widgetDropDownKey", "Id");
-        p.put("widgetDropDownValue", "Name");
+        p.put("widgetDropDownKey", keyFieldName(target));
+        p.put("widgetDropDownValue", labelFieldName(target));
         return p;
     }
 
     /**
-     * Top-level {@code <relation>} link that the EDM editor uses to render arrows on the canvas.
+     * Top-level {@code <relation>} element interleaved with its owning {@code <entity>} in the XML.
+     * {@code relationshipEntityPerspectiveName} is the target's <i>resolved</i> perspective - for a
+     * dependent target that is its composition parent's perspective, mirroring how the EDM editor
+     * writes these links.
      */
-    private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation) {
+    private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation, EntityIntent target,
+            Map<String, String> compositionParents) {
         Map<String, Object> link = new LinkedHashMap<>();
         String linkName = ownerEntity + "_" + relation.getName();
         link.put("name", linkName);
         link.put("type", "relation");
         link.put("entity", ownerEntity);
         link.put("relationName", linkName);
-        link.put("relationshipEntityPerspectiveName", relation.getTo());
+        link.put("relationshipEntityPerspectiveName", resolvePerspective(relation.getTo(), compositionParents));
         link.put("relationshipEntityPerspectiveLabel", "Entities");
         link.put("property", relation.getName());
         link.put("referenced", relation.getTo());
-        link.put("referencedProperty", "Id");
+        link.put("referencedProperty", keyFieldName(target));
         return link;
+    }
+
+    /** The target entity's primary-key field, or null when the target is unknown or has no PK. */
+    private static FieldIntent primaryKeyOf(EntityIntent entity) {
+        if (entity == null) {
+            return null;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (field.isPrimaryKey() && field.getName() != null) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /** The dropdown key: the target's actual PK field name; {@code Id} only as a last resort. */
+    private static String keyFieldName(EntityIntent target) {
+        FieldIntent pk = primaryKeyOf(target);
+        return pk == null ? "Id" : pk.getName();
+    }
+
+    /**
+     * The dropdown label: the target's {@code name} field (case-insensitive), else its first
+     * string-typed field, else its PK.
+     */
+    private static String labelFieldName(EntityIntent target) {
+        if (target == null) {
+            return "Name";
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                return field.getName();
+            }
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && "VARCHAR".equals(mapDataType(field.getType())) && !field.isPrimaryKey()) {
+                return field.getName();
+            }
+        }
+        return keyFieldName(target);
+    }
+
+    /** Declared length, with type-derived defaults ({@code uuid} -> 36). */
+    private static Integer fieldLength(FieldIntent field) {
+        if (field.getLength() != null) {
+            return field.getLength();
+        }
+        if (field.getType() != null && "uuid".equalsIgnoreCase(field.getType())) {
+            return 36;
+        }
+        return defaultLength(mapDataType(field.getType()));
     }
 
     private static String mapDataType(String type) {
@@ -325,42 +462,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Camel-/Pascal-case to upper snake. Handles {@code IDValue} -> {@code ID_VALUE}.
-     */
-    private static String toUpperSnake(String name) {
-        if (name == null || name.isEmpty()) {
-            return "";
-        }
-        StringBuilder out = new StringBuilder(name.length() + 8);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
-                out.append('_');
-            }
-            out.append(Character.toUpperCase(c));
-        }
-        return out.toString();
-    }
-
-    /**
-     * Render the typed model tree as the EDM XML shape. The XML is deliberately minimal - the EDM
-     * editor accepts files without the {@code <ui>} or {@code <model>}-wrapped extension blocks and
-     * fills its own defaults on first edit.
+     * Render the EDM XML shape: entities with their relations interleaved, then the perspectives and
+     * navigations blocks, mirroring documents the EDM editor itself writes (minus the
+     * {@code mxGraphModel} diagram, which the editor recreates).
      */
     @SuppressWarnings("unchecked")
-    private static String renderEdmXml(Map<String, Object> root) {
-        Map<String, Object> body = (Map<String, Object>) root.get("model");
-        List<Map<String, Object>> entities =
-                body == null ? Collections.emptyList() : (List<Map<String, Object>>) body.getOrDefault("entities", Collections.emptyList());
-        List<Map<String, Object>> relations = body == null ? Collections.emptyList()
-                : (List<Map<String, Object>>) body.getOrDefault("relations", Collections.emptyList());
+    private static String renderEdmXml(EdmDocument document) {
+        Map<String, Object> body = (Map<String, Object>) document.modelJson.get("model");
+        List<Map<String, Object>> entities = (List<Map<String, Object>>) body.get("entities");
+        List<Map<String, Object>> perspectives = (List<Map<String, Object>>) body.get("perspectives");
 
         StringBuilder sb = new StringBuilder(4096);
         sb.append("<model>\n");
-        sb.append("  <entities>\n");
+        sb.append(" <entities>\n");
         for (Map<String, Object> entity : entities) {
-            sb.append("    <entity");
-            List<Map<String, Object>> properties = (List<Map<String, Object>>) entity.getOrDefault("properties", Collections.emptyList());
+            sb.append("  <entity");
+            List<Map<String, Object>> properties = (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
             for (Map.Entry<String, Object> attr : entity.entrySet()) {
                 if ("properties".equals(attr.getKey())) {
                     continue;
@@ -369,22 +486,40 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             sb.append(">\n");
             for (Map<String, Object> property : properties) {
-                sb.append("      <property");
+                sb.append("   <property");
                 for (Map.Entry<String, Object> attr : property.entrySet()) {
                     appendAttribute(sb, attr.getKey(), attr.getValue());
                 }
                 sb.append("></property>\n");
             }
-            sb.append("    </entity>\n");
-        }
-        sb.append("  </entities>\n");
-        for (Map<String, Object> relation : relations) {
-            sb.append("  <relation");
-            for (Map.Entry<String, Object> attr : relation.entrySet()) {
-                appendAttribute(sb, attr.getKey(), attr.getValue());
+            sb.append("  </entity>\n");
+            List<Map<String, Object>> relations = document.relationsByEntity.get(entity.get("name"));
+            if (relations != null) {
+                for (Map<String, Object> relation : relations) {
+                    sb.append("  <relation");
+                    for (Map.Entry<String, Object> attr : relation.entrySet()) {
+                        appendAttribute(sb, attr.getKey(), attr.getValue());
+                    }
+                    sb.append(">\n  </relation>\n");
+                }
             }
-            sb.append("></relation>\n");
         }
+        sb.append(" </entities>\n");
+        sb.append(" <perspectives>\n");
+        for (Map<String, Object> perspective : perspectives) {
+            sb.append("  <perspective><name>")
+              .append(escapeXmlText(perspective.get("name")))
+              .append("</name><label>")
+              .append(escapeXmlText(perspective.get("label")))
+              .append("</label><icon>")
+              .append(escapeXmlText(perspective.get("icon")))
+              .append("</icon><order>")
+              .append(escapeXmlText(perspective.get("order")))
+              .append("</order></perspective>\n");
+        }
+        sb.append(" </perspectives>\n");
+        sb.append(" <navigations>\n");
+        sb.append(" </navigations>\n");
         sb.append("</model>\n");
         return sb.toString();
     }
@@ -393,11 +528,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         sb.append(' ')
           .append(key)
           .append("=\"")
-          .append(escapeXmlAttribute(value == null ? "" : value.toString()))
+          .append(escapeXml(value == null ? "" : value.toString()))
           .append("\"");
     }
 
-    private static String escapeXmlAttribute(String raw) {
+    private static String escapeXmlText(Object value) {
+        return escapeXml(value == null ? "" : value.toString());
+    }
+
+    private static String escapeXml(String raw) {
         StringBuilder sb = new StringBuilder(raw.length() + 8);
         for (int i = 0; i < raw.length(); i++) {
             char c = raw.charAt(i);
@@ -425,23 +564,4 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return sb.toString();
     }
 
-    private static String baseName(IntentGenerationContext context) {
-        String intentName = context.getIntent()
-                                   .getName();
-        if (intentName != null && !intentName.isBlank()) {
-            return intentName;
-        }
-        String project = context.getProjectName();
-        return project.isEmpty() ? "intent" : project;
-    }
-
-    private static void writeResource(IRepository repository, String path, String content) {
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        IResource existing = repository.getResource(path);
-        if (existing.exists()) {
-            existing.setContent(bytes);
-        } else {
-            repository.createResource(path, bytes);
-        }
-    }
 }

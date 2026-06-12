@@ -18,7 +18,6 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import jakarta.persistence.Transient;
 
@@ -41,10 +40,12 @@ public class Intent extends Artefact {
 
     /**
      * Raw YAML payload of the {@code .intent} file, post-placeholder-expansion. Persisted so the
-     * regeneration step can run from the DB row without re-reading the repository.
+     * regeneration step can run from the DB row without re-reading the repository. The {@code TEXT}
+     * column definition follows the platform convention for content-bearing artefacts (Bpmn, Camel,
+     * OpenAPI) and is proven portable across the H2 / PostgreSQL / MSSQL CI matrix - {@code CLOB} is
+     * not.
      */
-    @Lob
-    @Column(name = "INTENT_CONTENT", columnDefinition = "CLOB", nullable = false)
+    @Column(name = "INTENT_CONTENT", columnDefinition = "TEXT", nullable = false)
     @Expose
     private String content;
 

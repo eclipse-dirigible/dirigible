@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
-import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -29,10 +28,14 @@ import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
 
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.ToNumberPolicy;
+
 /**
  * Parses the YAML payload of a {@code .intent} file into an {@link IntentModel} tree. SnakeYAML
- * loads the document into a generic map; that map is then round-tripped through Gson via
- * {@link JsonHelper} so the typed-POJO mapping stays in a single place.
+ * loads the document into a generic map; that map is then round-tripped through a plain Gson
+ * instance (see {@link #GSON}) so the typed-POJO mapping stays in a single place.
  *
  * <p>
  * SafeConstructor blocks the {@code !!type} / {@code !!new} tags - YAML deserialisation of intents
@@ -52,6 +55,17 @@ public final class IntentParser {
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
 
+    /**
+     * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
+     * {@code GsonHelper} cannot be used here: they are configured with
+     * {@code excludeFieldsWithoutExposeAnnotation()}, which silently maps every un-annotated model
+     * field to null/empty - the parser then "succeeds" with an empty {@link IntentModel} and every
+     * generator quietly skips its slice. {@code LONG_OR_DOUBLE} keeps YAML integers integral (seed row
+     * {@code id: 1} must render as {@code 1} in the CSV, not {@code 1.0}).
+     */
+    private static final Gson GSON = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
+                                                      .create();
+
     private IntentParser() {}
 
     /**
@@ -70,8 +84,8 @@ public final class IntentParser {
         if (tree == null) {
             return new IntentModel();
         }
-        String json = JsonHelper.toJson(tree);
-        IntentModel model = JsonHelper.fromJson(json, IntentModel.class);
+        String json = GSON.toJson(tree);
+        IntentModel model = GSON.fromJson(json, IntentModel.class);
         if (model == null) {
             return new IntentModel();
         }
@@ -181,7 +195,54 @@ public final class IntentParser {
                             "process [" + process.getName() + "] step [" + step.getName() + "] has unknown kind [" + step.getKind() + "]");
                 }
             }
+            validateDecisionTargets(process, issues);
         }
+    }
+
+    /**
+     * Decision steps must declare {@code if} and {@code then}; {@code then} and the optional
+     * {@code else} must reference a declared step of the same process (or the literal {@code end}).
+     * Without this check a typo silently produces BPMN that Flowable rejects on the next
+     * synchronization cycle.
+     */
+    private static void validateDecisionTargets(ProcessIntent process, List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        for (StepIntent step : process.getSteps()) {
+            if (!"decision".equals(step.getKind()) || step.getName() == null) {
+                continue;
+            }
+            String condition = stepArg(step, "if");
+            String thenTarget = stepArg(step, "then");
+            if (condition == null || condition.isBlank() || thenTarget == null || thenTarget.isBlank()) {
+                issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] must declare both `if` and `then`");
+                continue;
+            }
+            checkDecisionTarget(process, step, "then", thenTarget, stepNames, issues);
+            String elseTarget = stepArg(step, "else");
+            if (elseTarget != null && !elseTarget.isBlank()) {
+                checkDecisionTarget(process, step, "else", elseTarget, stepNames, issues);
+            }
+        }
+    }
+
+    private static void checkDecisionTarget(ProcessIntent process, StepIntent step, String arg, String target, Set<String> stepNames,
+            List<String> issues) {
+        if (!"end".equalsIgnoreCase(target) && !stepNames.contains(target)) {
+            issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg + "` references unknown step ["
+                    + target + "]");
+        }
+    }
+
+    private static String stepArg(StepIntent step, String key) {
+        Object value = step.getArgs() == null ? null
+                : step.getArgs()
+                      .get(key);
+        return value == null ? null : value.toString();
     }
 
     private static void validateForms(IntentModel model, Set<String> entityNames, List<String> issues) {
