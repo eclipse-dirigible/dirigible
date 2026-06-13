@@ -31,55 +31,74 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
     let renderCounter = 0;
 
     // ----- Mermaid theming -----------------------------------------------------
-    // Drive Mermaid's colors from the live BlimpKit theme tokens so the diagram tracks the IDE
-    // light/dark switch instead of a hardcoded palette. Read at runtime via getComputedStyle so it
-    // works for any installed theme; re-applied (and the diagram re-rendered) on every theme change.
+    // Drive Mermaid's colors from the live BlimpKit theme so the diagram tracks the IDE light/dark
+    // switch. The two anchors that guarantee contrast are the theme foreground and background; lines,
+    // borders and text all use the foreground (the faint divider/surface tokens are deliberately
+    // low-contrast and made the diagram nearly invisible), and node fills are the foreground blended
+    // into the background at a low ratio so panels read as distinct without washing out their text.
 
-    const cssVar = (names, fallback) => {
-        const style = getComputedStyle(document.body);
-        for (const name of names) {
-            const value = style.getPropertyValue(name)
-                               .trim();
-            if (value) return value;
-        }
-        return fallback;
+    // Resolve a CSS color expression (incl. nested var()/named colors) to a concrete "rgb(...)" via a
+    // probe element - getComputedStyle on a raw custom property returns the unresolved authored value.
+    const probe = document.createElement('span');
+    probe.style.display = 'none';
+    document.body.appendChild(probe);
+    const resolveColor = (expr) => {
+        probe.style.color = '';
+        probe.style.color = expr;
+        return getComputedStyle(probe).color || 'rgb(0, 0, 0)';
     };
 
-    const isDarkColor = (color) => {
-        const match = color && color.match(/\d+(\.\d+)?/g);
-        if (!match || match.length < 3) return false;
-        const [r, g, b] = match.map(Number);
-        // Perceived luminance (ITU-R BT.601); < 0.5 means a dark surface.
-        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+    const rgbOf = (color) => {
+        const m = color.match(/\d+(\.\d+)?/g);
+        return m && m.length >= 3 ? [Number(m[0]), Number(m[1]), Number(m[2])] : [0, 0, 0];
+    };
+
+    const luminance = (rgb) => (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
+
+    const mix = (a, b, ratio) => {
+        const r = Math.round(a[0] * ratio + b[0] * (1 - ratio));
+        const g = Math.round(a[1] * ratio + b[1] * (1 - ratio));
+        const bl = Math.round(a[2] * ratio + b[2] * (1 - ratio));
+        return `rgb(${r}, ${g}, ${bl})`;
     };
 
     const applyMermaidTheme = () => {
         if (!window.mermaid || typeof window.mermaid.initialize !== 'function') return;
-        const background = cssVar(['--sapBackgroundColor', '--background'], '#ffffff');
-        const surface = cssVar(['--sapList_Background', '--object-background', '--sapBackgroundColor'], '#f7f7f7');
-        const text = cssVar(['--sapTextColor', '--foreground'], '#1d2d3e');
-        const border = cssVar(['--sapList_BorderColor', '--border', '--sapContent_ForegroundColor'], '#89919a');
+        const fg = rgbOf(resolveColor('var(--sapTextColor, var(--foreground, #1d2d3e))'));
+        const bg = rgbOf(resolveColor('var(--sapBackgroundColor, var(--background, #ffffff))'));
+        const fgCss = `rgb(${fg[0]}, ${fg[1]}, ${fg[2]})`;
+        const bgCss = `rgb(${bg[0]}, ${bg[1]}, ${bg[2]})`;
+        const nodeFill = mix(fg, bg, 0.10); // faint foreground tint - distinct panel, still light/dark-correct
+        const altRow = mix(fg, bg, 0.05);
         window.mermaid.initialize({
             startOnLoad: false,
             securityLevel: 'strict',
             theme: 'base',
             themeVariables: {
-                darkMode: isDarkColor(background),
-                background: background,
-                primaryColor: surface,
-                primaryBorderColor: border,
-                primaryTextColor: text,
-                secondaryColor: surface,
-                tertiaryColor: background,
-                lineColor: border,
-                textColor: text,
-                mainBkg: surface,
-                nodeBorder: border,
-                nodeTextColor: text,
-                titleColor: text,
-                edgeLabelBackground: background,
-                attributeBackgroundColorOdd: surface,
-                attributeBackgroundColorEven: background
+                darkMode: luminance(bg) < 0.5,
+                background: bgCss,
+                // High-contrast structure: lines / borders / text all use the theme foreground.
+                lineColor: fgCss,
+                textColor: fgCss,
+                primaryTextColor: fgCss,
+                secondaryTextColor: fgCss,
+                tertiaryTextColor: fgCss,
+                nodeTextColor: fgCss,
+                titleColor: fgCss,
+                primaryBorderColor: fgCss,
+                secondaryBorderColor: fgCss,
+                tertiaryBorderColor: fgCss,
+                nodeBorder: fgCss,
+                clusterBorder: fgCss,
+                // Surfaces: foreground tinted into the background so panels are visible in both themes.
+                primaryColor: nodeFill,
+                secondaryColor: altRow,
+                tertiaryColor: bgCss,
+                mainBkg: nodeFill,
+                clusterBkg: bgCss,
+                edgeLabelBackground: bgCss,
+                attributeBackgroundColorOdd: nodeFill,
+                attributeBackgroundColorEven: bgCss
             }
         });
     };
