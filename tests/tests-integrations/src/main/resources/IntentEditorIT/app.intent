@@ -1,0 +1,63 @@
+name: library
+description: Library management with a loan approval workflow
+version: 1
+
+entities:
+  - name: Genre
+    fields:
+      - { name: id,   type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string,  required: true, length: 100 }
+
+  - name: Book
+    fields:
+      - { name: id,    type: uuid,   primaryKey: true, generated: true }
+      - { name: title, type: string, required: true, length: 200 }
+    relations:
+      - { name: genre, kind: manyToOne, to: Genre }
+
+  - name: Loan
+    fields:
+      - { name: id,       type: uuid, primaryKey: true, generated: true }
+      - { name: loanedOn, type: date, required: true }
+    relations:
+      - { name: book, kind: manyToOne, to: Book, required: true }
+
+processes:
+  - name: LoanApproval
+    steps:
+      - name: librarianReview
+        kind: userTask
+        args: { assignee: librarian, form: ApproveLoan }
+      - name: rareBook
+        kind: decision
+        args: { if: "price > 500", then: curatorReview, else: notifyMember }
+      - name: curatorReview
+        kind: userTask
+        args: { assignee: curator, form: ApproveLoan }
+      - name: notifyMember
+        kind: serviceTask
+        args: { call: "custom/notify-member.ts" }
+      - name: done
+        kind: end
+
+forms:
+  - name: ApproveLoan
+    forEntity: Loan
+    fields: [loanedOn]
+    actions: [approve, reject]
+
+reports:
+  - name: LoansByBook
+    source: Loan
+    dimensions: [book]
+    measures: ["count(*)"]
+
+permissions:
+  - { role: Librarian, description: Library staff, can: [Book:read] }
+
+seeds:
+  - name: genres
+    entity: Genre
+    rows:
+      - { id: 1, name: Fiction }
+      - { id: 2, name: Science }
