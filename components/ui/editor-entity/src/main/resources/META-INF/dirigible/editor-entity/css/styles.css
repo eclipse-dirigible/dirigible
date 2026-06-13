@@ -10,8 +10,14 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 :root {
-  --font_color: #303030;
-  --stroke_color: #303030;
+  /*
+   * Follow the BlimpKit theme foreground (set by the IDE theme switcher), NOT the OS
+   * prefers-color-scheme. Keying these off the OS made the entity/property text light while the
+   * switcher was on the light theme (light text on the light entity background = invisible); the
+   * editor body and icons already use --foreground, so the graph font/stroke now match.
+   */
+  --font_color: var(--foreground, #303030);
+  --stroke_color: var(--foreground, #303030);
   --entity-header-color: #fff;
   --entity-color: #3584e4;
   --dependent-color: #2a6ab6;
@@ -24,13 +30,6 @@
   --copied-color: #5d36ff;
   --projection-color: #a100c2;
   --extension-color: #046c7a;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --font_color: #fafafa;
-    --stroke_color: #fafafa;
-  }
 }
 
 body {

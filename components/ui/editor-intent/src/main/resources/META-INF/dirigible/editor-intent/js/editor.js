@@ -15,6 +15,7 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
     const workspaceHub = new WorkspaceHub();
     const layoutHub = new LayoutHub();
     const dialogHub = new DialogHub();
+    const themeHub = new ThemingHub();
     const PARSE_URL = '/services/ide/intent/parse';
     const GENERATE_URL = '/services/ide/intent/generate';
 
@@ -29,9 +30,70 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
     let parseTimer = null;
     let renderCounter = 0;
 
-    if (window.mermaid && typeof window.mermaid.initialize === 'function') {
-        window.mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'default' });
-    }
+    // ----- Mermaid theming -----------------------------------------------------
+    // Drive Mermaid's colors from the live BlimpKit theme tokens so the diagram tracks the IDE
+    // light/dark switch instead of a hardcoded palette. Read at runtime via getComputedStyle so it
+    // works for any installed theme; re-applied (and the diagram re-rendered) on every theme change.
+
+    const cssVar = (names, fallback) => {
+        const style = getComputedStyle(document.body);
+        for (const name of names) {
+            const value = style.getPropertyValue(name)
+                               .trim();
+            if (value) return value;
+        }
+        return fallback;
+    };
+
+    const isDarkColor = (color) => {
+        const match = color && color.match(/\d+(\.\d+)?/g);
+        if (!match || match.length < 3) return false;
+        const [r, g, b] = match.map(Number);
+        // Perceived luminance (ITU-R BT.601); < 0.5 means a dark surface.
+        return (0.299 * r + 0.587 * g + 0.114 * b) / 255 < 0.5;
+    };
+
+    const applyMermaidTheme = () => {
+        if (!window.mermaid || typeof window.mermaid.initialize !== 'function') return;
+        const background = cssVar(['--sapBackgroundColor', '--background'], '#ffffff');
+        const surface = cssVar(['--sapList_Background', '--object-background', '--sapBackgroundColor'], '#f7f7f7');
+        const text = cssVar(['--sapTextColor', '--foreground'], '#1d2d3e');
+        const border = cssVar(['--sapList_BorderColor', '--border', '--sapContent_ForegroundColor'], '#89919a');
+        window.mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: 'strict',
+            theme: 'base',
+            themeVariables: {
+                darkMode: isDarkColor(background),
+                background: background,
+                primaryColor: surface,
+                primaryBorderColor: border,
+                primaryTextColor: text,
+                secondaryColor: surface,
+                tertiaryColor: background,
+                lineColor: border,
+                textColor: text,
+                mainBkg: surface,
+                nodeBorder: border,
+                nodeTextColor: text,
+                titleColor: text,
+                edgeLabelBackground: background,
+                attributeBackgroundColorOdd: surface,
+                attributeBackgroundColorEven: background
+            }
+        });
+    };
+
+    applyMermaidTheme();
+
+    themeHub.onThemeChange(() => {
+        // The theme swaps its <link> stylesheets asynchronously; recompute and re-render once the new
+        // CSS variables have taken effect.
+        setTimeout(() => {
+            applyMermaidTheme();
+            render();
+        }, 300);
+    });
 
     // ----- File location -----------------------------------------------------
 
