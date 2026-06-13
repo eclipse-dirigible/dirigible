@@ -271,6 +271,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("dataName=\"CUSTOMER_COUNTRY\""),
                 "Customer->Country FK should materialize as a CUSTOMER_COUNTRY column on Customer");
 
+        // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
+        // empty. Assert the diagram block, an entity vertex, and a relation edge are present.
+        assertTrue(edmXml.contains("<mxGraphModel>"), "EDM must carry an mxGraphModel diagram or the editor renders an empty canvas");
+        assertTrue(edmXml.contains("style=\"entity\""), "mxGraphModel must contain entity vertices");
+        assertTrue(edmXml.contains("<Entity") && edmXml.contains("type=\"Entity\""),
+                "mxGraphModel entity cells must carry an Entity value");
+        assertTrue(edmXml.contains("edge=\"1\""), "mxGraphModel must wire the foreign-key relations as edges");
+
         assertTrue(resource("orders.model").exists(), "orders.model should be generated");
         String modelBody = contentOf("orders.model");
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
@@ -289,6 +297,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
         assertTrue(body.contains("${amount > 10000}"), "BPMN should embed the decision's if expression");
+
+        // The Flowable/Oryx modeler renders the canvas ONLY from the diagram interchange - without it
+        // the editor opens empty. Assert the diagram block, a node shape, and a flow edge are present.
+        assertTrue(body.contains("<bpmndi:BPMNDiagram"), "BPMN must carry a bpmndi diagram or the editor renders an empty canvas");
+        assertTrue(body.contains("<bpmndi:BPMNShape bpmnElement=\"managerReview\""), "the diagram must place a shape for each node");
+        assertTrue(body.contains("<bpmndi:BPMNEdge bpmnElement=\"flow_bigOrder_then\""), "the diagram must draw an edge for each flow");
+        assertTrue(body.contains("<omgdc:Bounds"), "shapes must carry layout bounds");
     }
 
     private void assertForm() {

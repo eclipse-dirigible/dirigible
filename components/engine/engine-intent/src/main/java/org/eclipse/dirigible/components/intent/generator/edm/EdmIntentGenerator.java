@@ -58,8 +58,9 @@ import org.springframework.stereotype.Component;
  * {@code navigations}; relations appear only in the XML as {@code <relation>} elements interleaved
  * with their owning {@code <entity>}.</li>
  * </ul>
- * No {@code mxGraphModel} diagram block is emitted - the EDM editor lays out a missing diagram on
- * first open, which keeps the output deterministic across regenerations.
+ * An {@code mxGraphModel} diagram block IS emitted with a deterministic grid layout: the EDM editor
+ * renders the canvas exclusively by decoding {@code mxGraphModel}, so without it the editor opens
+ * empty. See {@link #appendMxGraphModel}.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -462,9 +463,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Render the EDM XML shape: entities with their relations interleaved, then the perspectives and
-     * navigations blocks, mirroring documents the EDM editor itself writes (minus the
-     * {@code mxGraphModel} diagram, which the editor recreates).
+     * Render the EDM XML shape: entities with their relations interleaved, the perspectives and
+     * navigations blocks, then the {@code mxGraphModel} diagram. The mxGraphModel is mandatory, not
+     * optional: the EDM editor renders the canvas <b>exclusively</b> by decoding {@code mxGraphModel}
+     * (see {@code editor-entity/js/editor.js} - {@code codec.decode(... getElementsByTagName(
+     * 'mxGraphModel')[0] ...)}); without it the editor opens to an empty canvas. The diagram is laid
+     * out deterministically in a grid so re-generation is byte-stable.
      */
     @SuppressWarnings("unchecked")
     private static String renderEdmXml(EdmDocument document) {
@@ -472,7 +476,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> entities = (List<Map<String, Object>>) body.get("entities");
         List<Map<String, Object>> perspectives = (List<Map<String, Object>>) body.get("perspectives");
 
-        StringBuilder sb = new StringBuilder(4096);
+        StringBuilder sb = new StringBuilder(8192);
         sb.append("<model>\n");
         sb.append(" <entities>\n");
         for (Map<String, Object> entity : entities) {
@@ -520,8 +524,173 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         sb.append(" </perspectives>\n");
         sb.append(" <navigations>\n");
         sb.append(" </navigations>\n");
+        appendMxGraphModel(sb, document, entities);
         sb.append("</model>\n");
         return sb.toString();
+    }
+
+    /** Entity box width and row heights for the deterministic grid layout. */
+    private static final int CELL_WIDTH = 200;
+    private static final int TITLE_HEIGHT = 28;
+    private static final int ROW_HEIGHT = 26;
+    private static final int GRID_COLUMNS = 3;
+    private static final int COLUMN_GAP = 80;
+    private static final int ROW_GAP = 40;
+    private static final int GRID_ORIGIN = 20;
+
+    /**
+     * Append the {@code mxGraphModel} the EDM editor decodes to render the canvas: one
+     * {@code style="entity"} vertex per entity carrying an {@code <Entity>} value, a child vertex per
+     * property carrying a {@code <Property>} value, and one edge per foreign-key relation linking the
+     * owner's FK property to the target entity's primary-key property. Entities are placed in a fixed
+     * grid so the output is deterministic across regenerations.
+     */
+    private static void appendMxGraphModel(StringBuilder sb, EdmDocument document, List<Map<String, Object>> entities) {
+        // Pre-compute cell ids and the per-entity primary-key property cell id (edge targets).
+        Map<String, String> entityCellId = new HashMap<>();
+        Map<String, Map<String, String>> propertyCellId = new HashMap<>();
+        Map<String, String> pkCellIdByEntity = new HashMap<>();
+        for (Map<String, Object> entity : entities) {
+            String name = (String) entity.get("name");
+            String entCell = "ent_" + sanitizeId(name);
+            entityCellId.put(name, entCell);
+            Map<String, String> props = new LinkedHashMap<>();
+            List<Map<String, Object>> properties = propertiesOf(entity);
+            for (Map<String, Object> property : properties) {
+                String propName = (String) property.get("name");
+                String propCell = entCell + "_p_" + sanitizeId(propName);
+                props.put(propName, propCell);
+                if ("true".equals(property.get("dataPrimaryKey")) && !pkCellIdByEntity.containsKey(name)) {
+                    pkCellIdByEntity.put(name, propCell);
+                }
+            }
+            propertyCellId.put(name, props);
+        }
+
+        sb.append(" <mxGraphModel>\n  <root>\n");
+        sb.append("   <mxCell id=\"0\"/>\n");
+        sb.append("   <mxCell id=\"1\" parent=\"0\"/>\n");
+
+        int[] columnY = new int[GRID_COLUMNS];
+        for (int i = 0; i < GRID_COLUMNS; i++) {
+            columnY[i] = GRID_ORIGIN;
+        }
+        int index = 0;
+        for (Map<String, Object> entity : entities) {
+            String name = (String) entity.get("name");
+            List<Map<String, Object>> properties = propertiesOf(entity);
+            int column = index % GRID_COLUMNS;
+            int x = GRID_ORIGIN + column * (CELL_WIDTH + COLUMN_GAP);
+            int y = columnY[column];
+            int height = TITLE_HEIGHT + ROW_HEIGHT * Math.max(properties.size(), 1);
+            columnY[column] = y + height + ROW_GAP;
+            index++;
+
+            sb.append("   <mxCell id=\"")
+              .append(entityCellId.get(name))
+              .append("\" style=\"entity\" parent=\"1\" vertex=\"1\">\n");
+            appendEntityValue(sb, entity);
+            sb.append("    <mxGeometry x=\"")
+              .append(x)
+              .append("\" y=\"")
+              .append(y)
+              .append("\" width=\"")
+              .append(CELL_WIDTH)
+              .append("\" height=\"")
+              .append(height)
+              .append("\" as=\"geometry\"><mxRectangle width=\"")
+              .append(CELL_WIDTH)
+              .append("\" height=\"")
+              .append(TITLE_HEIGHT)
+              .append("\" as=\"alternateBounds\"/></mxGeometry>\n");
+            sb.append("   </mxCell>\n");
+
+            int propIndex = 0;
+            for (Map<String, Object> property : properties) {
+                sb.append("   <mxCell id=\"")
+                  .append(propertyCellId.get(name)
+                                        .get(property.get("name")))
+                  .append("\" parent=\"")
+                  .append(entityCellId.get(name))
+                  .append("\" vertex=\"1\" connectable=\"0\">\n");
+                appendPropertyValue(sb, property);
+                sb.append("    <mxGeometry y=\"")
+                  .append(TITLE_HEIGHT + propIndex * ROW_HEIGHT)
+                  .append("\" width=\"")
+                  .append(CELL_WIDTH)
+                  .append("\" height=\"")
+                  .append(ROW_HEIGHT)
+                  .append("\" as=\"geometry\"/>\n");
+                sb.append("   </mxCell>\n");
+                propIndex++;
+            }
+        }
+
+        // Edges: owner FK property -> target entity primary-key property.
+        for (Map.Entry<String, List<Map<String, Object>>> entry : document.relationsByEntity.entrySet()) {
+            String owner = entry.getKey();
+            for (Map<String, Object> relation : entry.getValue()) {
+                String property = (String) relation.get("property");
+                String referenced = (String) relation.get("referenced");
+                String source = propertyCellId.getOrDefault(owner, Map.of())
+                                              .get(property);
+                String target = pkCellIdByEntity.get(referenced);
+                if (source == null || target == null) {
+                    continue;
+                }
+                sb.append("   <mxCell id=\"edge_")
+                  .append(sanitizeId(owner))
+                  .append("_")
+                  .append(sanitizeId(property))
+                  .append("\" parent=\"1\" source=\"")
+                  .append(source)
+                  .append("\" target=\"")
+                  .append(target)
+                  .append("\" edge=\"1\"><mxGeometry relative=\"1\" as=\"geometry\"/></mxCell>\n");
+            }
+        }
+
+        sb.append("  </root>\n </mxGraphModel>\n");
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> propertiesOf(Map<String, Object> entity) {
+        return (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
+    }
+
+    /**
+     * The {@code <Entity>} cell value. {@code type="Entity"} is the constant cell-kind marker the
+     * editor keys on; the PRIMARY/DEPENDENT distinction is carried in {@code entityType} (omitted for
+     * PRIMARY), matching the editor's own serializer.
+     */
+    private static void appendEntityValue(StringBuilder sb, Map<String, Object> entity) {
+        sb.append("    <Entity");
+        appendAttribute(sb, "name", entity.get("name"));
+        if ("DEPENDENT".equals(entity.get("type"))) {
+            appendAttribute(sb, "entityType", "DEPENDENT");
+        }
+        for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
+                "menuLabel", "layoutType", "perspectiveName"}) {
+            if (entity.get(key) != null) {
+                appendAttribute(sb, key, entity.get(key));
+            }
+        }
+        appendAttribute(sb, "type", "Entity");
+        sb.append(" as=\"value\"/>\n");
+    }
+
+    /** The {@code <Property>} cell value - the property's attributes verbatim. */
+    private static void appendPropertyValue(StringBuilder sb, Map<String, Object> property) {
+        sb.append("    <Property");
+        for (Map.Entry<String, Object> attr : property.entrySet()) {
+            appendAttribute(sb, attr.getKey(), attr.getValue());
+        }
+        sb.append(" as=\"value\"/>\n");
+    }
+
+    /** mxGraph cell ids must be attribute-safe and stable; keep only word characters. */
+    private static String sanitizeId(String raw) {
+        return raw == null ? "" : raw.replaceAll("[^A-Za-z0-9_]", "_");
     }
 
     private static void appendAttribute(StringBuilder sb, String key, Object value) {

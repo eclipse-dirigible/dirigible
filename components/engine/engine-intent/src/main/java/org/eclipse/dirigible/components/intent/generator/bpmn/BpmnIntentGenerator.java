@@ -46,9 +46,10 @@ import org.springframework.stereotype.Component;
  * </ul>
  *
  * <p>
- * <b>No BPMN diagram block ({@code bpmndi}) is emitted.</b> Flowable executes without it; the BPMN
- * editor in the IDE auto-lays out a missing diagram on first open. Skipping it keeps the generator
- * deterministic and trivially stable across re-runs (no spurious x/y churn).
+ * The <b>{@code bpmndi:BPMNDiagram}</b> block IS emitted (see {@link #appendBpmnDiagram}): the
+ * Flowable/Oryx modeler renders the canvas only from the diagram interchange, so a process with no
+ * shapes opens empty. Nodes are laid out left-to-right on a fixed lane for deterministic,
+ * byte-stable output; the modeler re-routes on first manual edit.
  *
  * <p>
  * <b>Path-free references.</b> Per the CLAUDE.md "no template-engine paths" rule,
@@ -111,19 +112,24 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     private static String render(ProcessIntent process) {
         List<StepIntent> steps = process.getSteps();
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
-        StringBuilder sb = new StringBuilder(2048);
+        List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
+        String processId = process.getName();
+        StringBuilder sb = new StringBuilder(4096);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
         sb.append("<definitions xmlns=\"http://www.omg.org/spec/BPMN/20100524/MODEL\"");
         sb.append(" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\"");
         sb.append(" xmlns:xsd=\"http://www.w3.org/2001/XMLSchema\"");
         sb.append(" xmlns:flowable=\"http://flowable.org/bpmn\"");
+        sb.append(" xmlns:bpmndi=\"http://www.omg.org/spec/BPMN/20100524/DI\"");
+        sb.append(" xmlns:omgdc=\"http://www.omg.org/spec/DD/20100524/DC\"");
+        sb.append(" xmlns:omgdi=\"http://www.omg.org/spec/DD/20100524/DI\"");
         sb.append(" typeLanguage=\"http://www.w3.org/2001/XMLSchema\"");
         sb.append(" expressionLanguage=\"http://www.w3.org/1999/XPath\"");
         sb.append(" targetNamespace=\"http://www.flowable.org/processdef\">\n");
         sb.append("  <process id=\"")
-          .append(escapeXmlAttribute(process.getName()))
+          .append(escapeXmlAttribute(processId))
           .append("\" name=\"")
-          .append(escapeXmlAttribute(process.getName()))
+          .append(escapeXmlAttribute(processId))
           .append("\" isExecutable=\"true\">\n");
         sb.append("    <startEvent id=\"")
           .append(START_ID)
@@ -138,8 +144,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    <endEvent id=\"")
           .append(END_ID)
           .append("\"></endEvent>\n");
-        appendSequenceFlows(sb, steps, effectiveSteps);
+        writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
+        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps);
         sb.append("</definitions>\n");
         return sb.toString();
     }
@@ -256,13 +263,18 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\"></exclusiveGateway>\n");
     }
 
+    /** A resolved sequence flow: stable id, source/target element ids, and an optional condition. */
+    private record SequenceFlow(String id, String source, String target, String condition) {
+    }
+
     /**
-     * Emit the sequence flows. The default is a linear chain through {@link #buildEffectiveStepIds}.
+     * Build the sequence flows. The default is a linear chain through {@link #buildEffectiveStepIds}.
      * Decision steps emit a conditioned flow to {@code args.then} and route their gateway-default flow
      * to {@code args.else} when declared (so the conditioned branch can actually be skipped); without
      * an {@code else} the default falls through to the next step in the chain.
      */
-    private static void appendSequenceFlows(StringBuilder sb, List<StepIntent> steps, List<String> effectiveIds) {
+    private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds) {
+        List<SequenceFlow> flows = new ArrayList<>();
         for (int i = 0; i < effectiveIds.size() - 1; i++) {
             String source = effectiveIds.get(i);
             String target = effectiveIds.get(i + 1);
@@ -277,13 +289,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             } else {
                 flowId = "flow_" + source + "_" + target;
             }
-            sb.append("    <sequenceFlow id=\"")
-              .append(escapeXmlAttribute(flowId))
-              .append("\" sourceRef=\"")
-              .append(escapeXmlAttribute(source))
-              .append("\" targetRef=\"")
-              .append(escapeXmlAttribute(target))
-              .append("\"></sequenceFlow>\n");
+            flows.add(new SequenceFlow(flowId, source, target, null));
         }
         for (StepIntent step : steps) {
             if (!"decision".equalsIgnoreCase(step.getKind())) {
@@ -295,17 +301,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", step.getName());
                 continue;
             }
-            sb.append("    <sequenceFlow id=\"flow_")
-              .append(escapeXmlAttribute(step.getName()))
-              .append("_then\" sourceRef=\"")
-              .append(escapeXmlAttribute(step.getName()))
+            flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), effectiveTarget(thenTarget, steps), condition));
+        }
+        return flows;
+    }
+
+    private static void writeSequenceFlows(StringBuilder sb, List<SequenceFlow> flows) {
+        for (SequenceFlow flow : flows) {
+            sb.append("    <sequenceFlow id=\"")
+              .append(escapeXmlAttribute(flow.id()))
+              .append("\" sourceRef=\"")
+              .append(escapeXmlAttribute(flow.source()))
               .append("\" targetRef=\"")
-              .append(escapeXmlAttribute(effectiveTarget(thenTarget, steps)))
-              .append("\">\n");
-            sb.append("      <conditionExpression xsi:type=\"tFormalExpression\"><![CDATA[${")
-              .append(condition)
-              .append("}]]></conditionExpression>\n");
-            sb.append("    </sequenceFlow>\n");
+              .append(escapeXmlAttribute(flow.target()))
+              .append("\">");
+            if (flow.condition() != null) {
+                sb.append("\n      <conditionExpression xsi:type=\"tFormalExpression\"><![CDATA[${")
+                  .append(flow.condition())
+                  .append("}]]></conditionExpression>\n    ");
+            }
+            sb.append("</sequenceFlow>\n");
         }
     }
 
@@ -329,6 +344,111 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     private static StepIntent decisionOf(String stepId, List<StepIntent> steps) {
         for (StepIntent step : steps) {
             if (stepId.equals(step.getName()) && "decision".equalsIgnoreCase(step.getKind())) {
+                return step;
+            }
+        }
+        return null;
+    }
+
+    // ----- BPMN diagram interchange (bpmndi) ---------------------------------------------------
+
+    private static final int LANE_Y = 140;
+    private static final int NODE_SPACING = 160;
+    private static final int FIRST_NODE_CENTER_X = 100;
+
+    /**
+     * Append the {@code bpmndi:BPMNDiagram} block. The Flowable/Oryx modeler renders the canvas
+     * <b>only</b> from this diagram interchange (a process with no {@code BPMNShape}s opens empty), so
+     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane; edges
+     * connect the right edge of the source to the left edge of the target. The layout is deterministic
+     * so re-generation is byte-stable; the modeler re-routes on first manual edit.
+     */
+    private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
+            List<StepIntent> steps) {
+        Map<String, int[]> bounds = new java.util.LinkedHashMap<>();
+        for (int i = 0; i < effectiveIds.size(); i++) {
+            String id = effectiveIds.get(i);
+            if (bounds.containsKey(id)) {
+                continue;
+            }
+            int[] size = nodeSize(id, steps);
+            int centerX = FIRST_NODE_CENTER_X + i * NODE_SPACING;
+            int x = centerX - size[0] / 2;
+            int y = LANE_Y - size[1] / 2;
+            bounds.put(id, new int[] {x, y, size[0], size[1]});
+        }
+
+        sb.append("  <bpmndi:BPMNDiagram id=\"BPMNDiagram_")
+          .append(escapeXmlAttribute(processId))
+          .append("\">\n");
+        sb.append("    <bpmndi:BPMNPlane bpmnElement=\"")
+          .append(escapeXmlAttribute(processId))
+          .append("\" id=\"BPMNPlane_")
+          .append(escapeXmlAttribute(processId))
+          .append("\">\n");
+        for (Map.Entry<String, int[]> entry : bounds.entrySet()) {
+            int[] b = entry.getValue();
+            sb.append("      <bpmndi:BPMNShape bpmnElement=\"")
+              .append(escapeXmlAttribute(entry.getKey()))
+              .append("\" id=\"BPMNShape_")
+              .append(escapeXmlAttribute(entry.getKey()))
+              .append("\">\n        <omgdc:Bounds height=\"")
+              .append(b[3])
+              .append("\" width=\"")
+              .append(b[2])
+              .append("\" x=\"")
+              .append(b[0])
+              .append("\" y=\"")
+              .append(b[1])
+              .append("\"/>\n      </bpmndi:BPMNShape>\n");
+        }
+        for (SequenceFlow flow : flows) {
+            int[] source = bounds.get(flow.source());
+            int[] target = bounds.get(flow.target());
+            if (source == null || target == null) {
+                continue;
+            }
+            int x1 = source[0] + source[2];
+            int y1 = source[1] + source[3] / 2;
+            int x2 = target[0];
+            int y2 = target[1] + target[3] / 2;
+            sb.append("      <bpmndi:BPMNEdge bpmnElement=\"")
+              .append(escapeXmlAttribute(flow.id()))
+              .append("\" id=\"BPMNEdge_")
+              .append(escapeXmlAttribute(flow.id()))
+              .append("\">\n        <omgdi:waypoint x=\"")
+              .append(x1)
+              .append("\" y=\"")
+              .append(y1)
+              .append("\"/>\n        <omgdi:waypoint x=\"")
+              .append(x2)
+              .append("\" y=\"")
+              .append(y2)
+              .append("\"/>\n      </bpmndi:BPMNEdge>\n");
+        }
+        sb.append("    </bpmndi:BPMNPlane>\n");
+        sb.append("  </bpmndi:BPMNDiagram>\n");
+    }
+
+    /** Width/height of a node's shape by its element id / step kind. */
+    private static int[] nodeSize(String id, List<StepIntent> steps) {
+        if (START_ID.equals(id)) {
+            return new int[] {30, 30};
+        }
+        if (END_ID.equals(id)) {
+            return new int[] {28, 28};
+        }
+        StepIntent step = stepByName(id, steps);
+        String kind = step == null ? "userTask" : step.getKind();
+        if ("decision".equalsIgnoreCase(kind)) {
+            return new int[] {40, 40};
+        }
+        return new int[] {100, 80};
+    }
+
+    private static StepIntent stepByName(String name, List<StepIntent> steps) {
+        for (StepIntent step : steps) {
+            if (name.equals(step.getName())) {
                 return step;
             }
         }

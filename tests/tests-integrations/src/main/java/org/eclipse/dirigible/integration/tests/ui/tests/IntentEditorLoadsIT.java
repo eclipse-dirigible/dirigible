@@ -90,5 +90,23 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
                   .pollInterval(1, TimeUnit.SECONDS)
                   .until(() -> repository.getResource(GENERATED_EDM_PATH)
                                          .exists());
+
+        // The generated EDM must render its entity boxes - the canvas was empty before the
+        // mxGraphModel layout was added. Switch into the EDM editor's graph frame and assert an
+        // entity title is drawn.
+        workbench.openFile("library.edm");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag",
+                "library.edm");
+        browser.findElementInAllFrames(By.id("graphContainer"), Condition.visible);
+        Selenide.$(By.xpath("//*[contains(text(), 'Book')]"))
+                .shouldBe(Condition.visible);
+
+        // The generated BPMN must render its process nodes - likewise empty before the bpmndi layout.
+        workbench.openFile("LoanApproval.bpmn");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag",
+                "LoanApproval.bpmn");
+        browser.findElementInAllFrames(By.id("canvasSection"), Condition.visible);
+        Selenide.$(By.xpath("//*[contains(text(), 'librarianReview')]"))
+                .shouldBe(Condition.visible);
     }
 }
