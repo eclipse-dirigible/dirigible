@@ -39,9 +39,9 @@ import org.openqa.selenium.By;
  * <li>the file is routed to the Intent Editor (the editor tab appears),</li>
  * <li>the AngularJS {@code intentEditor} module actually bootstrapped (its injector resolves -
  * directly catching the {@code $injector:modulerr} that a missing dependency causes),</li>
- * <li>the source textarea and the live mxGraph diagram render - including the parsed entity's label
- * inside the diagram - so the {@code /parse} round-trip and the mxGraph rendering both work end to
- * end inside the iframe,</li>
+ * <li>the Monaco source editor and the live mxGraph diagram render - including the parsed entity's
+ * label inside the diagram - so the {@code /parse} round-trip and the mxGraph rendering both work
+ * end to end inside the iframe,</li>
  * <li>clicking Generate writes the model files into the workspace project.</li>
  * </ul>
  * The diagram uses fixed brand colours that read on both the light and dark themes (like the
@@ -69,8 +69,8 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
         // The file routed to the Intent Editor - its tab is present.
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag", INTENT_FILE);
 
-        // Switch into the editor iframe; the source textarea is the body, not the error message page.
-        browser.findElementInAllFrames(By.cssSelector("textarea.intent-text"), Condition.visible);
+        // Switch into the editor iframe; the Monaco source editor is the body, not the error page.
+        browser.findElementInAllFrames(By.cssSelector(".intent-monaco .monaco-editor"), Condition.visible);
 
         // The AngularJS module bootstrapped - a missing platform-links dependency would have thrown
         // $injector:modulerr and left no injector on the ng-app element.

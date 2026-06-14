@@ -64,6 +64,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 savedText = $scope.text;
                 $scope.state.isBusy = false;
                 refreshPreview();
+                mountEditor();
             });
         }, (response) => {
             console.error(response);
@@ -102,9 +103,69 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         });
     };
 
+    // ----- Monaco source editor ------------------------------------------------
+    // The left pane is a Monaco editor (the same engine as the platform's main code editor) with YAML
+    // highlighting; $scope.text stays the single source the parse / save / diagram code reads, kept in
+    // sync from Monaco's change event. The theme follows the IDE via ThemingHub, mirroring editor-monaco.
+    const themingHub = new ThemingHub();
+    let monacoEditor = null;
+
+    const monacoThemeFor = (theme) => {
+        if (!theme) theme = themingHub.getSavedTheme();
+        if (theme && theme.type === 'light') return 'vs-light';
+        const classic = theme && typeof theme.id === 'string' && theme.id.startsWith('classic');
+        if (theme && theme.type === 'dark') return classic ? 'classic-dark' : 'blimpkit-dark';
+        const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (!prefersDark) return 'vs-light';
+        return classic ? 'classic-dark' : 'blimpkit-dark';
+    };
+
+    // The platform's dark editor themes - editor-monaco defines these too; redefining is idempotent.
+    const defineMonacoThemes = (monaco) => {
+        monaco.editor.defineTheme('blimpkit-dark', {
+            base: 'vs-dark', inherit: true, rules: [{ background: '1d1d1d' }],
+            colors: { 'editor.background': '#1d1d1d', 'minimap.background': '#1d1d1d', 'editorGutter.background': '#1d1d1d' }
+        });
+        monaco.editor.defineTheme('classic-dark', {
+            base: 'vs-dark', inherit: true, rules: [{ background: '1c2228' }],
+            colors: { 'editor.background': '#1c2228', 'minimap.background': '#1c2228', 'editorGutter.background': '#1c2228' }
+        });
+    };
+
+    const mountEditor = () => {
+        if (monacoEditor || typeof require === 'undefined') return;
+        require.config({ paths: { vs: '/webjars/monaco-editor/min/vs' } });
+        require(['vs/editor/editor.main'], (monaco) => {
+            const container = document.getElementById('intent-monaco');
+            if (!container) return;
+            defineMonacoThemes(monaco);
+            monacoEditor = monaco.editor.create(container, {
+                value: $scope.text || '',
+                language: 'yaml',
+                theme: monacoThemeFor(),
+                automaticLayout: true,
+                fontSize: 13,
+                tabSize: 2,
+                insertSpaces: true,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                renderWhitespace: 'selection',
+            });
+            // Monaco owns the text now; push every edit back into $scope.text and run the same
+            // dirty-tracking + debounced re-parse the textarea's ng-change used to drive.
+            monacoEditor.onDidChangeModelContent(() => {
+                $scope.$evalAsync(() => {
+                    $scope.text = monacoEditor.getValue();
+                    handleTextChanged();
+                });
+            });
+            themingHub.onThemeChange((theme) => monaco.editor.setTheme(monacoThemeFor(theme)));
+        });
+    };
+
     // ----- Live preview --------------------------------------------------------
 
-    $scope.onTextChange = () => {
+    const handleTextChanged = () => {
         const dirty = $scope.text !== savedText;
         if (dirty !== $scope.changed) {
             $scope.changed = dirty;
@@ -222,10 +283,18 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const shapeStyle = (shape, fill) => `shape=${shape};whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=${fill};fontColor=${COLOR.label};`;
     const edgeStyle = (dashed) => `edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=${COLOR.edge};fontColor=${COLOR.edge};endArrow=open;${dashed ? 'dashed=1;' : ''}`;
 
-    // Fit the container to the laid-out graph so it shows at natural size and the pane scrolls.
-    const sizeToContent = (graph, container) => {
-        const bounds = graph.getGraphBounds();
-        container.style.height = `${Math.ceil(bounds.height) + 2 * graph.border}px`;
+    // Bring the laid-out graph into view: layouts place cells at arbitrary (often negative)
+    // coordinates, so translate the view to seat the content's top-left at the border (otherwise
+    // cells fall off the left/top edge and get clipped), then size the container to the content
+    // height so it shows at natural size and the pane scrolls.
+    const fitIntoView = (graph, container) => {
+        const cells = graph.getChildCells(graph.getDefaultParent(), true, true);
+        const bbox = graph.getBoundingBoxFromGeometry(cells, true);
+        if (!bbox) return;
+        graph.view.setTranslate(graph.border - bbox.x, graph.border - bbox.y);
+        container.style.height = `${Math.ceil(bbox.height) + 2 * graph.border}px`;
+        container.scrollLeft = 0;
+        container.scrollTop = 0;
     };
 
     // Entity card: a blue panel whose HTML label is the entity name over its field list (PK marked).
@@ -260,14 +329,17 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                     graph.insertEdge(parent, null, relation.name || '', byName[entity.name], byName[relation.to], edgeStyle(!relation.required));
                 }
             }
-            const layout = new mxFastOrganicLayout(graph);
-            layout.forceConstant = 180;
-            layout.disableEdgeStyle = false;
+            // Hierarchical (left-to-right), the same layout the processes use: it assigns layers so
+            // the entity cards never overlap - unlike the organic layout, which collapsed every card
+            // onto the same spot because they all start at the origin.
+            const layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_WEST);
+            layout.intraCellSpacing = 40;
+            layout.interRankCellSpacing = 80;
             layout.execute(parent);
         } finally {
             graph.getModel().endUpdate();
         }
-        sizeToContent(graph, container);
+        fitIntoView(graph, container);
     };
 
     // Mirrors BpmnIntentGenerator: a linear chain through the declared steps; a decision emits a
@@ -324,7 +396,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         } finally {
             graph.getModel().endUpdate();
         }
-        sizeToContent(graph, container);
+        fitIntoView(graph, container);
     };
 
     const render = () => {
@@ -371,7 +443,13 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     });
 
-    $scope.$on('$destroy', teardown);
+    $scope.$on('$destroy', () => {
+        teardown();
+        if (monacoEditor) {
+            monacoEditor.dispose();
+            monacoEditor = null;
+        }
+    });
 
     $scope.dataParameters = ViewParameters.get();
     if (!$scope.dataParameters.hasOwnProperty('filePath')) {

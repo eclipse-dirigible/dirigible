@@ -25,6 +25,8 @@
             mxBasePath = '/services/web/resources/mxgraph/4.2.2/src';
         </script>
         <script type="text/javascript" src="/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js"></script>
+        <link type="text/css" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
+        <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
         <style>
             .intent-split {
                 display: flex;
@@ -37,20 +39,11 @@
                 min-width: 0;
                 border-right: 1px solid var(--sapList_BorderColor, #e5e5e5);
             }
-            .intent-text {
+            .intent-monaco {
                 flex: 1;
-                resize: none;
-                border: none;
-                outline: none;
-                font-family: var(--sapFontMonoFamily, monospace);
-                font-size: 13px;
-                line-height: 1.5;
-                padding: 12px;
-                color: var(--sapTextColor, #1d2d3e);
-                background: var(--sapBackgroundColor, #fff);
-                white-space: pre;
-                overflow: auto;
-                tab-size: 2;
+                min-width: 0;
+                position: relative;
+                overflow: hidden;
             }
             .intent-diagram-pane {
                 flex: 1 1 55%;
@@ -118,7 +111,7 @@
 
         <div class="intent-split" ng-if="!state.error">
             <div class="intent-text-pane">
-                <textarea class="intent-text" ng-model="text" ng-change="onTextChange()" ng-model-options="{ debounce: 100 }" spellcheck="false" wrap="off" aria-label="Intent source"></textarea>
+                <div id="intent-monaco" class="intent-monaco"></div>
             </div>
             <div class="intent-diagram-pane">
                 <div id="intent-diagrams" class="intent-diagrams"></div>

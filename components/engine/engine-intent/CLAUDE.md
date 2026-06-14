@@ -120,14 +120,14 @@ components/engine/engine-intent/                   # backend: parser + generator
 
 The editor lives in one sibling UI module:
 
-- `components/ui/editor-intent` - registered for content type `application/yaml+intent` (the `intent` extension is mapped in `ContentTypeHelper`) via the `platform-editors` extension point, like every other specialized editor. Split layout: editable plain-text YAML left (Save, ctrl+s, dirty tracking via `LayoutHub`), live diagram right (an mxGraph ER-style diagram for the entities + one top-down mxGraph flowchart per process + forms/reports/roles/seeds summaries), validation issues as an inline strip fed by `POST /parse` on a 600ms debounce. The Generate button calls `POST /generate` and refreshes the project tree via the `projects.tree.refresh` dialog-hub topic (the same mechanism the form-builder uses). The diagram uses **mxGraph 4.2.2** (the same engine the EDM / schema / mapping modelers use), depended on as `dirigible-components-resources-mxgraph` and loaded from `/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js` with `mxBasePath` set in the editor HTML.
+- `components/ui/editor-intent` - registered for content type `application/yaml+intent` (the `intent` extension is mapped in `ContentTypeHelper`) via the `platform-editors` extension point, like every other specialized editor. Split layout: an embedded Monaco editor (YAML highlighting, theme-synced to the IDE via `ThemingHub`, loaded from the `/webjars/monaco-editor/...` webjar that `editor-monaco` already ships) left (Save, ctrl+s, dirty tracking via `LayoutHub`; `$scope.text` stays the single source the parse/save/diagram code reads, kept in sync from Monaco's change event), live diagram right (an mxGraph ER-style diagram for the entities + one top-down mxGraph flowchart per process + forms/reports/roles/seeds summaries), validation issues as an inline strip fed by `POST /parse` on a 600ms debounce. The Generate button calls `POST /generate` and refreshes the project tree via the `projects.tree.refresh` dialog-hub topic (the same mechanism the form-builder uses). The diagram uses **mxGraph 4.2.2** (the same engine the EDM / schema / mapping modelers use), depended on as `dirigible-components-resources-mxgraph` and loaded from `/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js` with `mxBasePath` set in the editor HTML.
 
 ### Intent Editor diagram = mxGraph, fixed-colour palette (read before touching `editor-intent/js/editor.js`)
 
 The diagram pane was Mermaid through mid-2026 and had two unfixable-in-practice theming defects (invisible connector lines in dark mode; a "Syntax error in text" bomb on every light↔dark switch). It was **rewritten on mxGraph** - the rendering engine Dirigible already trusts in the EDM/schema/mapping modelers - which removed both defects by construction. Do not reintroduce Mermaid.
 
 **How it renders.** `render()` tears down any live graphs, then builds one read-only `mxGraph` per section into a freshly created container appended to `#intent-diagrams`:
-- `renderEntities()` - one blue HTML-label card per entity (name over its field list, PK marked); a solid edge for a required (composition) relation, dashed for an optional (association) one - mirroring the EDM generator semantics. Laid out with `mxFastOrganicLayout`.
+- `renderEntities()` - one blue HTML-label card per entity (name over its field list, PK marked); a solid edge for a required (composition) relation, dashed for an optional (association) one - mirroring the EDM generator semantics. Laid out left-to-right with `mxHierarchicalLayout(graph, mxConstants.DIRECTION_WEST)` - the same layout the processes use; the organic layout was tried first but collapsed every card onto the origin because they all start at (0,0).
 - `renderProcess()` - slate start/end ellipses, blue user-task / green service-task rounded rects, amber decision rhombus; decision steps emit a conditioned edge (label = `if`) to `then` and a default edge to `else` (falling back to the next step), exactly like `BpmnIntentGenerator`. Laid out top-down with `mxHierarchicalLayout(graph, mxConstants.DIRECTION_NORTH)`.
 Each graph is `setEnabled(false)` (read-only, no selection/editing), HTML labels on, and sized to its content (`sizeToContent` → the pane scrolls). The forms/reports/roles/seeds summaries stay as Angular-bound HTML below the diagrams.
 
@@ -275,7 +275,6 @@ Semantics worth knowing:
 - Mark intent-generated model files as not-for-hand-editing in the IDE (decoration in the Projects view or a banner in the modelers).
 - `/custom/` escape-hatch directory + per-slice hook points in the generators (the generators must learn to preserve `/custom/` files alongside their gen output).
 - `reverse-engineer intent` command for migrating classic projects.
-- A proper code editor for the text pane (Monaco with YAML highlighting) instead of the plain textarea; the split/preview contract stays.
 - Wire the `trigger` block: `onCreate: <Entity>` should start the process when the entity is created (listener or interceptor on the generated persistence layer), `onSchedule` should map to a timer start event or a `.job` artefact.
 
 **Done:**
@@ -287,3 +286,4 @@ Semantics worth knowing:
 - Stale-output scrub on regeneration (the project-root ownership contract above).
 - Reliable `forceProcessSynchronizers` (bounded wait instead of silent skip) in `core-initializers` - kept even though intent no longer uses it; it fixes a whole class of IT flakes.
 - Diagram pane rendered with mxGraph 4.2.2 (replacing Mermaid) using a fixed brand-colour palette that reads on both themes - this resolved the dark-mode invisible-lines and theme-switch "Syntax error" defects by construction.
+- Source pane is an embedded Monaco editor with YAML highlighting (replacing the plain textarea), theme-synced to the IDE via `ThemingHub`, reusing the `/webjars/monaco-editor/...` webjar `editor-monaco` already ships.
