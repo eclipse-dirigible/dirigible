@@ -99,7 +99,17 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
                 edgeLabelBackground: bgCss,
                 attributeBackgroundColorOdd: nodeFill,
                 attributeBackgroundColorEven: bgCss
-            }
+            },
+            // themeVariables alone do not reliably reach the ER relationship lines and flowchart edge
+            // strokes/arrowheads (mermaid derives those from internal CSS), so force them to the theme
+            // foreground - this is what makes the connector lines visible in dark mode.
+            themeCSS: `
+                .edgePath .path, .flowchart-link, path.relation, .relationshipLine, line.relationshipLine { stroke: ${fgCss} !important; }
+                .arrowheadPath, marker path, defs marker path, #arrowhead path { fill: ${fgCss} !important; stroke: ${fgCss} !important; }
+                .node rect, .node circle, .node ellipse, .node polygon, .node path, .er.entityBox, .cluster rect, .statediagram-state rect { stroke: ${fgCss} !important; }
+                .nodeLabel, .edgeLabel, .label, .er.entityLabel, .er.relationshipLabel, .titleText, text { fill: ${fgCss} !important; color: ${fgCss} !important; }
+                .edgeLabel rect, .edgeLabel .label-container { background-color: ${bgCss} !important; fill: ${bgCss} !important; }
+            `
         });
     };
 
@@ -254,7 +264,7 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
 
     // ----- Diagram rendering -----------------------------------------------------
 
-    const render = () => {
+    const render = async () => {
         if (!window.mermaid || typeof window.mermaid.render !== 'function') {
             $scope.diagramSvg = $sce.trustAsHtml('<em>Mermaid not loaded.</em>');
             return;
@@ -271,15 +281,23 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
             return;
         }
         const generation = ++renderCounter;
-        Promise.all(sections.map((section, index) =>
-            window.mermaid.render(`intent-editor-svg-${generation}-${index}`, section.spec).then(
-                (result) => `<h4 class="intent-section-title">${escapeHtml(section.title)}</h4>${result.svg}`,
-                (err) => `<h4 class="intent-section-title">${escapeHtml(section.title)}</h4><em>Render failed: ${escapeHtml(err && err.message ? err.message : String(err))}</em>`)
-        )).then((rendered) => {
+        // Render sequentially: mermaid.render shares global parser/DOM state and is not safe to call
+        // concurrently (Promise.all here produced "Syntax error in text" diagrams, especially right
+        // after a theme-change re-initialize).
+        const rendered = [];
+        for (let index = 0; index < sections.length; index++) {
+            const section = sections[index];
+            const header = `<h4 class="intent-section-title">${escapeHtml(section.title)}</h4>`;
+            try {
+                const result = await window.mermaid.render(`intent-editor-svg-${generation}-${index}`, section.spec);
+                rendered.push(header + result.svg);
+            } catch (err) {
+                rendered.push(`${header}<em>Render failed: ${escapeHtml(err && err.message ? err.message : String(err))}</em>`);
+            }
             if (generation !== renderCounter) return; // a newer render superseded this one
-            $scope.diagramSvg = $sce.trustAsHtml(rendered.join(''));
-            $scope.$applyAsync();
-        });
+        }
+        $scope.diagramSvg = $sce.trustAsHtml(rendered.join(''));
+        $scope.$applyAsync();
     };
 
     const escapeHtml = (s) => String(s).replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
