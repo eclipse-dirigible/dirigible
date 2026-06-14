@@ -13,18 +13,11 @@
 	<packaging>jar</packaging>
 
 	<dependencies>
-		<!-- Only the bundled dist/mermaid.min.js is served; the npm dependency graph behind it
-		     carries conflicting version ranges (cose-base), so transitives are excluded wholesale. -->
+		<!-- The diagram pane renders with mxGraph (served from this module), the same engine the
+		     EDM / schema / mapping modelers use, so the editor inherits their theme-correct rendering. -->
 		<dependency>
-			<groupId>org.webjars.npm</groupId>
-			<artifactId>mermaid</artifactId>
-			<version>${mermaid.version}</version>
-			<exclusions>
-				<exclusion>
-					<groupId>*</groupId>
-					<artifactId>*</artifactId>
-				</exclusion>
-			</exclusions>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-resources-mxgraph</artifactId>
 		</dependency>
 	</dependencies>
 

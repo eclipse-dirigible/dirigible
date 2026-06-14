@@ -39,10 +39,13 @@ import org.openqa.selenium.By;
  * <li>the file is routed to the Intent Editor (the editor tab appears),</li>
  * <li>the AngularJS {@code intentEditor} module actually bootstrapped (its injector resolves -
  * directly catching the {@code $injector:modulerr} that a missing dependency causes),</li>
- * <li>the source textarea and the live diagram SVG render (so the {@code /parse} round-trip and
- * Mermaid both work end to end inside the iframe),</li>
+ * <li>the source textarea and the live mxGraph diagram render - including the parsed entity's label
+ * inside the diagram - so the {@code /parse} round-trip and the mxGraph rendering both work end to
+ * end inside the iframe,</li>
  * <li>clicking Generate writes the model files into the workspace project.</li>
  * </ul>
+ * The diagram uses fixed brand colours that read on both the light and dark themes (like the
+ * EDM/schema modelers), so it renders identically in either theme and needs no theme-switch probe.
  */
 public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
 
@@ -76,8 +79,11 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
         Assertions.assertTrue(Boolean.TRUE.equals(bootstrapped),
                 "intentEditor AngularJS module failed to bootstrap inside the editor iframe.");
 
-        // The live diagram rendered from the parsed model (proves /parse + Mermaid work in-frame).
-        Selenide.$(By.cssSelector(".intent-diagram-pane svg"))
+        // The live mxGraph diagram rendered from the parsed model (proves /parse + mxGraph work
+        // in-frame): the entities section produces an mxGraph SVG carrying the parsed entity's label.
+        Selenide.$(By.cssSelector(".intent-diagram svg"))
+                .shouldBe(Condition.visible);
+        Selenide.$(By.xpath("//div[contains(@class, 'intent-diagram')]//*[contains(text(), 'Book')]"))
                 .shouldBe(Condition.visible);
 
         // Generate writes the model files into the workspace project.

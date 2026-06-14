@@ -20,8 +20,11 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/editor-intent/configs/intent-editor.js"></script>
-        <script type="text/javascript" src="/webjars/mermaid/dist/mermaid.min.js"></script>
         <meta name="platform-links" category="ng-view,ng-editor">
+        <script type="text/javascript">
+            mxBasePath = '/services/web/resources/mxgraph/4.2.2/src';
+        </script>
+        <script type="text/javascript" src="/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js"></script>
         <style>
             .intent-split {
                 display: flex;
@@ -56,9 +59,20 @@
                 background: var(--sapBackgroundColor, #fff);
                 color: var(--sapTextColor, #1d2d3e);
             }
-            .intent-diagram-pane svg {
-                max-width: 100%;
-                height: auto;
+            .intent-diagrams {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .intent-diagram {
+                width: 100%;
+                overflow: auto;
+                border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                border-radius: 4px;
+            }
+            .intent-diagram-empty {
+                color: var(--sapNeutralTextColor, #6a6d70);
+                font-style: italic;
             }
             .intent-section-title {
                 font-size: var(--sapFontHeader4Size, 16px);
@@ -107,7 +121,7 @@
                 <textarea class="intent-text" ng-model="text" ng-change="onTextChange()" ng-model-options="{ debounce: 100 }" spellcheck="false" wrap="off" aria-label="Intent source"></textarea>
             </div>
             <div class="intent-diagram-pane">
-                <div ng-bind-html="diagramSvg"></div>
+                <div id="intent-diagrams" class="intent-diagrams"></div>
                 <div ng-if="model.forms.length">
                     <h4 class="intent-section-title">Forms</h4>
                     <ul class="intent-summary">

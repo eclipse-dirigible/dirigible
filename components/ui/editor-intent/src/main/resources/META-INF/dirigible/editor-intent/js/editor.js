@@ -10,12 +10,11 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const editorView = angular.module('intentEditor', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService']);
-editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParameters, WorkspaceService) => {
+editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, WorkspaceService) => {
     const statusBarHub = new StatusBarHub();
     const workspaceHub = new WorkspaceHub();
     const layoutHub = new LayoutHub();
     const dialogHub = new DialogHub();
-    const themeHub = new ThemingHub();
     const PARSE_URL = '/services/ide/intent/parse';
     const GENERATE_URL = '/services/ide/intent/generate';
 
@@ -25,104 +24,23 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
     $scope.text = '';
     $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [] };
     $scope.issues = [];
-    $scope.diagramSvg = '';
     let savedText = '';
     let parseTimer = null;
-    let renderCounter = 0;
 
-    // ----- Mermaid theming -----------------------------------------------------
-    // Drive Mermaid's colors from the live BlimpKit theme so the diagram tracks the IDE light/dark
-    // switch. The two anchors that guarantee contrast are the theme foreground and background; lines,
-    // borders and text all use the foreground (the faint divider/surface tokens are deliberately
-    // low-contrast and made the diagram nearly invisible), and node fills are the foreground blended
-    // into the background at a low ratio so panels read as distinct without washing out their text.
-
-    // Resolve a CSS color expression (incl. nested var()/named colors) to a concrete "rgb(...)" via a
-    // probe element - getComputedStyle on a raw custom property returns the unresolved authored value.
-    const probe = document.createElement('span');
-    probe.style.display = 'none';
-    document.body.appendChild(probe);
-    const resolveColor = (expr) => {
-        probe.style.color = '';
-        probe.style.color = expr;
-        return getComputedStyle(probe).color || 'rgb(0, 0, 0)';
+    // ----- Diagram palette -----------------------------------------------------
+    // The diagram is drawn with mxGraph (the same engine the EDM and BPMN modelers use), so it inherits
+    // their robust rendering instead of Mermaid's brittle theming. Colours are fixed brand tones that
+    // read equally well on the light and dark IDE themes - solid fills with white labels on a
+    // transparent canvas, exactly like the schema/entity modelers - so the diagram looks identical in
+    // either theme and needs no recolour on a theme switch. Values mirror editor-entity/css/styles.css.
+    const COLOR = {
+        entity: '#3584e4',   // blue   - entities, user tasks
+        service: '#26a269',  // green  - service / script tasks
+        decision: '#e9a319', // amber  - decision gateways
+        terminal: '#708090', // slate  - start / end events
+        edge: '#7a8896',     // mid-gray - relations and sequence flows, visible on both themes
+        label: '#ffffff'     // white  - on-shape text
     };
-
-    const rgbOf = (color) => {
-        const m = color.match(/\d+(\.\d+)?/g);
-        return m && m.length >= 3 ? [Number(m[0]), Number(m[1]), Number(m[2])] : [0, 0, 0];
-    };
-
-    const luminance = (rgb) => (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255;
-
-    const mix = (a, b, ratio) => {
-        const r = Math.round(a[0] * ratio + b[0] * (1 - ratio));
-        const g = Math.round(a[1] * ratio + b[1] * (1 - ratio));
-        const bl = Math.round(a[2] * ratio + b[2] * (1 - ratio));
-        return `rgb(${r}, ${g}, ${bl})`;
-    };
-
-    const applyMermaidTheme = () => {
-        if (!window.mermaid || typeof window.mermaid.initialize !== 'function') return;
-        const fg = rgbOf(resolveColor('var(--sapTextColor, var(--foreground, #1d2d3e))'));
-        const bg = rgbOf(resolveColor('var(--sapBackgroundColor, var(--background, #ffffff))'));
-        const fgCss = `rgb(${fg[0]}, ${fg[1]}, ${fg[2]})`;
-        const bgCss = `rgb(${bg[0]}, ${bg[1]}, ${bg[2]})`;
-        const nodeFill = mix(fg, bg, 0.10); // faint foreground tint - distinct panel, still light/dark-correct
-        const altRow = mix(fg, bg, 0.05);
-        window.mermaid.initialize({
-            startOnLoad: false,
-            securityLevel: 'strict',
-            theme: 'base',
-            themeVariables: {
-                darkMode: luminance(bg) < 0.5,
-                background: bgCss,
-                // High-contrast structure: lines / borders / text all use the theme foreground.
-                lineColor: fgCss,
-                textColor: fgCss,
-                primaryTextColor: fgCss,
-                secondaryTextColor: fgCss,
-                tertiaryTextColor: fgCss,
-                nodeTextColor: fgCss,
-                titleColor: fgCss,
-                primaryBorderColor: fgCss,
-                secondaryBorderColor: fgCss,
-                tertiaryBorderColor: fgCss,
-                nodeBorder: fgCss,
-                clusterBorder: fgCss,
-                // Surfaces: foreground tinted into the background so panels are visible in both themes.
-                primaryColor: nodeFill,
-                secondaryColor: altRow,
-                tertiaryColor: bgCss,
-                mainBkg: nodeFill,
-                clusterBkg: bgCss,
-                edgeLabelBackground: bgCss,
-                attributeBackgroundColorOdd: nodeFill,
-                attributeBackgroundColorEven: bgCss
-            },
-            // themeVariables alone do not reliably reach the ER relationship lines and flowchart edge
-            // strokes/arrowheads (mermaid derives those from internal CSS), so force them to the theme
-            // foreground - this is what makes the connector lines visible in dark mode.
-            themeCSS: `
-                .edgePath .path, .flowchart-link, path.relation, .relationshipLine, line.relationshipLine { stroke: ${fgCss} !important; }
-                .arrowheadPath, marker path, defs marker path, #arrowhead path { fill: ${fgCss} !important; stroke: ${fgCss} !important; }
-                .node rect, .node circle, .node ellipse, .node polygon, .node path, .er.entityBox, .cluster rect, .statediagram-state rect { stroke: ${fgCss} !important; }
-                .nodeLabel, .edgeLabel, .label, .er.entityLabel, .er.relationshipLabel, .titleText, text { fill: ${fgCss} !important; color: ${fgCss} !important; }
-                .edgeLabel rect, .edgeLabel .label-container { background-color: ${bgCss} !important; fill: ${bgCss} !important; }
-            `
-        });
-    };
-
-    applyMermaidTheme();
-
-    themeHub.onThemeChange(() => {
-        // The theme swaps its <link> stylesheets asynchronously; recompute and re-render once the new
-        // CSS variables have taken effect.
-        setTimeout(() => {
-            applyMermaidTheme();
-            render();
-        }, 300);
-    });
 
     // ----- File location -----------------------------------------------------
 
@@ -262,126 +180,167 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
              });
     };
 
-    // ----- Diagram rendering -----------------------------------------------------
+    // ----- Diagram rendering (mxGraph) -------------------------------------------
+    // One read-only mxGraph per section: an ER-style diagram for the entities and one top-down
+    // flowchart per process. Each graph paints fixed-colour cells on a transparent canvas, so the
+    // whole pane tracks the IDE theme through its CSS background while the cells stay legible in both.
 
-    const render = async () => {
-        if (!window.mermaid || typeof window.mermaid.render !== 'function') {
-            $scope.diagramSvg = $sce.trustAsHtml('<em>Mermaid not loaded.</em>');
-            return;
-        }
-        const sections = [];
-        const erSpec = toErDiagram($scope.model);
-        if (erSpec) sections.push({ title: 'Entities', spec: erSpec });
-        for (const process of $scope.model.processes) {
-            if (!process || !process.name) continue;
-            sections.push({ title: 'Process: ' + process.name, spec: toFlowchart(process) });
-        }
-        if (!sections.length) {
-            $scope.diagramSvg = $sce.trustAsHtml('<em>Nothing to diagram yet - declare entities or processes.</em>');
-            return;
-        }
-        const generation = ++renderCounter;
-        // Render sequentially: mermaid.render shares global parser/DOM state and is not safe to call
-        // concurrently (Promise.all here produced "Syntax error in text" diagrams, especially right
-        // after a theme-change re-initialize).
-        const rendered = [];
-        for (let index = 0; index < sections.length; index++) {
-            const section = sections[index];
-            const header = `<h4 class="intent-section-title">${escapeHtml(section.title)}</h4>`;
-            try {
-                const result = await window.mermaid.render(`intent-editor-svg-${generation}-${index}`, section.spec);
-                rendered.push(header + result.svg);
-            } catch (err) {
-                rendered.push(`${header}<em>Render failed: ${escapeHtml(err && err.message ? err.message : String(err))}</em>`);
-            }
-            if (generation !== renderCounter) return; // a newer render superseded this one
-        }
-        $scope.diagramSvg = $sce.trustAsHtml(rendered.join(''));
-        $scope.$applyAsync();
+    const escapeHtml = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+    const diagrams = []; // live mxGraph instances, destroyed before each re-render
+
+    const teardown = () => {
+        while (diagrams.length) diagrams.pop().destroy();
+        const host = document.getElementById('intent-diagrams');
+        if (host) host.innerHTML = '';
     };
 
-    const escapeHtml = (s) => String(s).replace(/[&<>'"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[c]));
+    // A read-only graph wired into a freshly created, titled container appended to the diagram host.
+    const newSection = (title) => {
+        const host = document.getElementById('intent-diagrams');
+        const heading = document.createElement('h4');
+        heading.className = 'intent-section-title';
+        heading.textContent = title;
+        host.appendChild(heading);
+        const container = document.createElement('div');
+        container.className = 'intent-diagram';
+        host.appendChild(container);
 
-    const safeName = (s) => String(s || 'UNNAMED').replace(/[^A-Za-z0-9_]/g, '_');
-
-    // Composition (required to-one) renders as an identifying (solid) relationship,
-    // association as non-identifying (dashed) - mirroring the EDM generator semantics.
-    const cardinality = (kind, required) => {
-        const line = required ? '--' : '..';
-        switch (kind) {
-            case 'oneToMany': return '||' + line + 'o{';
-            case 'manyToOne': return '}o' + line + '||';
-            case 'oneToOne': return '||' + line + '||';
-            case 'manyToMany': return '}o' + line + 'o{';
-            default: return '||' + line + 'o{';
-        }
+        const graph = new mxGraph(container);
+        graph.setHtmlLabels(true);
+        graph.setEnabled(false);            // read-only: no selection, editing or connecting
+        graph.setTooltips(false);
+        graph.setPanning(false);
+        graph.setCellsLocked(true);
+        graph.border = 16;
+        graph.keepEdgesInBackground = true;
+        diagrams.push(graph);
+        return graph;
     };
 
-    const toErDiagram = (model) => {
-        const entities = model.entities.filter(e => e && e.name);
-        if (!entities.length) return null;
-        const lines = ['erDiagram'];
-        for (const entity of entities) {
-            lines.push('    ' + safeName(entity.name) + ' {');
-            for (const field of (entity.fields || [])) {
-                if (!field || !field.name) continue;
-                const type = (field.type || 'string').replace(/[^A-Za-z0-9_]/g, '_');
-                const flag = field.primaryKey ? ' PK' : '';
-                lines.push('        ' + type + ' ' + safeName(field.name) + flag);
-            }
-            lines.push('    }');
-        }
-        for (const entity of entities) {
-            for (const relation of (entity.relations || [])) {
-                if (!relation || !relation.to || !relation.name) continue;
-                lines.push('    ' + safeName(entity.name) + ' ' + cardinality(relation.kind, relation.required)
-                    + ' ' + safeName(relation.to) + ' : "' + relation.name + '"');
-            }
-        }
-        return lines.join('\n');
+    const nodeStyle = (fill) => `rounded=1;whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=${fill};fontColor=${COLOR.label};verticalAlign=top;spacingTop=2;arcSize=8;`;
+    const shapeStyle = (shape, fill) => `shape=${shape};whiteSpace=wrap;html=1;fillColor=${fill};strokeColor=${fill};fontColor=${COLOR.label};`;
+    const edgeStyle = (dashed) => `edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=${COLOR.edge};fontColor=${COLOR.edge};endArrow=open;${dashed ? 'dashed=1;' : ''}`;
+
+    // Fit the container to the laid-out graph so it shows at natural size and the pane scrolls.
+    const sizeToContent = (graph, container) => {
+        const bounds = graph.getGraphBounds();
+        container.style.height = `${Math.ceil(bounds.height) + 2 * graph.border}px`;
     };
 
-    // Mirrors BpmnIntentGenerator: a linear chain through the declared steps; decisions
-    // emit a labeled conditioned edge to `then` and route their default edge to `else`
-    // (falling back to the next step); `end`-kind steps collapse into the end node.
-    const toFlowchart = (process) => {
-        const steps = (process.steps || []).filter(s => s && s.name);
-        const effectiveId = (name) => {
-            if (String(name).toLowerCase() === 'end') return 'END';
-            const step = steps.find(s => s.name === name);
-            return (step && String(step.kind).toLowerCase() === 'end') ? 'END' : safeName(name);
-        };
-        const lines = ['flowchart TD', '    START((start))', '    END((end))'];
-        for (const step of steps) {
-            if (String(step.kind).toLowerCase() === 'end') continue;
-            const id = safeName(step.name);
-            const text = '"' + step.name.replace(/"/g, "'") + '"';
-            if (step.kind === 'decision') lines.push('    ' + id + '{' + text + '}');
-            else if (step.kind === 'serviceTask' || step.kind === 'script') lines.push('    ' + id + '[[' + text + ']]');
-            else lines.push('    ' + id + '[' + text + ']');
-        }
-        const chain = ['START'];
-        for (const step of steps) {
-            const id = String(step.kind).toLowerCase() === 'end' ? 'END' : safeName(step.name);
-            if (chain[chain.length - 1] !== id) chain.push(id);
-        }
-        if (chain[chain.length - 1] !== 'END') chain.push('END');
-        for (let i = 0; i < chain.length - 1; i++) {
-            const source = chain[i];
-            let target = chain[i + 1];
-            const decision = steps.find(s => safeName(s.name) === source && s.kind === 'decision');
-            if (decision) {
-                const args = decision.args || {};
-                if (args['else']) target = effectiveId(args['else']);
-                lines.push('    ' + source + ' -.-> ' + target);
-                if (args['if'] && args['then']) {
-                    lines.push('    ' + source + ' -- "' + String(args['if']).replace(/"/g, "'") + '" --> ' + effectiveId(args['then']));
+    // Entity card: a blue panel whose HTML label is the entity name over its field list (PK marked).
+    const entityLabel = (entity) => {
+        const fields = (entity.fields || []).filter(f => f && f.name);
+        const rows = fields.map((f) => {
+            const type = escapeHtml(f.type || 'string');
+            const pk = f.primaryKey ? ' <strong>PK</strong>' : '';
+            return `<div style="opacity:.92">${escapeHtml(f.name)} : ${type}${pk}</div>`;
+        }).join('');
+        return `<div style="font-weight:bold;border-bottom:1px solid rgba(255,255,255,.5);padding-bottom:2px;margin-bottom:2px">${escapeHtml(entity.name)}</div>`
+            + `<div style="font-size:11px;text-align:left">${rows}</div>`;
+    };
+
+    const renderEntities = () => {
+        const entities = $scope.model.entities.filter(e => e && e.name);
+        if (!entities.length) return;
+        const graph = newSection('Entities');
+        const container = graph.container;
+        const parent = graph.getDefaultParent();
+        graph.getModel().beginUpdate();
+        try {
+            const byName = {};
+            for (const entity of entities) {
+                const height = 30 + 18 * (entity.fields || []).filter(f => f && f.name).length;
+                byName[entity.name] = graph.insertVertex(parent, null, entityLabel(entity), 0, 0, 200, Math.max(height, 48), nodeStyle(COLOR.entity));
+            }
+            for (const entity of entities) {
+                for (const relation of (entity.relations || [])) {
+                    if (!relation || !relation.to || !byName[relation.to]) continue;
+                    // Composition (required to-one) is a solid edge, association is dashed - matching the EDM semantics.
+                    graph.insertEdge(parent, null, relation.name || '', byName[entity.name], byName[relation.to], edgeStyle(!relation.required));
                 }
-            } else {
-                lines.push('    ' + source + ' --> ' + target);
             }
+            const layout = new mxFastOrganicLayout(graph);
+            layout.forceConstant = 180;
+            layout.disableEdgeStyle = false;
+            layout.execute(parent);
+        } finally {
+            graph.getModel().endUpdate();
         }
-        return lines.join('\n');
+        sizeToContent(graph, container);
+    };
+
+    // Mirrors BpmnIntentGenerator: a linear chain through the declared steps; a decision emits a
+    // labelled conditioned edge to `then` and routes its default edge to `else` (falling back to the
+    // next step in the chain); `end`-kind steps collapse into the single end node.
+    const renderProcess = (process) => {
+        const steps = (process.steps || []).filter(s => s && s.name);
+        const graph = newSection('Process: ' + process.name);
+        const container = graph.container;
+        const parent = graph.getDefaultParent();
+        graph.getModel().beginUpdate();
+        try {
+            const start = graph.insertVertex(parent, null, 'start', 0, 0, 60, 40, shapeStyle('ellipse', COLOR.terminal));
+            const end = graph.insertVertex(parent, null, 'end', 0, 0, 60, 40, shapeStyle('ellipse', COLOR.terminal));
+            const byName = {};
+            for (const step of steps) {
+                if (String(step.kind).toLowerCase() === 'end') { byName[step.name] = end; continue; }
+                if (step.kind === 'decision') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 120, 70, shapeStyle('rhombus', COLOR.decision));
+                else if (step.kind === 'serviceTask' || step.kind === 'script') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.service));
+                else byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.entity));
+            }
+            const vertexFor = (name) => {
+                if (String(name).toLowerCase() === 'end') return end;
+                return byName[name] || end;
+            };
+
+            const chain = [start];
+            for (const step of steps) {
+                const v = String(step.kind).toLowerCase() === 'end' ? end : byName[step.name];
+                if (chain[chain.length - 1] !== v) chain.push(v);
+            }
+            if (chain[chain.length - 1] !== end) chain.push(end);
+
+            for (let i = 0; i < chain.length - 1; i++) {
+                const source = chain[i];
+                let target = chain[i + 1];
+                const decision = steps.find(s => byName[s.name] === source && s.kind === 'decision');
+                if (decision) {
+                    const args = decision.args || {};
+                    if (args['else']) target = vertexFor(args['else']);
+                    graph.insertEdge(parent, null, '', source, target, edgeStyle(true));
+                    if (args['if'] && args['then']) {
+                        graph.insertEdge(parent, null, String(args['if']), source, vertexFor(args['then']), edgeStyle(false));
+                    }
+                } else {
+                    graph.insertEdge(parent, null, '', source, target, edgeStyle(false));
+                }
+            }
+
+            const layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_NORTH);
+            layout.intraCellSpacing = 30;
+            layout.interRankCellSpacing = 60;
+            layout.execute(parent);
+        } finally {
+            graph.getModel().endUpdate();
+        }
+        sizeToContent(graph, container);
+    };
+
+    const render = () => {
+        const host = document.getElementById('intent-diagrams');
+        if (!host || typeof mxGraph === 'undefined') return;
+        teardown();
+        renderEntities();
+        for (const process of $scope.model.processes) {
+            if (process && process.name) renderProcess(process);
+        }
+        if (!diagrams.length) {
+            const empty = document.createElement('div');
+            empty.className = 'intent-diagram-empty';
+            empty.textContent = 'Nothing to diagram yet - declare entities or processes.';
+            host.appendChild(empty);
+        }
     };
 
     // ----- Editor lifecycle wiring -----------------------------------------------
@@ -411,6 +370,8 @@ editorView.controller('IntentEditorController', ($scope, $http, $sce, ViewParame
             }
         }
     });
+
+    $scope.$on('$destroy', teardown);
 
     $scope.dataParameters = ViewParameters.get();
     if (!$scope.dataParameters.hasOwnProperty('filePath')) {
