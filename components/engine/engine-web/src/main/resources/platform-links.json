@@ -204,10 +204,6 @@
     },
     {
       "type": "SCRIPT",
-      "path": "/webjars/monaco-editor/min/vs/editor/editor.main.nls.js"
-    },
-    {
-      "type": "SCRIPT",
       "path": "/webjars/monaco-editor/min/vs/editor/editor.main.js"
     },
     {
