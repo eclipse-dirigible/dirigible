@@ -19,7 +19,7 @@
         <parent.pom.folder>../../../</parent.pom.folder>
 
         <microsoft-graph.version>6.65.0</microsoft-graph.version>
-        <azure-identity.version>1.18.3</azure-identity.version>
+        <azure-identity.version>1.18.4</azure-identity.version>
     </properties>
 
     <dependencies>
