@@ -284,10 +284,16 @@ class IntentEngineIT extends IntegrationTest {
                 "EDM dataName should be intent-prefixed (ORDERS_ORDER) to avoid reserved words and cross-project clashes");
         assertTrue(edmXml.contains("type=\"DEPENDENT\""),
                 "EDM should mark OrderItem as DEPENDENT through its composition manyToOne to Order");
-        assertTrue(edmXml.contains("relationshipName=\"Items\""),
-                "composition relationshipName should be the master's collection label (Order.items -> Items)");
+        assertTrue(edmXml.contains("relationshipName=\"OrderItem_Order\""),
+                "relationshipName (the FK constraint name) should be <owner>_<target> like the codbex .model");
+        assertTrue(edmXml.contains("relationshipEntityName=\"Order\"") && edmXml.contains("relationshipEntityPerspectiveName=\"Order\""),
+                "FK property must carry relationshipEntityName + relationshipEntityPerspectiveName - the dropdown data-service URL is built from them");
+        assertTrue(edmXml.contains("relationshipType=\"ASSOCIATION\"") && edmXml.contains("relationshipCardinality=\"n_1\""),
+                "a non-composition manyToOne (e.g. Order->Customer) should be an ASSOCIATION with n_1 cardinality");
         assertTrue(edmXml.contains("name=\"Id\""), "property names should be PascalCase (Dirigible/codbex convention): id -> Id");
         assertTrue(edmXml.contains("auditType=\"NONE\""), "properties should carry auditType=\"NONE\" like codbex EDMs");
+        assertTrue(edmXml.contains("isRequiredProperty=\"true\""),
+                "a required field/FK should carry isRequiredProperty - the REST controller's required validation keys on it");
         assertTrue(edmXml.contains("widgetDropDownKey=\"Id\""),
                 "dropdown key should be the target entity's actual PK property name, PascalCased (Id)");
         assertTrue(edmXml.contains("referenced=\"Customer\""), "EDM should carry the Order->Customer relation");

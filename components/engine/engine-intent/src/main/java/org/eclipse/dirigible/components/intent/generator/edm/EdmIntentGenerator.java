@@ -148,8 +148,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 boolean composition = !compositionAssigned && relation.isComposition();
                 compositionAssigned |= composition;
                 EntityIntent target = byName.get(relation.getTo());
-                String collection = composition ? compositionCollectionName(target, name) : null;
-                properties.add(relationProperty(name, relation, target, composition, collection));
+                String targetPerspective = resolvePerspective(relation.getTo(), compositionParents);
+                properties.add(relationProperty(name, relation, target, composition, targetPerspective));
                 relations.add(relationLink(name, relation, target, compositionParents));
             }
             entityMap.put("properties", properties);
@@ -270,6 +270,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataNullable", field.isRequired() || field.isPrimaryKey() ? "false" : "true");
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
+        } else if (field.isRequired()) {
+            // The generated REST controller's required-value validation keys on isRequiredProperty
+            // (not dataNullable); set it so a required field is actually validated. PKs are excluded
+            // (auto-generated), matching codbex.
+            p.put("isRequiredProperty", "true");
         }
         // Auto-increment is a DB identity/sequence - valid only on integer columns (a VARCHAR/uuid
         // AUTO_INCREMENT is rejected by the database). The parser already enforces integer primary keys;
@@ -306,10 +311,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * (NOT NULL when {@code required}), mirroring how the EDM editor writes multi-FK entities.
      */
     private static Map<String, Object> relationProperty(String ownerEntity, RelationIntent relation, EntityIntent target,
-            boolean composition, String compositionCollection) {
+            boolean composition, String targetPerspective) {
         String column = IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName());
         FieldIntent targetPk = primaryKeyOf(target);
         String fkType = targetPk == null ? "INTEGER" : mapDataType(targetPk.getType());
+        boolean oneToOne = "oneToOne".equals(relation.getKind());
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", IntentNaming.pascalCase(relation.getName()));
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
@@ -318,22 +324,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataType", fkType);
         // A composition FK is always NOT NULL (the detail cannot exist without its parent), even if
         // `required` was not also set; otherwise nullability follows `required`.
-        p.put("dataNullable", (relation.isRequired() || composition) ? "false" : "true");
+        boolean notNull = relation.isRequired() || composition;
+        p.put("dataNullable", notNull ? "false" : "true");
+        if (notNull) {
+            p.put("isRequiredProperty", "true");
+        }
         if ("VARCHAR".equals(fkType) && targetPk != null) {
             Integer length = fieldLength(targetPk);
             if (length != null && length > 0) {
                 p.put("dataLength", length.toString());
             }
         }
-        if (composition) {
-            p.put("relationshipType", "COMPOSITION");
-            p.put("relationshipCardinality", "1_n");
-            // The relationship name is the master's detail-collection label (the parent's matching
-            // oneToMany name, e.g. Member.loans -> "Loans"); falls back to the FK name when the parent
-            // declares no collection. This matches codbex master-detail (e.g. SalesInvoice "Items").
-            p.put("relationshipName", compositionCollection != null ? compositionCollection : IntentNaming.pascalCase(relation.getName()));
-        }
         p.put("auditType", "NONE");
+        // Relationship metadata the generation reads (codbex .model convention): composition vs
+        // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
+        // relationshipName is the FK constraint name <owner>_<target>; relationshipEntityName and
+        // relationshipEntityPerspectiveName drive the dropdown's data-service URL
+        // (api/<perspective>/<entity>Service.ts) and the create-detail dialog.
+        p.put("relationshipType", composition ? "COMPOSITION" : "ASSOCIATION");
+        p.put("relationshipCardinality", composition ? "1_n" : (oneToOne ? "1_1" : "n_1"));
+        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipEntityName", relation.getTo());
+        p.put("relationshipEntityPerspectiveName", targetPerspective);
+        p.put("relationshipEntityPerspectiveLabel", "Entities");
         p.put("widgetType", "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
@@ -363,23 +376,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         link.put("referenced", relation.getTo());
         link.put("referencedProperty", keyFieldName(target));
         return link;
-    }
-
-    /**
-     * The detail-collection label for a composition: the parent's {@code oneToMany} relation that
-     * points back to the child entity (e.g. {@code Member.loans} -> {@code Loans}), PascalCased. Null
-     * when the parent declares no such collection, in which case the FK name is used.
-     */
-    private static String compositionCollectionName(EntityIntent parent, String childEntityName) {
-        if (parent == null) {
-            return null;
-        }
-        for (RelationIntent relation : parent.getRelations()) {
-            if ("oneToMany".equals(relation.getKind()) && childEntityName.equals(relation.getTo()) && relation.getName() != null) {
-                return IntentNaming.pascalCase(relation.getName());
-            }
-        }
-        return null;
     }
 
     /** The target entity's primary-key field, or null when the target is unknown or has no PK. */
