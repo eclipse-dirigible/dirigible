@@ -87,6 +87,7 @@ class IntentEngineIT extends IntegrationTest {
 
             processes:
               - name: OrderApproval
+                trigger: { onCreate: Order }
                 steps:
                   - name: managerReview
                     kind: userTask
@@ -185,6 +186,30 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("issues", hasItems(
                                                          "entity [Customer] relation [country] points to unknown entity [Nowhere]",
                                                          "process [Flow] decision [decide] `then` references unknown step [missingStep]")));
+    }
+
+    @Test
+    void parse_rejects_a_trigger_to_an_unknown_entity() {
+        String yaml = """
+                name: badtrigger
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: Nowhere }
+                    steps:
+                      - { name: done, kind: end }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItem(
+                                                         "process [Approve] trigger onCreate references unknown entity [Nowhere]")));
     }
 
     @Test
@@ -304,6 +329,9 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("referenced=\"Customer\""), "EDM should carry the Order->Customer relation");
         assertTrue(edmXml.contains("dataName=\"CUSTOMER_COUNTRY\""),
                 "Customer->Country FK should materialize as a CUSTOMER_COUNTRY column on Customer");
+        // OrderApproval has trigger { onCreate: Order }, so Order gains a ProcessId back-reference.
+        assertTrue(edmXml.contains("name=\"ProcessId\"") && edmXml.contains("dataName=\"ORDER_PROCESS_ID\""),
+                "an entity a process starts on create should get a ProcessId back-reference property");
 
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
         // empty. Assert the diagram block, an entity vertex, and a relation edge are present.

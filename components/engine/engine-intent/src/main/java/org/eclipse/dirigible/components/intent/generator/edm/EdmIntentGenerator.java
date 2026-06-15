@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -106,6 +107,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
+        Set<String> triggerTargets = TriggerSupport.onCreateTargetEntities(model);
 
         EdmDocument document = new EdmDocument();
         List<Map<String, Object>> entityList = new ArrayList<>();
@@ -135,6 +137,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 properties.add(propertyMap(name, field));
+            }
+            // An entity a process starts on create carries a ProcessId back-reference (the runtime
+            // listener/handler writes the started process-instance id here). See TriggerSupport.
+            if (triggerTargets.contains(name)) {
+                properties.add(processIdProperty(name));
             }
             List<Map<String, Object>> relations = new ArrayList<>();
             boolean compositionAssigned = false;
@@ -299,6 +306,28 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetSize", "");
         p.put("widgetLength", length == null ? "20" : length.toString());
         p.put("widgetIsMajor", "true");
+        return p;
+    }
+
+    /**
+     * The {@code ProcessId} back-reference property added to an entity that a process starts on
+     * create. A plain VARCHAR holding the started process-instance id; the runtime trigger handler
+     * writes it. Not a major widget - it is system-managed, not user input.
+     */
+    private static Map<String, Object> processIdProperty(String entityName) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "ProcessId");
+        p.put("description", "Process instance started for this record");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake("ProcessId"));
+        p.put("dataType", "VARCHAR");
+        p.put("dataNullable", "true");
+        p.put("dataLength", "100");
+        p.put("auditType", "NONE");
+        p.put("widgetType", "TEXTBOX");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "100");
+        p.put("widgetIsMajor", "false");
         return p;
     }
 

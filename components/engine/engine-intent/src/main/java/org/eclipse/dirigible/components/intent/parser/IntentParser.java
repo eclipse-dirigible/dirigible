@@ -105,7 +105,7 @@ public final class IntentParser {
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
         Set<String> entityNames = validateEntities(model, issues);
-        validateProcesses(model, issues);
+        validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
         validateSeeds(model, entityNames, issues);
@@ -186,7 +186,7 @@ public final class IntentParser {
         return entityNames;
     }
 
-    private static void validateProcesses(IntentModel model, List<String> issues) {
+    private static void validateProcesses(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> processNames = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -196,6 +196,11 @@ public final class IntentParser {
             }
             if (!processNames.add(process.getName())) {
                 issues.add("duplicate process [" + process.getName() + "]");
+            }
+            Object onCreate = process.getTrigger()
+                                     .get("onCreate");
+            if (onCreate != null && !entityNames.contains(onCreate.toString())) {
+                issues.add("process [" + process.getName() + "] trigger onCreate references unknown entity [" + onCreate + "]");
             }
             Set<String> stepNames = new HashSet<>();
             for (StepIntent step : process.getSteps()) {

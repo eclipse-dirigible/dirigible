@@ -102,7 +102,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             if (!process.getTrigger()
                         .isEmpty()) {
-                LOGGER.warn("Process [{}] declares a trigger, which is not consumed yet - the process must be started explicitly",
+                LOGGER.info(
+                        "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
                         process.getName());
             }
             context.writeModelFile(fileName, render(process));
