@@ -62,7 +62,7 @@ class IntentEngineIT extends IntegrationTest {
 
               - name: Customer
                 fields:
-                  - { name: id,     type: uuid,    primaryKey: true, generated: true }
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: name,   type: string,  required: true, length: 200 }
                   - { name: active, type: boolean, defaultValue: "true" }
                 relations:
@@ -71,7 +71,7 @@ class IntentEngineIT extends IntegrationTest {
 
               - name: Order
                 fields:
-                  - { name: id,        type: uuid,    primaryKey: true, generated: true }
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: orderDate, type: date,    required: true }
                   - { name: total,     type: decimal }
                 relations:
@@ -80,10 +80,10 @@ class IntentEngineIT extends IntegrationTest {
 
               - name: OrderItem
                 fields:
-                  - { name: id,       type: uuid,    primaryKey: true, generated: true }
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
                   - { name: quantity, type: integer, required: true }
                 relations:
-                  - { name: order, kind: manyToOne, to: Order, required: true }
+                  - { name: order, kind: manyToOne, to: Order, composition: true }
 
             processes:
               - name: OrderApproval
@@ -160,7 +160,7 @@ class IntentEngineIT extends IntegrationTest {
                 entities:
                   - name: Customer
                     fields:
-                      - { name: id, type: uuid, primaryKey: true }
+                      - { name: id, type: integer, primaryKey: true }
                     relations:
                       - { name: country, kind: manyToOne, to: Nowhere }
                 processes:
@@ -180,6 +180,25 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("issues", hasItems(
                                                          "entity [Customer] relation [country] points to unknown entity [Nowhere]",
                                                          "process [Flow] decision [decide] `then` references unknown step [missingStep]")));
+    }
+
+    @Test
+    void parse_rejects_a_non_integer_primary_key() {
+        String yaml = """
+                name: badpk
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: uuid, primaryKey: true, generated: true }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItem(
+                                                         "entity [Customer] primary-key field [id] must be an integer type (integer/int/long) - identifiers are integer by convention, got [uuid]")));
     }
 
     @Test
@@ -264,9 +283,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("dataName=\"ORDERS_ORDER\""),
                 "EDM dataName should be intent-prefixed (ORDERS_ORDER) to avoid reserved words and cross-project clashes");
         assertTrue(edmXml.contains("type=\"DEPENDENT\""),
-                "EDM should mark OrderItem as DEPENDENT through its required (composition) manyToOne to Order");
-        assertTrue(edmXml.contains("widgetDropDownKey=\"id\""),
-                "dropdown key should be the target entity's actual PK field name (lowercase id), not a hardcoded Id");
+                "EDM should mark OrderItem as DEPENDENT through its composition manyToOne to Order");
+        assertTrue(edmXml.contains("relationshipName=\"Items\""),
+                "composition relationshipName should be the master's collection label (Order.items -> Items)");
+        assertTrue(edmXml.contains("name=\"Id\""), "property names should be PascalCase (Dirigible/codbex convention): id -> Id");
+        assertTrue(edmXml.contains("auditType=\"NONE\""), "properties should carry auditType=\"NONE\" like codbex EDMs");
+        assertTrue(edmXml.contains("widgetDropDownKey=\"Id\""),
+                "dropdown key should be the target entity's actual PK property name, PascalCased (Id)");
         assertTrue(edmXml.contains("referenced=\"Customer\""), "EDM should carry the Order->Customer relation");
         assertTrue(edmXml.contains("dataName=\"CUSTOMER_COUNTRY\""),
                 "Customer->Country FK should materialize as a CUSTOMER_COUNTRY column on Customer");

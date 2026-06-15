@@ -325,7 +325,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
             for (const entity of entities) {
                 for (const relation of (entity.relations || [])) {
                     if (!relation || !relation.to || !byName[relation.to]) continue;
-                    // Composition (required to-one) is a solid edge, association is dashed - matching the EDM semantics.
+                    // A required relation is drawn solid, an optional one dashed.
                     graph.insertEdge(parent, null, relation.name || '', byName[entity.name], byName[relation.to], edgeStyle(!relation.required));
                 }
             }

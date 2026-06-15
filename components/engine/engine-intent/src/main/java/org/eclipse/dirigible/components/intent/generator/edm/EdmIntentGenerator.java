@@ -46,11 +46,14 @@ import org.springframework.stereotype.Component;
  * {@code ORDERS_COUNTRY}, codbex-style). This keeps physical table names unique across projects and
  * away from SQL reserved words like {@code ORDER}; the {@code .report} and {@code .csvim}
  * generators use the same convention so all three artefacts agree on the table name.</li>
- * <li>A {@code required} {@code manyToOne}/{@code oneToOne} relation is a <b>composition</b>: the
- * FK property carries the {@code relationship*} attributes, the owning entity becomes
- * {@code DEPENDENT} with {@code MANAGE_DETAILS} layout and inherits the perspective of its
- * (transitively resolved) composition parent. An optional relation is an <b>association</b>: a
- * plain DROPDOWN property, the entity stays {@code PRIMARY} with its own perspective.</li>
+ * <li>A {@code manyToOne}/{@code oneToOne} relation marked {@code composition: true} is a
+ * <b>composition</b>: the FK property carries the {@code relationship*} attributes, the owning
+ * entity becomes {@code DEPENDENT} with {@code MANAGE_DETAILS} layout and inherits the perspective
+ * of its (transitively resolved) composition parent (and the FK is NOT NULL). Every other relation
+ * is an <b>association</b>: a plain DROPDOWN property whose FK is NOT NULL when {@code required},
+ * and the entity stays {@code PRIMARY} with its own perspective. Composition is opt-in (matching
+ * codbex, where it is an explicit {@code relationshipType="COMPOSITION"}); {@code required} alone
+ * only means the FK column is NOT NULL.</li>
  * <li>Dropdown key / value and the relation's {@code referencedProperty} are derived from the
  * target entity's actual fields (its primary key and its {@code name}-like field), never
  * hardcoded.</li>
@@ -142,10 +145,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (relation.getName() == null || relation.getTo() == null) {
                     continue;
                 }
-                boolean composition = !compositionAssigned && relation.isRequired();
+                boolean composition = !compositionAssigned && relation.isComposition();
                 compositionAssigned |= composition;
                 EntityIntent target = byName.get(relation.getTo());
-                properties.add(relationProperty(name, relation, target, composition));
+                String collection = composition ? compositionCollectionName(target, name) : null;
+                properties.add(relationProperty(name, relation, target, composition, collection));
                 relations.add(relationLink(name, relation, target, compositionParents));
             }
             entityMap.put("properties", properties);
@@ -174,7 +178,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Map each entity to its composition parent: the target of its first {@code required}
+     * Map each entity to its composition parent: the target of its first {@code composition: true}
      * {@code manyToOne} / {@code oneToOne} relation. Entities present as keys are DEPENDENT; their
      * perspective is the parent's, resolved transitively by {@link #resolvePerspective}.
      */
@@ -186,7 +190,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             for (RelationIntent relation : entity.getRelations()) {
                 boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-                if (toOne && relation.isRequired() && relation.getTo() != null) {
+                if (toOne && relation.isComposition() && relation.getTo() != null) {
                     parents.put(entity.getName(), relation.getTo());
                     break;
                 }
@@ -256,7 +260,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String column = IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(field.getName());
         String dataType = mapDataType(field.getType());
         Map<String, Object> p = new LinkedHashMap<>();
-        p.put("name", field.getName());
+        // Property names are PascalCase (Dirigible/codbex convention); the physical column dataName
+        // stays UPPER_SNAKE, derived from the authored field name above.
+        p.put("name", IntentNaming.pascalCase(field.getName()));
         p.put("description", field.getDescription() == null ? "" : field.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
@@ -265,7 +271,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         }
-        if (field.isPrimaryKey() && field.isGenerated()) {
+        // Auto-increment is a DB identity/sequence - valid only on integer columns (a VARCHAR/uuid
+        // AUTO_INCREMENT is rejected by the database). The parser already enforces integer primary keys;
+        // this keeps the generator correct on its own.
+        if (field.isPrimaryKey() && field.isGenerated() && ("INTEGER".equals(dataType) || "BIGINT".equals(dataType))) {
             p.put("dataAutoIncrement", "true");
         }
         Integer length = fieldLength(field);
@@ -280,6 +289,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
             p.put("dataDefaultValue", field.getDefaultValue());
         }
+        p.put("auditType", "NONE");
         p.put("widgetType", widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length == null ? "20" : length.toString());
@@ -290,23 +300,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * FK property added to the owning entity for a {@code manyToOne}/{@code oneToOne} relation. Renders
      * as a DROPDOWN keyed by the target entity's actual primary-key field and labelled by its
-     * {@code name}-like field. Only the entity's composition relation (its first {@code required}
-     * to-one) carries the {@code relationship*} attributes that make the EDM editor treat the owner as
-     * a detail of the target - further required relations stay plain NOT NULL associations, mirroring
-     * how the EDM editor writes multi-FK entities.
+     * {@code name}-like field. Only the entity's composition relation (its first
+     * {@code composition: true} to-one) carries the {@code relationship*} attributes that make the EDM
+     * editor treat the owner as a detail of the target - every other relation stays a plain association
+     * (NOT NULL when {@code required}), mirroring how the EDM editor writes multi-FK entities.
      */
     private static Map<String, Object> relationProperty(String ownerEntity, RelationIntent relation, EntityIntent target,
-            boolean composition) {
+            boolean composition, String compositionCollection) {
         String column = IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName());
         FieldIntent targetPk = primaryKeyOf(target);
         String fkType = targetPk == null ? "INTEGER" : mapDataType(targetPk.getType());
         Map<String, Object> p = new LinkedHashMap<>();
-        p.put("name", relation.getName());
+        p.put("name", IntentNaming.pascalCase(relation.getName()));
         p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
         p.put("tooltip", "");
         p.put("dataName", column);
         p.put("dataType", fkType);
-        p.put("dataNullable", relation.isRequired() ? "false" : "true");
+        // A composition FK is always NOT NULL (the detail cannot exist without its parent), even if
+        // `required` was not also set; otherwise nullability follows `required`.
+        p.put("dataNullable", (relation.isRequired() || composition) ? "false" : "true");
         if ("VARCHAR".equals(fkType) && targetPk != null) {
             Integer length = fieldLength(targetPk);
             if (length != null && length > 0) {
@@ -316,8 +328,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (composition) {
             p.put("relationshipType", "COMPOSITION");
             p.put("relationshipCardinality", "1_n");
-            p.put("relationshipName", relation.getName());
+            // The relationship name is the master's detail-collection label (the parent's matching
+            // oneToMany name, e.g. Member.loans -> "Loans"); falls back to the FK name when the parent
+            // declares no collection. This matches codbex master-detail (e.g. SalesInvoice "Items").
+            p.put("relationshipName", compositionCollection != null ? compositionCollection : IntentNaming.pascalCase(relation.getName()));
         }
+        p.put("auditType", "NONE");
         p.put("widgetType", "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
@@ -336,17 +352,34 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation, EntityIntent target,
             Map<String, String> compositionParents) {
         Map<String, Object> link = new LinkedHashMap<>();
-        String linkName = ownerEntity + "_" + relation.getName();
+        String linkName = ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
         link.put("name", linkName);
         link.put("type", "relation");
         link.put("entity", ownerEntity);
         link.put("relationName", linkName);
         link.put("relationshipEntityPerspectiveName", resolvePerspective(relation.getTo(), compositionParents));
         link.put("relationshipEntityPerspectiveLabel", "Entities");
-        link.put("property", relation.getName());
+        link.put("property", IntentNaming.pascalCase(relation.getName()));
         link.put("referenced", relation.getTo());
         link.put("referencedProperty", keyFieldName(target));
         return link;
+    }
+
+    /**
+     * The detail-collection label for a composition: the parent's {@code oneToMany} relation that
+     * points back to the child entity (e.g. {@code Member.loans} -> {@code Loans}), PascalCased. Null
+     * when the parent declares no such collection, in which case the FK name is used.
+     */
+    private static String compositionCollectionName(EntityIntent parent, String childEntityName) {
+        if (parent == null) {
+            return null;
+        }
+        for (RelationIntent relation : parent.getRelations()) {
+            if ("oneToMany".equals(relation.getKind()) && childEntityName.equals(relation.getTo()) && relation.getName() != null) {
+                return IntentNaming.pascalCase(relation.getName());
+            }
+        }
+        return null;
     }
 
     /** The target entity's primary-key field, or null when the target is unknown or has no PK. */
@@ -362,10 +395,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return null;
     }
 
-    /** The dropdown key: the target's actual PK field name; {@code Id} only as a last resort. */
+    /**
+     * The dropdown key: the target's actual PK field name (PascalCase); {@code Id} as a last resort.
+     */
     private static String keyFieldName(EntityIntent target) {
         FieldIntent pk = primaryKeyOf(target);
-        return pk == null ? "Id" : pk.getName();
+        return pk == null ? "Id" : IntentNaming.pascalCase(pk.getName());
     }
 
     /**
@@ -378,12 +413,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         for (FieldIntent field : target.getFields()) {
             if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
-                return field.getName();
+                return IntentNaming.pascalCase(field.getName());
             }
         }
         for (FieldIntent field : target.getFields()) {
             if (field.getName() != null && "VARCHAR".equals(mapDataType(field.getType())) && !field.isPrimaryKey()) {
-                return field.getName();
+                return IntentNaming.pascalCase(field.getName());
             }
         }
         return keyFieldName(target);

@@ -57,6 +57,22 @@ public final class IntentNaming {
     }
 
     /**
+     * Capitalize the first letter to make an UpperCamelCase (PascalCase) name, preserving the rest -
+     * the codbex/Dirigible EDM convention for property names ({@code id} -> {@code Id},
+     * {@code loanedOn} -> {@code LoanedOn}). Authoring stays lower camelCase; only the generated model
+     * property names are PascalCased (column {@code dataName}s stay UPPER_SNAKE).
+     *
+     * @param name the identifier to convert (may be null)
+     * @return the PascalCase form, empty for null/empty input
+     */
+    public static String pascalCase(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        return Character.toUpperCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /**
      * Camel-/Pascal-case to upper snake. Handles {@code IDValue} -> {@code ID_VALUE}.
      *
      * @param name the identifier to convert (may be null)

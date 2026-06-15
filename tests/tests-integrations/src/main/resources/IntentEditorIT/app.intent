@@ -10,15 +10,15 @@ entities:
 
   - name: Book
     fields:
-      - { name: id,    type: uuid,   primaryKey: true, generated: true }
-      - { name: title, type: string, required: true, length: 200 }
+      - { name: id,    type: integer, primaryKey: true, generated: true }
+      - { name: title, type: string,  required: true, length: 200 }
     relations:
       - { name: genre, kind: manyToOne, to: Genre }
 
   - name: Loan
     fields:
-      - { name: id,       type: uuid, primaryKey: true, generated: true }
-      - { name: loanedOn, type: date, required: true }
+      - { name: id,       type: integer, primaryKey: true, generated: true }
+      - { name: loanedOn, type: date,    required: true }
     relations:
       - { name: book, kind: manyToOne, to: Book, required: true }
 

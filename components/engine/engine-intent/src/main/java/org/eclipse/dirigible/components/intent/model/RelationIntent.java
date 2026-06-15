@@ -19,6 +19,7 @@ public class RelationIntent {
     private String kind;
     private String to;
     private boolean required;
+    private boolean composition;
     private String description;
 
     public String getName() {
@@ -51,6 +52,14 @@ public class RelationIntent {
 
     public void setRequired(boolean required) {
         this.required = required;
+    }
+
+    public boolean isComposition() {
+        return composition;
+    }
+
+    public void setComposition(boolean composition) {
+        this.composition = composition;
     }
 
     public String getDescription() {

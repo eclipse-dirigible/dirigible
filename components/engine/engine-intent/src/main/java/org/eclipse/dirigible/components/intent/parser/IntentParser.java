@@ -52,6 +52,11 @@ public final class IntentParser {
 
     private static final Set<String> FIELD_TYPES =
             Set.of("string", "text", "integer", "int", "long", "decimal", "double", "boolean", "date", "timestamp", "uuid");
+    /**
+     * Primary keys must be an integer type - the codbex model convention is integer identifiers
+     * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
+     */
+    private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
 
@@ -137,6 +142,14 @@ public final class IntentParser {
                 }
                 if (field.isPrimaryKey()) {
                     idCount++;
+                    String type = field.getType() == null ? null
+                            : field.getType()
+                                   .toLowerCase(Locale.ROOT);
+                    if (!INTEGER_PK_TYPES.contains(type)) {
+                        issues.add("entity [" + name + "] primary-key field [" + field.getName()
+                                + "] must be an integer type (integer/int/long) - identifiers are integer by convention"
+                                + (type == null ? "" : ", got [" + field.getType() + "]"));
+                    }
                 }
             }
             if (idCount > 1) {
@@ -156,6 +169,10 @@ public final class IntentParser {
                 if (relation.getKind() != null && !RELATION_KINDS.contains(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
+                }
+                if (relation.isComposition() && !"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                    issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
+                            + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
                 if (relation.getTo() == null || relation.getTo()
                                                         .isBlank()) {
