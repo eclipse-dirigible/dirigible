@@ -14,10 +14,10 @@ import java.util.concurrent.TimeUnit;
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
-import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
+import org.eclipse.dirigible.tests.framework.ide.GitPerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
@@ -33,8 +33,9 @@ import org.openqa.selenium.By;
  * {@code /parse} and {@code /generate} services exhaustively but cannot catch the editor page
  * failing to bootstrap in a browser - which is exactly the class of regression that slips through
  * (a missing {@code ng-editor} platform-links category, or the config script not being loaded, both
- * leave the services green while the editor is dead). This test opens a real {@code .intent} file
- * and asserts:
+ * leave the services green while the editor is dead). This test clones the
+ * {@code dirigiblelabs/sample-intent-model} sample project (the same clone-a-real-repo pattern the
+ * {@code SampleProjectRepositoryIT} subclasses use), opens its {@code app.intent}, and asserts:
  * <ul>
  * <li>the file is routed to the Intent Editor (the editor tab appears),</li>
  * <li>the AngularJS {@code intentEditor} module actually bootstrapped (its injector resolves -
@@ -49,19 +50,19 @@ import org.openqa.selenium.By;
  */
 public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
 
-    private static final String PROJECT = "IntentEditorIT";
+    private static final String REPOSITORY_URL = "https://github.com/dirigiblelabs/sample-intent-model.git";
+    private static final String PROJECT = "sample-intent-model";
     private static final String INTENT_FILE = "app.intent";
     private static final String GENERATED_EDM_PATH = IRepositoryStructure.PATH_USERS + "/admin/workspace/" + PROJECT + "/library.edm";
-
-    @Autowired
-    private ProjectUtil projectUtil;
 
     @Autowired
     private IRepository repository;
 
     @Test
     void intentEditor_opens_bootstraps_and_generates() {
-        projectUtil.copyResourceProjectToDefaultUserWorkspace(PROJECT);
+        ide.openHomePage();
+        GitPerspective gitPerspective = ide.openGitPerspective();
+        gitPerspective.cloneRepository(REPOSITORY_URL);
 
         Workbench workbench = ide.openWorkbench();
         workbench.openFile(PROJECT, INTENT_FILE);
