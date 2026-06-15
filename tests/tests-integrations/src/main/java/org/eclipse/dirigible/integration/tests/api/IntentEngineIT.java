@@ -115,6 +115,11 @@ class IntentEngineIT extends IntegrationTest {
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+              - name: BigOrderItems
+                source: OrderItem
+                description: Order items with quantity over one, with their order date
+                dimensions: [order.orderDate, quantity]
+                filter: "quantity > 1"
 
             permissions:
               - { role: Sales,   description: Sales staff,   can: [Customer:read, Order:create] }
@@ -148,7 +153,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(5))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(1))
+                                                 .body("reports", hasSize(2))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -346,11 +351,24 @@ class IntentEngineIT extends IntegrationTest {
 
     private void assertReport() {
         String body = contentOf("OrdersByCustomer.report");
-        assertTrue(body.contains("\"alias\": \"OrdersByCustomer\""), "report should carry the intent name as alias");
-        assertTrue(body.contains("\"baseTable\": \"ORDERS_ORDER\""),
-                "report baseTable should carry the same intent-prefixed table name the EDM declares as dataName");
+        assertTrue(body.contains("\"name\": \"OrdersByCustomer\""), "report should carry its declared name");
+        assertTrue(body.contains("\"alias\": \"Order\""), "report alias should be the source entity");
+        assertTrue(body.contains("\"table\": \"ORDERS_ORDER\""),
+                "report table should be the same intent-prefixed table name the EDM declares as dataName");
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
+        // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
+        assertTrue(body.contains("SELECT ") && body.contains("FROM ORDERS_ORDER as Order") && body.contains("GROUP BY"),
+                "report query should be a materialised SQL statement with GROUP BY, not empty");
+        assertTrue(body.contains("SUM(Order.ORDER_TOTAL)"), "sum(total) should aggregate the qualified ORDER_TOTAL column");
+        assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
+
+        // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
+        String joined = contentOf("BigOrderItems.report");
+        assertTrue(joined.contains("INNER JOIN ORDERS_ORDER as Order ON OrderItem.ORDER_ITEM_ORDER = Order.ORDER_ID"),
+                "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
+        assertTrue(joined.contains("WHERE OrderItem.ORDER_ITEM_QUANTITY > 1"),
+                "the intent filter should become a WHERE with the field rewritten to its qualified column");
     }
 
     private void assertRoles() {
