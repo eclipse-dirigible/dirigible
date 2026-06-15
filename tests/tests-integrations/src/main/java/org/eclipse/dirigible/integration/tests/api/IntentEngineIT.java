@@ -345,6 +345,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"controlId\": \"header\""), "form should start with a header control");
         assertTrue(body.contains("\"controlId\": \"input-date\""), "form should pick input-date for the orderDate field");
         assertTrue(body.contains("\"controlId\": \"input-number\""), "form should pick input-number for the total decimal field");
+        assertTrue(body.contains("\"model\": \"OrderDate\""),
+                "form field model should bind to the PascalCase entity property (orderDate -> OrderDate)");
         assertTrue(body.contains("\"type\": \"positive\""), "form should mark the approve button as positive");
         assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler stub");
     }
@@ -362,6 +364,12 @@ class IntentEngineIT extends IntegrationTest {
                 "report query should be a materialised SQL statement with GROUP BY, not empty");
         assertTrue(body.contains("SUM(Order.ORDER_TOTAL)"), "sum(total) should aggregate the qualified ORDER_TOTAL column");
         assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
+        // A bare to-one relation dimension (customer) joins the related table and shows its name field,
+        // grouping by the name - not the raw FK id.
+        assertTrue(body.contains("INNER JOIN ORDERS_CUSTOMER as Customer ON Order.ORDER_CUSTOMER = Customer.CUSTOMER_ID"),
+                "a bare relation dimension (customer) should INNER JOIN the related entity");
+        assertTrue(body.contains("SELECT Customer.CUSTOMER_NAME as") && body.contains("GROUP BY Customer.CUSTOMER_NAME"),
+                "the bare relation dimension should select + group by the related entity's name, not its FK id");
 
         // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
         String joined = contentOf("BigOrderItems.report");

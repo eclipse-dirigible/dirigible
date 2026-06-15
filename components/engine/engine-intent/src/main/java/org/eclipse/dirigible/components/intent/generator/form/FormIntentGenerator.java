@@ -183,10 +183,14 @@ public class FormIntentGenerator implements IntentTargetGenerator {
 
     private static Map<String, Object> fieldControl(String fieldName, FieldIntent field) {
         Control control = pickControl(field);
+        // The control binds to the entity property, whose name the EDM generator emits in PascalCase
+        // (loanedOn -> LoanedOn); the `model` binding (and the control id) must match it so the form
+        // reads/writes the right field. Use the same IntentNaming.pascalCase the EDM uses.
+        String property = IntentNaming.pascalCase(fieldName);
         Map<String, Object> map = new LinkedHashMap<>();
         map.put("controlId", control.controlId);
         map.put("groupId", "fb-controls");
-        map.put("id", fieldName + "Id");
+        map.put("id", property + "Id");
         map.put("label", humanize(fieldName));
         map.put("horizontal", false);
         map.put("isCompact", false);
@@ -194,7 +198,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         if (control.htmlType != null) {
             map.put("type", control.htmlType);
         }
-        map.put("model", fieldName);
+        map.put("model", property);
         map.put("required", field != null && field.isRequired());
         if ("input-textfield".equals(control.controlId) || "input-textarea".equals(control.controlId)) {
             map.put("minLength", 0);

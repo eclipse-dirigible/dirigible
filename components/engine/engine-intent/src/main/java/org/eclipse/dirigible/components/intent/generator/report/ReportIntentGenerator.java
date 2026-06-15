@@ -35,24 +35,27 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits one {@code <report>.report} per {@link ReportIntent}, in the JSON shape the report editor and
- * the report runtime consume (the codbex convention - see {@code codbex-invoices/*.report}): an outer
- * record with {@code name} / {@code alias} (base-table alias) / {@code table} (physical base table) /
- * {@code columns} / a fully materialised SQL {@code query} / {@code conditions} / {@code security}.
+ * Emits one {@code <report>.report} per {@link ReportIntent}, in the JSON shape the report editor
+ * and the report runtime consume (the codbex convention - see {@code codbex-invoices/*.report}): an
+ * outer record with {@code name} / {@code alias} (base-table alias) / {@code table} (physical base
+ * table) / {@code columns} / a fully materialised SQL {@code query} / {@code conditions} /
+ * {@code security}.
  *
  * <p>
- * The report is rooted at {@link ReportIntent#getSource()}. Each dimension and measure resolves to a
- * physical column:
+ * The report is rooted at {@link ReportIntent#getSource()}. Each dimension and measure resolves to
+ * a physical column:
  * <ul>
  * <li>a plain field ({@code dueOn}) -&gt; a column on the source table;</li>
- * <li>a {@code relation.field} path ({@code member.name}) -&gt; an {@code INNER JOIN} to the related
- * entity plus a column on it - this is how a report shows columns from a parent/related entity;</li>
+ * <li>a {@code relation.field} path ({@code member.name}) -&gt; an {@code INNER JOIN} to the
+ * related entity plus a column on it - this is how a report shows columns from a parent/related
+ * entity;</li>
  * <li>a bare to-one relation name ({@code book}) -&gt; the foreign-key column on the source;</li>
- * <li>a measure {@code count(*)} / {@code sum(total)} / {@code avg(price)} / {@code min}/{@code max}
- * -&gt; an aggregate column (and the dimensions become the {@code GROUP BY}).</li>
+ * <li>a measure {@code count(*)} / {@code sum(total)} / {@code avg(price)} /
+ * {@code min}/{@code max} -&gt; an aggregate column (and the dimensions become the
+ * {@code GROUP BY}).</li>
  * </ul>
- * {@link ReportIntent#getFilter()} becomes the {@code WHERE} predicate, with the intent's field names
- * rewritten to their qualified physical columns (so {@code dueOn <= CURRENT_DATE} ->
+ * {@link ReportIntent#getFilter()} becomes the {@code WHERE} predicate, with the intent's field
+ * names rewritten to their qualified physical columns (so {@code dueOn <= CURRENT_DATE} ->
  * {@code Loan.LOAN_DUE_ON <= CURRENT_DATE}); non-field tokens (operators, {@code CURRENT_DATE},
  * literals) pass through untouched.
  *
@@ -69,9 +72,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     /**
      * Pretty-printed JSON with HTML-escaping OFF so the SQL {@code query} keeps literal {@code =} /
-     * {@code >} / {@code <} operators (the platform's {@code JsonHelper} escapes them to {@code \\u003d}
-     * etc.; valid JSON, but unreadable and unlike the codbex {@code .report} files). Maps only - no
-     * {@code @Expose} concern.
+     * {@code >} / {@code <} operators (the platform's {@code JsonHelper} escapes them to
+     * {@code \\u003d} etc.; valid JSON, but unreadable and unlike the codbex {@code .report} files).
+     * Maps only - no {@code @Expose} concern.
      */
     private static final Gson REPORT_JSON = new GsonBuilder().setPrettyPrinting()
                                                              .disableHtmlEscaping()
@@ -185,7 +188,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 ColumnRef ref = resolve(context, model, source, baseAlias, field);
                 registerJoin(joins, ref);
                 String alias = humanize(aggregate.toLowerCase(Locale.ROOT) + " " + leaf(field));
-                String type = "COUNT".equals(aggregate) ? "INTEGER" : ("MIN".equals(aggregate) || "MAX".equals(aggregate) ? ref.reportType : "DECIMAL");
+                String type = "COUNT".equals(aggregate) ? "INTEGER"
+                        : ("MIN".equals(aggregate) || "MAX".equals(aggregate) ? ref.reportType : "DECIMAL");
                 columns.add(column(ref.tableAlias, alias, ref.physicalColumn, type, aggregate, false));
                 selectParts.add(aggregate + "(" + ref.qualified() + ") as \"" + alias + "\"");
                 return;
@@ -194,7 +198,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", measure);
     }
 
-    /** Resolve a dimension/measure field reference to its physical column, joining when it crosses a relation. */
+    /**
+     * Resolve a dimension/measure field reference to its physical column, joining when it crosses a
+     * relation.
+     */
     private static ColumnRef resolve(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             String reference) {
         ColumnRef ref = new ColumnRef();
@@ -215,18 +222,67 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 return ref;
             }
         }
-        // Bare reference: a field, else a to-one relation's FK column, else a best-effort raw column.
+        // A plain field on the source table.
         FieldIntent field = source == null ? null : fieldByName(source, reference);
+        if (field != null) {
+            ref.tableAlias = baseAlias;
+            ref.physicalColumn = column(source.getName(), reference);
+            ref.reportType = reportType(field.getType());
+            ref.displayAlias = humanize(reference);
+            return ref;
+        }
+        // A bare to-one relation (e.g. `member`): JOIN the related table and show its label (name)
+        // field rather than the raw FK id - "group by member" should display the member, not its id.
+        // Use `relation.field` to pick a specific column instead.
+        RelationIntent relation = source == null ? null : relationByName(source, reference);
+        if (relation != null && relation.getTo() != null
+                && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+            EntityIntent target = entityByName(model, relation.getTo());
+            String targetAlias = relation.getTo();
+            String labelField = labelFieldName(target);
+            FieldIntent labeled = fieldByName(target, labelField);
+            ref.tableAlias = targetAlias;
+            ref.physicalColumn = column(targetAlias, labelField);
+            ref.reportType = reportType(labeled == null ? null : labeled.getType());
+            ref.displayAlias = humanize(reference);
+            ref.join = join(context, source, relation, target, targetAlias, baseAlias);
+            return ref;
+        }
+        // Best-effort: treat the reference as a raw column on the source.
         ref.tableAlias = baseAlias;
         ref.physicalColumn = column(source == null ? baseAlias : source.getName(), reference);
+        ref.reportType = "CHARACTER VARYING";
         ref.displayAlias = humanize(reference);
-        if (field != null) {
-            ref.reportType = reportType(field.getType());
-        } else {
-            RelationIntent relation = source == null ? null : relationByName(source, reference);
-            ref.reportType = relation != null ? "INTEGER" : "CHARACTER VARYING";
-        }
         return ref;
+    }
+
+    /**
+     * The related entity's label field (its {@code name}-like field; else first text field; else PK).
+     */
+    private static String labelFieldName(EntityIntent target) {
+        if (target == null) {
+            return "id";
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                return field.getName();
+            }
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && !field.isPrimaryKey() && isTextType(field.getType())) {
+                return field.getName();
+            }
+        }
+        FieldIntent pk = primaryKeyOf(target);
+        return pk == null ? "id" : pk.getName();
+    }
+
+    private static boolean isTextType(String type) {
+        if (type == null) {
+            return false;
+        }
+        String t = type.toLowerCase(Locale.ROOT);
+        return "string".equals(t) || "text".equals(t) || "uuid".equals(t);
     }
 
     private static Join join(IntentGenerationContext context, EntityIntent source, RelationIntent relation, EntityIntent target,
@@ -244,8 +300,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
     }
 
-    private static String buildQuery(String baseTable, String baseAlias, Map<String, Join> joins, List<String> selectParts,
-            String where, List<String> groupParts) {
+    private static String buildQuery(String baseTable, String baseAlias, Map<String, Join> joins, List<String> selectParts, String where,
+            List<String> groupParts) {
         StringBuilder sql = new StringBuilder();
         sql.append("SELECT ")
            .append(selectParts.isEmpty() ? "*" : String.join(", ", selectParts));
@@ -272,7 +328,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return sql.toString();
     }
 
-    /** Rewrite the intent filter's field names to qualified physical columns; pass other tokens through. */
+    /**
+     * Rewrite the intent filter's field names to qualified physical columns; pass other tokens through.
+     */
     private static String buildWhere(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             Map<String, Join> joins, String filter) {
         if (filter == null || filter.isBlank() || source == null) {
@@ -303,7 +361,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return where.trim();
     }
 
-    /** Best-effort structured condition for a single binary predicate (matches what the editor shows). */
+    /**
+     * Best-effort structured condition for a single binary predicate (matches what the editor shows).
+     */
     private static List<Map<String, Object>> conditions(IntentGenerationContext context, IntentModel model, EntityIntent source,
             String baseAlias, String filter) {
         List<Map<String, Object>> conditions = new ArrayList<>();
@@ -321,7 +381,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return conditions;
     }
 
-    /** Qualify a single filter token to a physical column when it names a field/relation.field; else leave it. */
+    /**
+     * Qualify a single filter token to a physical column when it names a field/relation.field; else
+     * leave it.
+     */
     private static String qualifyToken(IntentModel model, EntityIntent source, String baseAlias, String token) {
         int dot = token.indexOf('.');
         if (dot > 0) {
@@ -343,8 +406,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return security;
     }
 
-    private static Map<String, Object> column(String tableAlias, String alias, String physicalColumn, String reportType,
-            String aggregate, boolean grouping) {
+    private static Map<String, Object> column(String tableAlias, String alias, String physicalColumn, String reportType, String aggregate,
+            boolean grouping) {
         Map<String, Object> column = new LinkedHashMap<>();
         column.put("table", tableAlias);
         column.put("alias", alias);
@@ -482,7 +545,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return out.toString();
     }
 
-    /** A resolved column reference: where it lives, its physical name + type, display alias, optional join. */
+    /**
+     * A resolved column reference: where it lives, its physical name + type, display alias, optional
+     * join.
+     */
     private static final class ColumnRef {
         private String tableAlias;
         private String physicalColumn;
