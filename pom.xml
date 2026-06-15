@@ -162,7 +162,7 @@
         <okhttp.version>5.4.0</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
-        <jaxws-rt.version>4.0.4</jaxws-rt.version>
+        <jaxws-rt.version>4.0.5</jaxws-rt.version>
 
         <!-- Lucene -->
         <lucene.version>10.4.0</lucene.version>
