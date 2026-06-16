@@ -269,6 +269,28 @@ export function generateFiles(model, parameters, templateSources) {
                         });
                     }
                     break;
+                case "triggers":
+                    // Process triggers (intent layer): one glue-code artefact per process started on an
+                    // entity's create. Not entity-shaped, so it gets its own loop rather than
+                    // generateCollection (which dereferences entity perspectives).
+                    if (model.triggers) {
+                        for (let t = 0; t < model.triggers.length; t++) {
+                            const triggerParameters = {
+                                ...parameters,
+                                process: model.triggers[t].process,
+                                entity: model.triggers[t].entity,
+                                perspective: model.triggers[t].perspective,
+                                keyProperty: model.triggers[t].keyProperty
+                            };
+                            const cleanTriggerParameters = cleanData(triggerParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanTriggerParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanTriggerParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

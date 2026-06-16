@@ -255,6 +255,35 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void events_template_generates_the_process_trigger_handler() {
+        // Generate the models from the intent (orders.model carries the triggers collection)...
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // ...then run the events template against that model through the real generation service -
+        // this exercises the generateUtils.js "triggers" collection case end to end.
+        String payload = "{\"template\":\"template-application-events-java/template/template.js\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=orders.model")
+                                                 .then()
+                                                 .statusCode(201));
+
+        String handler = contentOf("gen/events/OrderApprovalTrigger.java");
+        assertTrue(handler.contains("class OrderApprovalTrigger"),
+                "the events template should generate a handler class named after the process");
+        assertTrue(handler.contains("@Listener(name = \"intent-test-Order-Order\""),
+                "the handler should bind to the entity's event topic <project>-<perspective>-<entity>");
+        assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
+        assertTrue(handler.contains("import gen.orders.data.Order.OrderRepository"),
+                "the handler should use the generated typed repository");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -346,6 +375,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
+        // The trigger collection the events template iterates: one entry per onCreate process trigger.
+        assertTrue(modelBody.contains("\"triggers\"") && modelBody.contains("\"process\": \"OrderApproval\"")
+                && modelBody.contains("\"entity\": \"Order\""),
+                "model JSON should carry a triggers collection for the events template");
     }
 
     private void assertBpmn() {
