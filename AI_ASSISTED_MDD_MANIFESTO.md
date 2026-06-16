@@ -1,4 +1,4 @@
-# The AI-Driven Model-Driven Development Manifesto
+# The AI-Assisted Model-Driven Development Manifesto
 
 *How Eclipse Dirigible closes the gap that broke Model-Driven Development for thirty years.*
 
@@ -153,21 +153,21 @@ the deterministic input to the one below.
             │  (AI proposes a patch; human accepts)
             ▼
 ┌───────────────────────────────────────────────┐
-│  1. INTENT  -  the abstract model               │   one file, human + AI authored
-│     entities · relations · processes ·          │   structured, diff-stable, portable
-│     forms · reports · permissions · seeds       │
+│  1. INTENT  -  the abstract model             │   one file, human + AI authored
+│     entities · relations · processes ·        │   structured, diff-stable, portable
+│     forms · reports · permissions · seeds     │
 └───────────────────────────────────────────────┘
             │  (deterministic generation - pure functions)
             ▼
 ┌───────────────────────────────────────────────┐
-│  2. MODELS  -  the specific models              │   .edm / .model · .bpmn · .form ·
-│     the platform's native, openable artefacts   │   .report · .roles · .csvim
+│  2. MODELS  -  the specific models            │   .edm / .model · .bpmn · .form ·
+│     the platform's native, openable artefacts │   .report · .roles · .csvim
 └───────────────────────────────────────────────┘
             │  (deterministic generation - the existing template engine)
             ▼
 ┌───────────────────────────────────────────────┐
-│  3. APPLICATION  -  the full stack              │   schema · persistence · REST · UI ·
-│     plus its extensions                         │   jobs · listeners · processes · security
+│  3. APPLICATION  -  the full stack            │   schema · persistence · REST · UI ·
+│     plus its extensions                       │   jobs · listeners · processes · security
 └───────────────────────────────────────────────┘
 ```
 
@@ -187,7 +187,7 @@ layering has collapsed and the discipline is lost.
 
 ## VI. Principles
 
-These are the tenets that keep AI-driven MDD honest. Violate one and you slide back into
+These are the tenets that keep AI-assisted MDD honest. Violate one and you slide back into
 either the old modeller trap or the new "let the AI write the app" trap.
 
 1. **The specific models stay canonical.** The platform's deterministic generators are
@@ -238,7 +238,7 @@ either the old modeller trap or the new "let the AI write the app" trap.
 
 ## VII. The Role of the Low-Code Platform
 
-AI-driven MDD is not possible without a Low-Code Platform underneath it, and this is the
+AI-assisted MDD is not possible without a Low-Code Platform underneath it, and this is the
 part that is easy to miss.
 
 The AI can only propose an abstract model that is *compliant* because the platform has
@@ -259,7 +259,7 @@ So the Low-Code Platform contributes the two things AI cannot:
 
 Dirigible is that platform. The abstract model (intent) is the new top layer; the EDM /
 BPMN / form / report / roles / CSVIM models and their template generators are the layer
-that was always here. AI-driven MDD is the *composition* of the two.
+that was always here. AI-assisted MDD is the *composition* of the two.
 
 ---
 
@@ -327,4 +327,4 @@ using. That layer is here.
 
 ---
 
-*Eclipse Dirigible - the polyglot, model-driven, AI-authored application platform.*
+*Eclipse Dirigible - the polyglot, model-driven, AI-enabled application platform.*
