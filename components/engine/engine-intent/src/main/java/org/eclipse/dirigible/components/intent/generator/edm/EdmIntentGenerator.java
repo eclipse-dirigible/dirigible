@@ -312,9 +312,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The {@code ProcessId} back-reference property added to an entity that a process starts on
-     * create. A plain VARCHAR holding the started process-instance id; the runtime trigger handler
-     * writes it. Not a major widget - it is system-managed, not user input.
+     * The {@code ProcessId} back-reference property added to an entity that a process starts on create.
+     * A plain VARCHAR holding the started process-instance id; the runtime trigger handler writes it.
+     * Not a major widget - it is system-managed, not user input.
      */
     /**
      * The {@code triggers} collection in the {@code .model}: one entry per process that starts on an

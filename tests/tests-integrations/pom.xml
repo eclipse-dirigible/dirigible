@@ -46,6 +46,11 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-dao-java</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-tests-framework</artifactId>
         </dependency>
         <dependency>

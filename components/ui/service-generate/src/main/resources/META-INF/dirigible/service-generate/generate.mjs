@@ -79,7 +79,24 @@ function onGenerateModel(context, request, response) {
 
     let generatedFiles = template.generate(model, parameters);
 
-    cleanGenFolder(workspace, project, parameters.genFolderName);
+    // Clean only the gen/<subfolder>s this generation actually writes to (derived from the output
+    // paths), not gen/<modelFileName> blindly. The standard templates write under gen/<modelFileName>
+    // so this is unchanged for them, but a template that targets a sibling folder (e.g. the events
+    // glue under gen/events) must not wipe another template's output (e.g. gen/<model>) for the same
+    // model file.
+    let genSubfolders = new Set();
+    for (let i = 0; i < generatedFiles.length; i++) {
+        let path = generatedFiles[i].path;
+        if (path && path.startsWith("gen/")) {
+            let rest = path.substring("gen/".length);
+            let slash = rest.indexOf("/");
+            let subfolder = slash >= 0 ? rest.substring(0, slash) : rest;
+            if (subfolder) {
+                genSubfolders.add(subfolder);
+            }
+        }
+    }
+    genSubfolders.forEach(subfolder => cleanGenFolder(workspace, project, subfolder));
 
     for (let i = 0; i < generatedFiles.length; i++) {
         createFile(workspace, project, generatedFiles[i].path, generatedFiles[i].content);

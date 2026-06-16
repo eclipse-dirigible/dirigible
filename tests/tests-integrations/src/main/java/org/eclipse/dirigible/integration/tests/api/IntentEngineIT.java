@@ -264,14 +264,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         // ...then run the events template against that model through the real generation service -
         // this exercises the generateUtils.js "triggers" collection case end to end.
-        String payload = "{\"template\":\"template-application-events-java/template/template.js\",\"parameters\":{}}";
-        restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body(payload)
-                                                 .when()
-                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
-                                                         + "?path=orders.model")
-                                                 .then()
-                                                 .statusCode(201));
+        generateFromModel("template-application-events-java/template/template.js", "orders.model");
 
         String handler = contentOf("gen/events/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
@@ -281,6 +274,25 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
         assertTrue(handler.contains("import gen.orders.data.Order.OrderRepository"),
                 "the handler should use the generated typed repository");
+    }
+
+    @Test
+    void generating_the_events_template_preserves_the_full_stack_gen_output() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // Full-stack (DAO) generation writes the repository under gen/orders.
+        generateFromModel("template-application-dao-java/template/template.js", "orders.model");
+        assertTrue(resource("gen/orders/data/Order/OrderRepository.java").exists(),
+                "the DAO template should generate the repository under gen/orders");
+        // Generating the events template must clean only gen/events, not gen/<modelName> - so the
+        // full-stack output survives (the reported bug was the events generation wiping gen/orders).
+        generateFromModel("template-application-events-java/template/template.js", "orders.model");
+        assertTrue(resource("gen/orders/data/Order/OrderRepository.java").exists(),
+                "generating the events template must not delete the full-stack gen/orders output");
+        assertTrue(resource("gen/events/OrderApprovalTrigger.java").exists(), "the events template should still produce gen/events");
     }
 
     @Test
@@ -333,6 +345,18 @@ class IntentEngineIT extends IntegrationTest {
         return new String(resource(fileName).getContent(), StandardCharsets.UTF_8);
     }
 
+    /** Run a language template against a generated model through the real generation service. */
+    private void generateFromModel(String templateModule, String modelFile) {
+        String payload = "{\"template\":\"" + templateModule + "\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=" + modelFile)
+                                                 .then()
+                                                 .statusCode(201));
+    }
+
     private void assertEdmAndModel() {
         assertTrue(resource("orders.edm").exists(), "orders.edm should be generated");
         String edmXml = contentOf("orders.edm");
@@ -376,8 +400,9 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
         // The trigger collection the events template iterates: one entry per onCreate process trigger.
-        assertTrue(modelBody.contains("\"triggers\"") && modelBody.contains("\"process\": \"OrderApproval\"")
-                && modelBody.contains("\"entity\": \"Order\""),
+        assertTrue(
+                modelBody.contains("\"triggers\"") && modelBody.contains("\"process\": \"OrderApproval\"")
+                        && modelBody.contains("\"entity\": \"Order\""),
                 "model JSON should carry a triggers collection for the events template");
     }
 
