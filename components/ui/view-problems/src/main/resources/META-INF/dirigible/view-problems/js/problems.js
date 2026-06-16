@@ -12,6 +12,8 @@
 const problemsView = angular.module('problems', ['blimpKit', 'platformView']);
 problemsView.controller('ProblemsController', ($scope, $http, $timeout) => {
     const dialogHub = new DialogHub();
+    const messageHub = new MessageHubApi();
+    const layoutHub = new LayoutHub();
     $scope.models = {
         search: '',
         selectAll: false,
@@ -47,6 +49,45 @@ problemsView.controller('ProblemsController', ($scope, $http, $timeout) => {
     }
 
     fetchData();
+
+    // Surface the Problems view after a publish that introduces new problems. Publishing kicks off
+    // server-side synchronization (which compiles client Java); the resulting problems land a moment
+    // later, so re-poll a few times and, the first time the total rises above the pre-publish count,
+    // bring this view to the front. Reducing or unchanged counts never steal focus.
+    const POST_PUBLISH_REFRESH_DELAYS_MS = [1500, 4000, 8000];
+    const pendingPublishTimers = [];
+
+    const reloadAndFocusIfWorse = (baseline, alreadyFocused) => {
+        const limit = $scope.currentPage * $scope.pageSize;
+        const startIndex = ($scope.currentPage - 1) * $scope.pageSize;
+        return $http.get('/services/ide/problems/search', { params: { 'condition': $scope.filterBy, 'limit': limit } })
+            .then((response) => {
+                const { result, totalRows } = response.data;
+                $scope.problemsList = result.slice(startIndex);
+                $scope.totalRows = totalRows;
+                $scope.selectionChanged();
+                if (!alreadyFocused.value && totalRows > baseline) {
+                    alreadyFocused.value = true;
+                    layoutHub.focusView({ id: 'problems', region: 'bottom' });
+                }
+            });
+    };
+
+    const onPublished = messageHub.addMessageListener({
+        topic: 'platform.publisher.published',
+        handler: () => {
+            const baseline = $scope.totalRows || 0;
+            const alreadyFocused = { value: false };
+            for (const delay of POST_PUBLISH_REFRESH_DELAYS_MS) {
+                pendingPublishTimers.push($timeout(() => reloadAndFocusIfWorse(baseline, alreadyFocused), delay));
+            }
+        }
+    });
+
+    $scope.$on('$destroy', () => {
+        messageHub.removeMessageListener(onPublished);
+        for (const timer of pendingPublishTimers) $timeout.cancel(timer);
+    });
 
     $scope.hasSelected = () => $scope.problemsList.some(x => x.selected);
 

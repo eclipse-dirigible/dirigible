@@ -55,6 +55,14 @@
             <version>${project.version}</version>
         </dependency>
 
+        <!-- ProblemsFacade: the synchronizer reports client-Java compile failures to the Problems view
+             (same pattern as data-csvim's CsvimUtils). Already on the classpath transitively via the SDK
+             above; declared here because the synchronizer compiles against it directly. -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-api-platform</artifactId>
+        </dependency>
+
         <!-- Registry access (IRepository / IRepositoryStructure) -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

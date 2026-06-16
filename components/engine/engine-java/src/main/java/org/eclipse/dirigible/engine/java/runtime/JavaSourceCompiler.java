@@ -56,8 +56,18 @@ public class JavaSourceCompiler {
     }
 
 
-    /** Result of a batch compilation. */
-    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures) {
+    /**
+     * Result of a batch compilation.
+     *
+     * @param bytecode compiled binary class name → bytecode (top-level + nested types)
+     * @param failures per top-level FQN → a single formatted failure message (kept for existing
+     *        call-sites that surface one error string per artefact)
+     * @param diagnostics per top-level FQN → the structured diagnostics behind that failure, so
+     *        consumers can render one entry per error at its line/column; absent for FQNs that failed
+     *        without an attributable diagnostic (e.g. produced no class file)
+     */
+    public record BatchResult(Map<String, byte[]> bytecode, Map<String, String> failures,
+            Map<String, List<CompileDiagnostic>> diagnostics) {
     }
 
     /**
@@ -95,7 +105,7 @@ public class JavaSourceCompiler {
      */
     public BatchResult compileBatch(List<SourceUnit> units) {
         if (units.isEmpty()) {
-            return new BatchResult(Map.of(), Map.of());
+            return new BatchResult(Map.of(), Map.of(), Map.of());
         }
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         if (compiler == null) {
@@ -127,7 +137,8 @@ public class JavaSourceCompiler {
             // no compilation error is lost between here and the per-FQN bucketing below.
             logDiagnostics(diagnostics);
 
-            Map<String, String> failures = bucketDiagnostics(units, bytecode, diagnostics);
+            Buckets buckets = bucketDiagnostics(units, bytecode, diagnostics);
+            Map<String, String> failures = buckets.failures();
 
             if (failures.isEmpty()) {
                 LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
@@ -136,7 +147,7 @@ public class JavaSourceCompiler {
                         bytecode.size(), failures.size(), failures.keySet());
             }
 
-            return new BatchResult(bytecode, failures);
+            return new BatchResult(bytecode, failures, buckets.diagnostics());
 
         } catch (Exception e) {
             throw new JavaCompilationException("Batch compilation failed: " + e.getMessage(), e);
@@ -168,7 +179,10 @@ public class JavaSourceCompiler {
      * in the batch references its source file (by simple-name match — javac doesn't give us back the
      * original {@code JavaFileObject} we passed in for every diagnostic).
      */
-    private static Map<String, String> bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
+    private record Buckets(Map<String, String> failures, Map<String, List<CompileDiagnostic>> diagnostics) {
+    }
+
+    private static Buckets bucketDiagnostics(List<SourceUnit> units, Map<String, byte[]> bytecode,
             DiagnosticCollector<JavaFileObject> diagnostics) {
 
         Map<String, List<Diagnostic<? extends JavaFileObject>>> perUnit = new LinkedHashMap<>();
@@ -204,18 +218,37 @@ public class JavaSourceCompiler {
         }
 
         Map<String, String> failures = new HashMap<>();
+        Map<String, List<CompileDiagnostic>> structured = new HashMap<>();
         for (SourceUnit u : units) {
             String fqn = u.fqn();
             boolean hasBytecode = bytecode.containsKey(fqn);
             List<Diagnostic<? extends JavaFileObject>> errs = perUnit.get(fqn);
             if (!errs.isEmpty()) {
                 failures.put(fqn, formatDiagnostics(fqn, errs));
+                structured.put(fqn, toCompileDiagnostics(errs));
             } else if (!hasBytecode) {
-                String message = orphan.isEmpty() ? "Compilation produced no class file for [" + fqn + "]" : formatDiagnostics(fqn, orphan);
-                failures.put(fqn, message);
+                // No class file and no error we could attribute to this unit: surface the orphan
+                // diagnostics (e.g. a classpath error with no source) when there are any, else a
+                // generic message. Orphan diagnostics have no usable position, so attribute them to
+                // every no-bytecode unit as the best available explanation.
+                if (orphan.isEmpty()) {
+                    failures.put(fqn, "Compilation produced no class file for [" + fqn + "]");
+                } else {
+                    failures.put(fqn, formatDiagnostics(fqn, orphan));
+                    structured.put(fqn, toCompileDiagnostics(orphan));
+                }
             }
         }
-        return Collections.unmodifiableMap(failures);
+        return new Buckets(Collections.unmodifiableMap(failures), Collections.unmodifiableMap(structured));
+    }
+
+    private static List<CompileDiagnostic> toCompileDiagnostics(List<Diagnostic<? extends JavaFileObject>> diags) {
+        List<CompileDiagnostic> result = new ArrayList<>(diags.size());
+        for (Diagnostic<? extends JavaFileObject> d : diags) {
+            result.add(new CompileDiagnostic(d.getKind() == Diagnostic.Kind.ERROR, d.getLineNumber(), d.getColumnNumber(),
+                    d.getMessage(Locale.ROOT)));
+        }
+        return result;
     }
 
     private static String formatDiagnostics(String fqn, List<Diagnostic<? extends JavaFileObject>> errs) {
