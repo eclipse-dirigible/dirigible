@@ -272,8 +272,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(handler.contains("@Listener(name = \"intent-test-Order-Order\""),
                 "the handler should bind to the entity's event topic <project>-<perspective>-<entity>");
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
-        assertTrue(handler.contains("import gen.orders.data.Order.OrderRepository"),
-                "the handler should use the generated typed repository");
+        assertTrue(handler.contains("import gen.orders.data.order.OrderRepository"),
+                "the handler should import the generated typed repository from its real (lowercased) Java package");
     }
 
     @Test
@@ -285,12 +285,12 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         // Full-stack (DAO) generation writes the repository under gen/orders.
         generateFromModel("template-application-dao-java/template/template.js", "orders.model");
-        assertTrue(resource("gen/orders/data/Order/OrderRepository.java").exists(),
+        assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "the DAO template should generate the repository under gen/orders");
         // Generating the events template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
         generateFromModel("template-application-events-java/template/template.js", "orders.model");
-        assertTrue(resource("gen/orders/data/Order/OrderRepository.java").exists(),
+        assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "generating the events template must not delete the full-stack gen/orders output");
         assertTrue(resource("gen/events/OrderApprovalTrigger.java").exists(), "the events template should still produce gen/events");
     }

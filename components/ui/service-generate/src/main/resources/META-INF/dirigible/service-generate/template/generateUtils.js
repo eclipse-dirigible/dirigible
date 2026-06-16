@@ -11,6 +11,7 @@
  */
 import { Registry } from "@aerokit/sdk/platform";
 import { TemplateEngines as templateEngines } from "@aerokit/sdk/template";
+import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
 
 function getTranslationId(str) {
     return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
@@ -280,6 +281,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 process: model.triggers[t].process,
                                 entity: model.triggers[t].entity,
                                 perspective: model.triggers[t].perspective,
+                                // The Java package segment is the lowercased perspective, the same
+                                // sanitization the DAO/entity templates apply (javaPerspectiveName).
+                                // The event-topic name keeps the raw perspective so it matches the
+                                // topic the DAO publishes to (${projectName}-${perspectiveName}-${name}).
+                                javaPerspective: sanitizeJavaIdentifier(model.triggers[t].perspective),
                                 keyProperty: model.triggers[t].keyProperty
                             };
                             const cleanTriggerParameters = cleanData(triggerParameters);

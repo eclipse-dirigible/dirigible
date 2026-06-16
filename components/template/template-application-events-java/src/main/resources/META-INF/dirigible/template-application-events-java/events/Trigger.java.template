@@ -7,8 +7,8 @@ import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 
 import com.google.gson.Gson;
 
-import gen.${javaGenFolderName}.data.${perspective}.${entity}Entity;
-import gen.${javaGenFolderName}.data.${perspective}.${entity}Repository;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
  * Starts the ${process} process when a ${entity} is created.
