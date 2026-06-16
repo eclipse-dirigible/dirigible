@@ -147,6 +147,8 @@ public class DataTypeUtils {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DATE, DataType.DATE);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BOOLEAN, DataType.BOOLEAN);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BLOB, DataType.BLOB);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.CLOB, DataType.CLOB);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.NCLOB, DataType.NCLOB);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.DECIMAL, DataType.DECIMAL);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.BIT, DataType.BIT);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.ARRAY, DataType.ARRAY);
