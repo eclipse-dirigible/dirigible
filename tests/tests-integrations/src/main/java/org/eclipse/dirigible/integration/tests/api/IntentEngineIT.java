@@ -423,6 +423,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("flowable:candidateGroups=\"Manager\""),
                 "the userTask candidateGroups must be the resolved role name, not the raw lower-case assignee");
         assertFalse(body.contains("flowable:candidateGroups=\"manager\""), "the candidate group must not keep the raw lower-case assignee");
+        // The form key must be the served form-page URL so the Inbox "Open Form" navigates to the page
+        // (a bare name resolves relative to the inbox and 404s).
+        assertTrue(body.contains("flowable:formKey=\"/services/web/intent-test/gen/ApproveOrder/forms/ApproveOrder/index.html\""),
+                "the userTask formKey must be the generated form page URL");
         assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\""), "BPMN should map the decision step to an exclusiveGateway");
         assertTrue(body.contains("delegateExpression=\"${JSTask}\""), "BPMN should use the Flowable delegate expression for service tasks");
         assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),

@@ -55,11 +55,17 @@ import org.springframework.stereotype.Component;
  * byte-stable output; the modeler re-routes on first manual edit.
  *
  * <p>
- * <b>Path-free references.</b> Per the CLAUDE.md "no template-engine paths" rule,
- * {@code flowable:formKey} carries the bare form name from {@code args.form}, not a rendered HTML
- * URL; the deployment-time form-key resolver maps it to a generated page. {@code args.call} is
- * passed through verbatim - it should reference a hand-authored handler under {@code custom/}, not
- * a template output.
+ * <b>{@code flowable:formKey} is the form page URL.</b> The Inbox / Process perspective opens a
+ * task's form by navigating straight to its {@code formKey} (plus
+ * {@code ?taskId=&processInstanceId=}), so the key must be the served path of the generated form
+ * page, not a bare name (a bare name resolves relative to the inbox and 404s). It is therefore
+ * {@code /services/web/<project>/gen/<form>/forms/<form>/index.html} - the layout the form-builder
+ * template emits ({@code gen/{genFolderName}/forms/{fileName}/index.html}) for the
+ * {@code <form>.form} this intent produced. This is a deliberate, documented exception to the "no
+ * template-engine paths" rule: a user task cannot reference its form without naming where that form
+ * is rendered, and this is the canonical Dirigible/codbex form-key convention. {@code args.call}
+ * stays path-free - it is passed through verbatim and should reference a hand-authored handler
+ * under {@code custom/}.
  *
  * <p>
  * The process {@code trigger} block is parsed but not yet consumed - wiring {@code onCreate} /
@@ -115,7 +121,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                         "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
                         process.getName());
             }
-            context.writeModelFile(fileName, render(process, rolesByLowerName));
+            context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName()));
         }
     }
 
@@ -141,7 +147,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return match != null ? match : IntentNaming.pascalCase(assignee);
     }
 
-    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName) {
+    /**
+     * The served URL of a form's generated page, used as the user task's {@code flowable:formKey}. The
+     * form-builder template renders {@code <form>.form} to {@code gen/<form>/forms/<form>/index.html},
+     * served under {@code /services/web/<project>/}.
+     */
+    private static String formPageUrl(String projectName, String form) {
+        return "/services/web/" + projectName + "/gen/" + form + "/forms/" + form + "/index.html";
+    }
+
+    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName) {
         List<StepIntent> steps = process.getSteps();
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
@@ -171,7 +186,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName);
+            appendStepElement(sb, step, rolesByLowerName, projectName);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
@@ -223,11 +238,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return out;
     }
 
-    private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName) {
+    private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName);
+                appendUserTask(sb, step, rolesByLowerName, projectName);
                 break;
             case "serviceTask":
             case "script":
@@ -240,12 +255,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
-                appendUserTask(sb, step, rolesByLowerName);
+                appendUserTask(sb, step, rolesByLowerName, projectName);
                 break;
         }
     }
 
-    private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName) {
+    private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -260,7 +275,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         if (form != null && !form.isBlank()) {
             sb.append(" flowable:formKey=\"")
-              .append(escapeXmlAttribute(form))
+              .append(escapeXmlAttribute(formPageUrl(projectName, form)))
               .append("\"");
         }
         sb.append("></userTask>\n");
