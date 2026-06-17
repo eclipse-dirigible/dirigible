@@ -19,10 +19,13 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
- * The Class TenantPropertyManager.
+ * The Class TenantPropertyManager. Public so other engines that run their own message consumers
+ * (e.g. the client-Java {@code @Listener} path in engine-java) can recover the originating tenant
+ * from a received message and re-establish it before dispatching, the same way the built-in
+ * asynchronous listener does.
  */
 @Component
-class TenantPropertyManager {
+public class TenantPropertyManager {
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantPropertyManager.class);
@@ -77,7 +80,7 @@ class TenantPropertyManager {
      * @return the current tenant id
      * @throws JMSException the JMS exception
      */
-    String getCurrentTenantId(Message message) throws JMSException {
+    public String getCurrentTenantId(Message message) throws JMSException {
         Object tenantId = message.getObjectProperty(TENANT_ID_PARAM_NAME);
         if (null == tenantId) {
             throw new IllegalArgumentException("Tenant id parameter [" + TENANT_ID_PARAM_NAME + "] cannot be null in message: " + message);
