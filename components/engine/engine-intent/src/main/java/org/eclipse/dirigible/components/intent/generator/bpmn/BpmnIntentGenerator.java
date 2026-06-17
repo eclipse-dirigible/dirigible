@@ -72,9 +72,10 @@ import org.springframework.stereotype.Component;
  * template emits ({@code gen/{genFolderName}/forms/{fileName}/index.html}) for the
  * {@code <form>.form} this intent produced. This is a deliberate, documented exception to the "no
  * template-engine paths" rule: a user task cannot reference its form without naming where that form
- * is rendered, and this is the canonical Dirigible form-key convention. {@code args.call} stays
- * path-free - it is passed through verbatim and should reference a hand-authored handler under
- * {@code custom/}.
+ * is rendered, and this is the canonical Dirigible form-key convention. A service task's
+ * {@code args.call} (a project-relative JS handler path such as {@code custom/notify-member.ts}) is
+ * likewise qualified with the project name, because the {@code ${JSTask}} delegate resolves it
+ * relative to the registry root; it should reference a hand-authored handler under {@code custom/}.
  *
  * <p>
  * A {@code decision} whose condition references a {@code relation.field} of the trigger entity
@@ -379,7 +380,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step);
+                appendServiceTask(sb, step, projectName);
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -419,13 +420,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("></userTask>\n");
     }
 
-    private static void appendServiceTask(StringBuilder sb, StepIntent step) {
+    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName) {
         // A generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) and runs
         // through the ${JavaTask} delegate; an author-declared serviceTask carries a `call` (a TS
-        // handler path) and runs through ${JSTask}.
+        // handler path) and runs through ${JSTask}. The JS handler path is resolved relative to the
+        // registry root, so the project-relative `call` (e.g. custom/notify-member.ts) is qualified
+        // with the project name; the Java FQN is used verbatim.
         String javaHandler = stringArg(step, "javaHandler");
         boolean java = javaHandler != null && !javaHandler.isBlank();
-        String handlerValue = java ? javaHandler : stringArg(step, "call");
+        String call = stringArg(step, "call");
+        String handlerValue = java ? javaHandler : qualifyHandlerPath(projectName, call);
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
@@ -443,6 +447,22 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             sb.append("      </extensionElements>\n");
         }
         sb.append("    </serviceTask>\n");
+    }
+
+    /**
+     * Qualify a project-relative JS handler path (e.g. {@code custom/notify-member.ts}) with the
+     * project name, since the {@code ${JSTask}} delegate resolves it relative to the registry root
+     * ({@code /registry/public}). Paths that already start with the project segment are left as-is.
+     */
+    private static String qualifyHandlerPath(String projectName, String call) {
+        if (call == null || call.isBlank() || projectName == null || projectName.isBlank()) {
+            return call;
+        }
+        String trimmed = call.startsWith("/") ? call.substring(1) : call;
+        if (trimmed.equals(projectName) || trimmed.startsWith(projectName + "/")) {
+            return trimmed;
+        }
+        return projectName + "/" + trimmed;
     }
 
     private static void appendExclusiveGateway(StringBuilder sb, StepIntent step) {

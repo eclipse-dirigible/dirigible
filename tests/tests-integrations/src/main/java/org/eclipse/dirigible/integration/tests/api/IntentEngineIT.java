@@ -530,6 +530,10 @@ class IntentEngineIT extends IntegrationTest {
                 "the userTask formKey must be the generated form page URL");
         assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\""), "BPMN should map the decision step to an exclusiveGateway");
         assertTrue(body.contains("delegateExpression=\"${JSTask}\""), "BPMN should use the Flowable delegate expression for service tasks");
+        // The JS handler path is qualified with the project so the JSTask delegate (which resolves from
+        // the registry root) finds the project's custom/ handler.
+        assertTrue(body.contains("<![CDATA[intent-test/custom/notify-customer.ts]]>"),
+                "the service-task handler path should be project-qualified");
         assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
                 "the conditioned flow should target the `then` step");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
