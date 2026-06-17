@@ -77,6 +77,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     private static final String DEFAULT_ICON = "/services/web/resources/unicons/file.svg";
 
+    /** Id of the shell-provided perspective every {@code SETTING} entity is grouped under. */
+    private static final String SETTINGS_PERSPECTIVE = "Settings";
+
     @Override
     public String name() {
         return "edm";
@@ -107,6 +110,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
+        Set<String> settingEntities = settingEntities(entities);
         Set<String> triggerTargets = TriggerSupport.onCreateTargetEntities(model);
 
         EdmDocument document = new EdmDocument();
@@ -121,11 +125,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Skipping unnamed entity in intent");
                 continue;
             }
-            boolean dependent = compositionParents.containsKey(name);
-            String perspective = resolvePerspective(name, compositionParents);
+            boolean setting = settingEntities.contains(name);
+            boolean dependent = !setting && compositionParents.containsKey(name);
+            // A setting lives under the global Settings perspective (provided by the shell); it does not
+            // own a generated perspective.
+            String perspective = perspectiveFor(name, compositionParents, settingEntities);
             Map<String, Object> entityMap =
-                    entityDefaults(name, entity.getDescription(), dependent, perspective, tablePrefix, perspectiveOrder);
-            if (!dependent) {
+                    entityDefaults(name, entity.getDescription(), dependent, setting, perspective, tablePrefix, perspectiveOrder);
+            if (!dependent && !setting) {
                 perspectiveList.add(perspectiveEntry(name, perspectiveOrder));
                 perspectiveOrder++;
             }
@@ -155,9 +162,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 boolean composition = !compositionAssigned && relation.isComposition();
                 compositionAssigned |= composition;
                 EntityIntent target = byName.get(relation.getTo());
-                String targetPerspective = resolvePerspective(relation.getTo(), compositionParents);
+                String targetPerspective = perspectiveFor(relation.getTo(), compositionParents, settingEntities);
                 properties.add(relationProperty(name, relation, target, composition, targetPerspective));
-                relations.add(relationLink(name, relation, target, compositionParents));
+                relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
@@ -175,6 +182,28 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // ProcessId column it adds to a trigger-target entity.
         document.modelJson.put("model", body);
         return document;
+    }
+
+    /** Names of entities declared as settings / nomenclature ({@code kind: setting}). */
+    private static Set<String> settingEntities(List<EntityIntent> entities) {
+        Set<String> settings = new LinkedHashSet<>();
+        for (EntityIntent entity : entities) {
+            if (entity.getName() != null && entity.isSetting()) {
+                settings.add(entity.getName());
+            }
+        }
+        return settings;
+    }
+
+    /**
+     * The perspective an entity (or relation target) lives under: the global {@code Settings}
+     * perspective for a setting entity, otherwise its composition-resolved perspective.
+     */
+    private static String perspectiveFor(String entityName, Map<String, String> compositionParents, Set<String> settingEntities) {
+        if (settingEntities.contains(entityName)) {
+            return SETTINGS_PERSPECTIVE;
+        }
+        return resolvePerspective(entityName, compositionParents);
     }
 
     private static Map<String, EntityIntent> indexEntities(List<EntityIntent> entities) {
@@ -236,15 +265,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return perspective;
     }
 
-    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, String perspective,
-            String tablePrefix, int order) {
+    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, boolean setting,
+            String perspective, String tablePrefix, int order) {
         String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
         entity.put("name", name);
         entity.put("dataName", dataName);
         entity.put("dataCount", "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}" + dataName + "\"");
         entity.put("dataQuery", "");
-        entity.put("type", dependent ? "DEPENDENT" : "PRIMARY");
+        entity.put("type", setting ? "SETTING" : (dependent ? "DEPENDENT" : "PRIMARY"));
         entity.put("title", name);
         entity.put("caption", "Manage entity " + name);
         entity.put("description", description != null && !description.isBlank() ? description : "Manage entity " + name);
@@ -395,14 +424,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * writes these links.
      */
     private static Map<String, Object> relationLink(String ownerEntity, RelationIntent relation, EntityIntent target,
-            Map<String, String> compositionParents) {
+            Map<String, String> compositionParents, Set<String> settingEntities) {
         Map<String, Object> link = new LinkedHashMap<>();
         String linkName = ownerEntity + "_" + IntentNaming.pascalCase(relation.getName());
         link.put("name", linkName);
         link.put("type", "relation");
         link.put("entity", ownerEntity);
         link.put("relationName", linkName);
-        link.put("relationshipEntityPerspectiveName", resolvePerspective(relation.getTo(), compositionParents));
+        link.put("relationshipEntityPerspectiveName", perspectiveFor(relation.getTo(), compositionParents, settingEntities));
         link.put("relationshipEntityPerspectiveLabel", "Entities");
         link.put("property", IntentNaming.pascalCase(relation.getName()));
         link.put("referenced", relation.getTo());
@@ -729,8 +758,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static void appendEntityValue(StringBuilder sb, Map<String, Object> entity) {
         sb.append("    <Entity");
         appendAttribute(sb, "name", entity.get("name"));
-        if ("DEPENDENT".equals(entity.get("type"))) {
-            appendAttribute(sb, "entityType", "DEPENDENT");
+        // PRIMARY is the editor's default (omitted); DEPENDENT and SETTING are carried explicitly so
+        // the EDM editor restyles the cell and the template engine routes the entity correctly.
+        Object entityType = entity.get("type");
+        if ("DEPENDENT".equals(entityType) || "SETTING".equals(entityType)) {
+            appendAttribute(sb, "entityType", entityType);
         }
         for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
                 "menuLabel", "layoutType", "perspectiveName"}) {

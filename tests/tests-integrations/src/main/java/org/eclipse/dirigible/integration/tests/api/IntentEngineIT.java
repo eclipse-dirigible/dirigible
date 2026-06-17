@@ -56,6 +56,7 @@ class IntentEngineIT extends IntegrationTest {
 
             entities:
               - name: Country
+                kind: setting
                 description: ISO 3166-1 country reference data
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
@@ -255,7 +256,10 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.templateId",
                                                          equalTo("template-application-angular-java/template/template.js"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.parameters.dataSource",
-                                                         equalTo("DefaultDB")));
+                                                         equalTo("DefaultDB"))
+                                                 // The report is generated server-side as Java (DAO + REST controller).
+                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId",
+                                                         equalTo("template-application-ui-angular-java/template/template-report-file.js")));
 
         assertEdmAndModel();
         assertBpmn();
@@ -476,6 +480,13 @@ class IntentEngineIT extends IntegrationTest {
         // Process glue (triggers, resolvers) is NOT in the EDM model - it lives in the .glue file.
         assertFalse(modelBody.contains("\"triggers\""),
                 "the EDM model must not carry process-glue metadata - that lives in the .glue file");
+        // Country is declared `kind: setting`, so it is emitted as a SETTING entity (the template engine
+        // routes it under the dashboard's Settings menu) instead of a top-level PRIMARY entity.
+        assertTrue(modelBody.contains("\"type\": \"SETTING\""), "a setting entity should be emitted with type SETTING");
+        assertTrue(edmXml.contains("entityType=\"SETTING\""), "the EDM mxGraph cell should mark the setting entity");
+        // A relation that targets a setting entity points its dropdown at the global Settings perspective.
+        assertTrue(modelBody.contains("\"relationshipEntityPerspectiveName\": \"Settings\""),
+                "a relation targeting a setting entity should resolve to the Settings perspective");
     }
 
     private void assertGlue() {
@@ -616,23 +627,29 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
         // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
-        assertTrue(body.contains("SELECT ") && body.contains("FROM ORDERS_ORDER as Order") && body.contains("GROUP BY"),
+        // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds
+        // unquoted identifiers to lower case); aliases stay unquoted.
+        // The quotes are escaped (\") inside the JSON .report file's query string, so match that form.
+        assertTrue(body.contains("SELECT ") && body.contains("FROM \\\"ORDERS_ORDER\\\" as Order") && body.contains("GROUP BY"),
                 "report query should be a materialised SQL statement with GROUP BY, not empty");
-        assertTrue(body.contains("SUM(Order.ORDER_TOTAL)"), "sum(total) should aggregate the qualified ORDER_TOTAL column");
+        assertTrue(body.contains("SUM(Order.\\\"ORDER_TOTAL\\\")"), "sum(total) should aggregate the quoted, qualified ORDER_TOTAL column");
         assertTrue(body.contains("\"roleRead\":"), "report should carry default-role read security");
         // A bare to-one relation dimension (customer) joins the related table and shows its name field,
         // grouping by the name - not the raw FK id.
-        assertTrue(body.contains("INNER JOIN ORDERS_CUSTOMER as Customer ON Order.ORDER_CUSTOMER = Customer.CUSTOMER_ID"),
-                "a bare relation dimension (customer) should INNER JOIN the related entity");
-        assertTrue(body.contains("SELECT Customer.CUSTOMER_NAME as") && body.contains("GROUP BY Customer.CUSTOMER_NAME"),
+        assertTrue(
+                body.contains(
+                        "INNER JOIN \\\"ORDERS_CUSTOMER\\\" as Customer ON Order.\\\"ORDER_CUSTOMER\\\" = Customer.\\\"CUSTOMER_ID\\\""),
+                "a bare relation dimension (customer) should INNER JOIN the related entity with quoted identifiers");
+        assertTrue(body.contains("SELECT Customer.\\\"CUSTOMER_NAME\\\" as") && body.contains("GROUP BY Customer.\\\"CUSTOMER_NAME\\\""),
                 "the bare relation dimension should select + group by the related entity's name, not its FK id");
 
         // A relation.field dimension joins the related table; the filter becomes a qualified WHERE.
         String joined = contentOf("BigOrderItems.report");
-        assertTrue(joined.contains("INNER JOIN ORDERS_ORDER as Order ON OrderItem.ORDER_ITEM_ORDER = Order.ORDER_ID"),
+        assertTrue(
+                joined.contains("INNER JOIN \\\"ORDERS_ORDER\\\" as Order ON OrderItem.\\\"ORDER_ITEM_ORDER\\\" = Order.\\\"ORDER_ID\\\""),
                 "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
-        assertTrue(joined.contains("WHERE OrderItem.ORDER_ITEM_QUANTITY > 1"),
-                "the intent filter should become a WHERE with the field rewritten to its qualified column");
+        assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
+                "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
     }
 
     private void assertRoles() {

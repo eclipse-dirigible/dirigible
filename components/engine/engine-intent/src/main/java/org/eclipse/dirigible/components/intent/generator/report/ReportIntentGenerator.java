@@ -55,8 +55,14 @@ import org.springframework.stereotype.Component;
  * </ul>
  * {@link ReportIntent#getFilter()} becomes the {@code WHERE} predicate, with the intent's field
  * names rewritten to their qualified physical columns (so {@code dueOn <= CURRENT_DATE} ->
- * {@code Loan.LOAN_DUE_ON <= CURRENT_DATE}); non-field tokens (operators, {@code CURRENT_DATE},
+ * {@code Loan."LOAN_DUE_ON" <= CURRENT_DATE}); non-field tokens (operators, {@code CURRENT_DATE},
  * literals) pass through untouched.
+ *
+ * <p>
+ * Physical table and column identifiers in the generated {@code query} are double-quoted (table
+ * aliases are not) so the SQL runs on PostgreSQL, which folds unquoted identifiers to lower case
+ * and would otherwise never match the quoted UPPER_SNAKE objects the platform creates; H2 accepts
+ * the quoted form too.
  *
  * <p>
  * Column physical names and the base table mirror what {@code EdmIntentGenerator} emits
@@ -287,8 +293,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static Join join(IntentGenerationContext context, EntityIntent source, RelationIntent relation, EntityIntent target,
             String targetAlias, String baseAlias) {
         FieldIntent targetPk = target == null ? null : primaryKeyOf(target);
-        String fkColumn = column(source.getName(), relation.getName());
-        String pkColumn = column(targetAlias, targetPk == null ? "id" : targetPk.getName());
+        String fkColumn = quote(column(source.getName(), relation.getName()));
+        String pkColumn = quote(column(targetAlias, targetPk == null ? "id" : targetPk.getName()));
         return new Join(IntentNaming.tableName(context, targetAlias), targetAlias,
                 baseAlias + "." + fkColumn + " = " + targetAlias + "." + pkColumn);
     }
@@ -305,12 +311,12 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         sql.append("SELECT ")
            .append(selectParts.isEmpty() ? "*" : String.join(", ", selectParts));
         sql.append("\nFROM ")
-           .append(baseTable)
+           .append(baseTable.isBlank() ? baseTable : quote(baseTable))
            .append(" as ")
            .append(baseAlias);
         for (Join join : joins.values()) {
             sql.append("\nINNER JOIN ")
-               .append(join.table)
+               .append(quote(join.table))
                .append(" as ")
                .append(join.alias)
                .append(" ON ")
@@ -343,7 +349,8 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 EntityIntent target = entityByName(model, relation.getTo());
                 String targetAlias = relation.getTo();
                 joins.putIfAbsent(targetAlias, join(context, source, relation, target, targetAlias, baseAlias));
-                matcher.appendReplacement(dotted, Matcher.quoteReplacement(targetAlias + "." + column(targetAlias, matcher.group(2))));
+                matcher.appendReplacement(dotted,
+                        Matcher.quoteReplacement(targetAlias + "." + quote(column(targetAlias, matcher.group(2)))));
             } else {
                 matcher.appendReplacement(dotted, Matcher.quoteReplacement(matcher.group()));
             }
@@ -354,7 +361,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (field.getName() != null && !field.getName()
                                                  .isBlank()) {
                 where = where.replaceAll("\\b" + Pattern.quote(field.getName()) + "\\b",
-                        Matcher.quoteReplacement(baseAlias + "." + column(source.getName(), field.getName())));
+                        Matcher.quoteReplacement(baseAlias + "." + quote(column(source.getName(), field.getName()))));
             }
         }
         return where.trim();
@@ -422,6 +429,17 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
     private static String column(String entityName, String fieldName) {
         return IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(fieldName);
+    }
+
+    /**
+     * Double-quote a physical identifier (table or column) so the SQL is portable. Dirigible creates
+     * tables/columns as quoted UPPER_SNAKE, and PostgreSQL folds <i>unquoted</i> identifiers to lower
+     * case - so an unquoted {@code LIBRARY_LOAN} / {@code LOAN_DUE_ON} would never match the actual
+     * object on Postgres. Table aliases are intentionally left unquoted (they fold consistently on both
+     * sides). H2 accepts the quoted form too, so the output runs on both.
+     */
+    private static String quote(String identifier) {
+        return "\"" + identifier + "\"";
     }
 
     private static EntityIntent entityByName(IntentModel model, String name) {
@@ -556,7 +574,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         private Join join;
 
         private String qualified() {
-            return tableAlias + "." + physicalColumn;
+            return tableAlias + "." + quote(physicalColumn);
         }
     }
 

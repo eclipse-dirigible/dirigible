@@ -20,6 +20,13 @@ public class EntityIntent {
 
     private String name;
     private String description;
+    /**
+     * Optional entity classification. {@code setting} marks the entity as nomenclature / configuration
+     * data: the EDM generator emits it with {@code type="SETTING"} so the template engine routes it
+     * under the dashboard's Settings menu instead of generating a top-level perspective. Absent (the
+     * default) means a regular managed entity.
+     */
+    private String kind;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -29,6 +36,22 @@ public class EntityIntent {
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getKind() {
+        return kind;
+    }
+
+    public void setKind(String kind) {
+        this.kind = kind;
+    }
+
+    /**
+     * Whether this entity is declared as a setting / nomenclature (case-insensitive
+     * {@code kind: setting}).
+     */
+    public boolean isSetting() {
+        return "setting".equalsIgnoreCase(kind);
     }
 
     public String getDescription() {

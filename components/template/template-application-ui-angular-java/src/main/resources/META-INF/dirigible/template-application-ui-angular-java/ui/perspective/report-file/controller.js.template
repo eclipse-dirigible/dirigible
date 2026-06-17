@@ -45,6 +45,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 		}
 		resetPagination();
 
+		$scope.refresh = () => {
+			$scope.loadPage($scope.dataPage, $scope.filter);
+		};
+
 		//-----------------Events-------------------//
 		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.entitySearch', handler: (data) => {
 			resetPagination();

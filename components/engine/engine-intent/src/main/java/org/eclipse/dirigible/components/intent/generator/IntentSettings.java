@@ -110,7 +110,7 @@ public final class IntentSettings {
         settings.generation.put("glue", new Recipe("template-application-events-java/template/template.js", new LinkedHashMap<>()));
         settings.generation.put("form", new Recipe("template-form-builder-angularjs/template/template.js", new LinkedHashMap<>()));
         settings.generation.put("report",
-                new Recipe("template-application-ui-angular-v2/template/template-report-file.js", new LinkedHashMap<>()));
+                new Recipe("template-application-ui-angular-java/template/template-report-file.js", new LinkedHashMap<>()));
 
         Map<String, ArtefactOverride> triggers = new LinkedHashMap<>();
         for (ProcessIntent process : model.getProcesses()) {
