@@ -4,20 +4,24 @@
  * Do not modify the content as it may be re-generated again.
  */
 import * as generateUtils from "service-generate/template/generateUtils";
-import * as parameterUtils from "service-generate/template/parameterUtils";
+import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
 
 export function generate(model, parameters) {
-    model = JSON.parse(model).model;
+    // The .glue file is { triggers: [...], resolvers: [...] } - no entity model. generateUtils
+    // filters model.entities up front, so give it an empty list; the gen package root comes from the
+    // glue file's base name (same as the full-stack gen folder).
+    const glue = JSON.parse(model);
+    glue.entities = glue.entities || [];
+    parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
     let templateSources = getTemplate(parameters).sources;
-    parameterUtils.process(model, parameters)
-    return generateUtils.generateFiles(model, parameters, templateSources);
+    return generateUtils.generateFiles(glue, parameters, templateSources);
 };
 
 export function getTemplate(parameters) {
     return {
-        name: "Application - Events - Java",
-        description: "Process-trigger glue-code (Java listeners) from the intent model",
-        extension: "model",
+        name: "Application - Glue Code - Java",
+        description: "Process glue-code (Java listeners + decision resolvers) generated from the intent .glue file",
+        extension: "glue",
         sources: [
             {
                 location: "/template-application-events-java/events/Trigger.java.template",
@@ -25,6 +29,13 @@ export function getTemplate(parameters) {
                 rename: "gen/events/{{process}}Trigger.java",
                 engine: "velocity",
                 collection: "triggers"
+            },
+            {
+                location: "/template-application-events-java/events/Resolver.java.template",
+                action: "generate",
+                rename: "gen/events/{{handler}}.java",
+                engine: "velocity",
+                collection: "resolvers"
             },
             {
                 location: "/template-application-events-java/project.json.mjs",

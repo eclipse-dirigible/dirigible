@@ -297,6 +297,33 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "resolvers":
+                    // Decision resolvers (intent layer): one JavaDelegate per relation.field a decision
+                    // references. Like triggers, not entity-shaped, so it gets its own loop. The Java
+                    // package segment of the target entity is its lowercased perspective.
+                    if (model.resolvers) {
+                        for (let r = 0; r < model.resolvers.length; r++) {
+                            const resolverParameters = {
+                                ...parameters,
+                                process: model.resolvers[r].process,
+                                handler: model.resolvers[r].handler,
+                                fkProperty: model.resolvers[r].fkProperty,
+                                targetEntity: model.resolvers[r].targetEntity,
+                                targetPerspective: model.resolvers[r].targetPerspective,
+                                javaTargetPerspective: sanitizeJavaIdentifier(model.resolvers[r].targetPerspective),
+                                targetField: model.resolvers[r].targetField,
+                                targetIdAccessor: model.resolvers[r].targetIdAccessor,
+                                variable: model.resolvers[r].variable
+                            };
+                            const cleanResolverParameters = cleanData(resolverParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanResolverParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanResolverParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

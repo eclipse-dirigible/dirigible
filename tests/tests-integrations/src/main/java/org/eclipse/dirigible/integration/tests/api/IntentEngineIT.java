@@ -63,9 +63,10 @@ class IntentEngineIT extends IntegrationTest {
 
               - name: Customer
                 fields:
-                  - { name: id,     type: integer, primaryKey: true, generated: true }
-                  - { name: name,   type: string,  required: true, length: 200 }
-                  - { name: active, type: boolean, defaultValue: "true" }
+                  - { name: id,          type: integer, primaryKey: true, generated: true }
+                  - { name: name,        type: string,  required: true, length: 200 }
+                  - { name: active,      type: boolean, defaultValue: "true" }
+                  - { name: creditLimit, type: decimal }
                 relations:
                   - { name: country, kind: manyToOne, to: Country }
                   - { name: orders,  kind: oneToMany, to: Order }
@@ -95,7 +96,7 @@ class IntentEngineIT extends IntegrationTest {
                     args: { assignee: manager, form: ApproveOrder }
                   - name: bigOrder
                     kind: decision
-                    args: { if: "amount > 10000", then: cfoReview, else: notifyCustomer }
+                    args: { if: "customer.creditLimit > 10000", then: cfoReview, else: notifyCustomer }
                   - name: cfoReview
                     kind: userTask
                     args: { assignee: cfo, form: ApproveOrder }
@@ -243,8 +244,8 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("project", equalTo(PROJECT))
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
-                                                                 "OrdersByCustomer.report", "orders.roles", "countries.csvim",
-                                                                 "countries.csv"))
+                                                                 "OrdersByCustomer.report", "orders.roles", "orders.glue",
+                                                                 "countries.csvim", "countries.csv"))
                                                  .body("scrubbed", hasSize(0)));
 
         assertEdmAndModel();
@@ -253,23 +254,24 @@ class IntentEngineIT extends IntegrationTest {
         assertReport();
         assertRoles();
         assertSeeds();
+        assertGlue();
     }
 
     @Test
-    void events_template_generates_the_process_trigger_handler() {
-        // Generate the models from the intent (orders.model carries the triggers collection)...
+    void glue_template_generates_the_trigger_and_resolver_handlers() {
+        // Generate the models from the intent (orders.glue carries the triggers + resolvers)...
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
                                                  .post(GENERATE_URL)
                                                  .then()
                                                  .statusCode(200));
-        // ...then run the events template against that model through the real generation service -
-        // this exercises the generateUtils.js "triggers" collection case end to end.
-        generateFromModel("template-application-events-java/template/template.js", "orders.model");
+        // ...then run the glue-code template against the .glue file through the real generation service -
+        // this exercises the generateUtils.js "triggers" + "resolvers" collection cases end to end.
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
         String handler = contentOf("gen/events/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
-                "the events template should generate a handler class named after the process");
+                "the glue template should generate a handler class named after the process");
         assertTrue(handler.contains("@Listener(name = \"intent-test-Order-Order\""),
                 "the handler should bind to the entity's event topic <project>-<perspective>-<entity>");
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
@@ -279,6 +281,18 @@ class IntentEngineIT extends IntegrationTest {
         // InaccessibleObjectException on LocalDate fields under JDK 17+).
         assertTrue(handler.contains("Json.parse(message,"), "the handler should parse the event with the SDK Json helper");
         assertFalse(handler.contains("new Gson()"), "the handler must not use a bare Gson (fails on java.time fields)");
+
+        // The decision resolver (customer.creditLimit) is a JavaDelegate that loads Customer and sets
+        // the variable the rewritten condition tests.
+        String resolver = contentOf("gen/events/ResolveCustomerCreditLimit.java");
+        assertTrue(resolver.contains("class ResolveCustomerCreditLimit implements JavaDelegate"),
+                "the resolver should be a Flowable JavaDelegate");
+        assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
+                "the resolver should load the target entity from its real (lowercased) Java package");
+        assertTrue(resolver.contains("execution.getVariable(\"Customer\")"),
+                "the resolver should read the FK id from the process variables");
+        assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
+        assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
     }
 
     @Test
@@ -296,12 +310,12 @@ class IntentEngineIT extends IntegrationTest {
         String repository = contentOf("gen/orders/data/order/OrderRepository.java");
         assertTrue(repository.contains("Json.stringify(saved)"), "the repository should publish the event with the SDK Json helper");
         assertFalse(repository.contains("new Gson()"), "the repository must not use a bare Gson (fails on java.time fields)");
-        // Generating the events template must clean only gen/events, not gen/<modelName> - so the
+        // Generating the glue template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
-        generateFromModel("template-application-events-java/template/template.js", "orders.model");
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
-                "generating the events template must not delete the full-stack gen/orders output");
-        assertTrue(resource("gen/events/OrderApprovalTrigger.java").exists(), "the events template should still produce gen/events");
+                "generating the glue template must not delete the full-stack gen/orders output");
+        assertTrue(resource("gen/events/OrderApprovalTrigger.java").exists(), "the glue template should still produce gen/events");
     }
 
     @Test
@@ -408,11 +422,25 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
-        // The trigger collection the events template iterates: one entry per onCreate process trigger.
+        // Process glue (triggers, resolvers) is NOT in the EDM model - it lives in the .glue file.
+        assertFalse(modelBody.contains("\"triggers\""),
+                "the EDM model must not carry process-glue metadata - that lives in the .glue file");
+    }
+
+    private void assertGlue() {
+        assertTrue(resource("orders.glue").exists(), "the .glue file should be generated");
+        String glue = contentOf("orders.glue");
+        // Triggers: one per onCreate process trigger.
         assertTrue(
-                modelBody.contains("\"triggers\"") && modelBody.contains("\"process\": \"OrderApproval\"")
-                        && modelBody.contains("\"entity\": \"Order\""),
-                "model JSON should carry a triggers collection for the events template");
+                glue.contains("\"triggers\"") && glue.contains("\"process\": \"OrderApproval\"") && glue.contains("\"entity\": \"Order\""),
+                "glue should carry the trigger for the OrderApproval process on Order");
+        // Resolvers: one per relation.field referenced in a decision.
+        assertTrue(glue.contains("\"resolvers\"") && glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""),
+                "glue should carry the customer.creditLimit decision resolver");
+        assertTrue(
+                glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
+                        && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
+                "the resolver should carry the FK property, target entity/field and the resolved variable");
     }
 
     private void assertBpmn() {
@@ -433,7 +461,20 @@ class IntentEngineIT extends IntegrationTest {
                 "the conditioned flow should target the `then` step");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
-        assertTrue(body.contains("${amount > 10000}"), "BPMN should embed the decision's if expression");
+        // The decision references customer.creditLimit, so a JavaTask resolver is inserted before the
+        // gateway and the condition is rewritten to test the resolved variable.
+        assertTrue(
+                body.contains("<serviceTask id=\"ResolveCustomerCreditLimit\"")
+                        && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
+                "a JavaTask resolver service task should precede the decision");
+        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit"), "the resolver task should point at the generated handler FQN");
+        assertTrue(
+                body.contains("sourceRef=\"managerReview\" targetRef=\"ResolveCustomerCreditLimit\"")
+                        && body.contains("sourceRef=\"ResolveCustomerCreditLimit\" targetRef=\"bigOrder\""),
+                "the resolver should sit on the linear flow right before the decision");
+        assertTrue(body.contains("${customer_creditLimit > 10000}"),
+                "the decision condition should be rewritten to test the resolved variable");
+        assertFalse(body.contains("customer.creditLimit"), "the raw relation.field path must not leak into the BPMN condition");
 
         // The Flowable/Oryx modeler renders the canvas ONLY from the diagram interchange - without it
         // the editor opens empty. Assert the diagram block, a node shape, and a flow edge are present.

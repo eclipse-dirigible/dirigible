@@ -26,7 +26,6 @@ import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
-import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -171,7 +170,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
-        body.put("triggers", buildTriggers(model, byName, compositionParents));
+        // Process glue (triggers, decision resolvers) is NOT part of the EDM - it lives in the
+        // sibling <intent>.glue file (GlueIntentGenerator). The EDM keeps only the persisted
+        // ProcessId column it adds to a trigger-target entity.
         document.modelJson.put("model", body);
         return document;
     }
@@ -316,34 +317,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * A plain VARCHAR holding the started process-instance id; the runtime trigger handler writes it.
      * Not a major widget - it is system-managed, not user input.
      */
-    /**
-     * The {@code triggers} collection in the {@code .model}: one entry per process that starts on an
-     * entity's create. The events template iterates this to generate a listener/handler per trigger.
-     * Each entry pre-resolves everything the template needs: the process, the entity, the entity's
-     * perspective (the data subfolder + the event-topic segment) and its PascalCase key property.
-     */
-    private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents) {
-        List<Map<String, Object>> triggers = new ArrayList<>();
-        for (ProcessIntent process : model.getProcesses()) {
-            if (process.getName() == null || process.getName()
-                                                    .isBlank()) {
-                continue;
-            }
-            String entity = TriggerSupport.onCreateEntity(process);
-            if (entity == null || entity.isBlank() || !byName.containsKey(entity)) {
-                continue;
-            }
-            Map<String, Object> trigger = new LinkedHashMap<>();
-            trigger.put("process", process.getName());
-            trigger.put("entity", entity);
-            trigger.put("perspective", resolvePerspective(entity, compositionParents));
-            trigger.put("keyProperty", keyFieldName(byName.get(entity)));
-            triggers.add(trigger);
-        }
-        return triggers;
-    }
-
     private static Map<String, Object> processIdProperty(String entityName) {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("name", "ProcessId");

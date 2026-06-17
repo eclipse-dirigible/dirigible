@@ -12,15 +12,24 @@ package org.eclipse.dirigible.components.intent.generator.bpmn;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+import java.util.regex.Pattern;
+
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -63,14 +72,20 @@ import org.springframework.stereotype.Component;
  * template emits ({@code gen/{genFolderName}/forms/{fileName}/index.html}) for the
  * {@code <form>.form} this intent produced. This is a deliberate, documented exception to the "no
  * template-engine paths" rule: a user task cannot reference its form without naming where that form
- * is rendered, and this is the canonical Dirigible form-key convention. {@code args.call}
- * stays path-free - it is passed through verbatim and should reference a hand-authored handler
- * under {@code custom/}.
+ * is rendered, and this is the canonical Dirigible form-key convention. {@code args.call} stays
+ * path-free - it is passed through verbatim and should reference a hand-authored handler under
+ * {@code custom/}.
  *
  * <p>
- * The process {@code trigger} block is parsed but not yet consumed - wiring {@code onCreate} /
- * {@code onSchedule} to process starts belongs to a follow-up; a warning is logged so authors are
- * not silently surprised.
+ * A {@code decision} whose condition references a {@code relation.field} of the trigger entity
+ * (e.g. {@code customer.creditLimit > 10000}) gets a {@code JavaTask} resolver service task
+ * inserted immediately before the gateway, and the condition is rewritten to test the resolved
+ * variable ({@code customer_creditLimit}); the resolver handler itself is generated from the
+ * {@code .glue} file (see
+ * {@link org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport}). The trigger
+ * {@code onCreate} block similarly drives the {@code .glue} file - the BPMN keeps a plain
+ * none-start event; the generated {@code @Listener} starts the process on the entity's create
+ * event.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -102,6 +117,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // role names ("Librarian"). Resolve the assignee to the actual role name so the casing lines
         // up - otherwise the task is started but never shows up for anyone.
         Map<String, String> rolesByLowerName = buildRoleIndex(model.getPermissions());
+        // Decision resolvers: a relation.field reference (book.price) becomes a service task before the
+        // decision that loads the related entity and a condition rewritten to test the resolved
+        // variable (book_price). The handler itself is generated from the .glue file, not here.
+        List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
+        Map<String, EntityIntent> byName = IntentEntities.byName(model);
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -121,8 +141,33 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                         "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
                         process.getName());
             }
-            context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName()));
+            List<Resolver> processResolvers = new ArrayList<>();
+            for (Resolver resolver : allResolvers) {
+                if (process.getName()
+                           .equals(resolver.process())) {
+                    processResolvers.add(resolver);
+                }
+            }
+            context.writeModelFile(fileName,
+                    render(process, rolesByLowerName, context.getProjectName(), processResolvers, ownFieldPascalCase(process, byName)));
         }
+    }
+
+    /**
+     * The trigger entity's own field names mapped camelCase -> PascalCase (the process-variable names).
+     */
+    private static Map<String, String> ownFieldPascalCase(ProcessIntent process, Map<String, EntityIntent> byName) {
+        Map<String, String> rewrites = new LinkedHashMap<>();
+        String triggerEntity = TriggerSupport.onCreateEntity(process);
+        EntityIntent entity = triggerEntity == null ? null : byName.get(triggerEntity);
+        if (entity != null) {
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    rewrites.put(field.getName(), IntentNaming.pascalCase(field.getName()));
+                }
+            }
+        }
+        return rewrites;
     }
 
     /** Index of declared role names by their lower-cased form, for resolving a user-task assignee. */
@@ -156,8 +201,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return "/services/web/" + projectName + "/gen/" + form + "/forms/" + form + "/index.html";
     }
 
-    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName) {
-        List<StepIntent> steps = process.getSteps();
+    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
+            Map<String, String> ownFieldPascalCase) {
+        // Insert a resolver service task before each decision that needs one and rewrite that
+        // decision's condition - on a COPY of the step list, never mutating the shared model (the glue
+        // generator runs after this one and must still see the original relation.field condition).
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -196,6 +245,85 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps);
         sb.append("</definitions>\n");
         return sb.toString();
+    }
+
+    /**
+     * Produce a render-only step list: before each decision that references a {@code relation.field}, a
+     * Java service task (the resolver) is inserted, and the decision is replaced by a copy whose
+     * condition is rewritten to test the resolved variable. Original steps pass through untouched.
+     */
+    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers,
+            Map<String, String> ownFieldPascalCase) {
+        List<StepIntent> result = new ArrayList<>(steps.size());
+        for (StepIntent step : steps) {
+            if (!"decision".equals(step.getKind())) {
+                result.add(step);
+                continue;
+            }
+            List<Resolver> stepResolvers = new ArrayList<>();
+            for (Resolver resolver : resolvers) {
+                if (step.getName() != null && step.getName()
+                                                  .equals(resolver.decisionStep())) {
+                    stepResolvers.add(resolver);
+                }
+            }
+            for (Resolver resolver : stepResolvers) {
+                result.add(javaServiceTaskStep(resolver.handler(), "gen.events." + resolver.handler()));
+            }
+            result.add(rewriteDecision(step, stepResolvers, ownFieldPascalCase));
+        }
+        return result;
+    }
+
+    /**
+     * A synthetic service-task step bound to the {@code JavaTask} delegate + a client-class handler
+     * FQN.
+     */
+    private static StepIntent javaServiceTaskStep(String name, String handlerFqn) {
+        StepIntent step = new StepIntent();
+        step.setName(name);
+        step.setKind("serviceTask");
+        Map<String, Object> args = new LinkedHashMap<>();
+        args.put("javaHandler", handlerFqn);
+        step.setArgs(args);
+        return step;
+    }
+
+    /**
+     * A copy of the decision step whose {@code if} condition is rewritten to the resolved variables.
+     */
+    private static StepIntent rewriteDecision(StepIntent decision, List<Resolver> resolvers, Map<String, String> ownFieldPascalCase) {
+        StepIntent copy = new StepIntent();
+        copy.setName(decision.getName());
+        copy.setKind(decision.getKind());
+        Map<String, Object> args = new LinkedHashMap<>(decision.getArgs());
+        Object condition = args.get("if");
+        if (condition != null) {
+            args.put("if", rewriteCondition(condition.toString(), resolvers, ownFieldPascalCase));
+        }
+        copy.setArgs(args);
+        return copy;
+    }
+
+    /**
+     * Rewrite a decision condition for the BPMN: each {@code relation.field} token becomes its resolved
+     * variable, then the trigger entity's own fields are upper-cased to the PascalCase process-variable
+     * names (the entity JSON seeds the process with PascalCase keys). Word boundaries keep the
+     * already-substituted {@code relation_field} variable from being touched by the field pass.
+     */
+    private static String rewriteCondition(String condition, List<Resolver> resolvers, Map<String, String> ownFieldPascalCase) {
+        String result = condition;
+        for (Resolver resolver : resolvers) {
+            result = result.replace(resolver.token(), resolver.variable());
+        }
+        for (Map.Entry<String, String> field : ownFieldPascalCase.entrySet()) {
+            if (!field.getKey()
+                      .equals(field.getValue())) {
+                result = result.replaceAll("\\b" + Pattern.quote(field.getKey()) + "\\b",
+                        java.util.regex.Matcher.quoteReplacement(field.getValue()));
+            }
+        }
+        return result;
     }
 
     /**
@@ -282,17 +410,24 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step) {
-        String call = stringArg(step, "call");
+        // A generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) and runs
+        // through the ${JavaTask} delegate; an author-declared serviceTask carries a `call` (a TS
+        // handler path) and runs through ${JSTask}.
+        String javaHandler = stringArg(step, "javaHandler");
+        boolean java = javaHandler != null && !javaHandler.isBlank();
+        String handlerValue = java ? javaHandler : stringArg(step, "call");
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
           .append(escapeXmlAttribute(step.getName()))
-          .append("\" flowable:async=\"true\" flowable:delegateExpression=\"${JSTask}\">\n");
-        if (call != null && !call.isBlank()) {
+          .append("\" flowable:async=\"true\" flowable:delegateExpression=\"")
+          .append(java ? "${JavaTask}" : "${JSTask}")
+          .append("\">\n");
+        if (handlerValue != null && !handlerValue.isBlank()) {
             sb.append("      <extensionElements>\n");
             sb.append("        <flowable:field name=\"handler\">\n");
             sb.append("          <flowable:string><![CDATA[")
-              .append(call)
+              .append(handlerValue)
               .append("]]></flowable:string>\n");
             sb.append("        </flowable:field>\n");
             sb.append("      </extensionElements>\n");
