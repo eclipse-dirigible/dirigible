@@ -4,8 +4,7 @@ import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.messaging.Listener;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
-
-import com.google.gson.Gson;
+import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
@@ -24,7 +23,7 @@ public class ${process}Trigger implements MessageHandler {
 
     @Override
     public void onMessage(String message) {
-        ${entity}Entity created = new Gson().fromJson(message, ${entity}Entity.class);
+        ${entity}Entity created = Json.parse(message, ${entity}Entity.class);
         if (created == null) {
             return;
         }

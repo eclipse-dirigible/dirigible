@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -274,6 +275,10 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
         assertTrue(handler.contains("import gen.orders.data.order.OrderRepository"),
                 "the handler should import the generated typed repository from its real (lowercased) Java package");
+        // Must deserialize via the java.time-aware SDK helper, not a bare Gson (which throws
+        // InaccessibleObjectException on LocalDate fields under JDK 17+).
+        assertTrue(handler.contains("Json.parse(message,"), "the handler should parse the event with the SDK Json helper");
+        assertFalse(handler.contains("new Gson()"), "the handler must not use a bare Gson (fails on java.time fields)");
     }
 
     @Test
@@ -287,6 +292,10 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-dao-java/template/template.js", "orders.model");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "the DAO template should generate the repository under gen/orders");
+        // The create-event publish must serialize via the java.time-aware SDK helper, not a bare Gson.
+        String repository = contentOf("gen/orders/data/order/OrderRepository.java");
+        assertTrue(repository.contains("Json.stringify(saved)"), "the repository should publish the event with the SDK Json helper");
+        assertFalse(repository.contains("new Gson()"), "the repository must not use a bare Gson (fails on java.time fields)");
         // Generating the events template must clean only gen/events, not gen/<modelName> - so the
         // full-stack output survives (the reported bug was the events generation wiping gen/orders).
         generateFromModel("template-application-events-java/template/template.js", "orders.model");

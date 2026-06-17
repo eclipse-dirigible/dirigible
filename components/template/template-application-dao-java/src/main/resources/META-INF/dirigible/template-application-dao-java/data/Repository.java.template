@@ -3,8 +3,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
-
-import com.google.gson.Gson;
+import org.eclipse.dirigible.sdk.utils.Json;
 
 #foreach ($property in $properties)
     #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
@@ -32,7 +31,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         ${name}Entity saved = super.save(entity);
         // Publish the create event so listeners (e.g. intent process triggers under gen/events) can react.
-        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", new Gson().toJson(saved));
+        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
         return saved;
     }
 #if($haveCalculatedPropertyOnUpdate)
