@@ -222,21 +222,21 @@ the deterministic input to the one below.
             │  (AI proposes a patch; human accepts)
             ▼
 ┌───────────────────────────────────────────────┐
-│  1. INTENT  -  the abstract model               │   one file, human + AI authored
-│     entities · relations · processes ·          │   structured, diff-stable, portable
-│     forms · reports · permissions · seeds       │
+│  1. INTENT  -  the abstract model             │   one file, human + AI authored
+│     entities · relations · processes ·        │   structured, diff-stable, portable
+│     forms · reports · permissions · seeds     │
 └───────────────────────────────────────────────┘
             │  (deterministic generation - pure functions)
             ▼
 ┌───────────────────────────────────────────────┐
-│  2. MODELS  -  the specific models              │   .edm / .model · .bpmn · .form ·
-│     the platform's native, openable artefacts   │   .report · .roles · .csvim
+│  2. MODELS  -  the specific models            │   .edm / .model · .bpmn · .form ·
+│     the platform's native, openable artefacts │   .report · .roles · .csvim
 └───────────────────────────────────────────────┘
             │  (deterministic generation - the existing template engine)
             ▼
 ┌───────────────────────────────────────────────┐
-│  3. APPLICATION  -  the full stack              │   schema · persistence · REST · UI ·
-│     plus its extensions                         │   jobs · listeners · processes · security
+│  3. APPLICATION  -  the full stack            │   schema · persistence · REST · UI ·
+│     plus its extensions                       │   jobs · listeners · processes · security
 └───────────────────────────────────────────────┘
 ```
 
