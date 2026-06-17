@@ -63,7 +63,7 @@ import org.springframework.stereotype.Component;
  * template emits ({@code gen/{genFolderName}/forms/{fileName}/index.html}) for the
  * {@code <form>.form} this intent produced. This is a deliberate, documented exception to the "no
  * template-engine paths" rule: a user task cannot reference its form without naming where that form
- * is rendered, and this is the canonical Dirigible/codbex form-key convention. {@code args.call}
+ * is rendered, and this is the canonical Dirigible form-key convention. {@code args.call}
  * stays path-free - it is passed through verbatim and should reference a hand-authored handler
  * under {@code custom/}.
  *
