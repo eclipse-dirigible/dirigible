@@ -9,49 +9,85 @@
  */
 package org.eclipse.dirigible.sdk.utils;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
+import java.io.IOException;
+import java.lang.reflect.Method;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonDeserializer;
-import com.google.gson.JsonPrimitive;
-import com.google.gson.JsonSerializer;
+import com.google.gson.TypeAdapter;
+import com.google.gson.TypeAdapterFactory;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
+import com.google.gson.stream.JsonToken;
+import com.google.gson.stream.JsonWriter;
 
 /**
  * JSON (de)serialization for client Java code. A thin wrapper over a {@link Gson} instance
- * pre-configured to handle the {@code java.time} types the generated entities use
- * ({@link LocalDate}, {@link LocalDateTime}, {@link LocalTime}), serializing them as ISO-8601
- * strings.
+ * configured to handle the {@code java.time} types the generated entities use, serializing each as
+ * its ISO-8601 string form.
  * <p>
  * A bare {@code new Gson()} cannot serialize these on JDK 17+: Gson falls back to field reflection
  * and {@code java.base} does not open {@code java.time} to other modules, so the call fails with
- * {@code InaccessibleObjectException}. Use this helper (instead of constructing {@code Gson}
- * directly) whenever entity instances - which routinely carry date/time fields - are involved, e.g.
- * publishing an entity to a message topic or parsing one back.
+ * {@code InaccessibleObjectException} (e.g. on {@code LocalDate#year} or {@code Instant#seconds}).
+ * Use this helper - instead of constructing {@code Gson} directly - whenever entity instances are
+ * involved (publishing one to a message topic, parsing one back, ...), since they routinely carry
+ * date/time fields. The generated entities map {@code date} to {@link java.time.LocalDate},
+ * {@code time} to {@link java.time.LocalTime} and {@code timestamp}/audit fields to
+ * {@link java.time.Instant}; this helper covers those and every other {@code java.time} type that
+ * exposes a static {@code parse(CharSequence)} (Local/Offset/Zoned date-times, Year, Duration,
+ * ...).
  */
 public final class Json {
 
-    private static final Gson GSON = new GsonBuilder()
-                                                      .registerTypeAdapter(LocalDate.class,
-                                                              (JsonSerializer<LocalDate>) (value, type,
-                                                                      context) -> new JsonPrimitive(value.toString()))
-                                                      .registerTypeAdapter(LocalDate.class,
-                                                              (JsonDeserializer<LocalDate>) (json, type,
-                                                                      context) -> LocalDate.parse(json.getAsString()))
-                                                      .registerTypeAdapter(LocalDateTime.class,
-                                                              (JsonSerializer<LocalDateTime>) (value, type,
-                                                                      context) -> new JsonPrimitive(value.toString()))
-                                                      .registerTypeAdapter(LocalDateTime.class,
-                                                              (JsonDeserializer<LocalDateTime>) (json, type,
-                                                                      context) -> LocalDateTime.parse(json.getAsString()))
-                                                      .registerTypeAdapter(LocalTime.class,
-                                                              (JsonSerializer<LocalTime>) (value, type,
-                                                                      context) -> new JsonPrimitive(value.toString()))
-                                                      .registerTypeAdapter(LocalTime.class,
-                                                              (JsonDeserializer<LocalTime>) (json, type,
-                                                                      context) -> LocalTime.parse(json.getAsString()))
+    /**
+     * Serializes any {@code java.time.*} value via {@link Object#toString()} (ISO-8601) and reads it
+     * back through that type's static {@code parse(CharSequence)} - the uniform contract those types
+     * share - so no per-type registration is needed and new ones are handled automatically. Types
+     * without such a factory method are left to Gson's default handling.
+     */
+    private static final TypeAdapterFactory JAVA_TIME = new TypeAdapterFactory() {
+        @Override
+        public <T> TypeAdapter<T> create(Gson gson, TypeToken<T> typeToken) {
+            Class<? super T> raw = typeToken.getRawType();
+            if (!raw.getName()
+                    .startsWith("java.time.")) {
+                return null;
+            }
+            final Method parse;
+            try {
+                parse = raw.getMethod("parse", CharSequence.class);
+            } catch (NoSuchMethodException e) {
+                return null;
+            }
+            return new TypeAdapter<T>() {
+                @Override
+                public void write(JsonWriter out, T value) throws IOException {
+                    if (value == null) {
+                        out.nullValue();
+                    } else {
+                        out.value(value.toString());
+                    }
+                }
+
+                @Override
+                @SuppressWarnings("unchecked")
+                public T read(JsonReader in) throws IOException {
+                    if (in.peek() == JsonToken.NULL) {
+                        in.nextNull();
+                        return null;
+                    }
+                    String text = in.nextString();
+                    try {
+                        return (T) parse.invoke(null, text);
+                    } catch (ReflectiveOperationException e) {
+                        throw new IOException("Cannot parse " + raw.getName() + " from [" + text + "]", e);
+                    }
+                }
+            };
+        }
+    };
+
+    private static final Gson GSON = new GsonBuilder().registerTypeAdapterFactory(JAVA_TIME)
                                                       .create();
 
     private Json() {}
