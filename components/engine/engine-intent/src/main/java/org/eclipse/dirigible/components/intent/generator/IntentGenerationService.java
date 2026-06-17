@@ -81,6 +81,7 @@ public class IntentGenerationService {
     public GenerationResult generate(String yaml, String projectRoot, String projectName, String fallbackName) {
         IntentModel model = IntentParser.parse(yaml);
         IntentGenerationContext context = new IntentGenerationContext(model, projectRoot, projectName, fallbackName, repository);
+        context.setSettings(loadOrScaffoldSettings(context));
         LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", IntentNaming.baseName(context), projectRoot,
                 generators.size());
         for (IntentTargetGenerator generator : generators) {
@@ -92,6 +93,30 @@ public class IntentGenerationService {
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed);
+    }
+
+    /**
+     * Load the project's {@code <intent>.settings} if it exists; otherwise scaffold the initial version
+     * (default template recipes + per-artefact override stubs) and write it. The settings file is
+     * developer-owned: it is written once and never overwritten or scrubbed afterwards, so manual edits
+     * (template choices, {@code generate:false} overrides) survive regeneration.
+     */
+    private IntentSettings loadOrScaffoldSettings(IntentGenerationContext context) {
+        String fileName = IntentNaming.baseName(context) + ".settings";
+        String path = context.getProjectRoot() + "/" + fileName;
+        var resource = repository.getResource(path);
+        if (resource.exists()) {
+            try {
+                return IntentSettings.parse(new String(resource.getContent(), java.nio.charset.StandardCharsets.UTF_8));
+            } catch (RuntimeException e) {
+                LOGGER.error("Failed to parse [{}] - falling back to defaults (not overwriting your file)", fileName, e);
+                return IntentSettings.scaffold(context.getModel());
+            }
+        }
+        IntentSettings settings = IntentSettings.scaffold(context.getModel());
+        context.writeModelFile(fileName, settings.toJson());
+        LOGGER.info("Scaffolded initial settings [{}/{}]", context.getProjectRoot(), fileName);
+        return settings;
     }
 
     /**

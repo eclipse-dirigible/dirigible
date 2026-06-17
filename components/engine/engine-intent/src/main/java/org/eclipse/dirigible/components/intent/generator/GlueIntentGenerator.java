@@ -62,8 +62,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
         Map<String, String> compositionParents = IntentEntities.compositionParents(model);
 
-        List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents);
-        List<Map<String, Object>> resolvers = buildResolvers(model);
+        IntentSettings settings = context.getSettings();
+        List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings);
+        List<Map<String, Object>> resolvers = buildResolvers(model, settings);
 
         if (triggers.isEmpty() && resolvers.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
@@ -78,7 +79,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents) {
+            Map<String, String> compositionParents, IntentSettings settings) {
         List<Map<String, Object>> triggers = new ArrayList<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -87,6 +88,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             String entity = TriggerSupport.onCreateEntity(process);
             if (entity == null || entity.isBlank() || !byName.containsKey(entity)) {
+                continue;
+            }
+            if (!settings.shouldGenerate("triggers", process.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing listener for trigger [{}] (not generated)", process.getName());
                 continue;
             }
             Map<String, Object> trigger = new LinkedHashMap<>();
@@ -99,9 +104,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return triggers;
     }
 
-    private static List<Map<String, Object>> buildResolvers(IntentModel model) {
+    private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {
         List<Map<String, Object>> resolvers = new ArrayList<>();
         for (Resolver resolver : ProcessResolverSupport.resolvers(model)) {
+            if (!settings.shouldGenerate("resolvers", resolver.handler())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for resolver [{}] (not generated)", resolver.handler());
+                continue;
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("process", resolver.process());
             entry.put("handler", resolver.handler());

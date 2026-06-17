@@ -499,6 +499,9 @@ public class ContentTypeHelper {
      */
     public static final String APPLICATION_JSON_GLUE = "application/json+glue";
 
+    /** The Constant APPLICATION_JSON_SETTINGS - per-project generation recipe + overrides. */
+    public static final String APPLICATION_JSON_SETTINGS = "application/json+settings";
+
     /** The Constant APPLICATION_JSON_XSACCESS. */
     public static final String APPLICATION_JSON_XSACCESS = "application/json+xsaccess";
 
@@ -728,6 +731,7 @@ public class ContentTypeHelper {
         TEXT_CONTENT_TYPES.put("form", APPLICATION_JSON_FORM); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("intent", APPLICATION_YAML_INTENT); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("glue", APPLICATION_JSON_GLUE); //$NON-NLS-1$
+        TEXT_CONTENT_TYPES.put("settings", APPLICATION_JSON_SETTINGS); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("xsaccess", APPLICATION_JSON_XSACCESS); //$NON-NLS-1$
         TEXT_CONTENT_TYPES.put("report", APPLICATION_JSON_REPORT); //$NON-NLS-1$
         // TEXT_CONTENT_TYPES.put("entity", APPLICATION_JSON); //$NON-NLS-1$

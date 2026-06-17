@@ -122,6 +122,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // variable (book_price). The handler itself is generated from the .glue file, not here.
         List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
+        // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
+        // task, so an administrator can always claim a task in addition to the task's own role.
+        String candidateGroupsExtra = String.join(",", context.getSettings()
+                                                              .candidateGroupsExtra());
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -148,8 +152,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processResolvers.add(resolver);
                 }
             }
-            context.writeModelFile(fileName,
-                    render(process, rolesByLowerName, context.getProjectName(), processResolvers, ownFieldPascalCase(process, byName)));
+            context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
+                    ownFieldPascalCase(process, byName), candidateGroupsExtra));
         }
     }
 
@@ -202,7 +206,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase) {
+            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra) {
         // Insert a resolver service task before each decision that needs one and rewrite that
         // decision's condition - on a COPY of the step list, never mutating the shared model (the glue
         // generator runs after this one and must still see the original relation.field condition).
@@ -235,7 +239,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName);
+            appendStepElement(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
@@ -366,11 +370,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return out;
     }
 
-    private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName) {
+    private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
+            String candidateGroupsExtra) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step, rolesByLowerName, projectName);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
                 break;
             case "serviceTask":
             case "script":
@@ -383,12 +388,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
-                appendUserTask(sb, step, rolesByLowerName, projectName);
+                appendUserTask(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
                 break;
         }
     }
 
-    private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName) {
+    private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
+            String candidateGroupsExtra) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -397,8 +403,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(escapeXmlAttribute(step.getName()))
           .append("\"");
         if (assignee != null && !assignee.isBlank()) {
+            String candidateGroups = resolveCandidateGroup(assignee, rolesByLowerName);
+            if (candidateGroupsExtra != null && !candidateGroupsExtra.isBlank()) {
+                candidateGroups = candidateGroups + "," + candidateGroupsExtra;
+            }
             sb.append(" flowable:candidateGroups=\"")
-              .append(escapeXmlAttribute(resolveCandidateGroup(assignee, rolesByLowerName)))
+              .append(escapeXmlAttribute(candidateGroups))
               .append("\"");
         }
         if (form != null && !form.isBlank()) {

@@ -100,6 +100,11 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                         IntentNaming.baseName(context));
                 continue;
             }
+            if (!context.getSettings()
+                        .shouldGenerate("forms", form.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing form [{}] (not generated)", form.getName());
+                continue;
+            }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
             Map<String, Object> document = buildForm(form, boundEntity);
             context.writeModelFile(fileName, JsonHelper.toJson(document));

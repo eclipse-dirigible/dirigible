@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -255,6 +256,7 @@ class IntentEngineIT extends IntegrationTest {
         assertRoles();
         assertSeeds();
         assertGlue();
+        assertSettings();
     }
 
     @Test
@@ -360,6 +362,16 @@ class IntentEngineIT extends IntegrationTest {
         }
     }
 
+    private void writeProjectFile(String fileName, String content) {
+        String path = PROJECT_PATH + "/" + fileName;
+        IResource existing = repository.getResource(path);
+        if (existing.exists()) {
+            existing.setContent(content.getBytes(StandardCharsets.UTF_8));
+        } else {
+            repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
     private IResource resource(String fileName) {
         return repository.getResource(PROJECT_PATH + "/" + fileName);
     }
@@ -443,13 +455,65 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should carry the FK property, target entity/field and the resolved variable");
     }
 
+    private void assertSettings() {
+        assertTrue(resource("orders.settings").exists(), "the .settings file should be scaffolded");
+        String settings = contentOf("orders.settings");
+        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-angular-java"),
+                "settings should carry the model generation recipe");
+        assertTrue(settings.contains("\"glue\"") && settings.contains("template-application-events-java"),
+                "settings should carry the glue generation recipe");
+        assertTrue(
+                settings.contains("\"overrides\"") && settings.contains("\"OrderApproval\"")
+                        && settings.contains("\"ResolveCustomerCreditLimit\"") && settings.contains("\"ApproveOrder\""),
+                "settings should enumerate the trigger / resolver / form overrides");
+        assertTrue(settings.contains("\"candidateGroupsExtra\"") && settings.contains("ADMINISTRATOR"),
+                "settings should default candidateGroupsExtra to ADMINISTRATOR");
+    }
+
+    @Test
+    void settings_overrides_skip_generation_and_are_preserved() {
+        writeIntent(INTENT_YAML);
+        // First Generate scaffolds orders.settings (everything generate:true) and emits the form.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(resource("ApproveOrder.form").exists());
+
+        // The developer opts out of the form and the trigger (uses hand-written ones).
+        writeProjectFile("orders.settings", """
+                {
+                  "overrides": {
+                    "forms":    { "ApproveOrder":  { "generate": false } },
+                    "triggers": { "OrderApproval": { "generate": false } }
+                  }
+                }
+                """);
+
+        // Regenerate: the opted-out form is no longer emitted (and is scrubbed); the glue has no trigger.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("written", not(hasItem("ApproveOrder.form")))
+                                                 .body("scrubbed", hasItem("ApproveOrder.form")));
+        assertFalse(resource("ApproveOrder.form").exists(), "an opted-out form must not be generated");
+        String glue = contentOf("orders.glue");
+        assertFalse(glue.contains("\"entity\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
+        // The resolver was not opted out, so it survives.
+        assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
+        // The developer's settings file is preserved verbatim, not overwritten by the scaffold.
+        assertTrue(contentOf("orders.settings").contains("\"generate\": false"),
+                "the edited settings must be preserved across regeneration");
+    }
+
     private void assertBpmn() {
         String body = contentOf("OrderApproval.bpmn");
         assertTrue(body.contains("<userTask id=\"managerReview\""), "BPMN should map managerReview to a userTask");
-        // The assignee "manager" resolves to the declared role "Manager" (case-insensitive) so the
-        // candidate group matches UserFacade.getUserRoles() and the task shows up in the Process Inbox.
-        assertTrue(body.contains("flowable:candidateGroups=\"Manager\""),
-                "the userTask candidateGroups must be the resolved role name, not the raw lower-case assignee");
+        // The assignee "manager" resolves to the declared role "Manager" (case-insensitive); the
+        // settings' candidateGroupsExtra (ADMINISTRATOR by default) is appended so an admin can claim.
+        assertTrue(body.contains("flowable:candidateGroups=\"Manager,ADMINISTRATOR\""),
+                "the userTask candidateGroups must be the resolved role plus the settings' extra groups");
         assertFalse(body.contains("flowable:candidateGroups=\"manager\""), "the candidate group must not keep the raw lower-case assignee");
         // The form key must be the served form-page URL so the Inbox "Open Form" navigates to the page
         // (a bare name resolves relative to the inbox and 404s).

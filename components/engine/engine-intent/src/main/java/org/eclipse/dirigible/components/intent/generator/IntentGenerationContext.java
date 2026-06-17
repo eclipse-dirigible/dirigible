@@ -51,6 +51,9 @@ public final class IntentGenerationContext {
     private final IntentModel model;
     private final IRepository repository;
 
+    /** The project's {@code .settings} (loaded or scaffolded by the service before generators run). */
+    private IntentSettings settings;
+
     /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
 
@@ -108,6 +111,18 @@ public final class IntentGenerationContext {
 
     public IntentModel getModel() {
         return model;
+    }
+
+    /**
+     * The project's settings (template recipes + per-artefact overrides); never null once generation
+     * starts.
+     */
+    public IntentSettings getSettings() {
+        return settings;
+    }
+
+    void setSettings(IntentSettings settings) {
+        this.settings = settings;
     }
 
     public String getProjectRoot() {
