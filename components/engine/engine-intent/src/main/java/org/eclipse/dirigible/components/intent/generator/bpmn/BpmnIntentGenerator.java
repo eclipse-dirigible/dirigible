@@ -421,15 +421,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName) {
-        // A generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) and runs
-        // through the ${JavaTask} delegate; an author-declared serviceTask carries a `call` (a TS
-        // handler path) and runs through ${JSTask}. The JS handler path is resolved relative to the
-        // registry root, so the project-relative `call` (e.g. custom/notify-member.ts) is qualified
-        // with the project name; the Java FQN is used verbatim.
+        // Three service-task shapes:
+        // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
+        // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
+        // with the project name (the JSTask delegate resolves relative to the registry root);
+        // - an author-declared serviceTask with NO call -> JavaTask bound to a custom.<Step> Java handler
+        // that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer to implement.
         String javaHandler = stringArg(step, "javaHandler");
-        boolean java = javaHandler != null && !javaHandler.isBlank();
         String call = stringArg(step, "call");
-        String handlerValue = java ? javaHandler : qualifyHandlerPath(projectName, call);
+        boolean java;
+        String handlerValue;
+        if (javaHandler != null && !javaHandler.isBlank()) {
+            java = true;
+            handlerValue = javaHandler;
+        } else if (call != null && !call.isBlank()) {
+            java = false;
+            handlerValue = qualifyHandlerPath(projectName, call);
+        } else {
+            java = true;
+            handlerValue = "custom." + IntentNaming.pascalCase(step.getName());
+        }
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")

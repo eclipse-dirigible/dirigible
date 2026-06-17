@@ -103,7 +103,6 @@ class IntentEngineIT extends IntegrationTest {
                     args: { assignee: cfo, form: ApproveOrder }
                   - name: notifyCustomer
                     kind: serviceTask
-                    args: { call: "custom/notify-customer.ts" }
                   - name: done
                     kind: end
 
@@ -304,6 +303,37 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should read the FK id from the process variables");
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
+    }
+
+    @Test
+    void service_task_handler_stub_is_scaffolded_under_custom_and_preserved() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // notifyCustomer has no `call`, so a Java JavaDelegate stub is scaffolded under custom/.
+        assertTrue(resource("custom/NotifyCustomer.java").exists(), "a no-call service task should scaffold a custom/ Java stub");
+        String stub = contentOf("custom/NotifyCustomer.java");
+        assertTrue(stub.contains("package custom;") && stub.contains("class NotifyCustomer implements JavaDelegate"),
+                "the stub should be a custom-package JavaDelegate");
+        assertTrue(stub.contains("OrderApproval: notifyCustomer service task executed."), "the stub should log a default message");
+
+        // The developer implements it; regeneration must NOT overwrite it.
+        writeProjectFile("custom/NotifyCustomer.java", """
+                package custom;
+                import org.flowable.engine.delegate.DelegateExecution;
+                import org.flowable.engine.delegate.JavaDelegate;
+                public class NotifyCustomer implements JavaDelegate {
+                    public void execute(DelegateExecution execution) { /* MY IMPLEMENTATION */ }
+                }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertTrue(contentOf("custom/NotifyCustomer.java").contains("MY IMPLEMENTATION"),
+                "the developer's service-task handler must be preserved across regeneration");
     }
 
     @Test
@@ -529,11 +559,9 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("flowable:formKey=\"/services/web/intent-test/gen/ApproveOrder/forms/ApproveOrder/index.html\""),
                 "the userTask formKey must be the generated form page URL");
         assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\""), "BPMN should map the decision step to an exclusiveGateway");
-        assertTrue(body.contains("delegateExpression=\"${JSTask}\""), "BPMN should use the Flowable delegate expression for service tasks");
-        // The JS handler path is qualified with the project so the JSTask delegate (which resolves from
-        // the registry root) finds the project's custom/ handler.
-        assertTrue(body.contains("<![CDATA[intent-test/custom/notify-customer.ts]]>"),
-                "the service-task handler path should be project-qualified");
+        // A service task with no `call` binds to a generated Java handler under custom/.
+        assertTrue(body.contains("<serviceTask id=\"notifyCustomer\"") && body.contains("<![CDATA[custom.NotifyCustomer]]>"),
+                "a no-call service task should bind to ${JavaTask} -> custom.<Step>");
         assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
                 "the conditioned flow should target the `then` step");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
