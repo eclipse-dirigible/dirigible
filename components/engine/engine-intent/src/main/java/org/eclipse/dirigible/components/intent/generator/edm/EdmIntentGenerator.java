@@ -45,17 +45,17 @@ import org.springframework.stereotype.Component;
  * {@code tests-integrations/.../DependsOnScenariosTestProject/sales-order.edm}):
  * <ul>
  * <li>{@code dataName} is prefixed with the intent name: {@code <INTENT>_<ENTITY>} (e.g.
- * {@code ORDERS_COUNTRY}, codbex-style). This keeps physical table names unique across projects and
- * away from SQL reserved words like {@code ORDER}; the {@code .report} and {@code .csvim}
- * generators use the same convention so all three artefacts agree on the table name.</li>
+ * {@code ORDERS_COUNTRY}). This keeps physical table names unique across projects and away from SQL
+ * reserved words like {@code ORDER}; the {@code .report} and {@code .csvim} generators use the same
+ * convention so all three artefacts agree on the table name.</li>
  * <li>A {@code manyToOne}/{@code oneToOne} relation marked {@code composition: true} is a
  * <b>composition</b>: the FK property carries the {@code relationship*} attributes, the owning
  * entity becomes {@code DEPENDENT} with {@code MANAGE_DETAILS} layout and inherits the perspective
  * of its (transitively resolved) composition parent (and the FK is NOT NULL). Every other relation
  * is an <b>association</b>: a plain DROPDOWN property whose FK is NOT NULL when {@code required},
  * and the entity stays {@code PRIMARY} with its own perspective. Composition is opt-in (matching
- * codbex, where it is an explicit {@code relationshipType="COMPOSITION"}); {@code required} alone
- * only means the FK column is NOT NULL.</li>
+ * the Dirigible convention, where it is an explicit {@code relationshipType="COMPOSITION"});
+ * {@code required} alone only means the FK column is NOT NULL.</li>
  * <li>Dropdown key / value and the relation's {@code referencedProperty} are derived from the
  * target entity's actual fields (its primary key and its {@code name}-like field), never
  * hardcoded.</li>
@@ -269,7 +269,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String column = IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(field.getName());
         String dataType = mapDataType(field.getType());
         Map<String, Object> p = new LinkedHashMap<>();
-        // Property names are PascalCase (Dirigible/codbex convention); the physical column dataName
+        // Property names are PascalCase (Dirigible convention); the physical column dataName
         // stays UPPER_SNAKE, derived from the authored field name above.
         p.put("name", IntentNaming.pascalCase(field.getName()));
         p.put("description", field.getDescription() == null ? "" : field.getDescription());
@@ -282,7 +282,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         } else if (field.isRequired()) {
             // The generated REST controller's required-value validation keys on isRequiredProperty
             // (not dataNullable); set it so a required field is actually validated. PKs are excluded
-            // (auto-generated), matching codbex.
+            // (auto-generated).
             p.put("isRequiredProperty", "true");
         }
         // Auto-increment is a DB identity/sequence - valid only on integer columns (a VARCHAR/uuid
@@ -395,7 +395,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         p.put("auditType", "NONE");
-        // Relationship metadata the generation reads (codbex .model convention): composition vs
+        // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
         // relationshipName is the FK constraint name <owner>_<target>; relationshipEntityName and
         // relationshipEntityPerspectiveName drive the dropdown's data-service URL

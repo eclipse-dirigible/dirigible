@@ -44,7 +44,7 @@ public final class IntentNaming {
     }
 
     /**
-     * Physical table name for an entity: {@code <INTENT>_<ENTITY>} in upper snake (codbex-style, e.g.
+     * Physical table name for an entity: {@code <INTENT>_<ENTITY>} in upper snake (e.g.
      * {@code ORDERS_COUNTRY}). The intent-name prefix keeps tables unique across projects sharing a
      * schema and away from SQL reserved words like {@code ORDER}.
      *
@@ -58,9 +58,9 @@ public final class IntentNaming {
 
     /**
      * Capitalize the first letter to make an UpperCamelCase (PascalCase) name, preserving the rest -
-     * the codbex/Dirigible EDM convention for property names ({@code id} -> {@code Id},
-     * {@code loanedOn} -> {@code LoanedOn}). Authoring stays lower camelCase; only the generated model
-     * property names are PascalCased (column {@code dataName}s stay UPPER_SNAKE).
+     * the Dirigible EDM convention for property names ({@code id} -> {@code Id}, {@code loanedOn} ->
+     * {@code LoanedOn}). Authoring stays lower camelCase; only the generated model property names are
+     * PascalCased (column {@code dataName}s stay UPPER_SNAKE).
      *
      * @param name the identifier to convert (may be null)
      * @return the PascalCase form, empty for null/empty input

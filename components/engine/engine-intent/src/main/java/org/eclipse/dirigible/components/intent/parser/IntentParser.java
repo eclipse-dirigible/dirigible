@@ -53,7 +53,7 @@ public final class IntentParser {
     private static final Set<String> FIELD_TYPES =
             Set.of("string", "text", "integer", "int", "long", "decimal", "double", "boolean", "date", "timestamp", "uuid");
     /**
-     * Primary keys must be an integer type - the codbex model convention is integer identifiers
+     * Primary keys must be an integer type - the Dirigible model convention is integer identifiers
      * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
      */
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");

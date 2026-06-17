@@ -36,10 +36,9 @@ import org.springframework.stereotype.Component;
 
 /**
  * Emits one {@code <report>.report} per {@link ReportIntent}, in the JSON shape the report editor
- * and the report runtime consume (the codbex convention - see {@code codbex-invoices/*.report}): an
- * outer record with {@code name} / {@code alias} (base-table alias) / {@code table} (physical base
- * table) / {@code columns} / a fully materialised SQL {@code query} / {@code conditions} /
- * {@code security}.
+ * and the report runtime consume (the Dirigible convention): an outer record with {@code name} /
+ * {@code alias} (base-table alias) / {@code table} (physical base table) / {@code columns} / a
+ * fully materialised SQL {@code query} / {@code conditions} / {@code security}.
  *
  * <p>
  * The report is rooted at {@link ReportIntent#getSource()}. Each dimension and measure resolves to
@@ -73,7 +72,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     /**
      * Pretty-printed JSON with HTML-escaping OFF so the SQL {@code query} keeps literal {@code =} /
      * {@code >} / {@code <} operators (the platform's {@code JsonHelper} escapes them to
-     * {@code \\u003d} etc.; valid JSON, but unreadable and unlike the codbex {@code .report} files).
+     * {@code \\u003d} etc.; valid JSON, but unreadable and unlike the standard {@code .report} files).
      * Maps only - no {@code @Expose} concern.
      */
     private static final Gson REPORT_JSON = new GsonBuilder().setPrettyPrinting()
