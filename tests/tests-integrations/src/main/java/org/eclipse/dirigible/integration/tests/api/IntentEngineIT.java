@@ -247,7 +247,16 @@ class IntentEngineIT extends IntegrationTest {
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report", "orders.roles", "orders.glue",
                                                                  "countries.csvim", "countries.csv"))
-                                                 .body("scrubbed", hasSize(0)));
+                                                 .body("scrubbed", hasSize(0))
+                                                 // The model-to-code plan the editor replays: one entry per generated model with a
+                                                 // recipe in .settings, naming the template + parameters.
+                                                 .body("codeGenerations.path",
+                                                         hasItems("orders.model", "orders.glue", "ApproveOrder.form",
+                                                                 "OrdersByCustomer.report"))
+                                                 .body("codeGenerations.find { it.path == 'orders.model' }.templateId",
+                                                         equalTo("template-application-angular-java/template/template.js"))
+                                                 .body("codeGenerations.find { it.path == 'orders.model' }.parameters.dataSource",
+                                                         equalTo("DefaultDB")));
 
         assertEdmAndModel();
         assertBpmn();

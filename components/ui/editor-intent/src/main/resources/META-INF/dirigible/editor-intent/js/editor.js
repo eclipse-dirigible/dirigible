@@ -208,20 +208,59 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
 
     // ----- Generate ------------------------------------------------------------
 
+    const finishGenerate = (location, written, scrubbed, codeCount) => {
+        dialogHub.closeBusyDialog();
+        const code = codeCount ? `, generated code from ${codeCount} model(s)` : '';
+        const stale = scrubbed ? `, removed ${scrubbed} stale` : '';
+        statusBarHub.showMessage(`Generated ${written} model file(s)${stale}${code} in '${location.project}'`);
+        dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: location.project, workspace: location.workspace } });
+        $scope.$evalAsync(() => { $scope.state.isBusy = false; });
+    };
+
+    // Run the model-to-code plan from the response (the templates + parameters registered in the
+    // <intent>.settings), one generate-from-template call per generated model, sequentially.
+    const runCodeGenerations = (location, plan, written, scrubbed) => {
+        let index = 0;
+        const next = () => {
+            if (index >= plan.length) {
+                finishGenerate(location, written, scrubbed, plan.length);
+                return;
+            }
+            const entry = plan[index++];
+            dialogHub.showBusyDialog(`Generating code (${index}/${plan.length}): ${entry.path}`);
+            const url = `/services/js/service-generate/generate.mjs/model/${encodeURIComponent(location.workspace)}/${encodeURIComponent(location.project)}?path=${encodeURIComponent(entry.path)}`;
+            $http.post(url, { template: entry.templateId, parameters: entry.parameters || {} })
+                 .then(next, (response) => {
+                     console.error(response);
+                     dialogHub.closeBusyDialog();
+                     $scope.$evalAsync(() => { $scope.state.isBusy = false; });
+                     dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: location.project, workspace: location.workspace } });
+                     dialogHub.showAlert({
+                         title: 'Failed to generate code',
+                         message: `Models were generated, but generating code from '${entry.path}' failed. See the console for details.`,
+                         type: AlertTypes.Error,
+                         preformatted: false,
+                     });
+                 });
+        };
+        next();
+    };
+
     $scope.generate = () => {
         const location = fileLocation();
         $scope.state.isBusy = true;
         dialogHub.showBusyDialog('Generating model files');
         $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
              .then((response) => {
-                 dialogHub.closeBusyDialog();
                  const written = (response.data.written || []).length;
                  const scrubbed = (response.data.scrubbed || []).length;
-                 statusBarHub.showMessage(`Generated ${written} model file(s)${scrubbed ? `, removed ${scrubbed} stale` : ''} in '${location.project}'`);
-                 dialogHub.postMessage({ topic: 'projects.tree.refresh', data: { partial: true, project: location.project, workspace: location.workspace } });
-                 $scope.$evalAsync(() => {
-                     $scope.state.isBusy = false;
-                 });
+                 const plan = response.data.codeGenerations || [];
+                 if (plan.length) {
+                     // Models are written; now chain the model-to-code generation per the .settings recipe.
+                     runCodeGenerations(location, plan, written, scrubbed);
+                 } else {
+                     finishGenerate(location, written, scrubbed, 0);
+                 }
              }, (response) => {
                  console.error(response);
                  dialogHub.closeBusyDialog();

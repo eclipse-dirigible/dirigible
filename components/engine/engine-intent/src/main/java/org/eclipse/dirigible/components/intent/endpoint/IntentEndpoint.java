@@ -108,8 +108,8 @@ public class IntentEndpoint {
         try {
             IntentGenerationService.GenerationResult result =
                     generationService.generate(yaml, projectObject.getPath(), project, baseName(path));
-            return ResponseEntity.ok(
-                    Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed", result.scrubbed()));
+            return ResponseEntity.ok(Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed",
+                    result.scrubbed(), "codeGenerations", result.codeGenerations()));
         } catch (IntentValidationException e) {
             return ResponseEntity.unprocessableEntity()
                                  .body(Map.of("issues", e.getIssues()));

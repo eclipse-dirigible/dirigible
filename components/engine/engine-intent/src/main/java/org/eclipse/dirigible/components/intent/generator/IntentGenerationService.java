@@ -10,7 +10,9 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -54,14 +56,26 @@ public class IntentGenerationService {
         this.repository = repository;
     }
 
+    /** Maps a generated model file's extension to its {@code .settings} generation-recipe key. */
+    private static final Map<String, String> EXTENSION_TO_RECIPE =
+            Map.of(".model", "model", ".glue", "glue", ".form", "form", ".report", "report");
+
     /**
-     * Outcome of a generation pass: the files emitted and the stale files scrubbed.
+     * The order in which the model-to-code recipes run (model first - it creates the entities/repos).
+     */
+    private static final List<String> RECIPE_ORDER = List.of("model", "glue", "form", "report");
+
+    /**
+     * Outcome of a generation pass: the files emitted, the stale files scrubbed, and the model-to-code
+     * generation plan (which template + parameters to run against each generated model file, from the
+     * project's {@code .settings}). The editor's Generate replays the plan via the generation service.
      *
      * @param written bare names of the model files this pass produced
      * @param scrubbed bare names of previously generated files removed because the intent no longer
      *        declares their slice
+     * @param codeGenerations ordered plan entries, each {@code {path, templateId, parameters}}
      */
-    public record GenerationResult(List<String> written, List<String> scrubbed) {
+    public record GenerationResult(List<String> written, List<String> scrubbed, List<Map<String, Object>> codeGenerations) {
     }
 
     /**
@@ -92,7 +106,38 @@ public class IntentGenerationService {
             }
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
-        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed);
+        List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
+        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan);
+    }
+
+    /**
+     * The model-to-code plan: for each generated model file whose type has a recipe in the
+     * {@code .settings}, an entry naming the template + parameters to run against it. Ordered so the
+     * full-stack {@code model} runs first. Replayed by the editor's Generate via the generation
+     * service.
+     */
+    private List<Map<String, Object>> buildCodeGenerationPlan(IntentSettings settings, Set<String> written) {
+        List<Map<String, Object>> plan = new ArrayList<>();
+        for (String recipeKey : RECIPE_ORDER) {
+            IntentSettings.Recipe recipe = settings.getGeneration()
+                                                   .get(recipeKey);
+            if (recipe == null || recipe.getTemplateId() == null || recipe.getTemplateId()
+                                                                          .isBlank()) {
+                continue;
+            }
+            for (String fileName : written) {
+                int dot = fileName.lastIndexOf('.');
+                if (dot < 0 || !recipeKey.equals(EXTENSION_TO_RECIPE.get(fileName.substring(dot)))) {
+                    continue;
+                }
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("path", fileName);
+                entry.put("templateId", recipe.getTemplateId());
+                entry.put("parameters", recipe.getParameters());
+                plan.add(entry);
+            }
+        }
+        return plan;
     }
 
     /**
