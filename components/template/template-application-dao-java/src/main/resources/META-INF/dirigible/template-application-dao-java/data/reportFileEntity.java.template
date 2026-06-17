@@ -1,0 +1,83 @@
+package gen.${javaGenFolderName}.data.${javaPerspectiveName};
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.db.Database;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Generated repository for the ${name} report. Executes the report query against the configured data
+ * source and returns the rows as generic maps keyed by the result-set column aliases.
+ *
+ * Do not modify the content as it may be re-generated again.
+ */
+public class ${name}Repository {
+
+    private static final String QUERY = ${queryJava};
+
+    @SuppressWarnings("unchecked")
+    public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
+        StringBuilder sql = new StringBuilder(QUERY);
+        if (limit != null) {
+            sql.append(" LIMIT ").append(limit.intValue());
+        }
+        if (offset != null) {
+            sql.append(" OFFSET ").append(offset.intValue());
+        }
+        try {
+            String result = Database.queryNamed(sql.toString(), parameters(filter));
+            return (List<Map<String, Object>>) Json.parse(result, List.class);
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to execute report ${name}", t);
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    public long count(Map<String, Object> filter) {
+        String sql = "SELECT COUNT(*) AS REPORT_COUNT FROM (" + QUERY + ")";
+        try {
+            String result = Database.queryNamed(sql, parameters(filter));
+            List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
+            if (rows.isEmpty()) {
+                return 0L;
+            }
+            Object count = rows.get(0).get("REPORT_COUNT");
+            if (count instanceof Number number) {
+                return number.longValue();
+            }
+            return count == null ? 0L : Long.parseLong(count.toString());
+        } catch (Throwable t) {
+            throw new RuntimeException("Failed to count report ${name}", t);
+        }
+    }
+
+    public List<Map<String, Object>> exportCsv() {
+        return findAll(null, null, null);
+    }
+
+    private static String parameters(Map<String, Object> filter) {
+        List<Map<String, Object>> parameters = new ArrayList<>();
+#foreach($parameter in $parameters)
+        parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initial}")));
+#end
+        return Json.stringify(parameters);
+    }
+
+    private static Map<String, Object> parameter(String name, String type, Object value) {
+        Map<String, Object> parameter = new LinkedHashMap<>();
+        parameter.put("name", name);
+        parameter.put("type", type);
+        parameter.put("value", value);
+        return parameter;
+    }
+
+    private static Object value(Map<String, Object> filter, String name, Object initial) {
+        if (filter != null && filter.get(name) != null) {
+            return filter.get(name);
+        }
+        return initial;
+    }
+}

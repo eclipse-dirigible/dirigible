@@ -14,7 +14,11 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
+import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.sdk.messaging.Listener;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
@@ -53,13 +57,20 @@ public class ListenerClassConsumer implements JavaClassConsumer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerClassConsumer.class);
 
     private final ActiveMQConnectionArtifactsFactory connectionFactory;
+    private final TenantContext tenantContext;
+    private final TenantPropertyManager tenantPropertyManager;
+    private final Tenant defaultTenant;
 
     /** fqn → open JMS Connection for teardown. */
     private final ConcurrentMap<String, Connection> connections = new ConcurrentHashMap<>();
 
     @Autowired
-    public ListenerClassConsumer(ActiveMQConnectionArtifactsFactory connectionFactory) {
+    public ListenerClassConsumer(ActiveMQConnectionArtifactsFactory connectionFactory, TenantContext tenantContext,
+            TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant) {
         this.connectionFactory = connectionFactory;
+        this.tenantContext = tenantContext;
+        this.tenantPropertyManager = tenantPropertyManager;
+        this.defaultTenant = defaultTenant;
     }
 
     @Override
@@ -153,7 +164,7 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         }
     }
 
-    private static void dispatch(Message msg, Dispatcher dispatcher, String fqn) {
+    private void dispatch(Message msg, Dispatcher dispatcher, String fqn) {
         if (!(msg instanceof TextMessage textMsg)) {
             LOGGER.warn("@Listener [{}] received a non-text message; ignored.", fqn);
             return;
@@ -166,8 +177,24 @@ public class ListenerClassConsumer implements JavaClassConsumer {
             dispatcher.onError(e.getMessage(), fqn);
             return;
         }
+        // The message arrives on a broker thread with no tenant context. Recover the originating
+        // tenant the producer stamped on it and re-establish it for the handler, the same way the
+        // built-in asynchronous listener does - otherwise handler code that touches tenant-scoped
+        // services (DB, BPM via Process.start, ...) fails with "current tenant is not initialized".
+        // Messages from outside the platform producer carry no tenant; fall back to the default
+        // tenant so the handler still runs within a valid context.
+        String tenantId;
         try {
-            dispatcher.onMessage(text);
+            tenantId = tenantPropertyManager.getCurrentTenantId(msg);
+        } catch (JMSException | RuntimeException e) {
+            LOGGER.debug("@Listener [{}] message carries no tenant; using the default tenant. {}", fqn, e.getMessage());
+            tenantId = defaultTenant.getId();
+        }
+        try {
+            tenantContext.execute(tenantId, () -> {
+                dispatcher.onMessage(text);
+                return null;
+            });
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             dispatcher.onError(cause.getMessage(), fqn);

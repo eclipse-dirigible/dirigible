@@ -150,8 +150,9 @@ public class JavaLoader {
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
 
-        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()),
-                Collections.unmodifiableMap(failures), Collections.unmodifiableSet(removed));
+        RebuildResult result =
+                new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()), Collections.unmodifiableMap(failures),
+                        Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()));
 
         writeClassFiles(batch, result.unloadedFqns());
         eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
@@ -226,8 +227,18 @@ public class JavaLoader {
     public record ClientSource(String project, String fqn, String source) {
     }
 
-    /** Per-FQN outcomes of a rebuild. */
-    public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns) {
+    /**
+     * Per-FQN outcomes of a rebuild.
+     *
+     * @param succeededFqns FQNs in the new generation
+     * @param failures per failed FQN → a formatted error message
+     * @param unloadedFqns FQNs removed from the previous generation
+     * @param diagnostics per failed FQN → the structured compiler diagnostics behind the failure
+     *        (line/column/message); empty for failures with no attributable diagnostic (e.g. a class
+     *        that compiled but could not be loaded)
+     */
+    public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns,
+            Map<String, List<CompileDiagnostic>> diagnostics) {
     }
 
 }

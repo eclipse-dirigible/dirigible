@@ -1,0 +1,122 @@
+#set($needsRoles = false)
+#if($perspectiveRole || $security.roleRead)
+#set($needsRoles = true)
+#end
+package gen.${javaGenFolderName}.api.${javaPerspectiveName};
+
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
+
+#if($needsRoles)
+import org.eclipse.dirigible.components.api.security.UserFacade;
+#end
+import org.eclipse.dirigible.sdk.platform.Documentation;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.QueryParam;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+@Controller
+@Documentation("${projectName} - ${name} Report Controller")
+public class ${name}Controller {
+
+    private final ${name}Repository repository = new ${name}Repository();
+
+    @Get
+    @Documentation("List ${name}")
+    public List<Map<String, Object>> filter(@QueryParam("$limit") Integer limit,
+                                            @QueryParam("$offset") Integer offset#foreach($parameter in $parameters),
+                                            @QueryParam("${parameter.name}") String ${parameter.name}#end) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        Map<String, Object> filter = new LinkedHashMap<>();
+#foreach($parameter in $parameters)
+        if (${parameter.name} != null) {
+            filter.put("${parameter.name}", ${parameter.name});
+        }
+#end
+        return repository.findAll(limit, offset, filter);
+    }
+
+    @Get("/count")
+    @Documentation("Count ${name}")
+    public Map<String, Long> count(#foreach($parameter in $parameters)#if($foreach.index > 0), #end@QueryParam("${parameter.name}") String ${parameter.name}#end) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        Map<String, Object> filter = new LinkedHashMap<>();
+#foreach($parameter in $parameters)
+        if (${parameter.name} != null) {
+            filter.put("${parameter.name}", ${parameter.name});
+        }
+#end
+        return Map.of("count", repository.count(filter));
+    }
+
+    @Post("/count")
+    @Documentation("Count ${name} with filter")
+    public Map<String, Long> countWithFilter(@Body Map<String, Object> filter) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return Map.of("count", repository.count(filter));
+    }
+
+    @Post("/search")
+    @Documentation("Search ${name}")
+    public List<Map<String, Object>> search(@Body Map<String, Object> filter) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return repository.findAll(intValue(filter, "$limit"), intValue(filter, "$offset"), filter);
+    }
+
+    @Post("/export")
+    @Documentation("Export ${name}")
+    public List<Map<String, Object>> exportCsv() {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        return repository.exportCsv();
+    }
+
+    private static Integer intValue(Map<String, Object> filter, String key) {
+        if (filter == null) {
+            return null;
+        }
+        Object value = filter.get(key);
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value == null) {
+            return null;
+        }
+        try {
+            return Integer.valueOf(value.toString());
+        } catch (NumberFormatException e) {
+            return null;
+        }
+    }
+#if($needsRoles)
+
+    private void checkPermissions(String operationType) {
+#if($perspectiveRole)
+        if (!UserFacade.isInRole("${perspectiveRole}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+#if($security.roleRead)
+        if ("read".equals(operationType) && !UserFacade.isInRole("${security.roleRead}")) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN);
+        }
+#end
+    }
+#end
+}

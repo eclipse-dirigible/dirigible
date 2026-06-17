@@ -11,6 +11,7 @@
  */
 import { Registry } from "@aerokit/sdk/platform";
 import { TemplateEngines as templateEngines } from "@aerokit/sdk/template";
+import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
 
 function getTranslationId(str) {
     return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
@@ -267,6 +268,60 @@ export function generateFiles(model, parameters, templateSources) {
                             content: getGenerationEngine(template).generate(location, content, cleanParams),
                             path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanParams)
                         });
+                    }
+                    break;
+                case "triggers":
+                    // Process triggers (intent layer): one glue-code artefact per process started on an
+                    // entity's create. Not entity-shaped, so it gets its own loop rather than
+                    // generateCollection (which dereferences entity perspectives).
+                    if (model.triggers) {
+                        for (let t = 0; t < model.triggers.length; t++) {
+                            const triggerParameters = {
+                                ...parameters,
+                                process: model.triggers[t].process,
+                                entity: model.triggers[t].entity,
+                                perspective: model.triggers[t].perspective,
+                                // The Java package segment is the lowercased perspective, the same
+                                // sanitization the DAO/entity templates apply (javaPerspectiveName).
+                                // The event-topic name keeps the raw perspective so it matches the
+                                // topic the DAO publishes to (${projectName}-${perspectiveName}-${name}).
+                                javaPerspective: sanitizeJavaIdentifier(model.triggers[t].perspective),
+                                keyProperty: model.triggers[t].keyProperty
+                            };
+                            const cleanTriggerParameters = cleanData(triggerParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanTriggerParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanTriggerParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "resolvers":
+                    // Decision resolvers (intent layer): one JavaDelegate per relation.field a decision
+                    // references. Like triggers, not entity-shaped, so it gets its own loop. The Java
+                    // package segment of the target entity is its lowercased perspective.
+                    if (model.resolvers) {
+                        for (let r = 0; r < model.resolvers.length; r++) {
+                            const resolverParameters = {
+                                ...parameters,
+                                process: model.resolvers[r].process,
+                                handler: model.resolvers[r].handler,
+                                fkProperty: model.resolvers[r].fkProperty,
+                                targetEntity: model.resolvers[r].targetEntity,
+                                targetPerspective: model.resolvers[r].targetPerspective,
+                                javaTargetPerspective: sanitizeJavaIdentifier(model.resolvers[r].targetPerspective),
+                                targetField: model.resolvers[r].targetField,
+                                targetIdAccessor: model.resolvers[r].targetIdAccessor,
+                                variable: model.resolvers[r].variable
+                            };
+                            const cleanResolverParameters = cleanData(resolverParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanResolverParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanResolverParameters)
+                            });
+                        }
                     }
                     break;
                 default:

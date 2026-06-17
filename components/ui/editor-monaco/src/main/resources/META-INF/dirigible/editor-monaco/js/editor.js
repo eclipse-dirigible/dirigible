@@ -784,6 +784,21 @@ class DirigibleEditor {
             },
         });
 
+        // Reveal + place the cursor at a line/column on request (e.g. the Problems view double-click).
+        themingHub.addMessageListener({
+            topic: 'editor.reveal.line',
+            handler: (msg) => {
+                const { filePath, line, column } = msg || {};
+                const myPath = editorParameters.resourcePath;
+                if (filePath && myPath && (filePath.endsWith(myPath) || myPath.endsWith(filePath.replace(/^file:\/\//, ''))) && line > 0) {
+                    const col = column && column > 0 ? column : 1;
+                    editor.revealLineInCenter(line);
+                    editor.setPosition({ lineNumber: line, column: col });
+                    editor.focus();
+                }
+            },
+        });
+
         // Restore breakpoint glyphs from the debug view's persisted state
         themingHub.addMessageListener({
             topic: 'java.debug.breakpoints',

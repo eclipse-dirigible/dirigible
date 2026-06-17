@@ -1,0 +1,164 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="intentEditor" ng-controller="IntentEditorController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/editor-intent/configs/intent-editor.js"></script>
+        <meta name="platform-links" category="ng-view,ng-editor">
+        <script type="text/javascript">
+            mxBasePath = '/services/web/resources/mxgraph/4.2.2/src';
+        </script>
+        <script type="text/javascript" src="/services/web/resources/mxgraph/4.2.2/src/js/mxClient.js"></script>
+        <link type="text/css" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
+        <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
+        <style>
+            .intent-split {
+                display: flex;
+                flex: 1;
+                min-height: 0;
+            }
+            .intent-text-pane {
+                flex: 1 1 45%;
+                display: flex;
+                min-width: 0;
+                border-right: 1px solid var(--sapList_BorderColor, #e5e5e5);
+            }
+            .intent-monaco {
+                flex: 1;
+                min-width: 0;
+                position: relative;
+                overflow: hidden;
+            }
+            .intent-diagram-pane {
+                flex: 1 1 55%;
+                overflow: auto;
+                padding: 16px;
+                background: var(--sapBackgroundColor, #fff);
+                color: var(--sapTextColor, #1d2d3e);
+            }
+            .intent-diagrams {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .intent-diagram {
+                width: 100%;
+                overflow: auto;
+                border: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                border-radius: 4px;
+            }
+            .intent-diagram-empty {
+                color: var(--sapNeutralTextColor, #6a6d70);
+                font-style: italic;
+            }
+            .intent-section-title {
+                font-size: var(--sapFontHeader4Size, 16px);
+                margin: 12px 0 4px 0;
+            }
+            .intent-summary {
+                margin: 4px 0 0 0;
+                padding: 0 0 0 18px;
+            }
+            .intent-summary li {
+                margin: 2px 0;
+            }
+            .intent-issues {
+                margin: 0;
+                padding: 8px 8px 8px 26px;
+                background: var(--sapErrorBackground, #ffeaf4);
+                color: var(--sapNegativeTextColor, #aa0808);
+                font-size: 13px;
+            }
+            .intent-issues li {
+                margin: 2px 0;
+            }
+        </style>
+    </head>
+
+    <body class="bk-vbox" shortcut="'ctrl+s'" shortcut-action="save">
+        <bk-toolbar compact="true" has-title="false">
+            <span>Intent</span>
+            <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--save" title="Save" aria-label="Save" ng-click="save()" ng-disabled="!changed || state.isBusy"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="emphasized" glyph="sap-icon--generate-shortcut" label="Generate" title="Generate the model files into the project" aria-label="Generate" ng-click="generate()" ng-disabled="state.isBusy || issues.length"></bk-button>
+        </bk-toolbar>
+
+        <bk-message-page glyph="sap-icon--error" ng-if="state.error">
+            <bk-message-page-title>Editor encountered an error</bk-message-page-title>
+            <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
+        </bk-message-page>
+
+        <ul class="intent-issues" ng-if="issues.length">
+            <li ng-repeat="issue in issues">{{issue}}</li>
+        </ul>
+
+        <div class="intent-split" ng-if="!state.error">
+            <div class="intent-text-pane">
+                <div id="intent-monaco" class="intent-monaco"></div>
+            </div>
+            <div class="intent-diagram-pane">
+                <div id="intent-diagrams" class="intent-diagrams"></div>
+                <div ng-if="model.forms.length">
+                    <h4 class="intent-section-title">Forms</h4>
+                    <ul class="intent-summary">
+                        <li ng-repeat="f in model.forms">
+                            <strong>{{f.name}}</strong>
+                            <span ng-if="f.forEntity">for {{f.forEntity}}</span>
+                            <span ng-if="f.actions.length">&mdash; actions: {{f.actions.join(', ')}}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div ng-if="model.reports.length">
+                    <h4 class="intent-section-title">Reports</h4>
+                    <ul class="intent-summary">
+                        <li ng-repeat="r in model.reports">
+                            <strong>{{r.name}}</strong>
+                            <span ng-if="r.source">on {{r.source}}</span>
+                            <span ng-if="r.measures.length">&mdash; {{r.measures.join(', ')}}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div ng-if="model.permissions.length">
+                    <h4 class="intent-section-title">Roles</h4>
+                    <ul class="intent-summary">
+                        <li ng-repeat="perm in model.permissions">
+                            <strong>{{perm.role}}</strong>
+                            <span ng-if="perm.can.length">&mdash; {{perm.can.join(', ')}}</span>
+                        </li>
+                    </ul>
+                </div>
+                <div ng-if="model.seeds.length">
+                    <h4 class="intent-section-title">Seed data</h4>
+                    <ul class="intent-summary">
+                        <li ng-repeat="s in model.seeds">
+                            <strong>{{s.name}}</strong>
+                            <span ng-if="s.entity">into {{s.entity}}</span>
+                            <span>&mdash; {{s.rows.length}} row(s)</span>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <script type="text/javascript" src="/services/web/editor-intent/js/editor.js"></script>
+        <theme></theme>
+    </body>
+
+</html>

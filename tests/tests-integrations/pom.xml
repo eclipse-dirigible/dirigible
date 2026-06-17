@@ -35,6 +35,20 @@
             <artifactId>dirigible-application</artifactId>
             <scope>compile</scope>
         </dependency>
+        <!-- Template modules are bundled into the application fat jar in production but are not
+             resolved transitively here (via the group-templates aggregator pom), so the integration
+             test that exercises the events template generation depends on it explicitly to load its
+             content into the test registry. -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-events-java</artifactId>
+            <scope>compile</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-template-application-dao-java</artifactId>
+            <scope>compile</scope>
+        </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-tests-framework</artifactId>

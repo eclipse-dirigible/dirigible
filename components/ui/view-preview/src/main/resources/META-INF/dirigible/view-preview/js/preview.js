@@ -213,6 +213,7 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                 case 'camel':
                 case 'form':
                 case 'report':
+				case 'intent':
                     return;
                 default:
                     url += '/web';

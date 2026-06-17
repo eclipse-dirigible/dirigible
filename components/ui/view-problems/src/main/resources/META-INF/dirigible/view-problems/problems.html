@@ -62,7 +62,7 @@
                     </tr>
                 </thead>
                 <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="problem in problemsList track by problem.id" hoverable="true" activable="false" selected="problem.selected">
+                    <tr bk-table-row ng-repeat="problem in problemsList track by problem.id" hoverable="true" activable="false" selected="problem.selected" ng-dblclick="openProblem(problem)" title="Double-click to open the file at this line">
                         <td bk-table-cell content-type="checkbox">
                             <bk-checkbox compact="true" id="cb-{{problem.id}}" ng-model="problem.selected" ng-change="selectionChanged()"></bk-checkbox>
                             <bk-checkbox-label empty="true" compact="true" for="cb-{{problem.id}}">

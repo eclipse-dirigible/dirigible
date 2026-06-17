@@ -15,11 +15,11 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
 import org.eclipse.dirigible.components.engine.web.exposure.ExposeManager;
+import org.eclipse.dirigible.components.engine.web.watcher.HtmlPlatformLinksInjector;
 import org.eclipse.dirigible.components.registry.accessor.RegistryAccessor;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.eclipse.dirigible.repository.api.RepositoryNotFoundException;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -44,13 +44,30 @@ public class WebService {
     /** The Constant INDEX_HTML. */
     private static final String INDEX_HTML = "index.html";
 
+    /** The Constant PLATFORM_LINKS_MARKER. */
+    private static final String PLATFORM_LINKS_MARKER = "platform-links";
+
     /** The request. */
-    @Autowired
-    private HttpServletRequest request;
+    private final HttpServletRequest request;
 
     /** The registry accessor. */
-    @Autowired
-    private RegistryAccessor registryAccessor;
+    private final RegistryAccessor registryAccessor;
+
+    /** The platform links injector. */
+    private final HtmlPlatformLinksInjector platformLinksInjector;
+
+    /**
+     * Instantiates a new web service.
+     *
+     * @param request the request
+     * @param registryAccessor the registry accessor
+     * @param platformLinksInjector the platform links injector
+     */
+    public WebService(HttpServletRequest request, RegistryAccessor registryAccessor, HtmlPlatformLinksInjector platformLinksInjector) {
+        this.request = request;
+        this.registryAccessor = registryAccessor;
+        this.platformLinksInjector = platformLinksInjector;
+    }
 
     /**
      * Gets the resource.
@@ -140,7 +157,11 @@ public class WebService {
         if (isBinary) {
             return new ResponseEntity(content, httpHeaders, HttpStatus.OK);
         }
-        return new ResponseEntity(new String(content, StandardCharsets.UTF_8), httpHeaders, HttpStatus.OK);
+        String text = new String(content, StandardCharsets.UTF_8);
+        if (contentType != null && contentType.contains(MediaType.TEXT_HTML_VALUE) && text.contains(PLATFORM_LINKS_MARKER)) {
+            text = platformLinksInjector.processHtml(text);
+        }
+        return new ResponseEntity(text, httpHeaders, HttpStatus.OK);
     }
 
     /**
