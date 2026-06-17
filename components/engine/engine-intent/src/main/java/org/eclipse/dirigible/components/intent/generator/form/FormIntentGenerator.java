@@ -57,9 +57,13 @@ import org.springframework.stereotype.Component;
  * Actions become buttons in a trailing {@code container-hbox}. The button {@code type} is inferred
  * from the action name ({@code approve} -> positive, {@code reject}/{@code decline}/{@code delete}
  * -> negative, {@code save}/{@code submit} -> emphasized, anything else -> standard). Each button
- * carries a {@code callback} like {@code onApproveClicked()} pointing at a stub handler in the
- * {@code code} block. The stub does nothing; wiring it to an actual backend is left to the
- * downstream template engine or a hand-written form override under {@code custom/}.
+ * carries a {@code callback} like {@code onApproveClicked()} wired in the {@code code} block to
+ * complete the current BPM user task: the Inbox/Process perspective opens the form with
+ * {@code ?taskId=&processInstanceId=}, and the handler POSTs {@code COMPLETE} to
+ * {@code /services/bpm/bpm-processes/tasks/<taskId>} with the action name and the form model as
+ * process variables (so a downstream gateway can branch on the action). Forms opened outside a task
+ * report the missing {@code taskId} instead of failing silently. Business logic beyond completing
+ * the task belongs in a hand-written form override under {@code custom/}.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -128,17 +132,42 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             return "";
         }
         StringBuilder sb = new StringBuilder();
+        // Process user-task form: the Inbox/Process perspective opens it with
+        // ?taskId=&processInstanceId=. Each action completes the current task via the platform BPM API,
+        // passing the action name plus the form model as process variables so a downstream gateway can
+        // branch on them. A form opened outside a task (no taskId) reports it instead of failing silently.
+        sb.append(
+                """
+                        const __taskParams = new URLSearchParams(window.location.search);
+                        const __taskId = __taskParams.get('taskId');
+
+                        function __completeTask(action) {
+                            if (!__taskId) {
+                                Dialogs.showAlert({ title: 'Cannot submit', message: 'This form was not opened from a task (no taskId).', type: AlertTypes.Error });
+                                return;
+                            }
+                            $http.post('/services/bpm/bpm-processes/tasks/' + __taskId, {
+                                action: 'COMPLETE',
+                                data: Object.assign({ action: action }, $scope.model || {})
+                            }).then(() => {
+                                Dialogs.showAlert({ title: 'Task submitted', message: 'The task was completed (' + action + ').', type: AlertTypes.Success });
+                                window.close();
+                            }).catch((error) => {
+                                const message = error && error.data && error.data.message ? error.data.message : 'Unknown error';
+                                Dialogs.showAlert({ title: 'Submit failed', message: message, type: AlertTypes.Error });
+                            });
+                        }
+
+                        """);
         for (String action : form.getActions()) {
             if (action == null || action.isBlank()) {
                 continue;
             }
             sb.append("$scope.on")
               .append(pascalCase(action))
-              .append("Clicked = function () {\n");
-            sb.append("    // TODO: wire ")
+              .append("Clicked = function () { __completeTask('")
               .append(action)
-              .append(" action\n");
-            sb.append("};\n\n");
+              .append("'); };\n");
         }
         return sb.toString();
     }

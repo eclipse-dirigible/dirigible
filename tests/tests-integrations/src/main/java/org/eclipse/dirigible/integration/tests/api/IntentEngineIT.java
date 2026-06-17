@@ -451,7 +451,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"model\": \"OrderDate\""),
                 "form field model should bind to the PascalCase entity property (orderDate -> OrderDate)");
         assertTrue(body.contains("\"type\": \"positive\""), "form should mark the approve button as positive");
-        assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler stub");
+        assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler");
+        // The action handler must complete the BPM task, not be a no-op stub. (The .form code is
+        // HTML-escaped by Gson - ' becomes \\u0027, = becomes \\u003d - so match escape-free substrings;
+        // the form-builder un-escapes the code when it injects it into the controller.)
+        assertTrue(body.contains("__completeTask("), "the action buttons should complete the task");
+        assertTrue(body.contains("/services/bpm/bpm-processes/tasks/") && body.contains("COMPLETE"),
+                "the form should complete the task via the platform BPM task API");
+        assertFalse(body.contains("TODO: wire"), "the action handlers must no longer be TODO stubs");
     }
 
     private void assertReport() {
