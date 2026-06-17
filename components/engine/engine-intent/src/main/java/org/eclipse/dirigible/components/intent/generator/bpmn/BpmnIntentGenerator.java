@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -20,6 +22,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.PermissionIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
@@ -87,6 +90,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                  .isEmpty()) {
             return;
         }
+        // A user task's assignee names a role (lower-camel in the intent, e.g. "librarian"); the
+        // Process Inbox matches a task's flowable:candidateGroups against the user's role names
+        // (TaskServiceImpl: taskCandidateGroupIn(UserFacade.getUserRoles())), which are the declared
+        // role names ("Librarian"). Resolve the assignee to the actual role name so the casing lines
+        // up - otherwise the task is started but never shows up for anyone.
+        Map<String, String> rolesByLowerName = buildRoleIndex(model.getPermissions());
         Set<String> seenFiles = new HashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -106,11 +115,33 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                         "Process [{}] declares a trigger; the BPMN keeps a none-start event - auto-start (listener/handler under gen/events) is generated separately, so for now start it explicitly",
                         process.getName());
             }
-            context.writeModelFile(fileName, render(process));
+            context.writeModelFile(fileName, render(process, rolesByLowerName));
         }
     }
 
-    private static String render(ProcessIntent process) {
+    /** Index of declared role names by their lower-cased form, for resolving a user-task assignee. */
+    private static Map<String, String> buildRoleIndex(List<PermissionIntent> permissions) {
+        Map<String, String> index = new HashMap<>();
+        for (PermissionIntent permission : permissions) {
+            String role = permission.getRole();
+            if (role != null && !role.isBlank()) {
+                index.put(role.toLowerCase(Locale.ROOT), role);
+            }
+        }
+        return index;
+    }
+
+    /**
+     * The candidate group for a user task's {@code assignee}: the matching declared role name
+     * (case-insensitive), or PascalCase of the assignee when no role is declared - so the group still
+     * matches the role convention the {@code .roles} generator would produce.
+     */
+    private static String resolveCandidateGroup(String assignee, Map<String, String> rolesByLowerName) {
+        String match = rolesByLowerName.get(assignee.toLowerCase(Locale.ROOT));
+        return match != null ? match : IntentNaming.pascalCase(assignee);
+    }
+
+    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName) {
         List<StepIntent> steps = process.getSteps();
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
@@ -140,7 +171,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step);
+            appendStepElement(sb, step, rolesByLowerName);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
@@ -192,11 +223,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return out;
     }
 
-    private static void appendStepElement(StringBuilder sb, StepIntent step) {
+    private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
-                appendUserTask(sb, step);
+                appendUserTask(sb, step, rolesByLowerName);
                 break;
             case "serviceTask":
             case "script":
@@ -209,12 +240,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             default:
                 LOGGER.warn("Unknown step kind [{}] for step [{}] - rendering as userTask", kind, step.getName());
-                appendUserTask(sb, step);
+                appendUserTask(sb, step, rolesByLowerName);
                 break;
         }
     }
 
-    private static void appendUserTask(StringBuilder sb, StepIntent step) {
+    private static void appendUserTask(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName) {
         String assignee = stringArg(step, "assignee");
         String form = stringArg(step, "form");
         sb.append("    <userTask id=\"")
@@ -224,7 +255,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\"");
         if (assignee != null && !assignee.isBlank()) {
             sb.append(" flowable:candidateGroups=\"")
-              .append(escapeXmlAttribute(assignee))
+              .append(escapeXmlAttribute(resolveCandidateGroup(assignee, rolesByLowerName)))
               .append("\"");
         }
         if (form != null && !form.isBlank()) {

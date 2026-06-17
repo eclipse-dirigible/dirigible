@@ -92,7 +92,7 @@ class IntentEngineIT extends IntegrationTest {
                 steps:
                   - name: managerReview
                     kind: userTask
-                    args: { assignee: order-manager, form: ApproveOrder }
+                    args: { assignee: manager, form: ApproveOrder }
                   - name: bigOrder
                     kind: decision
                     args: { if: "amount > 10000", then: cfoReview, else: notifyCustomer }
@@ -418,7 +418,11 @@ class IntentEngineIT extends IntegrationTest {
     private void assertBpmn() {
         String body = contentOf("OrderApproval.bpmn");
         assertTrue(body.contains("<userTask id=\"managerReview\""), "BPMN should map managerReview to a userTask");
-        assertTrue(body.contains("flowable:candidateGroups=\"order-manager\""), "BPMN should carry the userTask candidateGroups");
+        // The assignee "manager" resolves to the declared role "Manager" (case-insensitive) so the
+        // candidate group matches UserFacade.getUserRoles() and the task shows up in the Process Inbox.
+        assertTrue(body.contains("flowable:candidateGroups=\"Manager\""),
+                "the userTask candidateGroups must be the resolved role name, not the raw lower-case assignee");
+        assertFalse(body.contains("flowable:candidateGroups=\"manager\""), "the candidate group must not keep the raw lower-case assignee");
         assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\""), "BPMN should map the decision step to an exclusiveGateway");
         assertTrue(body.contains("delegateExpression=\"${JSTask}\""), "BPMN should use the Flowable delegate expression for service tasks");
         assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
