@@ -1,6 +1,7 @@
-# The AI-Assisted Model-Driven Development Manifesto
+# The Intent-Driven Application Development Manifesto
 
-*How Eclipse Dirigible closes the gap that broke Model-Driven Development for thirty years.*
+*Business intent, captured as a canonical model, regenerated deterministically into
+running software.*
 
 ---
 
@@ -18,9 +19,10 @@ steep. So the abstraction that was supposed to save time became the thing develo
 routed around.
 
 This manifesto states what we are doing in Eclipse Dirigible: keeping everything that
-made MDD correct, and replacing the one part that made it fail. Artificial intelligence
-is not bolted on as a feature. It is the **authoring layer** the discipline was always
-missing.
+made Model-Driven Development correct, and replacing the one part that made it fail. We
+call the result **Intent-Driven Application Development** - the AI-native successor to
+MDD, not a revival of it. Artificial intelligence is not bolted on as a feature. It is
+the **authoring layer** the discipline was always missing.
 
 ---
 
@@ -143,7 +145,74 @@ This is the sentence the manifesto exists to say:
 
 ---
 
-## V. The Three Altitudes
+## V. Prompts Are Not the Source of Truth
+
+This is why the architecture matters specifically now, in the AI era.
+
+The fastest way to get an application from an AI today is to prompt for code directly. It
+demos beautifully and fails in the organisation, for a reason that has nothing to do with
+how capable the model is:
+
+- **A prompt is not a system of record.** It is a transient instruction, phrased
+  differently by every person, gone the moment the conversation scrolls away. You cannot
+  version it, review it as the authoritative specification, or regenerate from it
+  reliably. Ask twice and you get two different programs.
+
+- **Generated code is not a stable abstraction.** It is the *output*, not the *intent*.
+  It is voluminous, it drifts the instant a human edits it, and it bakes in a thousand
+  incidental decisions the prompt never expressed. Governing software by reading its
+  generated code is governing at the wrong altitude.
+
+So "AI writes the code" leaves an organisation holding two artefacts it cannot govern - a
+disposable prompt and an unstable mass of code - with nothing canonical in between.
+
+The intent model is that missing canonical thing: **a versionable, reviewable, diffable
+representation of what the business actually asked for** - small enough to read,
+structured enough to validate, stable enough to regenerate from deterministically. It is
+the system of record a prompt can never be, and the abstraction generated code should
+never be asked to be.
+
+```
+AI Coding - the trap
+────────────────────
+   Prompt  ->  Code
+
+   A transient prompt and code that drifts on first edit.
+   Nothing canonical in between, nothing to govern.
+
+
+Intent-Driven Application Development
+─────────────────────────────────────
+   Business Intent
+        │
+        ▼
+       AI
+        │
+        ▼
+   Canonical Intent Model   <-- the asset
+        │
+        ▼
+   Platform Models
+        │
+        ▼
+   Java / Spring Application
+
+   The intent model is canonical: versioned, reviewed, regenerated from.
+   The prompt is thrown away; the application is rebuilt deterministically.
+```
+
+The difference is one line:
+
+> **Prompts are not the source of truth. Intent models are.**
+
+The prompt becomes disposable - a convenient way to *edit* the intent model, and nothing
+more. It lands its patch and is thrown away. The intent model is what you keep, version,
+review, and regenerate from. The asset was never the conversation, and never the
+generated code. The asset is the model in the middle.
+
+---
+
+## VI. The Three Altitudes
 
 Dirigible expresses the discipline as three layers, each strictly above the next, each
 the deterministic input to the one below.
@@ -153,21 +222,21 @@ the deterministic input to the one below.
             │  (AI proposes a patch; human accepts)
             ▼
 ┌───────────────────────────────────────────────┐
-│  1. INTENT  -  the abstract model             │   one file, human + AI authored
-│     entities · relations · processes ·        │   structured, diff-stable, portable
-│     forms · reports · permissions · seeds     │
+│  1. INTENT  -  the abstract model               │   one file, human + AI authored
+│     entities · relations · processes ·          │   structured, diff-stable, portable
+│     forms · reports · permissions · seeds       │
 └───────────────────────────────────────────────┘
             │  (deterministic generation - pure functions)
             ▼
 ┌───────────────────────────────────────────────┐
-│  2. MODELS  -  the specific models            │   .edm / .model · .bpmn · .form ·
-│     the platform's native, openable artefacts │   .report · .roles · .csvim
+│  2. MODELS  -  the specific models              │   .edm / .model · .bpmn · .form ·
+│     the platform's native, openable artefacts   │   .report · .roles · .csvim
 └───────────────────────────────────────────────┘
             │  (deterministic generation - the existing template engine)
             ▼
 ┌───────────────────────────────────────────────┐
-│  3. APPLICATION  -  the full stack            │   schema · persistence · REST · UI ·
-│     plus its extensions                       │   jobs · listeners · processes · security
+│  3. APPLICATION  -  the full stack              │   schema · persistence · REST · UI ·
+│     plus its extensions                         │   jobs · listeners · processes · security
 └───────────────────────────────────────────────┘
 ```
 
@@ -185,10 +254,11 @@ layering has collapsed and the discipline is lost.
 
 ---
 
-## VI. Principles
+## VII. Principles
 
-These are the tenets that keep AI-assisted MDD honest. Violate one and you slide back into
-either the old modeller trap or the new "let the AI write the app" trap.
+These are the tenets that keep Intent-Driven Application Development honest. Violate one
+and you slide back into either the old modeller trap or the new "let the AI write the
+app" trap.
 
 1. **The specific models stay canonical.** The platform's deterministic generators are
    the contract. AI authors *toward* them; it does not bypass them and it does not get to
@@ -236,10 +306,10 @@ either the old modeller trap or the new "let the AI write the app" trap.
 
 ---
 
-## VII. The Role of the Low-Code Platform
+## VIII. The Role of the Low-Code Platform
 
-AI-assisted MDD is not possible without a Low-Code Platform underneath it, and this is the
-part that is easy to miss.
+Intent-Driven Application Development is not possible without a Low-Code Platform
+underneath it, and this is the part that is easy to miss.
 
 The AI can only propose an abstract model that is *compliant* because the platform has
 already defined, in code and proven by integration tests, exactly what a valid specific
@@ -259,11 +329,12 @@ So the Low-Code Platform contributes the two things AI cannot:
 
 Dirigible is that platform. The abstract model (intent) is the new top layer; the EDM /
 BPMN / form / report / roles / CSVIM models and their template generators are the layer
-that was always here. AI-assisted MDD is the *composition* of the two.
+that was always here. Intent-Driven Application Development is the *composition* of the
+two.
 
 ---
 
-## VIII. What This Is Not
+## IX. What This Is Not
 
 To say clearly what we are doing, it helps to say what we are refusing to do.
 
@@ -289,7 +360,7 @@ To say clearly what we are doing, it helps to say what we are refusing to do.
 
 ---
 
-## IX. The Workflow
+## X. The Workflow
 
 In practice, for the developer, the whole discipline collapses to this:
 
@@ -312,7 +383,7 @@ humans will actually walk through.
 
 ---
 
-## X. The Dream, Stated Plainly
+## XI. The Dream, Stated Plainly
 
 > No code. No modelling. Just intent.
 
@@ -323,8 +394,9 @@ application. Each layer is inspectable, each transform below the top is a pure f
 and a human is in the loop at the only point where judgement is required.
 
 Model-Driven Development was right all along. It was waiting for an authoring layer worth
-using. That layer is here.
+using. That layer is here, and the discipline it unlocks is Intent-Driven Application
+Development.
 
 ---
 
-*Eclipse Dirigible - the polyglot, model-driven, AI-enabled application platform.*
+*Eclipse Dirigible - the polyglot, intent-driven application platform.*
