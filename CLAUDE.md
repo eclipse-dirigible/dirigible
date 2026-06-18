@@ -130,7 +130,7 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000 -jar bui
 
 ## Local dev-loop automation (`.claude/` commands + script)
 
-The repo ships Claude Code slash commands (`/dirigible-start`, `/dirigible-stop`, `/dirigible-logs`, `/dirigible-pr` in `.claude/commands/`) wrapping one cross-platform Node.js driver (`.claude/scripts/dirigible.mjs`) for the local build/run/log/PR loop. Prefer these over hand-running `mvn`/`java`. **Maintainer reference (read before changing the commands or driver): [`.claude/scripts/README.md`](.claude/scripts/README.md)** — driver subcommands, cross-platform mechanics, the background-task log-tail rationale, and the team-wide permission whitelist in `.claude/settings.json`. The user-facing guide is the "Claude Code Commands" section of the root `README.md`.
+The repo ships Claude Code slash commands (`/dirigible-start`, `/dirigible-stop`, `/dirigible-logs`, `/dirigible-test`, `/dirigible-pr` in `.claude/commands/`) wrapping one cross-platform Node.js driver (`.claude/scripts/dirigible.mjs`) for the local build/run/log/test/PR loop. Prefer these over hand-running `mvn`/`java`. **Maintainer reference (read before changing the commands or driver): [`.claude/scripts/README.md`](.claude/scripts/README.md)** — driver subcommands, cross-platform mechanics, the background-task log-tail rationale, and the team-wide permission whitelist in `.claude/settings.json`. The user-facing guide is the "Claude Code Commands" section of the root `README.md`.
 
 ## Repository layout
 

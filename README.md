@@ -417,9 +417,9 @@ If you prefer working with a test environment you can use [LocalStack](https://w
 ## Claude Code Commands
 
 If you use [Claude Code](https://claude.com/claude-code), this repository ships a few slash commands
-that drive the everyday loop for you — build and run Dirigible, watch its logs, debug, and prepare a
-pull request — so you don't have to remember the `mvn` and `java` incantations. Just type the command
-in a Claude Code session opened in this repo.
+that drive the everyday loop for you — build and run Dirigible, watch its logs, debug, run the tests,
+and prepare a pull request — so you don't have to remember the `mvn` and `java` incantations. Just
+type the command in a Claude Code session opened in this repo.
 
 ### Available commands
 
@@ -428,6 +428,7 @@ in a Claude Code session opened in this repo.
 | `/dirigible-start` | Builds the project and starts Dirigible, then waits until it's ready and shows you the URL.   |
 | `/dirigible-logs`  | Shows the running server's log (live).                                                        |
 | `/dirigible-stop`  | Stops the running instance.                                                                    |
+| `/dirigible-test`  | Runs the tests — all by default, or just the unit or just the integration tests.               |
 | `/dirigible-pr`    | Gets your branch ready for a pull request (formats the code and checks the docs build).        |
 
 `/dirigible-start` accepts two optional keywords you can add in any combination:
@@ -450,8 +451,16 @@ in a Claude Code session opened in this repo.
 
 /dirigible-stop               # stop the server
 
+/dirigible-test               # run all tests (unit + integration)
+/dirigible-test unit          # run only the unit tests
+/dirigible-test integration   # run only the integration tests
+
 /dirigible-pr                 # format + validate before you open a PR
 ```
+
+> **Note:** the integration tests boot the whole application and drive a headless Chrome, so they
+> take a while and need [`ttyd`](https://github.com/tsl0922/ttyd) installed. `/dirigible-test` runs
+> them long-running in the background and reports pass/fail when finished.
 
 > **Tip:** to watch the log continuously, keep `.claude/run/dirigible.log` open in your editor — it's
 > rewritten fresh each time you start the server.
@@ -466,6 +475,7 @@ prerequisite):
 node .claude/scripts/dirigible.mjs start          # add --debug and/or --clean
 node .claude/scripts/dirigible.mjs logs           # snapshot; add --follow to tail, or --since MIN for a time window
 node .claude/scripts/dirigible.mjs stop
+node .claude/scripts/dirigible.mjs test           # all tests; or `test unit` / `test integration`
 ```
 
 ## Additional Information

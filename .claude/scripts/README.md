@@ -31,6 +31,10 @@ front and the log tail runs as a background task.
   finishes, so live tailing must be a background task. `snapshot` arg → a one-off foreground
   `dirigible.mjs logs --since 1` (last minute) printed inline (verbatim lines **plus** a short
   summary); `snapshot N` → `--since N`.
+- **`/dirigible-test`** → `dirigible.mjs test [all|unit|integration]` launched **as a background task**
+  (test runs are long; the user watches progress in the background-task view). Default `all` =
+  `-P tests`, `unit` = `-P unit-tests`, `integration`/`it` = `-P integration-tests`. Summarize
+  pass/fail on completion.
 - **`/dirigible-pr`** → format + javadoc-validate the changed Maven modules (the `mvn formatter:format`
   and release-profile javadoc commands from the root CLAUDE.md), fix issues, summarize; does **not**
   commit/push.
@@ -50,6 +54,13 @@ Also runnable directly: `node .claude/scripts/dirigible.mjs <cmd>`.
   (180s budget). Refuses to start if the recorded PID is alive.
 - `stop` — reads the PID file; POSIX = SIGTERM then SIGKILL after 15s, Windows =
   `taskkill /PID <pid> /T /F`; removes the PID file. No-op (not an error) when nothing is running.
+- `test [all|unit|integration]` — runs the test suites with the exact maven invocations CI uses
+  (`.github/workflows/build.yml`): `all` (default) = `mvn clean install -P tests`, `unit` =
+  `-P unit-tests`, `integration` (alias `it`) = `-P integration-tests`. `clean` is **always**
+  included — it matches CI and wipes the stale file-backed H2 under `tests/tests-integrations/target`
+  that otherwise breaks IT re-runs; `-D selenide.headless=true` is added whenever integration tests
+  run (Selenide drives Chrome, ttyd must be installed). Inherits stdio, exits non-zero on failure.
+  An unrecognized mode fails fast (it is **not** silently treated as `all`).
 - `logs [--lines N | --since MIN] [--follow] [--seconds N]` — reads `dirigible.log` with Node fs only
   (no `tail`). Default = snapshot: prints the last `N` lines (default 80) and exits, so the output
   reliably appears in the session. `--since MIN` selects the backlog by time instead — every entry

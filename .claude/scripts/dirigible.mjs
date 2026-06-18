@@ -7,12 +7,15 @@
 //   node .claude/scripts/dirigible.mjs build [quick|full]
 //   node .claude/scripts/dirigible.mjs start [--debug]
 //   node .claude/scripts/dirigible.mjs stop
+//   node .claude/scripts/dirigible.mjs test [all|unit|integration]
 //
 //   build : quick -> mvn -T 1C clean install -P quick-build (default; no tests/javadoc/license/format)
 //           full  -> mvn clean install (all unit tests)
 //   start : launch the fat jar in the background, record PID + log, poll readiness.
 //           --debug enables JDWP on port 8000 (transport=dt_socket,server=y,suspend=n).
 //   stop  : terminate the instance recorded in the PID file.
+//   test  : run the test suites (clean install). all (default) -> -P tests; unit -> -P unit-tests;
+//           integration -> -P integration-tests. Runs headless when integration tests are involved.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -81,6 +84,49 @@ function build(profile = 'quick', clean = false) {
   log('This can take several minutes — Maven output follows.');
   runMaven(args);
   log(`Build finished in ${elapsed(startedAt)}.`);
+}
+
+// --- test -----------------------------------------------------------------
+
+// Mirrors the maven invocations CI runs (.github/workflows/build.yml). `clean` is
+// always included: it matches CI and wipes the stale file-backed H2 under
+// tests/tests-integrations/target/dirigible that otherwise breaks IT re-runs.
+// Headless is on whenever integration tests run (Selenide drives Chrome).
+function test(mode = 'all') {
+  const startedAt = Date.now();
+  if (mode === 'it') {
+    mode = 'integration';
+  }
+  let label, args;
+  if (mode === 'all') {
+    label = 'all tests (unit + integration)';
+    args = ['clean', 'install', '-P', 'tests', '-D', 'selenide.headless=true'];
+  } else if (mode === 'unit') {
+    label = 'unit tests only';
+    args = ['clean', 'install', '-P', 'unit-tests'];
+  } else if (mode === 'integration') {
+    label = 'integration tests only';
+    args = ['clean', 'install', '-P', 'integration-tests', '-D', 'selenide.headless=true'];
+  } else {
+    fail(`Unknown test mode '${mode}' (expected 'all', 'unit', or 'integration')`);
+  }
+  log(`Running ${label}.`);
+  if (mode !== 'unit') {
+    log('Integration tests boot the full app and drive headless Chrome — this can take a long time; ttyd must be installed.');
+  }
+  log(`Running: mvn ${args.join(' ')}`);
+  log('This can take many minutes — Maven output follows.');
+  // shell:true so Windows resolves `mvn` -> `mvn.cmd` via PATHEXT; POSIX uses the PATH binary.
+  const result = spawnSync('mvn', args, { cwd: REPO_ROOT, stdio: 'inherit', shell: true });
+  if (result.status === 0) {
+    log(`Tests PASSED in ${elapsed(startedAt)}.`);
+  } else {
+    log(`Tests FAILED after ${elapsed(startedAt)} (mvn exit ${result.status}).`);
+    if (mode !== 'unit') {
+      log('Selenide screenshots/reports: tests/tests-integrations/build/reports/tests');
+    }
+    process.exit(result.status ?? 1);
+  }
 }
 
 // --- process helpers ------------------------------------------------------
@@ -386,6 +432,11 @@ switch (command) {
   case 'logs':
     await logs(parseLogsOpts(rest));
     break;
+  case 'test':
+    // Pass the raw mode through (default 'all') so an unrecognized arg fails fast
+    // in test() instead of silently falling back to running the whole suite.
+    test(rest[0] || 'all');
+    break;
   default:
-    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] [--clean] | start [--debug] | stop | logs [--lines N | --since MIN] [--follow] [--seconds N]`);
+    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] [--clean] | start [--debug] | stop | logs [--lines N | --since MIN] [--follow] [--seconds N] | test [all|unit|integration]`);
 }
