@@ -445,7 +445,8 @@ in a Claude Code session opened in this repo.
 /dirigible-start debug clean   # both at once
 
 /dirigible-logs               # watch the server log live
-/dirigible-logs snapshot      # just show the most recent log lines once
+/dirigible-logs snapshot      # show the last minute of logs, once
+/dirigible-logs snapshot 5    # show the last 5 minutes of logs, once
 
 /dirigible-stop               # stop the server
 
@@ -463,7 +464,7 @@ prerequisite):
 
 ```shell
 node .claude/scripts/dirigible.mjs start          # add --debug and/or --clean
-node .claude/scripts/dirigible.mjs logs           # add --follow to tail
+node .claude/scripts/dirigible.mjs logs           # snapshot; add --follow to tail, or --since MIN for a time window
 node .claude/scripts/dirigible.mjs stop
 ```
 

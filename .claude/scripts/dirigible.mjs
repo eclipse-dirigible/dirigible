@@ -225,13 +225,35 @@ async function stop() {
 
 // --- logs -----------------------------------------------------------------
 
+// Select the lines logged within the last `minutes`, by parsing each line's
+// leading `YYYY-MM-DD HH:MM:SS.mmm` timestamp (local time, as the server writes
+// it). Continuation lines without a timestamp inherit the previous line's verdict
+// so multi-line entries (stack traces) stay intact.
+function linesSince(allLines, minutes) {
+  const cutoff = Date.now() - minutes * 60_000;
+  const stampRe = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}\.\d{3})/;
+  const selected = [];
+  let including = false;
+  for (const line of allLines) {
+    const m = line.match(stampRe);
+    if (m) {
+      const t = new Date(`${m[1]}T${m[2]}`).getTime(); // parsed as local time
+      including = Number.isFinite(t) && t >= cutoff;
+    }
+    if (including) {
+      selected.push(line);
+    }
+  }
+  return selected;
+}
+
 // Cross-platform `tail -f` for the background server log. Used standalone and as
 // the auto-follower launched by start/debug; runs until the server stops or it is
 // killed. Built on fs primitives only — no `tail`, which Windows lacks.
 // Snapshot by default (print recent lines and exit) — that output reliably shows
 // up in the Claude session. With follow=true it tails for a bounded window so a
 // FOREGROUND run still returns the captured output instead of hanging forever.
-async function logs({ lines = 80, follow = false, seconds = 60 } = {}) {
+async function logs({ lines = 80, sinceMinutes = 0, follow = false, seconds = 60 } = {}) {
   if (!existsSync(LOG_FILE)) {
     log('Waiting for the log file to appear (is the server starting?)...');
   }
@@ -242,12 +264,20 @@ async function logs({ lines = 80, follow = false, seconds = 60 } = {}) {
     fail(`No log file at ${LOG_FILE}. Start Dirigible first.`);
   }
 
-  log(`Last ${lines} lines of ${LOG_FILE}:`);
-
-  // Print the requested backlog, then (optionally) follow from the end of file.
+  // Backlog is either the last N lines or everything logged in the last M minutes.
   const existing = readFileSync(LOG_FILE, 'utf8');
   const existingLines = existing.split('\n');
-  const backlog = existingLines.slice(Math.max(0, existingLines.length - lines - 1));
+  let backlog;
+  if (sinceMinutes > 0) {
+    backlog = linesSince(existingLines, sinceMinutes);
+    log(`Log entries from the last ${sinceMinutes} min of ${LOG_FILE}:`);
+    if (backlog.length === 0) {
+      console.log(`   (no entries in the last ${sinceMinutes} min — the server may be idle)`);
+    }
+  } else {
+    backlog = existingLines.slice(Math.max(0, existingLines.length - lines - 1));
+    log(`Last ${lines} lines of ${LOG_FILE}:`);
+  }
   process.stdout.write(backlog.join('\n'));
   let offset = Buffer.byteLength(existing);
 
@@ -304,12 +334,19 @@ async function logs({ lines = 80, follow = false, seconds = 60 } = {}) {
 }
 
 function parseLogsOpts(rest) {
-  const opts = { lines: 80, follow: false, seconds: 60 };
+  const opts = { lines: 80, sinceMinutes: 0, follow: false, seconds: 60 };
   const li = rest.indexOf('--lines');
   if (li !== -1 && rest[li + 1]) {
     const n = Number(rest[li + 1]);
     if (Number.isInteger(n) && n > 0) {
       opts.lines = n;
+    }
+  }
+  const mi = rest.indexOf('--since');
+  if (mi !== -1 && rest[mi + 1]) {
+    const n = Number(rest[mi + 1]);
+    if (Number.isInteger(n) && n > 0) {
+      opts.sinceMinutes = n; // minutes; takes precedence over --lines for the backlog
     }
   }
   if (rest.includes('--follow') || rest.includes('follow')) {
@@ -344,5 +381,5 @@ switch (command) {
     await logs(parseLogsOpts(rest));
     break;
   default:
-    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] [--clean] | start [--debug] | stop | logs [--lines N] [--follow] [--seconds N]`);
+    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] [--clean] | start [--debug] | stop | logs [--lines N | --since MIN] [--follow] [--seconds N]`);
 }

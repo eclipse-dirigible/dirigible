@@ -16,7 +16,8 @@ where to watch it. After launching, report the background task id and its output
   view — that view updates in real time (the main chat transcript only shows a
   command's output as a block when it finishes, so the live view is the task panel).
 - **Snapshot:** if the arguments contain `snapshot`, run
-  `node .claude/scripts/dirigible.mjs logs` in the foreground instead — it prints the
-  last 80 lines inline and exits. Pass `--lines N` for a larger backlog.
+  `node .claude/scripts/dirigible.mjs logs --since 1` in the foreground instead — it prints
+  every log entry from the last 1 minute and exits. If the user gives a number after
+  `snapshot` (e.g. `/dirigible-logs snapshot 5`), use that many minutes: `--since 5`.
 
 If there is no log file, the server isn't running — tell the user to `/dirigible-start` first.
