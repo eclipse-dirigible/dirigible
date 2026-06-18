@@ -58,17 +58,24 @@ function runMaven(args) {
   }
 }
 
-function build(profile = 'quick') {
+// By default we do NOT `clean`, so the runtime state the app keeps under
+// ./target/dirigible (H2 DB + on-disk repository) survives a rebuild. Pass
+// clean=true to wipe target/ and start from a fresh DB/repository.
+function build(profile = 'quick', clean = false) {
   const startedAt = Date.now();
+  const cleanGoal = clean ? ['clean'] : [];
   let args;
   if (profile === 'quick') {
-    log('Build: quick-build (skips tests, javadoc, license, formatting).');
-    args = ['-T', '1C', 'clean', 'install', '-P', 'quick-build'];
+    log(`Build: quick-build${clean ? ', clean' : ''} (skips tests, javadoc, license, formatting).`);
+    args = ['-T', '1C', ...cleanGoal, 'install', '-P', 'quick-build'];
   } else if (profile === 'full') {
-    log('Build: full (runs all unit tests).');
-    args = ['clean', 'install'];
+    log(`Build: full${clean ? ', clean' : ''} (runs all unit tests).`);
+    args = [...cleanGoal, 'install'];
   } else {
     fail(`Unknown profile '${profile}' (expected 'quick' or 'full')`);
+  }
+  if (clean) {
+    log('Clean requested — wiping target/, including the runtime H2 DB and repository under ./target/dirigible.');
   }
   log(`Running: mvn ${args.join(' ')}`);
   log('This can take several minutes — Maven output follows.');
@@ -292,9 +299,11 @@ function parseLines(rest) {
 
 const [command, ...rest] = process.argv.slice(2);
 switch (command) {
-  case 'build':
-    build(rest[0]);
+  case 'build': {
+    const profile = rest.find((a) => a === 'quick' || a === 'full') || 'quick';
+    build(profile, rest.includes('--clean'));
     break;
+  }
   case 'start':
     await start(rest.includes('--debug'));
     break;

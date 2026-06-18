@@ -4,7 +4,14 @@ description: Build (quick-build) and start Dirigible with JDWP remote debugging 
 
 Build and start Dirigible with remote debugging enabled (cross-platform — macOS / Linux / Windows).
 
-1. Run `node .claude/scripts/dirigible.mjs build quick`.
+Arguments: `$ARGUMENTS`
+
+1. Build with the quick profile (always `mvn install -P quick-build` — no clean by default, so the
+   runtime H2 DB and repository under `./target/dirigible` survive the rebuild):
+   - If the arguments above contain `clean` (e.g. `/dirigible-debug clean` or `--clean`), run
+     `node .claude/scripts/dirigible.mjs build quick --clean` to wipe `target/` and start from a
+     fresh DB/repository.
+   - Otherwise run `node .claude/scripts/dirigible.mjs build quick`.
    - If the build fails, STOP. Show the relevant Maven error and do not start anything.
 2. On a successful build, run `node .claude/scripts/dirigible.mjs start --debug`.
    - The script launches the jar in the background, records the PID, and polls

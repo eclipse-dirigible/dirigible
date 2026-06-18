@@ -132,15 +132,15 @@ java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000 -jar bui
 
 The repo ships Claude Code slash commands (`.claude/commands/dirigible-*.md`) that wrap a single cross-platform Node.js driver, `.claude/scripts/dirigible.mjs`. Use these instead of hand-running `mvn`/`java` for the local loop; they behave identically on macOS, Linux, and Windows (Node 22+ is already a build prerequisite, so no bash/PowerShell split).
 
-- **`/dirigible-start`** → `dirigible.mjs build quick` (`-T 1C clean install -P quick-build`) then `dirigible.mjs start`, then auto-follows the log via `dirigible.mjs logs` in the background.
-- **`/dirigible-debug`** → quick-build then `dirigible.mjs start --debug` (JDWP on 8000, `suspend=n`), then auto-follows the log.
+- **`/dirigible-start`** → `dirigible.mjs build quick` (`-T 1C install -P quick-build`, **no clean** so runtime data under `./target/dirigible` survives) then `dirigible.mjs start`, then auto-follows the log via `dirigible.mjs logs` in the background. Pass `clean`/`--clean` (e.g. `/dirigible-start clean`) to build with `clean` and reset the DB/repository.
+- **`/dirigible-debug`** → same build as start then `dirigible.mjs start --debug` (JDWP on 8000, `suspend=n`), then auto-follows the log. Also accepts `clean`/`--clean`.
 - **`/dirigible-stop`** → `dirigible.mjs stop`.
 - **`/dirigible-logs`** → `dirigible.mjs logs` run as a background process so output streams live into the session.
 - **`/dirigible-pr`** → format + javadoc-validate the changed Maven modules (the format and release-profile javadoc commands from this file), fix issues, summarize; does **not** commit/push.
 
 `dirigible.mjs` subcommands (also runnable directly: `node .claude/scripts/dirigible.mjs <cmd>`):
 
-- `build [quick|full]` — `quick` (default) = `-P quick-build`; `full` = `mvn clean install` with unit tests. Inherits stdio, exits non-zero on failure so the command stops before launching.
+- `build [quick|full] [--clean]` — `quick` (default) = `mvn -T 1C install -P quick-build`; `full` = `mvn install` with unit tests. **No `clean` by default** so the runtime H2 DB + repository under `./target/dirigible` survive a rebuild; `--clean` prepends the `clean` goal to wipe `target/`. Inherits stdio, exits non-zero on failure so the command stops before launching.
 - `start [--debug]` — launches the newest `build/application/target/dirigible-application-*-executable.jar` detached (`spawn` `detached:true`+`unref`), writes the PID to `.claude/run/dirigible.pid` and logs to `.claude/run/dirigible.log`, then polls `http://localhost:${DIRIGIBLE_SERVER_PORT:-8080}/actuator/health/readiness` via global `fetch` (180s budget). Refuses to start if the recorded PID is alive.
 - `stop` — reads the PID file; POSIX = SIGTERM then SIGKILL after 15s, Windows = `taskkill /PID <pid> /T /F`; removes the PID file. No-op (not an error) when nothing is running.
 - `logs [--lines N]` — cross-platform `tail -f` of `dirigible.log` (no `tail` dependency): prints the last `N` lines (default 50), then follows appended bytes via an offset+poll loop (handles truncation/rotation). Self-terminates when the recorded PID is no longer alive, so the background follower doesn't orphan after `stop`. Meant to be launched with `run_in_background: true`.

@@ -421,7 +421,7 @@ Linux, and Windows.
 
 | Command            | Description                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `/dirigible-start` | Quick-build the project, then start the fat jar in the background and wait until it is ready.           |
+| `/dirigible-start` | Quick-build (`mvn install -P quick-build`), then start the fat jar in the background and wait until it is ready. Add `clean` to wipe `target/` first. |
 | `/dirigible-debug` | Same as `/dirigible-start`, but starts the JVM with JDWP remote debugging on port 8000 (`suspend=n`).   |
 | `/dirigible-stop`  | Stop the running instance.                                                                              |
 | `/dirigible-logs`  | Stream the running server's log live in the session (a cross-platform `tail -f`).                       |
@@ -436,7 +436,7 @@ server stops; the server keeps running regardless.
 You can also invoke the underlying script directly, without Claude Code:
 
 ```shell
-node .claude/scripts/dirigible.mjs build [quick|full]   # quick (default): -P quick-build; full: all unit tests
+node .claude/scripts/dirigible.mjs build [quick|full] [--clean]   # quick (default): install -P quick-build (no clean); --clean wipes target/
 node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
 node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
 node .claude/scripts/dirigible.mjs logs [--lines N]     # follow the server log (tail -f); N backlog lines (default 50)
