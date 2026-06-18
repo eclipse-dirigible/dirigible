@@ -87,6 +87,12 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
      */
     private volatile boolean available = false;
 
+    /**
+     * Memoised default {@code .classpath} XML, shared by every project. See
+     * {@link #defaultClasspathXml()}.
+     */
+    private volatile String defaultClasspathXml;
+
     public JdtLsManager(ClassPathIndex classPathIndex, Optional<JavaCompiledOutputDirectory> compiledOutputDirectory) {
         this.classPathIndex = classPathIndex;
         this.compiledOutputDir = compiledOutputDirectory.map(JavaCompiledOutputDirectory::get)
@@ -274,7 +280,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         logger.debug("[java-lsp] Wrote .project for {}", sanitize(project));
 
         Path dotClasspath = projectRoot.resolve(".classpath");
-        Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
+        Files.writeString(dotClasspath, defaultClasspathXml(), StandardCharsets.UTF_8);
         logger.debug("[java-lsp] Wrote .classpath for {}", sanitize(project));
     }
 
@@ -289,21 +295,51 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                 + "        </buildCommand>\n" + "    </buildSpec>\n" + "</projectDescription>\n";
     }
 
-    private String buildClasspathXml() {
-        StringBuilder libs = new StringBuilder();
-        for (Path entry : classPathIndex.classPathEntries()) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"")
-                .append(entry.toString())
-                .append("\"/>\n");
+    /**
+     * The single default classpath shared by every Java project in the workspace. It is byte-identical
+     * for every project (nothing in it is project-specific), so it is rendered once and reused. It is
+     * composed of exactly the three things client Java needs to resolve:
+     * <ul>
+     * <li><b>Java standard library</b> - the {@code JRE_CONTAINER};</li>
+     * <li><b>the Dirigible SDK + platform jars</b> - one {@code lib} entry per {@link ClassPathIndex}
+     * entry. This is the full platform jar set: it contains {@code org.eclipse.dirigible.sdk.*} as well
+     * as the Spring / Flowable / etc. jars that generated controllers and BPMN handlers depend on (an
+     * SDK-only subset does not compile real projects);</li>
+     * <li><b>the registry / published projects</b> - one {@code lib} entry for the flat compiled-output
+     * directory ({@code <repoRoot>/dirigible/java-compiled/bin}). Every client {@code .java} on the
+     * platform (registry-published and sibling workspace projects) compiles into that one tree, so this
+     * single entry resolves cross-project and published types.</li>
+     * </ul>
+     * Plus the project's own sources via {@code src path=""}. Memoised because
+     * {@link ClassPathIndex#classPathEntries()} is itself cached for the application lifetime and
+     * {@code compiledOutputDir} is a fixed path, so the rendered XML never changes within a run.
+     */
+    private String defaultClasspathXml() {
+        String cached = defaultClasspathXml;
+        if (cached != null) {
+            return cached;
         }
-        if (compiledOutputDir != null) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"")
-                .append(compiledOutputDir.toString())
-                .append("\"/>\n");
+        synchronized (this) {
+            if (defaultClasspathXml != null) {
+                return defaultClasspathXml;
+            }
+            StringBuilder libs = new StringBuilder();
+            for (Path entry : classPathIndex.classPathEntries()) {
+                libs.append("    <classpathentry kind=\"lib\" path=\"")
+                    .append(entry.toString())
+                    .append("\"/>\n");
+            }
+            if (compiledOutputDir != null) {
+                libs.append("    <classpathentry kind=\"lib\" path=\"")
+                    .append(compiledOutputDir.toString())
+                    .append("\"/>\n");
+            }
+            defaultClasspathXml =
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<classpath>\n" + "    <classpathentry kind=\"src\" path=\"\"/>\n"
+                            + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n" + libs
+                            + "    <classpathentry kind=\"output\" path=\"bin\"/>\n" + "</classpath>\n";
+            return defaultClasspathXml;
         }
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<classpath>\n" + "    <classpathentry kind=\"src\" path=\"\"/>\n"
-                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n" + libs
-                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n" + "</classpath>\n";
     }
 
     private List<String> buildCommand(String launcherJar, String configDir, String dataDir) {
