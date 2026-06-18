@@ -60,6 +60,10 @@ jobs:
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
 
+      - name: Container Tests
+        if: runner.os == 'Linux'
+        run: mvn test -P testcontainers
+
   docker-build:
     runs-on: ${{ matrix.runner }}
     strategy:

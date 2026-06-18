@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.api.redis;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
@@ -22,6 +23,7 @@ import redis.clients.jedis.Jedis;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+@Tag("testcontainers")
 @DisabledOnOs(OS.WINDOWS)
 @Testcontainers
 public class RedisFacadeTest {

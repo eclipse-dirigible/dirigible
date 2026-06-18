@@ -76,7 +76,6 @@
                         --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
                         --add-opens=java.base/java.nio=ALL-UNNAMED
                     </argLine>
-                    <skip>${skipTCs}</skip>
                 </configuration>
             </plugin>
         </plugins>

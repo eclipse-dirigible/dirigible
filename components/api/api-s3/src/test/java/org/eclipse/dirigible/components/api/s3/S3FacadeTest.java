@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.api.s3;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -32,6 +33,7 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.testcontainers.containers.localstack.LocalStackContainer.Service.S3;
 
+@Tag("testcontainers")
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = {org.eclipse.dirigible.components.api.s3.S3Facade.class})
 @ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
