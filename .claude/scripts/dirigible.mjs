@@ -29,8 +29,22 @@ const LOG_FILE = join(RUN_DIR, 'dirigible.log');
 const PORT = process.env.DIRIGIBLE_SERVER_PORT || '8080';
 const READINESS_URL = `http://localhost:${PORT}/actuator/health/readiness`;
 
+function ts() {
+  return new Date().toLocaleTimeString('en-GB', { hour12: false }); // HH:MM:SS
+}
+
+// Timestamped progress line so the user can see what the command is doing right now.
+function log(message) {
+  console.log(`>> [${ts()}] ${message}`);
+}
+
+function elapsed(startedAtMs) {
+  const s = Math.round((Date.now() - startedAtMs) / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+}
+
 function fail(message) {
-  console.error(`>> ${message}`);
+  console.error(`>> [${ts()}] ${message}`);
   process.exit(1);
 }
 
@@ -45,16 +59,21 @@ function runMaven(args) {
 }
 
 function build(profile = 'quick') {
+  const startedAt = Date.now();
+  let args;
   if (profile === 'quick') {
-    console.log('>> Building Dirigible (quick-build: no tests/javadoc/license/format)');
-    runMaven(['-T', '1C', 'clean', 'install', '-P', 'quick-build']);
+    log('Build: quick-build (skips tests, javadoc, license, formatting).');
+    args = ['-T', '1C', 'clean', 'install', '-P', 'quick-build'];
   } else if (profile === 'full') {
-    console.log('>> Building Dirigible (full: all unit tests)');
-    runMaven(['clean', 'install']);
+    log('Build: full (runs all unit tests).');
+    args = ['clean', 'install'];
   } else {
     fail(`Unknown profile '${profile}' (expected 'quick' or 'full')`);
   }
-  console.log('>> Build finished.');
+  log(`Running: mvn ${args.join(' ')}`);
+  log('This can take several minutes — Maven output follows.');
+  runMaven(args);
+  log(`Build finished in ${elapsed(startedAt)}.`);
 }
 
 // --- process helpers ------------------------------------------------------
@@ -81,20 +100,25 @@ function resolveJar() {
 // --- start ----------------------------------------------------------------
 
 async function start(debug) {
+  log(`Starting Dirigible${debug ? ' in debug mode' : ''}...`);
   mkdirSync(RUN_DIR, { recursive: true });
 
+  log('Checking for an already-running instance...');
   if (existsSync(PID_FILE)) {
     const oldPid = Number(readFileSync(PID_FILE, 'utf8').trim());
     if (oldPid && isAlive(oldPid)) {
       fail(`Dirigible already running (PID ${oldPid}). Stop it first.`);
     }
-    rmSync(PID_FILE, { force: true }); // stale
+    log('Found a stale PID file — clearing it.');
+    rmSync(PID_FILE, { force: true });
   }
 
+  log('Resolving the executable jar...');
   const jar = resolveJar();
   if (!jar) {
     fail('No executable jar under build/application/target/. Build first.');
   }
+  log(`Using jar: ${jar}`);
 
   const javaArgs = [];
   if (debug) {
@@ -102,7 +126,7 @@ async function start(debug) {
   }
   javaArgs.push('-jar', jar);
 
-  console.log(`>> Starting: ${jar}`);
+  log(`Launching the JVM${debug ? ' with JDWP on port 8000' : ''}...`);
   const out = openSync(LOG_FILE, 'a');
   const child = spawn('java', javaArgs, {
     cwd: REPO_ROOT,
@@ -112,7 +136,7 @@ async function start(debug) {
   child.unref();
   writeFileSync(PID_FILE, String(child.pid));
 
-  console.log(`>> Dirigible started (PID ${child.pid})`);
+  log(`Dirigible process started (PID ${child.pid}).`);
   console.log(`   Log: ${LOG_FILE}`);
   console.log(`   UI:  http://localhost:${PORT}  (admin/admin)`);
   if (debug) {
@@ -123,48 +147,53 @@ async function start(debug) {
 }
 
 async function waitForReadiness(pid, timeoutMs = 180_000) {
-  const deadline = Date.now() + timeoutMs;
-  process.stdout.write('>> Waiting for readiness');
+  const startedAt = Date.now();
+  const deadline = startedAt + timeoutMs;
+  let lastBeat = startedAt;
+  log(`Waiting for the server to become ready (polling ${READINESS_URL})...`);
   while (Date.now() < deadline) {
     if (!isAlive(pid)) {
-      console.log('');
       fail(`Process ${pid} exited during startup. Check the log: ${LOG_FILE}`);
     }
     try {
       const res = await fetch(READINESS_URL);
       if (res.ok) {
-        console.log(`\n>> Ready: ${READINESS_URL} -> ${res.status}`);
+        log(`Server is ready after ${elapsed(startedAt)} (${READINESS_URL} -> ${res.status}).`);
         return;
       }
     } catch {
       // not up yet
     }
-    process.stdout.write('.');
+    if (Date.now() - lastBeat >= 10_000) {
+      log(`...still booting (${elapsed(startedAt)} elapsed)`);
+      lastBeat = Date.now();
+    }
     await sleep(2000);
   }
-  console.log('');
-  console.log(`>> Timed out after ${timeoutMs / 1000}s waiting for readiness. It may still be booting — check ${LOG_FILE}.`);
+  log(`Timed out after ${timeoutMs / 1000}s waiting for readiness. It may still be booting — check ${LOG_FILE}.`);
 }
 
 // --- stop -----------------------------------------------------------------
 
 async function stop() {
+  log('Stopping Dirigible...');
   if (!existsSync(PID_FILE)) {
-    console.log('>> No PID file — Dirigible is not running (started via this script).');
+    log('No PID file — Dirigible is not running (started via this script).');
     return;
   }
   const pid = Number(readFileSync(PID_FILE, 'utf8').trim());
   if (!pid || !isAlive(pid)) {
-    console.log(`>> Recorded process (PID ${pid || '?'}) is not alive. Removing stale PID file.`);
+    log(`Recorded process (PID ${pid || '?'}) is not alive. Removing stale PID file.`);
     rmSync(PID_FILE, { force: true });
     return;
   }
 
-  console.log(`>> Stopping Dirigible (PID ${pid})...`);
   if (IS_WINDOWS) {
+    log(`Terminating process tree of PID ${pid} (taskkill /T /F)...`);
     // No real graceful signal on Windows; terminate the tree forcefully.
     spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore' });
   } else {
+    log(`Sending SIGTERM to PID ${pid} and waiting up to 15s for graceful shutdown...`);
     try {
       process.kill(pid, 'SIGTERM');
     } catch {
@@ -174,7 +203,7 @@ async function stop() {
       await sleep(1000);
     }
     if (isAlive(pid)) {
-      console.log('>> Still alive after 15s — sending SIGKILL.');
+      log('Still alive after 15s — sending SIGKILL.');
       try {
         process.kill(pid, 'SIGKILL');
       } catch {
@@ -183,7 +212,7 @@ async function stop() {
     }
   }
   rmSync(PID_FILE, { force: true });
-  console.log('>> Stopped.');
+  log('Stopped.');
 }
 
 // --- logs -----------------------------------------------------------------
@@ -192,12 +221,17 @@ async function stop() {
 // the auto-follower launched by start/debug; runs until the server stops or it is
 // killed. Built on fs primitives only — no `tail`, which Windows lacks.
 async function logs(lines = 50) {
+  if (!existsSync(LOG_FILE)) {
+    log('Waiting for the log file to appear (is the server starting?)...');
+  }
   for (let i = 0; i < 30 && !existsSync(LOG_FILE); i++) {
     await sleep(1000); // server may still be booting
   }
   if (!existsSync(LOG_FILE)) {
     fail(`No log file at ${LOG_FILE}. Start Dirigible first.`);
   }
+
+  log(`Showing the last ${lines} lines of ${LOG_FILE}, then following live:`);
 
   // Print the requested backlog, then follow from the current end of file.
   const existing = readFileSync(LOG_FILE, 'utf8');
@@ -206,7 +240,7 @@ async function logs(lines = 50) {
   process.stdout.write(backlog.join('\n'));
   let offset = Buffer.byteLength(existing);
 
-  console.log(`\n>> Following ${LOG_FILE} (stop this command to detach; the server keeps running)`);
+  log('Following live (stop this command to detach; the server keeps running).');
 
   while (true) {
     await sleep(700);
@@ -214,7 +248,8 @@ async function logs(lines = 50) {
     if (existsSync(PID_FILE)) {
       const pid = Number(readFileSync(PID_FILE, 'utf8').trim());
       if (pid && !isAlive(pid)) {
-        console.log('\n>> Server process is no longer running — detaching log follower.');
+        console.log('');
+        log('Server process is no longer running — detaching log follower.');
         return;
       }
     }

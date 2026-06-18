@@ -4,6 +4,10 @@ description: Prepare the branch for a PR — format Java + validate javadoc on c
 
 Prepare the current branch for a pull request. Do NOT commit or push — leave that to the user.
 
+Announce each step to the user as you go (e.g. "Scoping changed modules…", "Formatting modules X, Y…",
+"Running the javadoc check…", "Fixing javadoc errors in …", "Done — summary below") so it is always
+clear what is happening at the moment.
+
 1. **Scope.** Determine which Maven modules changed:
    `git status --short` and `git diff --name-only master...HEAD` (plus uncommitted changes).
    Map changed files to their owning module directories (the nearest ancestor with a `pom.xml`).
