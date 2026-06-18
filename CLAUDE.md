@@ -128,6 +128,23 @@ For remote debugging:
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000 -jar build/application/target/dirigible-application-*-executable.jar
 ```
 
+## Local dev-loop automation (`.claude/` commands + script)
+
+The repo ships Claude Code slash commands (`.claude/commands/dirigible-*.md`) that wrap a single cross-platform Node.js driver, `.claude/scripts/dirigible.mjs`. Use these instead of hand-running `mvn`/`java` for the local loop; they behave identically on macOS, Linux, and Windows (Node 22+ is already a build prerequisite, so no bash/PowerShell split).
+
+- **`/dirigible-start`** → `dirigible.mjs build quick` (`-T 1C clean install -P quick-build`) then `dirigible.mjs start`.
+- **`/dirigible-debug`** → quick-build then `dirigible.mjs start --debug` (JDWP on 8000, `suspend=n`).
+- **`/dirigible-stop`** → `dirigible.mjs stop`.
+- **`/dirigible-pr`** → format + javadoc-validate the changed Maven modules (the format and release-profile javadoc commands from this file), fix issues, summarize; does **not** commit/push.
+
+`dirigible.mjs` subcommands (also runnable directly: `node .claude/scripts/dirigible.mjs <cmd>`):
+
+- `build [quick|full]` — `quick` (default) = `-P quick-build`; `full` = `mvn clean install` with unit tests. Inherits stdio, exits non-zero on failure so the command stops before launching.
+- `start [--debug]` — launches the newest `build/application/target/dirigible-application-*-executable.jar` detached (`spawn` `detached:true`+`unref`), writes the PID to `.claude/run/dirigible.pid` and logs to `.claude/run/dirigible.log`, then polls `http://localhost:${DIRIGIBLE_SERVER_PORT:-8080}/actuator/health/readiness` via global `fetch` (180s budget). Refuses to start if the recorded PID is alive.
+- `stop` — reads the PID file; POSIX = SIGTERM then SIGKILL after 15s, Windows = `taskkill /PID <pid> /T /F`; removes the PID file. No-op (not an error) when nothing is running.
+
+Cross-platform mechanics rely only on Node built-ins: `process.kill(pid, 0)` for liveness, `spawnSync('mvn', …, {shell:true})` so Windows resolves `mvn.cmd` via PATHEXT, `readdirSync`+mtime sort for the jar glob, `fetch` for readiness (no `curl` dependency). `.claude/run/` is ephemeral runtime state. To skip the per-run approval prompt, add `Bash(node .claude/scripts/dirigible.mjs *)` to `.claude/settings.local.json` (`Bash(mvn *)` is already allowed).
+
 ## Repository layout
 
 The Maven hierarchy (from root `pom.xml`) is: `modules`, `components`, `build`, `dependencies`, `tests`, `cli`. Each is a Maven aggregator.

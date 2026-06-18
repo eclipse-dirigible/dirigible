@@ -64,6 +64,7 @@ Enterprise Services.
       - [Usage:](#usage)
       - [Test environment with LocalStack](#test-environment-with-localstack)
       - [Setup:](#setup-1)
+  - [Claude Code Commands](#claude-code-commands)
   - [Additional Information](#additional-information)
     - [License](#license)
     - [Contributors](#contributors)
@@ -409,6 +410,36 @@ If you prefer working with a test environment you can use [LocalStack](https://w
 
 - Start `LocalStack` using - `localstack start -d`
 - Set up the environment variables, mainly `DIRIGIBLE_S3_PROVIDER=localstack`, exposed by Eclipse Dirigible
+
+## Claude Code Commands
+
+This repository ships a small set of [Claude Code](https://claude.com/claude-code) slash commands
+that automate the local development loop — building and running the fat jar, remote debugging, and
+preparing a pull request. They live in `.claude/commands/` and are backed by a single,
+dependency-free Node.js script (`.claude/scripts/dirigible.mjs`) that runs identically on macOS,
+Linux, and Windows.
+
+| Command            | Description                                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `/dirigible-start` | Quick-build the project, then start the fat jar in the background and wait until it is ready.           |
+| `/dirigible-debug` | Same as `/dirigible-start`, but starts the JVM with JDWP remote debugging on port 8000 (`suspend=n`).   |
+| `/dirigible-stop`  | Stop the running instance.                                                                              |
+| `/dirigible-pr`    | Prepare the branch for a PR: format Java and validate javadoc on the changed modules, fixing any issues. |
+
+The instance runs in the background; its PID and log are kept under `.claude/run/`
+(`dirigible.pid`, `dirigible.log`). `/dirigible-start` polls `/actuator/health/readiness` until the
+app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`).
+
+You can also invoke the underlying script directly, without Claude Code:
+
+```shell
+node .claude/scripts/dirigible.mjs build [quick|full]   # quick (default): -P quick-build; full: all unit tests
+node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
+node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
+```
+
+> Requires [Node.js 22+](https://nodejs.org/) (already a build prerequisite) and, for the slash
+> commands, [Claude Code](https://claude.com/claude-code).
 
 ## Additional Information
 
