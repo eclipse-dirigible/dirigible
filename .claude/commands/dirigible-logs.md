@@ -19,8 +19,10 @@ where to watch it. After launching, report the background task id and its output
   `node .claude/scripts/dirigible.mjs logs --since 1` in the foreground instead — it prints
   every log entry from the last 1 minute and exits. If the user gives a number after
   `snapshot` (e.g. `/dirigible-logs snapshot 5`), use that many minutes: `--since 5`.
-  **Show the command's actual log output verbatim in the session — paste the real log lines
-  (in a fenced code block), do NOT summarize, paraphrase, or describe them.** Only after the raw
-  lines may you add a brief note (e.g. that the window was idle, or point out an obvious error).
+  **Show both, in this order:**
+  1. The command's actual log output **verbatim** in a fenced code block — paste the real log
+     lines, do NOT replace them with a description.
+  2. **Then** a short summary below them: what happened in the window (key events/activity,
+     any WARN/ERROR lines called out, or note that the window was idle if there's nothing).
 
 If there is no log file, the server isn't running — tell the user to `/dirigible-start` first.
