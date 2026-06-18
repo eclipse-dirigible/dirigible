@@ -65,6 +65,9 @@ Enterprise Services.
       - [Test environment with LocalStack](#test-environment-with-localstack)
       - [Setup:](#setup-1)
   - [Claude Code Commands](#claude-code-commands)
+    - [Available commands](#available-commands)
+    - [Examples](#examples)
+    - [Without Claude Code](#without-claude-code)
   - [Additional Information](#additional-information)
     - [License](#license)
     - [Contributors](#contributors)
@@ -413,38 +416,56 @@ If you prefer working with a test environment you can use [LocalStack](https://w
 
 ## Claude Code Commands
 
-This repository ships a small set of [Claude Code](https://claude.com/claude-code) slash commands
-that automate the local development loop — building and running the fat jar, remote debugging, and
-preparing a pull request. They live in `.claude/commands/` and are backed by a single,
-dependency-free Node.js script (`.claude/scripts/dirigible.mjs`) that runs identically on macOS,
-Linux, and Windows.
+If you use [Claude Code](https://claude.com/claude-code), this repository ships a few slash commands
+that drive the everyday loop for you — build and run Dirigible, watch its logs, debug, and prepare a
+pull request — so you don't have to remember the `mvn` and `java` incantations. Just type the command
+in a Claude Code session opened in this repo.
 
-| Command            | Description                                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `/dirigible-start` | Quick-build (`mvn install -P quick-build`), start the fat jar in the background, then follow its log live. Optional args: `debug` (JDWP on 8000, `suspend=n`) and/or `clean` (wipe `target/` first). |
-| `/dirigible-stop`  | Stop the running instance.                                                                              |
-| `/dirigible-logs`  | Stream the running server's log live (continuous background task); `snapshot` for a one-off inline tail. |
-| `/dirigible-pr`    | Prepare the branch for a PR: format Java and validate javadoc on the changed modules, fixing any issues. |
+### Available commands
 
-The instance runs in the background; its PID and log are kept under `.claude/run/`
-(`dirigible.pid`, `dirigible.log`). `/dirigible-start` polls `/actuator/health/readiness` until the
-app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`) and
-begins following the log live as a background task. The log is truncated fresh on every start.
-Because Claude Code shows a command's output as a block only when it finishes, the live tail runs as
-a background task whose output you watch in Claude Code's background-task view — or open
-`.claude/run/dirigible.log` in your editor for a continuous tail there.
+| Command            | What it does                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `/dirigible-start` | Builds the project and starts Dirigible, then waits until it's ready and shows you the URL.   |
+| `/dirigible-logs`  | Shows the running server's log (live).                                                        |
+| `/dirigible-stop`  | Stops the running instance.                                                                    |
+| `/dirigible-pr`    | Gets your branch ready for a pull request (formats the code and checks the docs build).        |
 
-You can also invoke the underlying script directly, without Claude Code:
+`/dirigible-start` accepts two optional keywords you can add in any combination:
 
-```shell
-node .claude/scripts/dirigible.mjs build [quick|full] [--clean]   # quick (default): install -P quick-build (no clean); --clean wipes target/
-node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
-node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
-node .claude/scripts/dirigible.mjs logs [--lines N] [--follow] [--seconds N]   # snapshot (default); --follow tails for N seconds (60), --seconds 0 = until the server stops
+- **`debug`** — start with the remote debugger enabled (attach your IDE to port `8000`).
+- **`clean`** — wipe the build output first, resetting the local database and repository. Use this
+  when you want a completely fresh instance; omit it to keep your existing data between restarts.
+
+### Examples
+
+```text
+/dirigible-start              # build + start; open http://localhost:8080 (admin/admin)
+/dirigible-start clean        # start fresh — reset the local database and repository
+/dirigible-start debug        # start with the debugger on port 8000
+/dirigible-start debug clean   # both at once
+
+/dirigible-logs               # watch the server log live
+/dirigible-logs snapshot      # just show the most recent log lines once
+
+/dirigible-stop               # stop the server
+
+/dirigible-pr                 # format + validate before you open a PR
 ```
 
-> Requires [Node.js 22+](https://nodejs.org/) (already a build prerequisite) and, for the slash
-> commands, [Claude Code](https://claude.com/claude-code).
+> **Tip:** to watch the log continuously, keep `.claude/run/dirigible.log` open in your editor — it's
+> rewritten fresh each time you start the server.
+
+### Without Claude Code
+
+The commands are backed by one small, dependency-free script that you can also run directly (it works
+the same on macOS, Linux, and Windows; needs [Node.js 22+](https://nodejs.org/), already a build
+prerequisite):
+
+```shell
+node .claude/scripts/dirigible.mjs start          # add --debug and/or --clean
+node .claude/scripts/dirigible.mjs logs           # add --follow to tail
+node .claude/scripts/dirigible.mjs stop
+```
 
 ## Additional Information
 
