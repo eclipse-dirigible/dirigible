@@ -421,18 +421,18 @@ Linux, and Windows.
 
 | Command            | Description                                                                                             |
 | ------------------ | ------------------------------------------------------------------------------------------------------- |
-| `/dirigible-start` | Quick-build (`mvn install -P quick-build`), then start the fat jar in the background and wait until it is ready. Add `clean` to wipe `target/` first. |
-| `/dirigible-debug` | Same as `/dirigible-start`, but starts the JVM with JDWP remote debugging on port 8000 (`suspend=n`).   |
+| `/dirigible-start` | Quick-build (`mvn install -P quick-build`), start the fat jar in the background, then follow its log live. Optional args: `debug` (JDWP on 8000, `suspend=n`) and/or `clean` (wipe `target/` first). |
 | `/dirigible-stop`  | Stop the running instance.                                                                              |
-| `/dirigible-logs`  | Show the running server's log in the session — a snapshot by default, or `follow` for a bounded live tail.|
+| `/dirigible-logs`  | Stream the running server's log live (continuous background task); `snapshot` for a one-off inline tail. |
 | `/dirigible-pr`    | Prepare the branch for a PR: format Java and validate javadoc on the changed modules, fixing any issues. |
 
 The instance runs in the background; its PID and log are kept under `.claude/run/`
 (`dirigible.pid`, `dirigible.log`). `/dirigible-start` polls `/actuator/health/readiness` until the
 app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`) and
-shows a snapshot of the startup log. The log is truncated fresh on every start. Use `/dirigible-logs`
-to refresh it, `/dirigible-logs follow` to watch live for a bounded window, or open
-`.claude/run/dirigible.log` in your editor for a continuous tail.
+begins following the log live as a background task. The log is truncated fresh on every start.
+Because Claude Code shows a command's output as a block only when it finishes, the live tail runs as
+a background task whose output you watch in Claude Code's background-task view — or open
+`.claude/run/dirigible.log` in your editor for a continuous tail there.
 
 You can also invoke the underlying script directly, without Claude Code:
 
@@ -440,7 +440,7 @@ You can also invoke the underlying script directly, without Claude Code:
 node .claude/scripts/dirigible.mjs build [quick|full] [--clean]   # quick (default): install -P quick-build (no clean); --clean wipes target/
 node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
 node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
-node .claude/scripts/dirigible.mjs logs [--lines N] [--follow] [--seconds N]   # snapshot (default), or follow for N seconds (default 60)
+node .claude/scripts/dirigible.mjs logs [--lines N] [--follow] [--seconds N]   # snapshot (default); --follow tails for N seconds (60), --seconds 0 = until the server stops
 ```
 
 > Requires [Node.js 22+](https://nodejs.org/) (already a build prerequisite) and, for the slash

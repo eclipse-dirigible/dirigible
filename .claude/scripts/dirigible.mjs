@@ -257,11 +257,16 @@ async function logs({ lines = 80, follow = false, seconds = 60 } = {}) {
     return;
   }
 
+  const unbounded = seconds <= 0; // --seconds 0 → follow until the server stops (or killed)
   const deadline = Date.now() + seconds * 1000;
   console.log('');
-  log(`Following live for up to ${seconds}s (the server keeps running afterwards)...`);
+  log(
+    unbounded
+      ? 'Following live until the server stops (or this command is stopped)...'
+      : `Following live for up to ${seconds}s (the server keeps running afterwards)...`
+  );
 
-  while (Date.now() < deadline) {
+  while (unbounded || Date.now() < deadline) {
     await sleep(700);
 
     if (existsSync(PID_FILE)) {
@@ -313,8 +318,8 @@ function parseLogsOpts(rest) {
   const si = rest.indexOf('--seconds');
   if (si !== -1 && rest[si + 1]) {
     const n = Number(rest[si + 1]);
-    if (Number.isInteger(n) && n > 0) {
-      opts.seconds = n;
+    if (Number.isInteger(n) && n >= 0) {
+      opts.seconds = n; // 0 = unbounded follow
     }
   }
   return opts;
