@@ -10,14 +10,16 @@
 package org.eclipse.dirigible.components.api.s3;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.engine.cms.TenantPathResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -35,8 +37,7 @@ import static org.testcontainers.containers.localstack.LocalStackContainer.Servi
 
 @Tag("testcontainers")
 @ExtendWith(SpringExtension.class)
-@SpringBootTest(classes = {org.eclipse.dirigible.components.api.s3.S3Facade.class})
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
+@SpringBootTest(classes = {S3Facade.class, S3FacadeTest.TestConfig.class})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class S3FacadeTest {
 
@@ -122,5 +123,22 @@ public class S3FacadeTest {
                                                                      .bucket(bucketName)
                                                                      .build();
         s3Client.deleteBucket(deleteBucketRequest);
+    }
+
+    /**
+     * Supplies a pass-through {@link TenantPathResolver} so the test exercises S3 I/O without standing
+     * up the tenant subsystem (its {@code TenantContext} / default {@code Tenant} collaborators live in
+     * core-tenants, which is not on this module's test classpath).
+     */
+    @org.springframework.context.annotation.Configuration
+    static class TestConfig {
+
+        @Bean
+        TenantPathResolver tenantPathResolver() {
+            TenantPathResolver resolver = Mockito.mock(TenantPathResolver.class);
+            Mockito.when(resolver.resolve(Mockito.anyString()))
+                   .thenAnswer(invocation -> invocation.getArgument(0));
+            return resolver;
+        }
     }
 }
