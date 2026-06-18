@@ -45,7 +45,7 @@ public class S3FacadeTest {
 
     private static final String BUCKET_NAME = "test-cmis-bucket";
 
-    private static DockerImageName localstackImage = DockerImageName.parse("localstack/localstack:latest");
+    private static DockerImageName localstackImage = DockerImageName.parse("localstack/localstack:3.8.1");
 
     private static LocalStackContainer localstack = new LocalStackContainer(localstackImage).withServices(S3);
 
@@ -53,6 +53,7 @@ public class S3FacadeTest {
     public static void setUp() {
         System.setProperty("aws.accessKeyId", "localstack");
         System.setProperty("aws.secretAccessKey", "localstack");
+        System.setProperty("aws.region", Region.EU_CENTRAL_1.id());
         System.setProperty("DIRIGIBLE_S3_PROVIDER", "test");
         Configuration.set("DIRIGIBLE_S3_BUCKET", BUCKET_NAME);
         localstack.start();
