@@ -17,7 +17,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 const IS_WINDOWS = process.platform === 'win32';
@@ -186,6 +186,73 @@ async function stop() {
   console.log('>> Stopped.');
 }
 
+// --- logs -----------------------------------------------------------------
+
+// Cross-platform `tail -f` for the background server log. Used standalone and as
+// the auto-follower launched by start/debug; runs until the server stops or it is
+// killed. Built on fs primitives only — no `tail`, which Windows lacks.
+async function logs(lines = 50) {
+  for (let i = 0; i < 30 && !existsSync(LOG_FILE); i++) {
+    await sleep(1000); // server may still be booting
+  }
+  if (!existsSync(LOG_FILE)) {
+    fail(`No log file at ${LOG_FILE}. Start Dirigible first.`);
+  }
+
+  // Print the requested backlog, then follow from the current end of file.
+  const existing = readFileSync(LOG_FILE, 'utf8');
+  const existingLines = existing.split('\n');
+  const backlog = existingLines.slice(Math.max(0, existingLines.length - lines - 1));
+  process.stdout.write(backlog.join('\n'));
+  let offset = Buffer.byteLength(existing);
+
+  console.log(`\n>> Following ${LOG_FILE} (stop this command to detach; the server keeps running)`);
+
+  while (true) {
+    await sleep(700);
+
+    if (existsSync(PID_FILE)) {
+      const pid = Number(readFileSync(PID_FILE, 'utf8').trim());
+      if (pid && !isAlive(pid)) {
+        console.log('\n>> Server process is no longer running — detaching log follower.');
+        return;
+      }
+    }
+
+    let size;
+    try {
+      size = statSync(LOG_FILE).size;
+    } catch {
+      continue; // file briefly unavailable (rotation) — retry next tick
+    }
+    if (size < offset) {
+      offset = 0; // truncated or rotated
+    }
+    if (size > offset) {
+      const fd = openSync(LOG_FILE, 'r');
+      try {
+        const buf = Buffer.alloc(size - offset);
+        const read = readSync(fd, buf, 0, buf.length, offset);
+        process.stdout.write(buf.subarray(0, read).toString('utf8'));
+        offset += read;
+      } finally {
+        closeSync(fd);
+      }
+    }
+  }
+}
+
+function parseLines(rest) {
+  const i = rest.indexOf('--lines');
+  if (i !== -1 && rest[i + 1]) {
+    const n = Number(rest[i + 1]);
+    if (Number.isInteger(n) && n > 0) {
+      return n;
+    }
+  }
+  return 50;
+}
+
 // --- dispatch -------------------------------------------------------------
 
 const [command, ...rest] = process.argv.slice(2);
@@ -199,6 +266,9 @@ switch (command) {
   case 'stop':
     await stop();
     break;
+  case 'logs':
+    await logs(parseLines(rest));
+    break;
   default:
-    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] | start [--debug] | stop`);
+    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] | start [--debug] | stop | logs [--lines N]`);
 }

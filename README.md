@@ -424,11 +424,14 @@ Linux, and Windows.
 | `/dirigible-start` | Quick-build the project, then start the fat jar in the background and wait until it is ready.           |
 | `/dirigible-debug` | Same as `/dirigible-start`, but starts the JVM with JDWP remote debugging on port 8000 (`suspend=n`).   |
 | `/dirigible-stop`  | Stop the running instance.                                                                              |
+| `/dirigible-logs`  | Stream the running server's log live in the session (a cross-platform `tail -f`).                       |
 | `/dirigible-pr`    | Prepare the branch for a PR: format Java and validate javadoc on the changed modules, fixing any issues. |
 
 The instance runs in the background; its PID and log are kept under `.claude/run/`
 (`dirigible.pid`, `dirigible.log`). `/dirigible-start` polls `/actuator/health/readiness` until the
-app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`).
+app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`) and
+begins streaming the server log live in the session. The log follower detaches itself when the
+server stops; the server keeps running regardless.
 
 You can also invoke the underlying script directly, without Claude Code:
 
@@ -436,6 +439,7 @@ You can also invoke the underlying script directly, without Claude Code:
 node .claude/scripts/dirigible.mjs build [quick|full]   # quick (default): -P quick-build; full: all unit tests
 node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
 node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
+node .claude/scripts/dirigible.mjs logs [--lines N]     # follow the server log (tail -f); N backlog lines (default 50)
 ```
 
 > Requires [Node.js 22+](https://nodejs.org/) (already a build prerequisite) and, for the slash

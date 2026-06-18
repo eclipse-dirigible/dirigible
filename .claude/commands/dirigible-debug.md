@@ -11,3 +11,6 @@ Build and start Dirigible with remote debugging enabled (cross-platform — macO
      `/actuator/health/readiness` until the app is up (or times out).
 3. Report the PID, log path, UI URL, and the JDWP attach port (8000,
    transport=dt_socket, suspend=n — the JVM does not wait for a debugger).
+4. Once ready, stream the server log live: run `node .claude/scripts/dirigible.mjs logs`
+   **as a background process** (`run_in_background: true`) so new output flows into
+   the session. It detaches itself when the server stops; the server keeps running.
