@@ -225,20 +225,26 @@ async function stop() {
 
 // --- logs -----------------------------------------------------------------
 
-// Select the lines logged within the last `minutes`, by parsing each line's
-// leading `YYYY-MM-DD HH:MM:SS.mmm` timestamp (local time, as the server writes
-// it). Continuation lines without a timestamp inherit the previous line's verdict
-// so multi-line entries (stack traces) stay intact.
+function formatStamp(d) {
+  const p = (n, w = 2) => String(n).padStart(w, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
+
+// Select the lines logged within the last `minutes`. The server's timestamp
+// (`YYYY-MM-DD HH:MM:SS.mmm`, fixed-width, local time) is lexicographically ordered
+// the same as chronologically, so we compare the timestamp prefix as a STRING
+// against a formatted cutoff — far faster than `new Date()` per line on a big log.
+// Continuation lines without a timestamp inherit the previous line's verdict so
+// multi-line entries (stack traces) stay intact.
 function linesSince(allLines, minutes) {
-  const cutoff = Date.now() - minutes * 60_000;
-  const stampRe = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}\.\d{3})/;
+  const cutoff = formatStamp(new Date(Date.now() - minutes * 60_000));
+  const stampRe = /^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3})/;
   const selected = [];
   let including = false;
   for (const line of allLines) {
     const m = line.match(stampRe);
     if (m) {
-      const t = new Date(`${m[1]}T${m[2]}`).getTime(); // parsed as local time
-      including = Number.isFinite(t) && t >= cutoff;
+      including = m[1] >= cutoff;
     }
     if (including) {
       selected.push(line);
