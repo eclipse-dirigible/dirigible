@@ -17,8 +17,10 @@ Arguments: `$ARGUMENTS`
    - The script launches the jar in the background, records the PID, and polls
      `/actuator/health/readiness` until the app is up (or times out).
 3. Report the PID, the log path, and the UI URL (http://localhost:8080, admin/admin).
-4. Once ready, stream the server log live: run `node .claude/scripts/dirigible.mjs logs`
-   **as a background process** (`run_in_background: true`) so new output flows into
-   the session. It detaches itself when the server stops; the server keeps running.
+4. Once ready, show the startup log in the session: run
+   `node .claude/scripts/dirigible.mjs logs --lines 40` (a snapshot, printed inline).
+   Tell the user they can run `/dirigible-logs` for more, `/dirigible-logs follow` to
+   watch live for a bit, or open `.claude/run/dirigible.log` in their editor for a
+   continuous tail. (The log is truncated fresh on every start.)
 
 If the start step reports it's already running, tell the user to run `/dirigible-stop` first.

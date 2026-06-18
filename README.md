@@ -424,14 +424,15 @@ Linux, and Windows.
 | `/dirigible-start` | Quick-build (`mvn install -P quick-build`), then start the fat jar in the background and wait until it is ready. Add `clean` to wipe `target/` first. |
 | `/dirigible-debug` | Same as `/dirigible-start`, but starts the JVM with JDWP remote debugging on port 8000 (`suspend=n`).   |
 | `/dirigible-stop`  | Stop the running instance.                                                                              |
-| `/dirigible-logs`  | Stream the running server's log live in the session (a cross-platform `tail -f`).                       |
+| `/dirigible-logs`  | Show the running server's log in the session — a snapshot by default, or `follow` for a bounded live tail.|
 | `/dirigible-pr`    | Prepare the branch for a PR: format Java and validate javadoc on the changed modules, fixing any issues. |
 
 The instance runs in the background; its PID and log are kept under `.claude/run/`
 (`dirigible.pid`, `dirigible.log`). `/dirigible-start` polls `/actuator/health/readiness` until the
 app is up, then prints the URL ([http://localhost:8080](http://localhost:8080), `admin`/`admin`) and
-begins streaming the server log live in the session. The log follower detaches itself when the
-server stops; the server keeps running regardless.
+shows a snapshot of the startup log. The log is truncated fresh on every start. Use `/dirigible-logs`
+to refresh it, `/dirigible-logs follow` to watch live for a bounded window, or open
+`.claude/run/dirigible.log` in your editor for a continuous tail.
 
 You can also invoke the underlying script directly, without Claude Code:
 
@@ -439,7 +440,7 @@ You can also invoke the underlying script directly, without Claude Code:
 node .claude/scripts/dirigible.mjs build [quick|full] [--clean]   # quick (default): install -P quick-build (no clean); --clean wipes target/
 node .claude/scripts/dirigible.mjs start [--debug]      # background launch; --debug enables JDWP on 8000
 node .claude/scripts/dirigible.mjs stop                 # terminate the recorded PID
-node .claude/scripts/dirigible.mjs logs [--lines N]     # follow the server log (tail -f); N backlog lines (default 50)
+node .claude/scripts/dirigible.mjs logs [--lines N] [--follow] [--seconds N]   # snapshot (default), or follow for N seconds (default 60)
 ```
 
 > Requires [Node.js 22+](https://nodejs.org/) (already a build prerequisite) and, for the slash

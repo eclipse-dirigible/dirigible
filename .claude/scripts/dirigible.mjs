@@ -134,7 +134,8 @@ async function start(debug) {
   javaArgs.push('-jar', jar);
 
   log(`Launching the JVM${debug ? ' with JDWP on port 8000' : ''}...`);
-  const out = openSync(LOG_FILE, 'a');
+  log(`Starting a fresh log at ${LOG_FILE}.`);
+  const out = openSync(LOG_FILE, 'w'); // truncate: each start gets a fresh log
   const child = spawn('java', javaArgs, {
     cwd: REPO_ROOT,
     detached: true, // own process group so it survives this Node process
@@ -227,7 +228,10 @@ async function stop() {
 // Cross-platform `tail -f` for the background server log. Used standalone and as
 // the auto-follower launched by start/debug; runs until the server stops or it is
 // killed. Built on fs primitives only — no `tail`, which Windows lacks.
-async function logs(lines = 50) {
+// Snapshot by default (print recent lines and exit) — that output reliably shows
+// up in the Claude session. With follow=true it tails for a bounded window so a
+// FOREGROUND run still returns the captured output instead of hanging forever.
+async function logs({ lines = 80, follow = false, seconds = 60 } = {}) {
   if (!existsSync(LOG_FILE)) {
     log('Waiting for the log file to appear (is the server starting?)...');
   }
@@ -238,18 +242,26 @@ async function logs(lines = 50) {
     fail(`No log file at ${LOG_FILE}. Start Dirigible first.`);
   }
 
-  log(`Showing the last ${lines} lines of ${LOG_FILE}, then following live:`);
+  log(`Last ${lines} lines of ${LOG_FILE}:`);
 
-  // Print the requested backlog, then follow from the current end of file.
+  // Print the requested backlog, then (optionally) follow from the end of file.
   const existing = readFileSync(LOG_FILE, 'utf8');
   const existingLines = existing.split('\n');
   const backlog = existingLines.slice(Math.max(0, existingLines.length - lines - 1));
   process.stdout.write(backlog.join('\n'));
   let offset = Buffer.byteLength(existing);
 
-  log('Following live (stop this command to detach; the server keeps running).');
+  if (!follow) {
+    console.log('');
+    log('Snapshot only — re-run /dirigible-logs to refresh, or use follow mode to watch live.');
+    return;
+  }
 
-  while (true) {
+  const deadline = Date.now() + seconds * 1000;
+  console.log('');
+  log(`Following live for up to ${seconds}s (the server keeps running afterwards)...`);
+
+  while (Date.now() < deadline) {
     await sleep(700);
 
     if (existsSync(PID_FILE)) {
@@ -282,17 +294,30 @@ async function logs(lines = 50) {
       }
     }
   }
+  console.log('');
+  log(`Stopped following after ${seconds}s (server still running). Re-run /dirigible-logs to continue.`);
 }
 
-function parseLines(rest) {
-  const i = rest.indexOf('--lines');
-  if (i !== -1 && rest[i + 1]) {
-    const n = Number(rest[i + 1]);
+function parseLogsOpts(rest) {
+  const opts = { lines: 80, follow: false, seconds: 60 };
+  const li = rest.indexOf('--lines');
+  if (li !== -1 && rest[li + 1]) {
+    const n = Number(rest[li + 1]);
     if (Number.isInteger(n) && n > 0) {
-      return n;
+      opts.lines = n;
     }
   }
-  return 50;
+  if (rest.includes('--follow') || rest.includes('follow')) {
+    opts.follow = true;
+  }
+  const si = rest.indexOf('--seconds');
+  if (si !== -1 && rest[si + 1]) {
+    const n = Number(rest[si + 1]);
+    if (Number.isInteger(n) && n > 0) {
+      opts.seconds = n;
+    }
+  }
+  return opts;
 }
 
 // --- dispatch -------------------------------------------------------------
@@ -311,8 +336,8 @@ switch (command) {
     await stop();
     break;
   case 'logs':
-    await logs(parseLines(rest));
+    await logs(parseLogsOpts(rest));
     break;
   default:
-    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] | start [--debug] | stop | logs [--lines N]`);
+    fail(`Unknown command '${command ?? ''}'. Use: build [quick|full] [--clean] | start [--debug] | stop | logs [--lines N] [--follow] [--seconds N]`);
 }

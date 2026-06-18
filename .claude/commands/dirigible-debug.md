@@ -18,6 +18,8 @@ Arguments: `$ARGUMENTS`
      `/actuator/health/readiness` until the app is up (or times out).
 3. Report the PID, log path, UI URL, and the JDWP attach port (8000,
    transport=dt_socket, suspend=n — the JVM does not wait for a debugger).
-4. Once ready, stream the server log live: run `node .claude/scripts/dirigible.mjs logs`
-   **as a background process** (`run_in_background: true`) so new output flows into
-   the session. It detaches itself when the server stops; the server keeps running.
+4. Once ready, show the startup log in the session: run
+   `node .claude/scripts/dirigible.mjs logs --lines 40` (a snapshot, printed inline).
+   Tell the user they can run `/dirigible-logs` for more, `/dirigible-logs follow` to
+   watch live for a bit, or open `.claude/run/dirigible.log` in their editor for a
+   continuous tail. (The log is truncated fresh on every start.)
