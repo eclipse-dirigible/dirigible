@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(node .claude/scripts/dirigible.mjs *)"
+      "Bash(node .claude/scripts/dirigible.mjs *)",
+      "Bash(git status *)",
+      "Bash(git diff *)",
+      "Bash(mvn formatter:format *)",
+      "Bash(mvn -P release *)"
     ]
   }
 }
