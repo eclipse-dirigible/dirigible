@@ -48,6 +48,7 @@ class IntentEngineIT extends IntegrationTest {
     private static final String PARSE_URL = "/services/ide/intent/parse";
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
+    private static final String AGENT_URL = "/services/ide/intent/agent";
 
     private static final String INTENT_YAML = """
             name: orders
@@ -160,6 +161,18 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("reports", hasSize(2))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
+    }
+
+    @Test
+    void agent_reports_when_not_configured() {
+        // No DIRIGIBLE_INTENT_AI_API_KEY is set in the test environment, so the assistant is disabled
+        // and the endpoint must say so (412) rather than attempting an upstream call. Network-free.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"yaml\":\"name: demo\",\"message\":\"add a field\",\"history\":[]}")
+                                                 .when()
+                                                 .post(AGENT_URL)
+                                                 .then()
+                                                 .statusCode(412));
     }
 
     @Test

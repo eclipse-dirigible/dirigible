@@ -17,6 +17,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const dialogHub = new DialogHub();
     const PARSE_URL = '/services/ide/intent/parse';
     const GENERATE_URL = '/services/ide/intent/generate';
+    const AGENT_URL = '/services/ide/intent/agent';
 
     $scope.state = { isBusy: true, error: false };
     $scope.errorMessage = '';
@@ -109,6 +110,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     // sync from Monaco's change event. The theme follows the IDE via ThemingHub, mirroring editor-monaco.
     const themingHub = new ThemingHub();
     let monacoEditor = null;
+    let monacoApi = null; // the loaded monaco module, reused by the AI assistant's diff editor
 
     const monacoThemeFor = (theme) => {
         if (!theme) theme = themingHub.getSavedTheme();
@@ -136,6 +138,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         if (monacoEditor || typeof require === 'undefined') return;
         require.config({ paths: { vs: '/webjars/monaco-editor/min/vs' } });
         require(['vs/editor/editor.main'], (monaco) => {
+            monacoApi = monaco;
             const container = document.getElementById('intent-monaco');
             if (!container) return;
             defineMonacoThemes(monaco);
@@ -454,6 +457,120 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         }
     };
 
+    // ----- AI assistant (chat + patch preview) -----------------------------------
+    // A right-hand pane where the developer asks for changes in natural language. The assistant
+    // returns the COMPLETE proposed app.intent (never a re-emitted model file); we show it as a
+    // Monaco diff against the current buffer and, on Accept, replace the buffer (still unsaved) so
+    // the normal Save + Generate flow stays in the developer's hands - the agent never writes disk.
+
+    // `messages` is the display list (may hold UI-only notes and errors); `turns` is the clean
+    // user/assistant transcript sent upstream - the model API requires strictly alternating roles.
+    $scope.chat = { open: false, busy: false, input: '', messages: [], turns: [], proposalPending: false };
+    let proposedYaml = null;
+    let diffEditor = null;
+
+    $scope.toggleChat = () => { $scope.chat.open = !$scope.chat.open; };
+
+    const scrollChatToBottom = () => {
+        setTimeout(() => {
+            const list = document.getElementById('intent-chat-messages');
+            if (list) list.scrollTop = list.scrollHeight;
+        }, 0);
+    };
+
+    const disposeDiff = () => {
+        if (diffEditor) {
+            const model = diffEditor.getModel();
+            if (model) {
+                if (model.original) model.original.dispose();
+                if (model.modified) model.modified.dispose();
+            }
+            diffEditor.dispose();
+            diffEditor = null;
+        }
+    };
+
+    const showDiff = () => {
+        if (!monacoApi) return;
+        disposeDiff();
+        const container = document.getElementById('intent-chat-diff');
+        if (!container) return;
+        diffEditor = monacoApi.editor.createDiffEditor(container, {
+            theme: monacoThemeFor(),
+            automaticLayout: true,
+            readOnly: true,
+            renderSideBySide: false,
+            fontSize: 12,
+            minimap: { enabled: false },
+            scrollBeyondLastLine: false,
+        });
+        diffEditor.setModel({
+            original: monacoApi.editor.createModel($scope.text || '', 'yaml'),
+            modified: monacoApi.editor.createModel(proposedYaml || '', 'yaml'),
+        });
+    };
+
+    $scope.sendChat = () => {
+        const message = ($scope.chat.input || '').trim();
+        if (!message || $scope.chat.busy) return;
+        // Discard any still-open proposal when a new turn starts.
+        $scope.rejectProposal();
+        const history = $scope.chat.turns.slice();
+        $scope.chat.messages.push({ role: 'user', text: message });
+        $scope.chat.turns.push({ role: 'user', content: message });
+        $scope.chat.input = '';
+        $scope.chat.busy = true;
+        scrollChatToBottom();
+        $http.post(AGENT_URL, { yaml: $scope.text || '', message: message, history: history })
+             .then((response) => {
+                 $scope.chat.busy = false;
+                 const reply = (response.data && response.data.reply) || '';
+                 if (reply) {
+                     $scope.chat.messages.push({ role: 'assistant', text: reply });
+                     $scope.chat.turns.push({ role: 'assistant', content: reply });
+                 }
+                 if (response.data && response.data.proposedYaml) {
+                     proposedYaml = response.data.proposedYaml;
+                     $scope.chat.proposalPending = true;
+                     setTimeout(showDiff, 0); // defer until ng-if renders the diff container
+                 }
+                 scrollChatToBottom();
+             }, (response) => {
+                 $scope.chat.busy = false;
+                 // The turn never completed - drop its unanswered user turn so the transcript stays alternating.
+                 $scope.chat.turns.pop();
+                 let text = 'The AI assistant request failed. Please look at the console for more information.';
+                 if (response.status === 412) {
+                     text = (response.data && response.data.message) || 'The AI assistant is not configured. Set DIRIGIBLE_INTENT_AI_API_KEY.';
+                 } else console.error(response);
+                 $scope.chat.messages.push({ role: 'error', text: text });
+                 scrollChatToBottom();
+             });
+    };
+
+    $scope.onChatKey = (event) => {
+        // Enter sends; Shift+Enter inserts a newline.
+        if (event.key === 'Enter' && !event.shiftKey) {
+            event.preventDefault();
+            $scope.sendChat();
+        }
+    };
+
+    $scope.acceptProposal = () => {
+        if (!$scope.chat.proposalPending || proposedYaml === null) return;
+        if (monacoEditor) monacoEditor.setValue(proposedYaml); // fires onDidChangeModelContent -> $scope.text, dirty, re-parse
+        else { $scope.text = proposedYaml; handleTextChanged(); }
+        $scope.chat.messages.push({ role: 'assistant', text: 'Applied to the editor. Review, then Save and Generate.' });
+        $scope.rejectProposal();
+        scrollChatToBottom();
+    };
+
+    $scope.rejectProposal = () => {
+        proposedYaml = null;
+        $scope.chat.proposalPending = false;
+        disposeDiff();
+    };
+
     // ----- Editor lifecycle wiring -----------------------------------------------
 
     layoutHub.onFocusEditor((data) => {
@@ -484,6 +601,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
 
     $scope.$on('$destroy', () => {
         teardown();
+        disposeDiff();
         if (monacoEditor) {
             monacoEditor.dispose();
             monacoEditor = null;
