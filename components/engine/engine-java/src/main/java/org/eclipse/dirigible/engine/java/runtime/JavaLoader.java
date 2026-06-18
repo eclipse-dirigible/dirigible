@@ -47,8 +47,10 @@ import org.springframework.stereotype.Component;
  * <li>Write compiled {@code .class} files to the {@link JavaCompiledOutputDirectory} and delete
  * stale ones; publish a {@link JavaCompiledEvent} so listeners (e.g. JDT.LS) can react.</li>
  * </ol>
- * No state from the previous generation survives in the active loader — the prior
- * {@link ClassLoader} becomes unreachable as soon as in-flight code releases its references.
+ * A class that fails to recompile (or whose batch produced no bytecode at all) keeps its last-good
+ * bytecode in the new loader, so a single uncompilable source does not unload or delete the other
+ * classes - only classes whose source was actually removed leave the generation. The prior
+ * {@link ClassLoader} becomes unreachable once in-flight code releases its references.
  */
 @Component
 public class JavaLoader {
@@ -63,6 +65,13 @@ public class JavaLoader {
 
     /** FQN → {@link LoadedClass} record for the currently-installed generation. */
     private final Map<String, LoadedClass> currentGeneration = new HashMap<>();
+
+    /**
+     * Binary class name (top-level + nested) → bytecode for the currently-installed generation.
+     * Retained so a class that fails to recompile this cycle can fall back to its last-good bytecode
+     * instead of being unloaded and having its {@code .class} deleted.
+     */
+    private final Map<String, byte[]> currentBytecode = new HashMap<>();
 
     @Autowired
     public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, List<JavaClassConsumer> consumers,
@@ -94,29 +103,57 @@ public class JavaLoader {
 
         JavaSourceCompiler.BatchResult batch = compiler.compileBatch(compileUnits);
 
-        // Build the new ClientClassLoader from successful bytecode. Parent is the platform CL so
+        // Effective generation bytecode: carry over the LAST-GOOD bytecode for any class that still
+        // has source this cycle but did not (re)compile, then overlay this cycle's fresh bytecode.
+        // Classes whose source was deleted are dropped. This is what stops one uncompilable class from
+        // clearing the others: javac can emit ZERO bytecode for the whole batch on some errors (e.g. an
+        // unresolvable import aborts code generation for every unit), so survivors are preserved by
+        // falling back to their previous bytecode instead of being unloaded and deleted.
+        Set<String> submitted = new HashSet<>(fqnToProject.keySet());
+        Set<String> freshlyCompiledOwners = new HashSet<>();
+        for (String binaryName : batch.bytecode()
+                                      .keySet()) {
+            freshlyCompiledOwners.add(topLevelName(binaryName));
+        }
+        Map<String, byte[]> effectiveBytecode = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : currentBytecode.entrySet()) {
+            String owner = topLevelName(entry.getKey());
+            if (submitted.contains(owner) && !freshlyCompiledOwners.contains(owner)) {
+                effectiveBytecode.put(entry.getKey(), entry.getValue());
+            }
+        }
+        effectiveBytecode.putAll(batch.bytecode());
+
+        // Build the new ClientClassLoader from the effective bytecode. Parent is the platform CL so
         // user code sees JavaHandler, our annotations, Spring, Hibernate, etc.
         ClassLoader parent = JavaHandler.class.getClassLoader();
-        ClientClassLoader nextLoader = new ClientClassLoader(parent, batch.bytecode());
+        ClientClassLoader nextLoader = new ClientClassLoader(parent, effectiveBytecode);
 
-        // Resolve every successfully-compiled primary FQN through the new loader.
+        // Resolve every primary (top-level) FQN in the new generation through the new loader. The
+        // generation includes freshly compiled classes AND last-good carry-overs; only the freshly
+        // compiled ones are reported in succeededFqns.
         Map<String, LoadedClass> nextGeneration = new LinkedHashMap<>();
+        Set<String> succeeded = new HashSet<>();
         Map<String, String> failures = new HashMap<>(batch.failures());
-        for (String fqn : batch.bytecode()
-                               .keySet()) {
-            String project = fqnToProject.get(fqn);
-            if (project == null) {
-                // A nested type's binary name (com.example.Outer$Inner) wasn't listed as a top-level
-                // source. We keep its bytecode in the loader (so reflective access via outer class
-                // works) but we don't notify consumers for it — only top-level classes flow through.
+        for (String binaryName : effectiveBytecode.keySet()) {
+            if (binaryName.indexOf('$') >= 0) {
+                // A nested type's binary name (com.example.Outer$Inner): kept in the loader for linking
+                // but not surfaced to consumers — only top-level classes flow through.
                 continue;
             }
+            String project = fqnToProject.get(binaryName);
+            if (project == null) {
+                continue; // not a submitted top-level source
+            }
             try {
-                Class<?> type = nextLoader.loadClass(fqn);
-                nextGeneration.put(fqn, new LoadedClass(project, fqn, type, nextLoader));
+                Class<?> type = nextLoader.loadClass(binaryName);
+                nextGeneration.put(binaryName, new LoadedClass(project, binaryName, type, nextLoader));
+                if (freshlyCompiledOwners.contains(binaryName)) {
+                    succeeded.add(binaryName);
+                }
             } catch (ClassNotFoundException | LinkageError e) {
-                LOGGER.error("Compiled bytecode could not be loaded for [{}]: {}", fqn, e.getMessage(), e);
-                failures.put(fqn, "Failed to load class [" + fqn + "]: " + e.getMessage());
+                LOGGER.error("Compiled bytecode could not be loaded for [{}]: {}", binaryName, e.getMessage(), e);
+                failures.put(binaryName, "Failed to load class [" + binaryName + "]: " + e.getMessage());
             }
         }
 
@@ -149,10 +186,14 @@ public class JavaLoader {
 
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
+        currentBytecode.clear();
+        currentBytecode.putAll(effectiveBytecode);
 
-        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(nextGeneration.keySet()),
-                Collections.unmodifiableMap(failures), Collections.unmodifiableSet(removed));
+        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
+                Collections.unmodifiableSet(removed));
 
+        // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
+        // (failed-to-recompile) classes keep their existing .class files untouched.
         writeClassFiles(batch, result.unloadedFqns());
         eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
 
@@ -222,11 +263,25 @@ public class JavaLoader {
         }
     }
 
+    /** The top-level binary name for a class - strips a nested {@code $Inner} suffix. */
+    private static String topLevelName(String binaryName) {
+        int dollar = binaryName.indexOf('$');
+        return dollar < 0 ? binaryName : binaryName.substring(0, dollar);
+    }
+
     /** A client {@code .java} source as input to {@link #rebuild(List)}. */
     public record ClientSource(String project, String fqn, String source) {
     }
 
-    /** Per-FQN outcomes of a rebuild. */
+    /**
+     * Per-FQN outcomes of a rebuild.
+     *
+     * @param succeededFqns FQNs that compiled successfully <em>this cycle</em> (not the whole live
+     *        generation - classes kept on last-good bytecode are reported via {@code failures}, not
+     *        here)
+     * @param failures per-FQN compile error message for the ones that failed to (re)compile
+     * @param unloadedFqns FQNs removed from the generation because their source was deleted
+     */
     public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns) {
     }
 
