@@ -8,6 +8,12 @@ Arguments: `$ARGUMENTS`
 Optional, off by default: `debug` (enable JDWP remote debugging on port 8000) and/or
 `clean` (wipe `target/` first, resetting the runtime DB/repository). Either, both, or neither.
 
+**Keep the user informed at every step.** Before each command, post a one-line note saying what
+you are about to do (and warn that the build can take several minutes). Run each step as a
+*separate, visible* tool call — do not bundle steps into one silent command. After each command
+finishes, surface its key `>> [time] …` progress/result lines instead of replacing them with a
+terse summary, so the user can see exactly what happened and how long it took.
+
 1. Build with the quick profile (always `mvn install -P quick-build` — no clean by default, so the
    runtime H2 DB and repository under `./target/dirigible` survive the rebuild):
    - If the arguments contain `clean`, run `node .claude/scripts/dirigible.mjs build quick --clean`.

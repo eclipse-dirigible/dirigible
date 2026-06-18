@@ -6,6 +6,9 @@ Stream the Dirigible server log (`.claude/run/dirigible.log`) live.
 
 Arguments: `$ARGUMENTS`
 
+Before running, tell the user what you're doing (starting a live tail, or printing a snapshot) and
+where to watch it. After launching, report the background task id and its output-file path.
+
 - **Default (live):** run `node .claude/scripts/dirigible.mjs logs --follow --seconds 0`
   **as a background process** (`run_in_background: true`). It prints the recent
   backlog then tails the log continuously, updating live, and self-stops when the
