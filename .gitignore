@@ -37,7 +37,9 @@ package-lock.json
 **/spring-shell.log
 **/version.txt
 # Ignore local Claude Code state (settings.local.json, run/, worktrees/) but
-# keep the shared dev-loop slash commands and their cross-platform driver script.
+# keep the shared dev-loop slash commands, their cross-platform driver script,
+# and the team-wide settings.json.
 .claude/*
 !.claude/commands/
 !.claude/scripts/
+!.claude/settings.json
