@@ -115,6 +115,18 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Find every entity matching a typed {@link Criteria} — the type-safe alternative to
+     * {@link #query(String, Map)}. Conditions are combined with {@code AND}; values are bound as
+     * parameters.
+     *
+     * @param criteria the query criteria
+     * @return the matching entities
+     */
+    public List<T> findAll(Criteria criteria) {
+        return store().findAll(entityClass, criteria);
+    }
+
+    /**
      * Delete an entity instance.
      *
      * @param entity the entity to delete

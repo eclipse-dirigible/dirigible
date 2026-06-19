@@ -21,6 +21,7 @@ import java.util.Optional;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
 import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity;
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
 import org.hibernate.query.Query;
@@ -257,6 +258,25 @@ public class JavaEntityStore {
             }
             return mapRows(type, meta, q.getResultList());
         }
+    }
+
+    /**
+     * Find every entity of the given type matching a typed {@link Criteria}. Builds an HQL query from
+     * the criteria's conditions and ordering and runs it through the same map-projection path as
+     * {@link #query(Class, String, Map)} — values are bound as named parameters, never inlined.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param criteria the query criteria; {@code null} returns all rows
+     * @return the matching entities
+     */
+    public <T> List<T> findAll(Class<T> type, Criteria criteria) {
+        if (criteria == null) {
+            return findAll(type);
+        }
+        RegisteredEntity meta = resolve(type);
+        String hql = criteria.append("from " + meta.entityName());
+        return query(type, hql, criteria.parameters());
     }
 
     /**
