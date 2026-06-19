@@ -35,6 +35,7 @@ public class IntentModel {
     private List<PermissionIntent> permissions = new ArrayList<>();
     private List<SeedIntent> seeds = new ArrayList<>();
     private List<NotificationIntent> notifications = new ArrayList<>();
+    private List<ScheduleIntent> schedules = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -114,5 +115,13 @@ public class IntentModel {
 
     public void setNotifications(List<NotificationIntent> notifications) {
         this.notifications = notifications == null ? new ArrayList<>() : notifications;
+    }
+
+    public List<ScheduleIntent> getSchedules() {
+        return schedules;
+    }
+
+    public void setSchedules(List<ScheduleIntent> schedules) {
+        this.schedules = schedules == null ? new ArrayList<>() : schedules;
     }
 }

@@ -143,6 +143,17 @@ class IntentEngineIT extends IntegrationTest {
                 to: ops@example.com
                 subject: "Order {id} for {customer.name}, total {total}"
                 body: "The order changed."
+
+            schedules:
+              - name: staleOrders
+                cron: "0 0 9 * * ?"
+                entity: Order
+                where:
+                  - { field: orderDate, op: lt, value: CURRENT_DATE }
+                notify:
+                  to: ops@example.com
+                  subject: "Stale order {id} for {customer.name}"
+                  body: "This order is stale."
             """;
 
     @Autowired
@@ -352,6 +363,19 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should load the one-hop related entity by FK id");
         assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
                 "the subject should interpolate the relation.field against the loaded related entity");
+
+        // The schedule is a @Scheduled JobHandler that queries via a typed Criteria and notifies per row.
+        String job = contentOf("gen/events/StaleOrdersJob.java");
+        assertTrue(job.contains("@Scheduled(expression = \"0 0 9 * * ?\")") && job.contains("class StaleOrdersJob implements JobHandler"),
+                "the schedule should generate a @Scheduled JobHandler");
+        assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
+                "the job should query the entity with a typed Criteria built from the where clause");
+        assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
+        assertTrue(
+                job.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "the per-row notify should load the one-hop related entity");
+        assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
     }
 
     @Test
@@ -555,6 +579,12 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the orderUpdated notification bound to the -updated topic");
         assertTrue(glue.contains("\"toExpression\": \"\\\"ops@example.com\\\"\""),
                 "glue should carry the notification recipient as a Java string expression");
+        // Schedules: one per declarative schedule, carrying the cron + the typed Criteria expression.
+        assertTrue(
+                glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
+                "glue should carry the staleOrders schedule with its cron");
+        assertTrue(glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now())"),
+                "glue should carry the schedule's typed Criteria expression");
     }
 
     private void assertSettings() {

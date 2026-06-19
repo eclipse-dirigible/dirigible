@@ -45,6 +45,13 @@ export function getTemplate(parameters) {
                 collection: "notifications"
             },
             {
+                location: "/template-application-events-java/events/Job.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Job.java",
+                engine: "velocity",
+                collection: "schedules"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

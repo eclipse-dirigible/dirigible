@@ -327,12 +327,18 @@ Every action below has a real SDK surface to generate against, so none of this n
      - { name: orderUpdated, event: { onUpdate: Order }, channel: email, to: ops@example.com, subject: "Order {id} updated, total {total}", body: "The order changed." }
    ```
    → `gen/events/<Name>Notification.java` (`@Listener`) using `sdk.mail.Mail`, bound to the entity's create / `-updated` / `-deleted` topic; sender from `DIRIGIBLE_MAIL_SENDER`. The author-facing fields are translated to Java by `NotificationSupport` (unit-tested) and emitted into `.glue` (`GlueIntentGenerator`), rendered by `Notification.java.template` via the `notifications` collection case in `generateUtils.js`. **Scope:** `to`/`{placeholder}` resolve a literal, a **direct field**, or a **one-hop `relation.field`** of a to-one relation — the listener loads the related entity once by FK id (same one-hop mechanism as the decision resolvers; `NotificationSupport.plan` emits the `relationLoads` the template renders). `when:` supports a single `field ==|!= literal` on a direct field. **Multi-hop** paths (`a.b.c`) and relation-path `when:` are the remaining gap; the parser rejects multi-hop `to` with a clear message.
-3. **Scheduled activities + `onSchedule` process triggers** — reminders / cleanups; a per-row activity over a query.
+3. **Scheduled activities** — cron reminders / cleanups; query an entity and act per matching row. **(v1 implemented.)**
    ```yaml
    schedules:
-     - { name: overdueReminders, cron: "0 0 9 * * ?", forEach: "Loan where dueOn < CURRENT_DATE and status == 'ACTIVE'", do: { notify: { channel: email, to: member.email, body: overdue } } }
+     - name: overdueLoans
+       cron: "0 0 9 * * ?"
+       entity: Loan
+       where:
+         - { field: dueOn,  op: lt, value: CURRENT_DATE }   # eq/ne/gt/ge/lt/le/like; CURRENT_DATE/CURRENT_TIMESTAMP -> now()
+         - { field: status, op: eq, value: "ACTIVE" }
+       notify: { to: member.email, subject: "Overdue: {book.title}", body: "Your loan is overdue." }
    ```
-   → `@Scheduled(expression="...")` + `JobHandler`. Also wires process `trigger: { onSchedule: <cron> }`.
+   → `gen/events/<Name>Job.java`: a `@Scheduled(expression=cron)` `JobHandler` that runs `new <Entity>Repository().findAll(Criteria...)` (the typed `Criteria` query API) and performs the per-row `notify` (reusing `NotificationSupport.plan` against the row entity - same relation-load + interpolation as notifications). `ScheduleSupport.criteriaExpression` builds the `Criteria` chain (`where` -> typed conditions; field names PascalCased to the entity properties). Honors the `.settings` override. **Gap:** the action is `notify` only (other actions + `between`/`in` operators are later); process `trigger: { onSchedule: <cron> }` (timer start event) is still open.
 4. **Outbound calls** — "tell another system" on an event.
    ```yaml
    integrations:
