@@ -114,7 +114,7 @@ public final class IntentSettings {
 
         Map<String, ArtefactOverride> triggers = new LinkedHashMap<>();
         for (ProcessIntent process : model.getProcesses()) {
-            if (TriggerSupport.onCreateEntity(process) != null && process.getName() != null) {
+            if (TriggerSupport.triggerEntity(process) != null && process.getName() != null) {
                 triggers.put(process.getName(), new ArtefactOverride(true));
             }
         }

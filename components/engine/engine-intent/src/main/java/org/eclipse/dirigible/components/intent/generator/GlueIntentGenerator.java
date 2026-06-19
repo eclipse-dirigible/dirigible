@@ -102,7 +102,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                     .isBlank()) {
                 continue;
             }
-            String entity = TriggerSupport.onCreateEntity(process);
+            String entity = TriggerSupport.triggerEntity(process);
             if (entity == null || entity.isBlank() || !byName.containsKey(entity)) {
                 continue;
             }
@@ -115,6 +115,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             trigger.put("entity", entity);
             trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
             trigger.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            trigger.put("topicSuffix", EventBinding.topicSuffix(TriggerSupport.triggerKind(process)));
+            trigger.put("guardExpression", NotificationSupport.guard(TriggerSupport.triggerWhen(process)));
             triggers.add(trigger);
         }
         return triggers;

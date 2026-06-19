@@ -286,7 +286,9 @@ export function generateFiles(model, parameters, templateSources) {
                                 // The event-topic name keeps the raw perspective so it matches the
                                 // topic the DAO publishes to (${projectName}-${perspectiveName}-${name}).
                                 javaPerspective: sanitizeJavaIdentifier(model.triggers[t].perspective),
-                                keyProperty: model.triggers[t].keyProperty
+                                keyProperty: model.triggers[t].keyProperty,
+                                topicSuffix: model.triggers[t].topicSuffix,
+                                guardExpression: model.triggers[t].guardExpression
                             };
                             const cleanTriggerParameters = cleanData(triggerParameters);
                             generatedFiles.push({

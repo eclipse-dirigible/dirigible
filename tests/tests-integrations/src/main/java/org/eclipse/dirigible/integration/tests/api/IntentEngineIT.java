@@ -413,6 +413,37 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
+        String yaml = """
+                name: shipping
+                entities:
+                  - name: Shipment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                processes:
+                  - name: Deliver
+                    trigger: { onUpdate: Shipment, when: "status == 'SHIPPED'" }
+                    steps:
+                      - { name: handle, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
+
+        String trigger = contentOf("gen/events/DeliverTrigger.java");
+        assertTrue(trigger.contains("@Listener(name = \"intent-test-Shipment-Shipment-updated\""),
+                "an onUpdate trigger should bind to the entity's -updated topic");
+        assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
+                "the trigger should gate Process.start on the translated when-guard");
+        assertTrue(trigger.contains("Process.start(\"Deliver\""), "the trigger should start the process when the guard holds");
+    }
+
+    @Test
     void service_task_handler_stub_is_scaffolded_under_custom_and_preserved() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

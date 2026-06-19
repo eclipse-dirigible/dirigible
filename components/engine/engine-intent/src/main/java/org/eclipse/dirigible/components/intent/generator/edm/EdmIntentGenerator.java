@@ -111,7 +111,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
         Set<String> settingEntities = settingEntities(entities);
-        Set<String> triggerTargets = TriggerSupport.onCreateTargetEntities(model);
+        Set<String> triggerTargets = TriggerSupport.triggerTargetEntities(model);
 
         EdmDocument document = new EdmDocument();
         List<Map<String, Object>> entityList = new ArrayList<>();

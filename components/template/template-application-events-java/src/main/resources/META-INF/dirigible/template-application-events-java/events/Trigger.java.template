@@ -10,13 +10,13 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
- * Starts the ${process} process when a ${entity} is created.
+ * Starts the ${process} process when a ${entity} lifecycle event fires.
  *
- * Generated from the intent trigger (trigger: { onCreate: ${entity} }) - do not edit; it is
- * re-generated with the application. The ${entity} repository publishes the create event to the
- * topic this listener binds to; the started process-instance id is written back to ProcessId.
+ * Generated from the intent process trigger - do not edit; it is re-generated with the application.
+ * The ${entity} repository publishes the event to the topic this listener binds to; the started
+ * process-instance id is written back to ProcessId (so the process is started at most once).
  */
-@Listener(name = "${projectName}-${perspective}-${entity}", kind = ListenerKind.TOPIC)
+@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
 public class ${process}Trigger implements MessageHandler {
 
     private final ${entity}Repository repository = new ${entity}Repository();
@@ -31,6 +31,11 @@ public class ${process}Trigger implements MessageHandler {
         if (entity == null || entity.ProcessId != null) {
             return;
         }
+#if(${guardExpression} != "true")
+        if (!(${guardExpression})) {
+            return;
+        }
+#end
         String businessKey = String.valueOf(entity.${keyProperty});
         String processId = Process.start("${process}", businessKey, message);
         entity.ProcessId = processId;

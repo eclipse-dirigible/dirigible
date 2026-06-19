@@ -378,10 +378,19 @@ public final class IntentParser {
             if (!processNames.add(process.getName())) {
                 issues.add("duplicate process [" + process.getName() + "]");
             }
-            Object onCreate = process.getTrigger()
-                                     .get("onCreate");
-            if (onCreate != null && !entityNames.contains(onCreate.toString())) {
-                issues.add("process [" + process.getName() + "] trigger onCreate references unknown entity [" + onCreate + "]");
+            int triggerEvents = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = process.getTrigger()
+                                       .get(kind);
+                if (target != null) {
+                    triggerEvents++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("process [" + process.getName() + "] trigger " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (triggerEvents > 1) {
+                issues.add("process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete");
             }
             Set<String> stepNames = new HashSet<>();
             for (StepIntent step : process.getSteps()) {
