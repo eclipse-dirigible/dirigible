@@ -348,12 +348,12 @@ Every action below has a real SDK surface to generate against, so none of this n
 
 **Tier 2 — high value:**
 
-5. **Inbound integration / webhooks** — "another system tells us" → upsert an entity or start a process.
+5. **Inbound webhooks** — "another system tells us": a webhook that ingests a JSON payload into an entity. **(v1 implemented.)**
    ```yaml
    inbound:
-     - { name: returnBook, source: { webhook: "/returns" }, do: { upsert: Loan, match: { id: payload.loanId }, set: { status: "'RETURNED'" } } }
+     - { name: ingestOrder, path: /ingest, create: Order }
    ```
-   → `@Controller` + `@Post` (webhook), or `@Listener` / `Consumer` for a queue/topic source.
+   → `gen/events/<Name>Webhook.java`: a `@Controller` with a `@Post("<path>")` that deserializes the body (via the java.time-aware SDK `Json`) into the entity and `save`s it through the repository, returning the saved JSON. Served at `/services/java/<project>/gen/events/<Name>Webhook<path>`. **Gap:** v1 action is `create` (ingest); upsert/match-set and start-process, plus queue/topic sources (`@Listener`/`Consumer`), are later.
 6. **Status lifecycle (state machine) on an entity** — order/ticket/loan status; the highest "removes custom code" leverage of the set.
    ```yaml
    entities:

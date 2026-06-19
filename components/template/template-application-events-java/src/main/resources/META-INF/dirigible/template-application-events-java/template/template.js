@@ -59,6 +59,13 @@ export function getTemplate(parameters) {
                 collection: "integrations"
             },
             {
+                location: "/template-application-events-java/events/Webhook.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Webhook.java",
+                engine: "velocity",
+                collection: "inbound"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

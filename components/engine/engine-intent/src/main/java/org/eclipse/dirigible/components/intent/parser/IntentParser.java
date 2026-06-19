@@ -18,6 +18,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -124,6 +125,7 @@ public final class IntentParser {
         validateNotifications(model, entityNames, issues);
         validateSchedules(model, entityNames, issues);
         validateIntegrations(model, entityNames, issues);
+        validateInbound(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -173,6 +175,31 @@ public final class IntentParser {
                                                   .count() >= 2) {
                     issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
                 }
+            }
+        }
+    }
+
+    /**
+     * Each inbound webhook must have a unique name, a path, and a declared entity to create from the
+     * posted payload.
+     */
+    private static void validateInbound(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (InboundIntent inbound : model.getInbound()) {
+            String name = inbound.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("inbound webhook has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate inbound webhook [" + name + "]");
+            }
+            if (inbound.getPath() == null || inbound.getPath()
+                                                    .isBlank()) {
+                issues.add("inbound webhook [" + name + "] has no path");
+            }
+            if (inbound.getCreate() == null || !entityNames.contains(inbound.getCreate())) {
+                issues.add("inbound webhook [" + name + "] creates unknown entity [" + inbound.getCreate() + "]");
             }
         }
     }

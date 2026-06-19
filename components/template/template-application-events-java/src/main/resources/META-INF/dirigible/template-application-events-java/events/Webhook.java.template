@@ -1,0 +1,29 @@
+package gen.events;
+
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Inbound webhook ${name}: ingest a posted JSON payload as a ${entity}.
+ *
+ * Generated from the intent inbound block - do not edit; it is re-generated with the application.
+ * The endpoint is served under /services/java/<project>/gen/events/${className}Webhook${path}.
+ */
+@Controller
+public class ${className}Webhook {
+
+    @Post("${path}")
+    public String ingest(@Body String body) {
+        ${entity}Entity entity = Json.parse(body, ${entity}Entity.class);
+        if (entity == null) {
+            return "{\"error\": \"empty or invalid payload\"}";
+        }
+        ${entity}Entity saved = new ${entity}Repository().save(entity);
+        return Json.stringify(saved);
+    }
+}

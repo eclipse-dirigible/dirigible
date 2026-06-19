@@ -37,6 +37,7 @@ public class IntentModel {
     private List<NotificationIntent> notifications = new ArrayList<>();
     private List<ScheduleIntent> schedules = new ArrayList<>();
     private List<IntegrationIntent> integrations = new ArrayList<>();
+    private List<InboundIntent> inbound = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -132,5 +133,13 @@ public class IntentModel {
 
     public void setIntegrations(List<IntegrationIntent> integrations) {
         this.integrations = integrations == null ? new ArrayList<>() : integrations;
+    }
+
+    public List<InboundIntent> getInbound() {
+        return inbound;
+    }
+
+    public void setInbound(List<InboundIntent> inbound) {
+        this.inbound = inbound == null ? new ArrayList<>() : inbound;
     }
 }
