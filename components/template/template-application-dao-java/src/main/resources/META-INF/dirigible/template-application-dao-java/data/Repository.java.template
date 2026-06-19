@@ -30,20 +30,39 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
         ${name}Entity saved = super.save(entity);
-        // Publish the create event so listeners (e.g. intent process triggers under gen/events) can react.
+        // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
         return saved;
     }
-#if($haveCalculatedPropertyOnUpdate)
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
         entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
 #end
 #end
-        return super.update(entity);
-    }
 #end
+        ${name}Entity updated = super.update(entity);
+        // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
+        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
+        return updated;
+    }
+
+    @Override
+    public void delete(${name}Entity entity) {
+        super.delete(entity);
+        // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
+        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+    }
+
+    @Override
+    public void deleteById(Object id) {
+        ${name}Entity entity = findById(id);
+        super.deleteById(id);
+        if (entity != null) {
+            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+        }
+    }
 }
