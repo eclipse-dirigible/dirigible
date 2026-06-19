@@ -136,7 +136,10 @@ class IntentAgentService {
             throw new IntentAgentNotConfiguredException(
                     "The Intent AI assistant is not configured. Set the DIRIGIBLE_INTENT_AI_API_KEY environment variable.");
         }
-        String baseUrl = StringUtils.removeEnd(DirigibleConfig.INTENT_AI_BASE_URL.getStringValue(), "/");
+        String configuredBaseUrl = DirigibleConfig.INTENT_AI_BASE_URL.getStringValue();
+        String baseUrl = configuredBaseUrl != null && configuredBaseUrl.endsWith("/")
+                ? configuredBaseUrl.substring(0, configuredBaseUrl.length() - 1)
+                : configuredBaseUrl;
         String body = GSON.toJson(buildRequestBody(request));
 
         HttpRequest httpRequest = HttpRequest.newBuilder()
