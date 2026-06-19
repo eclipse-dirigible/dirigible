@@ -390,6 +390,31 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "integrations":
+                    // Integrations (intent layer): one @Listener per outbound integration - forward the
+                    // entity event to an external HTTP endpoint. Not entity-shaped, own loop.
+                    if (model.integrations) {
+                        for (let i = 0; i < model.integrations.length; i++) {
+                            const integrationParameters = {
+                                ...parameters,
+                                name: model.integrations[i].name,
+                                className: model.integrations[i].className,
+                                entity: model.integrations[i].entity,
+                                perspective: model.integrations[i].perspective,
+                                topicSuffix: model.integrations[i].topicSuffix,
+                                clientMethod: model.integrations[i].clientMethod,
+                                hasBody: model.integrations[i].hasBody,
+                                urlExpression: model.integrations[i].urlExpression
+                            };
+                            const cleanIntegrationParameters = cleanData(integrationParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanIntegrationParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanIntegrationParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

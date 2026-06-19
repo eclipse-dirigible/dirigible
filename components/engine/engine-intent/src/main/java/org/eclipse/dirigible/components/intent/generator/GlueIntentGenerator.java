@@ -17,6 +17,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -69,8 +70,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
+        List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -80,9 +82,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("resolvers", resolvers);
         glue.put("notifications", notifications);
         glue.put("schedules", schedules);
+        glue.put("integrations", integrations);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
-        LOGGER.debug("Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s) and [{}] schedule(s)", triggers.size(),
-                resolvers.size(), notifications.size(), schedules.size());
+        LOGGER.debug("Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s) and [{}] integration(s)",
+                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size());
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
@@ -147,6 +150,36 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             notifications.add(entry);
         }
         return notifications;
+    }
+
+    private static List<Map<String, Object>> buildIntegrations(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> integrations = new ArrayList<>();
+        for (IntegrationIntent integration : model.getIntegrations()) {
+            if (integration.getName() == null || integration.getName()
+                                                            .isBlank()) {
+                continue;
+            }
+            String entity = EventBinding.entity(integration.getEvent());
+            if (entity == null || !byName.containsKey(entity)) {
+                continue;
+            }
+            if (!settings.shouldGenerate("integrations", integration.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing listener for integration [{}] (not generated)", integration.getName());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", integration.getName());
+            entry.put("className", IntentNaming.pascalCase(integration.getName()));
+            entry.put("entity", entity);
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("topicSuffix", EventBinding.topicSuffix(EventBinding.kind(integration.getEvent())));
+            entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
+            entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
+            entry.put("urlExpression", IntegrationSupport.urlExpression(integration.getUrl()));
+            integrations.add(entry);
+        }
+        return integrations;
     }
 
     private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,

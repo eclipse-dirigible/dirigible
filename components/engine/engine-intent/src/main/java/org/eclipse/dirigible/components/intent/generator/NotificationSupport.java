@@ -35,7 +35,6 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  */
 public final class NotificationSupport {
 
-    private static final String[] EVENT_KINDS = {"onCreate", "onUpdate", "onDelete"};
     private static final Pattern PATH = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
     private static final Pattern SIMPLE_COMPARISON = Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*(.+?)\\s*");
@@ -56,13 +55,7 @@ public final class NotificationSupport {
      * @return the lifecycle event kind it binds to, or {@code null}
      */
     public static String eventKind(NotificationIntent notification) {
-        for (String kind : EVENT_KINDS) {
-            if (notification.getEvent()
-                            .get(kind) != null) {
-                return kind;
-            }
-        }
-        return null;
+        return EventBinding.kind(notification.getEvent());
     }
 
     /**
@@ -70,11 +63,7 @@ public final class NotificationSupport {
      * @return the entity named by the bound event, or {@code null}
      */
     public static String eventEntity(NotificationIntent notification) {
-        String kind = eventKind(notification);
-        Object target = kind == null ? null
-                : notification.getEvent()
-                              .get(kind);
-        return target == null ? null : target.toString();
+        return EventBinding.entity(notification.getEvent());
     }
 
     /**
@@ -85,13 +74,7 @@ public final class NotificationSupport {
      * @return the topic suffix, possibly empty
      */
     public static String topicSuffix(String eventKind) {
-        if ("onUpdate".equals(eventKind)) {
-            return "-updated";
-        }
-        if ("onDelete".equals(eventKind)) {
-            return "-deleted";
-        }
-        return "";
+        return EventBinding.topicSuffix(eventKind);
     }
 
     /**
