@@ -163,7 +163,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      */
     private static Map<String, String> ownFieldPascalCase(ProcessIntent process, Map<String, EntityIntent> byName) {
         Map<String, String> rewrites = new LinkedHashMap<>();
-        String triggerEntity = TriggerSupport.onCreateEntity(process);
+        String triggerEntity = TriggerSupport.triggerEntity(process);
         EntityIntent entity = triggerEntity == null ? null : byName.get(triggerEntity);
         if (entity != null) {
             for (FieldIntent field : entity.getFields()) {

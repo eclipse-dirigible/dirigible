@@ -75,7 +75,7 @@ public final class ProcessResolverSupport {
         Map<String, String> compositionParents = IntentEntities.compositionParents(model);
         Set<String> seen = new LinkedHashSet<>();
         for (ProcessIntent process : model.getProcesses()) {
-            String triggerEntity = TriggerSupport.onCreateEntity(process);
+            String triggerEntity = TriggerSupport.triggerEntity(process);
             EntityIntent owner = triggerEntity == null ? null : byName.get(triggerEntity);
             if (owner == null) {
                 continue; // no trigger entity -> no process-variable context to resolve against
