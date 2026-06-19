@@ -440,6 +440,33 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "rollups":
+                    // Rollups (intent layer): per rollup, two @Listeners (child create/delete) that
+                    // recompute a parent counter. Not entity-shaped, own loop.
+                    if (model.rollups) {
+                        for (let r = 0; r < model.rollups.length; r++) {
+                            const rollupParameters = {
+                                ...parameters,
+                                className: model.rollups[r].className,
+                                childEntity: model.rollups[r].childEntity,
+                                childPerspective: model.rollups[r].childPerspective,
+                                javaChildPerspective: sanitizeJavaIdentifier(model.rollups[r].childPerspective),
+                                parentEntity: model.rollups[r].parentEntity,
+                                javaParentPerspective: sanitizeJavaIdentifier(model.rollups[r].parentPerspective),
+                                fkProperty: model.rollups[r].fkProperty,
+                                countField: model.rollups[r].countField,
+                                topicSuffix: model.rollups[r].topicSuffix,
+                                criteriaExpression: model.rollups[r].criteriaExpression
+                            };
+                            const cleanRollupParameters = cleanData(rollupParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanRollupParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanRollupParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

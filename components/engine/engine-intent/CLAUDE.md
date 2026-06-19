@@ -375,7 +375,12 @@ Every action below has a real SDK surface to generate against, so none of this n
 **Tier 3 — denormalization & compliance (cheap once Tier 1 exists):**
 
 8. **Audit / history** — `audit: true` on an entity → shadow `<Entity>History` entity + a write-on-change `@Listener`.
-9. **Rollups / counters** — e.g. `Member.activeLoanCount: rollup(count Loan where status=='ACTIVE')`, maintained by reactions.
+9. **Rollups / counters** — maintain a denormalized count on a parent. **(v1 implemented.)**
+   ```yaml
+   rollups:
+     - { name: memberLoanCount, entity: Loan, via: member, field: loanCount }   # Member.loanCount = #Loans whose `member` FK = that Member
+   ```
+   → two `gen/events/<Name>RollupOn{Create,Delete}.java` `@Listener`s on the child's create/delete topics that recompute the affected parent's count via a typed `Criteria` (`findAll(Criteria.create().eq("<Fk>", entity.<Fk>)).size()`) and write it back. Recompute-on-event (self-healing); **eventually consistent, not transactionally exact** under heavy concurrency. **Gap:** no `where` filter (counts all children), and re-parenting on child update isn't tracked (only create/delete).
 10. **Dynamic user-task assignment** — `assignee: { fromPath: member.branch.manager }`, resolver-driven (extends the existing user-task glue).
 
 ### Guardrails (so this doesn't become the MDE expressiveness trap)

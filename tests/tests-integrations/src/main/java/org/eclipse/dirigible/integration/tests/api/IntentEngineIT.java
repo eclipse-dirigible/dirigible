@@ -444,6 +444,49 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void rollup_generates_create_and_delete_listeners_that_recompute_the_parent_count() {
+        String yaml = """
+                name: library
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: loanCount, type: integer }
+                  - name: Loan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: member, kind: manyToOne, to: Member }
+                rollups:
+                  - name: memberLoanCount
+                    entity: Loan
+                    via: member
+                    field: loanCount
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "library.glue");
+
+        String onCreate = contentOf("gen/events/MemberLoanCountRollupOnCreate.java");
+        assertTrue(onCreate.contains("class MemberLoanCountRollupOnCreate implements MessageHandler"),
+                "the create-side rollup listener should be generated");
+        assertTrue(onCreate.contains("@Listener(name = \"intent-test-Loan-Loan\""), "the create listener binds the child's base topic");
+        assertTrue(onCreate.contains("MemberEntity parent = parents.findById(entity.Member)"),
+                "it should load the parent via the child's FK");
+        assertTrue(
+                onCreate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member)).size()")
+                        && onCreate.contains("parent.LoanCount = count"),
+                "it should recompute the count via a typed Criteria and write it to the parent counter");
+
+        String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
+        assertTrue(onDelete.contains("@Listener(name = \"intent-test-Loan-Loan-deleted\""),
+                "the delete listener binds the child's -deleted topic");
+    }
+
+    @Test
     void service_task_handler_stub_is_scaffolded_under_custom_and_preserved() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

@@ -22,6 +22,8 @@ import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -73,9 +75,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
+        List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()
-                && inbound.isEmpty()) {
+                && inbound.isEmpty() && rollups.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -87,11 +90,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("schedules", schedules);
         glue.put("integrations", integrations);
         glue.put("inbound", inbound);
+        glue.put("rollups", rollups);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
-                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s), [{}] integration(s)"
-                        + " and [{}] inbound webhook(s)",
-                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size(), inbound.size());
+                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s), [{}] integration(s),"
+                        + " [{}] inbound webhook(s) and [{}] rollup(s)",
+                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size(), inbound.size(),
+                rollups.size());
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
@@ -158,6 +163,59 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             notifications.add(entry);
         }
         return notifications;
+    }
+
+    private static List<Map<String, Object>> buildRollups(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> rollups = new ArrayList<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            if (rollup.getName() == null || rollup.getName()
+                                                  .isBlank()) {
+                continue;
+            }
+            EntityIntent child = byName.get(rollup.getEntity());
+            RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
+            EntityIntent parent = via == null ? null : byName.get(via.getTo());
+            if (parent == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("rollups", rollup.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)", rollup.getName());
+                continue;
+            }
+            String fkProperty = IntentNaming.pascalCase(rollup.getVia());
+            Map<String, Object> base = new LinkedHashMap<>();
+            base.put("childEntity", rollup.getEntity());
+            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
+            base.put("parentEntity", via.getTo());
+            base.put("parentPerspective", IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+            base.put("fkProperty", fkProperty);
+            base.put("countField", IntentNaming.pascalCase(rollup.getField()));
+            // Recompute the count for the affected parent from the store on each child event.
+            base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
+            String className = IntentNaming.pascalCase(rollup.getName());
+            // Two listeners: recompute when a child is created and when one is deleted.
+            rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
+            rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
+        }
+        return rollups;
+    }
+
+    private static Map<String, Object> rollupEntry(Map<String, Object> base, String className, String topicSuffix) {
+        Map<String, Object> entry = new LinkedHashMap<>(base);
+        entry.put("className", className);
+        entry.put("topicSuffix", topicSuffix);
+        return entry;
+    }
+
+    private static RelationIntent toOneRelation(EntityIntent owner, String name) {
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name != null && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     private static List<Map<String, Object>> buildInbound(IntentModel model, Map<String, EntityIntent> byName,

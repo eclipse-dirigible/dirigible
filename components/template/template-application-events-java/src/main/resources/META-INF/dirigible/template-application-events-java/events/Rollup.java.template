@@ -1,0 +1,39 @@
+package gen.events;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
+import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
+
+/**
+ * Maintains the ${parentEntity}.${countField} roll-up count of ${childEntity} rows.
+ *
+ * Generated from the intent rollups block - do not edit; it is re-generated with the application.
+ * On each ${childEntity} event the count for the affected parent is recomputed from the store (so it
+ * self-heals); under heavy write concurrency it is eventually consistent, not transactionally exact.
+ */
+@Listener(name = "${projectName}-${childPerspective}-${childEntity}${topicSuffix}", kind = ListenerKind.TOPIC)
+public class ${className} implements MessageHandler {
+
+    @Override
+    public void onMessage(String message) {
+        ${childEntity}Entity entity = Json.parse(message, ${childEntity}Entity.class);
+        if (entity == null || entity.${fkProperty} == null) {
+            return;
+        }
+        ${parentEntity}Repository parents = new ${parentEntity}Repository();
+        ${parentEntity}Entity parent = parents.findById(entity.${fkProperty});
+        if (parent == null) {
+            return;
+        }
+        int count = new ${childEntity}Repository().findAll(${criteriaExpression}).size();
+        parent.${countField} = count;
+        parents.update(parent);
+    }
+}
