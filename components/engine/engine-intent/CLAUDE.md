@@ -278,6 +278,110 @@ Semantics worth knowing:
 - **Don't reuse the existing modelers for intent projects.** That would re-expose `gen/` as an authoring surface and undo the whole point.
 - **Don't read env vars or system properties directly** - go through `DirigibleConfig` per the platform-wide rule.
 
+## Planned: declarative glue — integrations & activities (`on <event> → do <action>`)
+
+The intent already generates two kinds of process glue (`.glue` → `template-application-events-java`): **triggers** (`onCreate` → start a process) and **decision resolvers** (load a related entity's field for a gateway). These are the first two instances of one abstraction we want to grow, so that **common integrations and activities are declared in the intent and need no hand-written code**:
+
+> **glue = `on <event> → do <action>`, with action parameters bound by resolver paths.**
+
+Three axes:
+- **Event** — entity `onCreate` / `onUpdate` / `onDelete` (+ a `when:` guard), a process step reached/completed, `onSchedule: <cron>`, or an inbound message / webhook / file. **The event-binding map key is `event:`, not `on:`** — YAML 1.1 resolves a bare `on` (also `off`/`yes`/`no`) to the boolean `true`, so SnakeYAML would swallow an `on:` key and the binding would silently never populate (this bit the notifications increment; `IntentEngineIT` caught it). Likewise an action key is `do:`, never `on:`.
+- **Action** — `startProcess`, `notify`, `callHttp` / `publish`, `setField` / `upsert`, `generateDocument`, `assign`.
+- **Binding** — the existing **resolver path grammar** (`member.email`, `book.genre.name`): relation walks off the triggering entity / process context, validated at parse time like `then`/`else`. Already built — reuse it everywhere, don't re-invent data access per action.
+
+### Glue is generated **annotated client-Java**, and that *is* the artefact — not "code we avoid"
+
+Decision (supersedes, **for the glue layer only**, the "prefer a model artifact, Java glue is the exception" wording elsewhere in this guide): every glue activity is generated as an **annotated client-Java class against the SDK** (`org.eclipse.dirigible.sdk.*`) under `gen/events`, exactly as the trigger glue already is (`@Listener` + `MessageHandler`, `Process.start(...)`, `Json`). The annotated class **is** the model/artefact — `engine-java` synchronizes and runs it; it is deterministic, regenerated with the app, and replaceable via a `/custom/` override. We do **not** emit `.listener` / `.job` XML/JSON artefacts that point at a handler, and we do **not** target TypeScript.
+
+**Why: TypeScript is being deprecated.** Client-Java (`engine-java` + `data-store-java`; the `@Entity`/`@Controller`/`@Repository`/`@Listener`/`@Scheduled` SDK surface) is now the primary runtime; the GraalJS path is a dead-end and TS will be removed once the Java surface is comfortable. So all new code-gen — glue, and increasingly the template engine via the `*-java` templates the `.settings` recipe already prefers — targets annotated Java; **do not invest in TS-handler-shaped glue.** The line we still hold is unchanged: **no hand-written business logic in `gen/`** — the moment an action needs real logic it is a `script` step or a `/custom/` hook, never more intent syntax. (The *core* model generators — entities→`.edm`, processes→`.bpmn`, forms→`.form`, reports→`.report`, roles→`.roles`, seeds→`.csvim` — stay model files: they feed the modelers and the template engine.)
+
+Every action below has a real SDK surface to generate against, so none of this needs a new runtime:
+
+| Action | SDK surface (`org.eclipse.dirigible.sdk.*`) |
+|---|---|
+| react to an entity event | `messaging.Listener` + `MessageHandler` (topic per entity, as the trigger glue) |
+| schedule | `job.Scheduled` (`expression()` = cron) + `job.JobHandler` |
+| notify — email | `mail.Mail` |
+| notify — in-app / push | `net.Websockets` / `messaging.Producer` |
+| call out (HTTP / webhook) | `http.HttpClient` |
+| publish / consume message | `messaging` / `kafka` / `rabbitmq` Producer/Consumer |
+| inbound webhook | `http.Controller` + `@Get`/`@Post` |
+| read / write / upsert data | `db.Store` / the generated `<Entity>Repository` |
+| generate a document | `pdf.Pdf` (+ `cms.Cmis` to file it) |
+| start process / complete task | `bpm.Process` / `bpm.Tasks` |
+| config / secrets | `core.Configurations` / `core.Env` (the `@config:` sugar) |
+| dynamic assignment / auth | `security.Roles` / `security.User` |
+
+### Catalog (prioritized by frequency × glue-ness)
+
+**Tier 1 — build first (reuses trigger + resolver almost entirely):**
+
+1. **Generalized lifecycle reactions** — generalize the trigger from "onCreate→startProcess" to `{onCreate|onUpdate|onDelete} + when:` → any action. Prereq: the Java DAO must publish update/delete events (create is already published). → `gen/events/<name>Reaction.java` (`@Listener`).
+   ```yaml
+   reactions:
+     - { event: { onUpdate: Loan, when: "status == 'APPROVED'" }, do: notify(loanApprovedEmail) }
+   ```
+2. **Notifications** — the most-requested business glue. **(v1 implemented.)**
+   ```yaml
+   notifications:
+     - { name: orderUpdated, event: { onUpdate: Order }, channel: email, to: ops@example.com, subject: "Order {id} updated, total {total}", body: "The order changed." }
+   ```
+   → `gen/events/<Name>Notification.java` (`@Listener`) using `sdk.mail.Mail`, bound to the entity's create / `-updated` / `-deleted` topic; sender from `DIRIGIBLE_MAIL_SENDER`. The author-facing fields are translated to Java by `NotificationSupport` (unit-tested) and emitted into `.glue` (`GlueIntentGenerator`), rendered by `Notification.java.template` via the `notifications` collection case in `generateUtils.js`. **v1 scope:** `to` is a literal address or a **direct field** of the event entity; `subject`/`body` interpolate `{field}` placeholders (direct fields); `when:` supports a single `field ==|!= literal` comparison. **Relation-path** recipients/placeholders (`member.email`, `{book.title}`) and richer `when:` are the next increment — the parser rejects relation-path `to` with a clear message until then.
+3. **Scheduled activities + `onSchedule` process triggers** — reminders / cleanups; a per-row activity over a query.
+   ```yaml
+   schedules:
+     - { name: overdueReminders, cron: "0 0 9 * * ?", forEach: "Loan where dueOn < CURRENT_DATE and status == 'ACTIVE'", do: { notify: { channel: email, to: member.email, body: overdue } } }
+   ```
+   → `@Scheduled(expression="...")` + `JobHandler`. Also wires process `trigger: { onSchedule: <cron> }`.
+4. **Outbound calls** — "tell another system" on an event.
+   ```yaml
+   integrations:
+     - { name: pushBookToCatalog, event: { onCreate: Book }, callHttp: { method: POST, url: "@config:CATALOG_URL", body: { isbn: id, title: title } } }
+   ```
+   → `@Listener` using `sdk.http.HttpClient`; URL/secret via `Configurations`.
+
+**Tier 2 — high value:**
+
+5. **Inbound integration / webhooks** — "another system tells us" → upsert an entity or start a process.
+   ```yaml
+   inbound:
+     - { name: returnBook, source: { webhook: "/returns" }, do: { upsert: Loan, match: { id: payload.loanId }, set: { status: "'RETURNED'" } } }
+   ```
+   → `@Controller` + `@Post` (webhook), or `@Listener` / `Consumer` for a queue/topic source.
+6. **Status lifecycle (state machine) on an entity** — order/ticket/loan status; the highest "removes custom code" leverage of the set.
+   ```yaml
+   entities:
+     - name: Loan
+       lifecycle:
+         field: status
+         states: [REQUESTED, APPROVED, ACTIVE, RETURNED, OVERDUE]
+         transitions:
+           - { from: REQUESTED, to: APPROVED, guard: "book.available", do: notify(loanApprovedEmail) }
+   ```
+   → guarded-transition glue (+ optionally a small `.bpmn`), reusing resolvers for guards and reactions for `do:`.
+7. **Document generation (PDF)** — agreements / invoices.
+   ```yaml
+   documents:
+     - { name: loanAgreement, event: { onUpdate: Loan, when: "status=='APPROVED'" }, template: loan-agreement, data: { member: member.name, book: book.title }, output: attachTo(Loan) }
+   ```
+   → `@Listener` using `sdk.pdf.Pdf` + `sdk.cms.Cmis`.
+
+**Tier 3 — denormalization & compliance (cheap once Tier 1 exists):**
+
+8. **Audit / history** — `audit: true` on an entity → shadow `<Entity>History` entity + a write-on-change `@Listener`.
+9. **Rollups / counters** — e.g. `Member.activeLoanCount: rollup(count Loan where status=='ACTIVE')`, maintained by reactions.
+10. **Dynamic user-task assignment** — `assignee: { fromPath: member.branch.manager }`, resolver-driven (extends the existing user-task glue).
+
+### Guardrails (so this doesn't become the MDE expressiveness trap)
+- **Curated action vocabulary, not a DSL.** Real logic → a `script` step or a `/custom/` hook (the escape hatch is non-negotiable; pure MDE always loses here).
+- **Every generated glue artefact gets an override switch** — the `.settings` `overrides.{...}.generate=false` mechanism (already honored for triggers/resolvers/forms) lets a hand-written `/custom/` class replace any single generated one.
+- **Secrets / endpoints via `DirigibleConfig` / `sdk.core.Configurations`** (`@config:` sugar), never inline — and grep-clean before publish.
+- **Bindings validated at parse**, like `then`/`else` today (a dangling `member.branchz` fails fast, not at runtime).
+- **Determinism + diff stability + comment preservation**, as for every generator; each generated class carries the "generated from intent — do not edit" header the trigger/resolver templates already use.
+
+### Sequencing
+Build **#1 (reactions) + #2 (notify)** first: one new concept ("reaction"), reuses trigger + resolver, unlocks the most apps per line of new code. Then **#3 (schedules)** (`sdk.job.Scheduled` already exists). **#6 (state machine)** is the highest later-leverage item but needs the most design. Each ships behind a `.settings` override and a parser-validated binding grammar.
+
 ## Follow-ups
 
 - `.access` rules from intent. The current PermissionIntentGenerator deliberately emits only `.roles`; URL-shaped constraints (the `<path, method, roles>` table in `.access`) need to know the paths the downstream template engine will publish, so they live with that template. A future pass should either (a) wire intent to feed those paths into the EDM template generator so it can emit the matching `.access`, or (b) add a custom-action `.access` block to intent for non-CRUD operations like {@code Order:approve} where there is no template-owned URL.
@@ -288,7 +392,7 @@ Semantics worth knowing:
 - Mark intent-generated model files as not-for-hand-editing in the IDE (decoration in the Projects view or a banner in the modelers).
 - `/custom/` escape-hatch directory + per-slice hook points in the generators (the generators must learn to preserve `/custom/` files alongside their gen output).
 - `reverse-engineer intent` command for migrating classic projects.
-- `onSchedule` triggers -> timer start event / `.job` (only `onCreate` is wired today). A TypeScript counterpart to `template-application-events-java` (the TS DAO already publishes events) and a configurable business key (beyond the entity id) are also open.
+- `onSchedule` triggers (only `onCreate` is wired today) and a configurable business key (beyond the entity id) are folded into the **"Planned: declarative glue"** section above. Note: **no TypeScript counterpart** - TS is being deprecated; all glue targets annotated client-Java (`@Scheduled` etc.).
 
 **Done:**
 

@@ -1,0 +1,52 @@
+package gen.events;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.core.Configurations;
+import org.eclipse.dirigible.sdk.mail.Mail;
+import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+
+/**
+ * Sends the ${name} notification when a ${entity} event fires.
+ *
+ * Generated from the intent notifications block - do not edit; it is re-generated with the
+ * application. Binds to the topic the ${entity} repository publishes the event to. The sender
+ * address comes from the DIRIGIBLE_MAIL_SENDER configuration.
+ */
+@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
+public class ${className}Notification implements MessageHandler {
+
+    @Override
+    public void onMessage(String message) {
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null) {
+            return;
+        }
+        if (!(${guardExpression})) {
+            return;
+        }
+        String to = ${toExpression};
+        if (to == null || to.isBlank()) {
+            return;
+        }
+        String subject = ${subjectExpression};
+        String body = ${bodyExpression};
+        Map part = new HashMap();
+        part.put("type", "text");
+        part.put("contentType", "text/plain");
+        part.put("text", body);
+        String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+        try {
+            Mail.send(from, new String[] {to}, new String[0], new String[0], subject, List.of(part));
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to send notification ${name}", ex);
+        }
+    }
+}

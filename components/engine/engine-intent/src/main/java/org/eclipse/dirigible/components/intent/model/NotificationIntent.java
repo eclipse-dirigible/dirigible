@@ -17,16 +17,17 @@ import java.util.Map;
  * of the declarative-glue catalog (see the engine guide's "Planned: declarative glue").
  *
  * <p>
- * It is a self-contained reaction (event -> send). {@link #on} is a free-form map carrying exactly
- * one of {@code onCreate} / {@code onUpdate} / {@code onDelete} naming a declared entity, plus an
- * optional {@code when} guard expression - the same shape a process trigger uses. The generator (a
- * later increment) emits an annotated client-Java {@code @Listener} that binds to the entity's
- * event topic and sends via the SDK; {@link #to} is a resolver path (e.g. {@code member.email}).
+ * It is a self-contained reaction (event -> send). {@link #event} is a free-form map carrying
+ * exactly one of {@code onCreate} / {@code onUpdate} / {@code onDelete} naming a declared entity,
+ * plus an optional {@code when} guard expression. (The key is {@code event}, not {@code on} - YAML
+ * 1.1 resolves a bare {@code on} to the boolean {@code true}.) The generator emits an annotated
+ * client-Java {@code @Listener} that binds to the entity's event topic and sends via the SDK;
+ * {@link #to} is a direct field of the event entity or a literal address.
  */
 public class NotificationIntent {
 
     private String name;
-    private Map<String, Object> on = new LinkedHashMap<>();
+    private Map<String, Object> event = new LinkedHashMap<>();
     private String channel = "email";
     private String to;
     private String subject;
@@ -40,12 +41,12 @@ public class NotificationIntent {
         this.name = name;
     }
 
-    public Map<String, Object> getOn() {
-        return on;
+    public Map<String, Object> getEvent() {
+        return event;
     }
 
-    public void setOn(Map<String, Object> on) {
-        this.on = on == null ? new LinkedHashMap<>() : on;
+    public void setEvent(Map<String, Object> event) {
+        this.event = event == null ? new LinkedHashMap<>() : event;
     }
 
     public String getChannel() {

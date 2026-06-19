@@ -324,6 +324,36 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "notifications":
+                    // Notifications (intent layer): one @Listener per declarative notification, binding
+                    // to the entity's event topic and sending via the SDK. Not entity-shaped, so it gets
+                    // its own loop. The Java package segment is the lowercased perspective (matching the
+                    // entity/DAO templates); the event-topic name keeps the raw perspective + the
+                    // operation suffix so it matches what the DAO publishes to.
+                    if (model.notifications) {
+                        for (let n = 0; n < model.notifications.length; n++) {
+                            const notificationParameters = {
+                                ...parameters,
+                                name: model.notifications[n].name,
+                                className: model.notifications[n].className,
+                                entity: model.notifications[n].entity,
+                                perspective: model.notifications[n].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.notifications[n].perspective),
+                                topicSuffix: model.notifications[n].topicSuffix,
+                                guardExpression: model.notifications[n].guardExpression,
+                                toExpression: model.notifications[n].toExpression,
+                                subjectExpression: model.notifications[n].subjectExpression,
+                                bodyExpression: model.notifications[n].bodyExpression
+                            };
+                            const cleanNotificationParameters = cleanData(notificationParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanNotificationParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanNotificationParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

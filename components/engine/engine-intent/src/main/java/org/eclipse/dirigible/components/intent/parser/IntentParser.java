@@ -140,7 +140,7 @@ public final class IntentParser {
             }
             int eventCount = 0;
             for (String kind : EVENT_KINDS) {
-                Object target = notification.getOn()
+                Object target = notification.getEvent()
                                             .get(kind);
                 if (target != null) {
                     eventCount++;
@@ -156,9 +156,15 @@ public final class IntentParser {
             if (channel != null && !channel.isBlank() && !NOTIFICATION_CHANNELS.contains(channel)) {
                 issues.add("notification [" + name + "] has unsupported channel [" + channel + "] (supported: email)");
             }
-            if (notification.getTo() == null || notification.getTo()
-                                                            .isBlank()) {
+            String to = notification.getTo();
+            if (to == null || to.isBlank()) {
                 issues.add("notification [" + name + "] has no recipient (to)");
+            } else if (!to.contains("@") && to.contains(".")) {
+                // v1 resolves a literal address or a direct field of the event entity; relation paths
+                // (member.email) are a later increment - reject them with a clear message rather than
+                // silently emailing the literal path.
+                issues.add("notification [" + name + "] recipient [" + to
+                        + "] uses a relation path, which is not supported yet - use a direct field or a literal address");
             }
         }
     }

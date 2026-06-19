@@ -136,6 +136,13 @@ class IntentEngineIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Afghanistan, code2: AF }
                   - { id: 2, name: Albania,     code2: AL }
+
+            notifications:
+              - name: orderUpdated
+                event: { onUpdate: Order }
+                to: ops@example.com
+                subject: "Order {id} updated, total {total}"
+                body: "The order changed."
             """;
 
     @Autowired
@@ -320,6 +327,20 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should read the FK id from the process variables");
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
+
+        // The notification (onUpdate: Order) is an @Listener that sends mail when an Order is updated -
+        // exercises the generateUtils.js "notifications" collection case end to end.
+        String notification = contentOf("gen/events/OrderUpdatedNotification.java");
+        assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
+                "the notification should be a message-handling listener (PascalCased class name)");
+        assertTrue(notification.contains("@Listener(name = \"intent-test-Order-Order-updated\""),
+                "an onUpdate notification should bind to the entity's -updated topic");
+        assertTrue(notification.contains("Mail.send("), "the notification should send via the SDK Mail API");
+        assertTrue(notification.contains("String to = \"ops@example.com\""), "a literal recipient should be emitted as a literal");
+        assertTrue(notification.contains("\"Order \" + entity.Id + \" updated, total \" + entity.Total"),
+                "the subject should interpolate {field} placeholders as entity field accesses");
+        assertTrue(notification.contains("import gen.orders.data.order.OrderEntity"),
+                "the notification should import the event entity from its real (lowercased) Java package");
     }
 
     @Test
@@ -516,6 +537,13 @@ class IntentEngineIT extends IntegrationTest {
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
                 "the resolver should carry the FK property, target entity/field and the resolved variable");
+        // Notifications: one per declarative notification, carrying the rendered Java expressions.
+        assertTrue(
+                glue.contains("\"notifications\"") && glue.contains("\"name\": \"orderUpdated\"")
+                        && glue.contains("\"topicSuffix\": \"-updated\""),
+                "glue should carry the orderUpdated notification bound to the -updated topic");
+        assertTrue(glue.contains("\"toExpression\": \"\\\"ops@example.com\\\"\""),
+                "glue should carry the notification recipient as a Java string expression");
     }
 
     private void assertSettings() {
