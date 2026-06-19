@@ -159,12 +159,13 @@ public final class IntentParser {
             String to = notification.getTo();
             if (to == null || to.isBlank()) {
                 issues.add("notification [" + name + "] has no recipient (to)");
-            } else if (!to.contains("@") && to.contains(".")) {
-                // v1 resolves a literal address or a direct field of the event entity; relation paths
-                // (member.email) are a later increment - reject them with a clear message rather than
-                // silently emailing the literal path.
+            } else if (!to.contains("@") && to.chars()
+                                              .filter(c -> c == '.')
+                                              .count() >= 2) {
+                // A recipient is a literal address, a direct field, or a one-hop relation.field; multi-hop
+                // paths are not supported (the generator resolves a single to-one relation by FK id).
                 issues.add("notification [" + name + "] recipient [" + to
-                        + "] uses a relation path, which is not supported yet - use a direct field or a literal address");
+                        + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
             }
         }
     }

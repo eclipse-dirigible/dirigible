@@ -12,6 +12,10 @@ import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+#foreach($load in $relationLoads)
+import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
 
 /**
  * Sends the ${name} notification when a ${entity} event fires.
@@ -32,6 +36,9 @@ public class ${className}Notification implements MessageHandler {
         if (!(${guardExpression})) {
             return;
         }
+#foreach($load in $relationLoads)
+        ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
         String to = ${toExpression};
         if (to == null || to.isBlank()) {
             return;

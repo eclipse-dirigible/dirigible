@@ -124,21 +124,39 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)", notification.getName());
                 continue;
             }
-            Object when = notification.getEvent()
-                                      .get("when");
+            NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents);
+            if (plan == null) {
+                LOGGER.warn("Notification [{}] recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
+                        notification.getName(), notification.getTo(), entity);
+                continue;
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
             entry.put("topicSuffix", NotificationSupport.topicSuffix(NotificationSupport.eventKind(notification)));
-            entry.put("guardExpression", NotificationSupport.guard(when == null ? null : when.toString()));
-            entry.put("toExpression", NotificationSupport.recipientExpression(notification.getTo()));
-            entry.put("subjectExpression", NotificationSupport.interpolate(notification.getSubject()));
-            entry.put("bodyExpression", NotificationSupport.interpolate(notification.getBody()));
+            entry.put("relationLoads", relationLoads(plan));
+            entry.put("guardExpression", plan.guardExpression());
+            entry.put("toExpression", plan.toExpression());
+            entry.put("subjectExpression", plan.subjectExpression());
+            entry.put("bodyExpression", plan.bodyExpression());
             notifications.add(entry);
         }
         return notifications;
+    }
+
+    private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {
+        List<Map<String, Object>> loads = new ArrayList<>();
+        for (NotificationSupport.RelationLoad load : plan.loads()) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("local", load.local());
+            entry.put("targetEntity", load.targetEntity());
+            entry.put("targetPerspective", load.targetPerspective());
+            entry.put("fkProperty", load.fkProperty());
+            loads.add(entry);
+        }
+        return loads;
     }
 
     private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {

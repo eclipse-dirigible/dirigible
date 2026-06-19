@@ -141,7 +141,7 @@ class IntentEngineIT extends IntegrationTest {
               - name: orderUpdated
                 event: { onUpdate: Order }
                 to: ops@example.com
-                subject: "Order {id} updated, total {total}"
+                subject: "Order {id} for {customer.name}, total {total}"
                 body: "The order changed."
             """;
 
@@ -337,10 +337,21 @@ class IntentEngineIT extends IntegrationTest {
                 "an onUpdate notification should bind to the entity's -updated topic");
         assertTrue(notification.contains("Mail.send("), "the notification should send via the SDK Mail API");
         assertTrue(notification.contains("String to = \"ops@example.com\""), "a literal recipient should be emitted as a literal");
-        assertTrue(notification.contains("\"Order \" + entity.Id + \" updated, total \" + entity.Total"),
-                "the subject should interpolate {field} placeholders as entity field accesses");
         assertTrue(notification.contains("import gen.orders.data.order.OrderEntity"),
                 "the notification should import the event entity from its real (lowercased) Java package");
+        // The subject references a one-hop relation.field ({customer.name}), so the listener loads the
+        // related Customer by FK id and the subject reads its field - the same one-hop mechanism as the
+        // decision resolvers.
+        assertTrue(
+                notification.contains("import gen.orders.data.customer.CustomerEntity")
+                        && notification.contains("import gen.orders.data.customer.CustomerRepository"),
+                "the notification should import the related entity + repository it loads");
+        assertTrue(
+                notification.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "the listener should load the one-hop related entity by FK id");
+        assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
+                "the subject should interpolate the relation.field against the loaded related entity");
     }
 
     @Test

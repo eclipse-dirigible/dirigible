@@ -10,41 +10,104 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.junit.jupiter.api.Test;
 
 class NotificationSupportTest {
 
-    private static NotificationIntent on(String kind, String entity) {
-        NotificationIntent notification = new NotificationIntent();
-        notification.setEvent(new java.util.LinkedHashMap<>(Map.of(kind, entity)));
-        return notification;
+    private static FieldIntent field(String name) {
+        FieldIntent f = new FieldIntent();
+        f.setName(name);
+        f.setType("string");
+        return f;
+    }
+
+    private static RelationIntent toOne(String name, String to) {
+        RelationIntent r = new RelationIntent();
+        r.setName(name);
+        r.setKind("manyToOne");
+        r.setTo(to);
+        return r;
+    }
+
+    /** Order(id, total) --customer--> Customer(id, name, email). */
+    private static Map<String, EntityIntent> libraryModel() {
+        EntityIntent customer = new EntityIntent();
+        customer.setName("Customer");
+        customer.setFields(List.of(field("id"), field("name"), field("email")));
+        EntityIntent order = new EntityIntent();
+        order.setName("Order");
+        order.setFields(List.of(field("id"), field("total")));
+        order.setRelations(List.of(toOne("customer", "Customer")));
+        Map<String, EntityIntent> byName = new LinkedHashMap<>();
+        byName.put("Customer", customer);
+        byName.put("Order", order);
+        return byName;
+    }
+
+    private static NotificationIntent notification(String to, String subject) {
+        NotificationIntent n = new NotificationIntent();
+        n.setName("orderNote");
+        n.setEvent(new LinkedHashMap<>(Map.of("onUpdate", "Order")));
+        n.setTo(to);
+        n.setSubject(subject);
+        return n;
     }
 
     @Test
     void resolvesEventAndTopicSuffix() {
-        assertEquals("onUpdate", NotificationSupport.eventKind(on("onUpdate", "Loan")));
-        assertEquals("Loan", NotificationSupport.eventEntity(on("onUpdate", "Loan")));
+        NotificationIntent n = notification("ops@x.com", "s");
+        assertEquals("onUpdate", NotificationSupport.eventKind(n));
+        assertEquals("Order", NotificationSupport.eventEntity(n));
         assertEquals("", NotificationSupport.topicSuffix("onCreate"));
         assertEquals("-updated", NotificationSupport.topicSuffix("onUpdate"));
         assertEquals("-deleted", NotificationSupport.topicSuffix("onDelete"));
     }
 
     @Test
-    void recipientIsLiteralOrFieldAccess() {
-        assertEquals("\"ops@example.com\"", NotificationSupport.recipientExpression("ops@example.com"));
-        assertEquals("entity.Email", NotificationSupport.recipientExpression("email"));
+    void directFieldsAndLiterals() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Order {id} total {total}"), byName.get("Order"), byName, Map.of());
+        assertTrue(plan.loads()
+                       .isEmpty(),
+                "no relations referenced -> no loads");
+        assertEquals("\"ops@x.com\"", plan.toExpression());
+        assertEquals("\"Order \" + entity.Id + \" total \" + entity.Total", plan.subjectExpression());
     }
 
     @Test
-    void interpolatesPlaceholdersIntoStringExpression() {
-        assertEquals("\"Welcome \" + entity.Name", NotificationSupport.interpolate("Welcome {name}"));
-        assertEquals("\"\" + entity.Name", NotificationSupport.interpolate("{name}"));
-        assertEquals("\"plain text\"", NotificationSupport.interpolate("plain text"));
-        assertEquals("\"Loan \" + entity.Id + \" approved\"", NotificationSupport.interpolate("Loan {id} approved"));
+    void oneHopRelationFieldLoadsTheRelatedEntity() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan = NotificationSupport.plan(notification("customer.email", "Order for {customer.name}"),
+                byName.get("Order"), byName, Map.of());
+
+        assertEquals(1, plan.loads()
+                            .size());
+        NotificationSupport.RelationLoad load = plan.loads()
+                                                    .get(0);
+        assertEquals("customer", load.local());
+        assertEquals("Customer", load.targetEntity());
+        assertEquals("Customer", load.fkProperty());
+        assertEquals("(customer == null ? null : customer.Email)", plan.toExpression());
+        assertEquals("\"Order for \" + (customer == null ? null : customer.Name)", plan.subjectExpression());
+    }
+
+    @Test
+    void unresolvableRecipientRelationYieldsNoPlan() {
+        Map<String, EntityIntent> byName = libraryModel();
+        // 'nope' is not a to-one relation of Order -> recipient cannot resolve -> skip the notification.
+        assertNull(NotificationSupport.plan(notification("nope.email", "s"), byName.get("Order"), byName, Map.of()));
     }
 
     @Test
@@ -53,8 +116,6 @@ class NotificationSupportTest {
         assertEquals("true", NotificationSupport.guard("  "));
         assertEquals("java.util.Objects.equals(entity.Status, \"APPROVED\")", NotificationSupport.guard("status == 'APPROVED'"));
         assertEquals("!java.util.Objects.equals(entity.Status, \"CLOSED\")", NotificationSupport.guard("status != 'CLOSED'"));
-        // Unsupported (multi-term) expressions degrade to firing on every event rather than emitting broken
-        // Java.
         assertEquals("true", NotificationSupport.guard("amount > 10 and status == 'X'"));
     }
 }

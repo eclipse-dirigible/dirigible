@@ -340,6 +340,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 perspective: model.notifications[n].perspective,
                                 javaPerspective: sanitizeJavaIdentifier(model.notifications[n].perspective),
                                 topicSuffix: model.notifications[n].topicSuffix,
+                                // Each one-hop relation load needs the lowercased Java package of its target.
+                                relationLoads: (model.notifications[n].relationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                })),
                                 guardExpression: model.notifications[n].guardExpression,
                                 toExpression: model.notifications[n].toExpression,
                                 subjectExpression: model.notifications[n].subjectExpression,
