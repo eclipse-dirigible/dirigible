@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
@@ -126,6 +127,7 @@ public final class IntentParser {
         validateSchedules(model, entityNames, issues);
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
+        validateRollups(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -177,6 +179,63 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * Each roll-up must have a unique name, a child entity, a {@code via} to-one relation of that child
+     * pointing at a parent, and an integer {@code field} on the parent to maintain.
+     */
+    private static void validateRollups(IntentModel model, List<String> issues) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            String name = rollup.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("rollup has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate rollup [" + name + "]");
+            }
+            EntityIntent child = byName.get(rollup.getEntity());
+            if (child == null) {
+                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity() + "]");
+                continue;
+            }
+            RelationIntent via = null;
+            for (RelationIntent relation : child.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null && relation.getName()
+                                                                   .equals(rollup.getVia())) {
+                    via = relation;
+                }
+            }
+            if (via == null) {
+                issues.add("rollup [" + name + "] via [" + rollup.getVia() + "] is not a to-one relation of [" + rollup.getEntity() + "]");
+                continue;
+            }
+            EntityIntent parent = byName.get(via.getTo());
+            FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
+            if (counter == null) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
+            } else if (!INTEGER_PK_TYPES.contains(counter.getType())) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
+            }
+        }
+    }
+
+    private static FieldIntent fieldByName(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name != null && name.equals(field.getName())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**

@@ -38,6 +38,7 @@ public class IntentModel {
     private List<ScheduleIntent> schedules = new ArrayList<>();
     private List<IntegrationIntent> integrations = new ArrayList<>();
     private List<InboundIntent> inbound = new ArrayList<>();
+    private List<RollupIntent> rollups = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -141,5 +142,13 @@ public class IntentModel {
 
     public void setInbound(List<InboundIntent> inbound) {
         this.inbound = inbound == null ? new ArrayList<>() : inbound;
+    }
+
+    public List<RollupIntent> getRollups() {
+        return rollups;
+    }
+
+    public void setRollups(List<RollupIntent> rollups) {
+        this.rollups = rollups == null ? new ArrayList<>() : rollups;
     }
 }
