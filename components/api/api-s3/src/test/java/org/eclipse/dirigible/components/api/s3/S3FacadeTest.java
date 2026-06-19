@@ -10,13 +10,16 @@
 package org.eclipse.dirigible.components.api.s3;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.engine.cms.TenantPathResolver;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Bean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.testcontainers.containers.localstack.LocalStackContainer;
 import org.testcontainers.utility.DockerImageName;
@@ -32,9 +35,9 @@ import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.testcontainers.containers.localstack.LocalStackContainer.Service.S3;
 
+@Tag("testcontainers")
 @ExtendWith(SpringExtension.class)
-@SpringBootTest(classes = {org.eclipse.dirigible.components.api.s3.S3Facade.class})
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
+@SpringBootTest(classes = {S3Facade.class, S3FacadeTest.TestConfig.class})
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 public class S3FacadeTest {
 
@@ -42,7 +45,7 @@ public class S3FacadeTest {
 
     private static final String BUCKET_NAME = "test-cmis-bucket";
 
-    private static DockerImageName localstackImage = DockerImageName.parse("localstack/localstack:latest");
+    private static DockerImageName localstackImage = DockerImageName.parse("localstack/localstack:3.8.1");
 
     private static LocalStackContainer localstack = new LocalStackContainer(localstackImage).withServices(S3);
 
@@ -50,6 +53,7 @@ public class S3FacadeTest {
     public static void setUp() {
         System.setProperty("aws.accessKeyId", "localstack");
         System.setProperty("aws.secretAccessKey", "localstack");
+        System.setProperty("aws.region", Region.EU_CENTRAL_1.id());
         System.setProperty("DIRIGIBLE_S3_PROVIDER", "test");
         Configuration.set("DIRIGIBLE_S3_BUCKET", BUCKET_NAME);
         localstack.start();
@@ -120,5 +124,22 @@ public class S3FacadeTest {
                                                                      .bucket(bucketName)
                                                                      .build();
         s3Client.deleteBucket(deleteBucketRequest);
+    }
+
+    /**
+     * Supplies a pass-through {@link TenantPathResolver} so the test exercises S3 I/O without standing
+     * up the tenant subsystem (its {@code TenantContext} / default {@code Tenant} collaborators live in
+     * core-tenants, which is not on this module's test classpath).
+     */
+    @org.springframework.context.annotation.Configuration
+    static class TestConfig {
+
+        @Bean
+        TenantPathResolver tenantPathResolver() {
+            TenantPathResolver resolver = Mockito.mock(TenantPathResolver.class);
+            Mockito.when(resolver.resolve(Mockito.anyString()))
+                   .thenAnswer(invocation -> invocation.getArgument(0));
+            return resolver;
+        }
     }
 }

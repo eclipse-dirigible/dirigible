@@ -29,7 +29,7 @@
 		mvn -T 1C clean install -Dmaven.test.skip=true -DskipTests -Dmaven.javadoc.skip=true
 
 	Update the years in the license header:
-		mvn license:format -P license -DskipExistingHeaders=false -DskipTCs=true
+		mvn license:format -P license -DskipExistingHeaders=false
 
 	Update the version:
 		mvn versions:set -DnewVersion=3.3.1-SNAPSHOT
@@ -266,7 +266,10 @@
         <skip.code.formatting>false</skip.code.formatting>
         <maven.javadoc.skip>false</maven.javadoc.skip>
         <license.skip>false</license.skip>
-        <skipTCs>true</skipTCs>
+        <!-- Testcontainers-based tests are tagged "testcontainers" and excluded by default;
+             the "testcontainers" profile runs only them (see surefire config below). -->
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>testcontainers</surefire.excludedGroups>
     </properties>
 
     <build>
@@ -361,6 +364,8 @@
                         <skipTests>${skipTests}</skipTests>
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <groups>${surefire.groups}</groups>
+                        <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                         <argLine>
                             --add-opens=java.base/java.lang=ALL-UNNAMED
                             --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
@@ -480,7 +485,6 @@
             </activation>
             <properties>
                 <maven.javadoc.skip>true</maven.javadoc.skip>
-                <skipTCs>true</skipTCs>
             </properties>
             <build>
                 <plugins>
@@ -748,7 +752,8 @@
         <profile>
             <id>testcontainers</id>
             <properties>
-                <skipTCs>false</skipTCs>
+                <surefire.groups>testcontainers</surefire.groups>
+                <surefire.excludedGroups></surefire.excludedGroups>
             </properties>
             <build>
                 <plugins>
