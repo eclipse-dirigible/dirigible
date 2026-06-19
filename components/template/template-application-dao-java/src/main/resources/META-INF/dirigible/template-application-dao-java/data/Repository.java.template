@@ -2,6 +2,8 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
 
 #foreach ($property in $properties)
     #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
@@ -17,18 +19,21 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Repository() {
         super(${name}Entity.class);
     }
-#if($haveCalculatedPropertyOnCreate)
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
         entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
 #end
 #end
-        return super.save(entity);
-    }
 #end
+        ${name}Entity saved = super.save(entity);
+        // Publish the create event so listeners (e.g. intent process triggers under gen/events) can react.
+        Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
+        return saved;
+    }
 #if($haveCalculatedPropertyOnUpdate)
 
     @Override

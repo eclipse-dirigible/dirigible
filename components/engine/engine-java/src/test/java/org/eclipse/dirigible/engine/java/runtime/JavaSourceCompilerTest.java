@@ -10,12 +10,16 @@
 package org.eclipse.dirigible.engine.java.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.engine.java.runtime.JavaSourceCompiler.BatchResult;
+import org.eclipse.dirigible.engine.java.runtime.JavaSourceCompiler.SourceUnit;
 import org.junit.jupiter.api.Test;
 
 class JavaSourceCompilerTest {
@@ -61,6 +65,42 @@ class JavaSourceCompilerTest {
         assertTrue(ex.getMessage()
                      .contains("Broken"),
                 "diagnostic should reference the offending class");
+    }
+
+    @Test
+    void exposes_structured_diagnostics_with_position_for_a_failure() {
+        BatchResult result = compiler.compileBatch(List.of(new SourceUnit("com.example.Broken", """
+                package com.example;
+                public class Broken {
+                    public void method() {
+                        notARealMethod();
+                    }
+                }
+                """)));
+
+        assertTrue(result.failures()
+                         .containsKey("com.example.Broken"));
+        List<CompileDiagnostic> diagnostics = result.diagnostics()
+                                                    .get("com.example.Broken");
+        assertNotNull(diagnostics, "structured diagnostics should accompany the failure");
+        assertFalse(diagnostics.isEmpty());
+        CompileDiagnostic first = diagnostics.get(0);
+        assertTrue(first.error(), "the diagnostic should be an error");
+        assertEquals(4, first.line(), "the error should be reported on the offending source line");
+        assertTrue(first.column() > 0, "a positioned diagnostic should carry a column");
+        assertNotNull(first.message());
+    }
+
+    @Test
+    void successful_compilation_has_no_diagnostics() {
+        BatchResult result = compiler.compileBatch(List.of(new SourceUnit("com.example.Ok", """
+                package com.example;
+                public class Ok {}
+                """)));
+        assertTrue(result.failures()
+                         .isEmpty());
+        assertTrue(result.diagnostics()
+                         .isEmpty());
     }
 
 }

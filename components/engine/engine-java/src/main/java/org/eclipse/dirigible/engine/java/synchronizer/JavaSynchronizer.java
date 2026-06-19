@@ -21,7 +21,9 @@ import org.eclipse.dirigible.components.base.artefact.ArtefactService;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.synchronizer.BaseSynchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
+import org.eclipse.dirigible.components.api.platform.ProblemsFacade;
 import org.eclipse.dirigible.engine.java.domain.JavaFile;
+import org.eclipse.dirigible.engine.java.runtime.CompileDiagnostic;
 import org.eclipse.dirigible.engine.java.runtime.JavaLoader;
 import org.eclipse.dirigible.engine.java.runtime.JavaSourceParser;
 import org.eclipse.dirigible.engine.java.service.JavaFileService;
@@ -65,6 +67,14 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
 
     public static final int SYNCHRONIZER_ORDER = 65;
     public static final String FILE_EXTENSION = ".java";
+
+    /** Problems-view grouping for client-Java compile failures (scopes the delete-before-insert). */
+    private static final String PROBLEM_CATEGORY = "Compilation";
+    private static final String PROBLEM_MODULE = "engine-java";
+    private static final String PROBLEM_SOURCE = "JavaSourceCompiler";
+    private static final String PROBLEM_PROGRAM = "Eclipse Dirigible";
+    /** Problem.cause column is VARCHAR(1024). */
+    private static final int PROBLEM_CAUSE_MAX = 1024;
 
     private static final Logger LOGGER = LoggerFactory.getLogger(JavaSynchronizer.class);
 
@@ -221,9 +231,11 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 bytes = RegistrySourceLoader.read(file.getLocation());
             } catch (RuntimeException e) {
                 LOGGER.error("Failed to read Java source at [{}]: {}", file.getLocation(), e.getMessage(), e);
+                String message = "Read failure: " + e.getMessage();
                 file.setLifecycle(ArtefactLifecycle.FAILED);
-                file.setError("Read failure: " + e.getMessage());
+                file.setError(message);
                 javaFileService.save(file);
+                recordCompilationProblems(file.getLocation(), List.of(), message);
                 continue;
             }
             sources.add(new JavaLoader.ClientSource(file.getProject(), file.getClassFqn(), new String(bytes, StandardCharsets.UTF_8)));
@@ -240,19 +252,71 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 file.setLifecycle(ArtefactLifecycle.FAILED);
                 file.setError(message);
                 javaFileService.save(file);
+                recordCompilationProblems(file.getLocation(), result.diagnostics()
+                                                                    .getOrDefault(fqn, List.of()),
+                        message);
             } else if (result.succeededFqns()
                              .contains(fqn)) {
                 file.setLifecycle(ArtefactLifecycle.CREATED);
                 file.setError(null);
                 javaFileService.save(file);
+                clearCompilationProblems(file.getLocation());
             }
         }
+    }
+
+    /**
+     * Project a file's compile failure onto the Problems view: replace its previous compilation
+     * problems (so resolved errors disappear), then add one entry per structured diagnostic at its
+     * line/column - or a single entry with the formatted message when no positioned diagnostic is
+     * available (e.g. a read failure or a class that compiled but failed to load).
+     */
+    private void recordCompilationProblems(String location, List<CompileDiagnostic> diagnostics, String message) {
+        try {
+            ProblemsFacade.deleteProblem(location, JavaFile.ARTEFACT_TYPE, PROBLEM_CATEGORY);
+            if (diagnostics.isEmpty()) {
+                saveProblem(location, "", "", message);
+            } else {
+                for (CompileDiagnostic diagnostic : diagnostics) {
+                    saveProblem(location, position(diagnostic.line()), position(diagnostic.column()), diagnostic.message());
+                }
+            }
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to record compilation problems for [{}]: {}", location, e.getMessage(), e);
+        }
+    }
+
+    private void clearCompilationProblems(String location) {
+        try {
+            ProblemsFacade.deleteProblem(location, JavaFile.ARTEFACT_TYPE, PROBLEM_CATEGORY);
+        } catch (RuntimeException e) {
+            LOGGER.error("Failed to clear compilation problems for [{}]: {}", location, e.getMessage(), e);
+        }
+    }
+
+    private static void saveProblem(String location, String line, String column, String cause) {
+        ProblemsFacade.save(location, JavaFile.ARTEFACT_TYPE, line, column, truncate(cause), "", PROBLEM_CATEGORY, PROBLEM_MODULE,
+                PROBLEM_SOURCE, PROBLEM_PROGRAM);
+    }
+
+    private static String position(long value) {
+        return value > 0 ? Long.toString(value) : "";
+    }
+
+    private static String truncate(String cause) {
+        if (cause == null) {
+            return "";
+        }
+        return cause.length() > PROBLEM_CAUSE_MAX ? cause.substring(0, PROBLEM_CAUSE_MAX) : cause;
     }
 
     @Override
     protected void cleanupImpl(JavaFile artefact) {
         try {
             javaFileService.delete(artefact);
+            // Clear any compilation problems for the removed source - the next rebuild won't see it,
+            // so its entries would otherwise linger.
+            clearCompilationProblems(artefact.getLocation());
             // Mark the cycle dirty so finishing() rebuilds the classloader without the removed
             // source; the consumer's onClassUnloaded fires from the rebuild's diff.
             dirty.set(true);

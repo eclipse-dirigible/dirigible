@@ -29,7 +29,7 @@
 		mvn -T 1C clean install -Dmaven.test.skip=true -DskipTests -Dmaven.javadoc.skip=true
 
 	Update the years in the license header:
-		mvn license:format -P license -DskipExistingHeaders=false -DskipTCs=true
+		mvn license:format -P license -DskipExistingHeaders=false
 
 	Update the version:
 		mvn versions:set -DnewVersion=3.3.1-SNAPSHOT
@@ -120,8 +120,8 @@
         <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
         <maven-source-plugin.version>3.4.0</maven-source-plugin.version>
         <maven-gpg-plugin.version>3.2.8</maven-gpg-plugin.version>
-        <maven-jacoco-plugin.version>0.8.14</maven-jacoco-plugin.version>
-        <maven-spotbugs-plugin.version>4.9.8.3</maven-spotbugs-plugin.version>
+        <maven-jacoco-plugin.version>0.8.15</maven-jacoco-plugin.version>
+        <maven-spotbugs-plugin.version>4.10.2.0</maven-spotbugs-plugin.version>
         <maven-formatter-plugin.version>2.29.0</maven-formatter-plugin.version>
         <maven-exec-plugin.version>3.6.3</maven-exec-plugin.version>
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
@@ -139,8 +139,8 @@
         <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
 
         <!-- Spring -->
-        <spring.boot.version>4.0.6</spring.boot.version>
-        <spring.admin.version>4.0.4</spring.admin.version>
+        <spring.boot.version>4.1.0</spring.boot.version>
+        <spring.admin.version>4.1.0</spring.admin.version>
         <springdoc.version>3.0.3</springdoc.version>
 
         <!-- Webjars -->
@@ -159,10 +159,10 @@
         <apache-httpcomponents-httpmime.version>4.5.14</apache-httpcomponents-httpmime.version>
         <apache-httpcomponents-httpclient.version>4.5.14</apache-httpcomponents-httpclient.version>
         <apache-httpcomponents-httpasyncclient.version>4.1.5</apache-httpcomponents-httpasyncclient.version>
-        <okhttp.version>5.3.2</okhttp.version>
+        <okhttp.version>5.4.0</okhttp.version>
 
         <jaxb.version>2.3.1</jaxb.version>
-        <jaxws-rt.version>4.0.4</jaxws-rt.version>
+        <jaxws-rt.version>4.0.5</jaxws-rt.version>
 
         <!-- Lucene -->
         <lucene.version>10.4.0</lucene.version>
@@ -189,7 +189,7 @@
         <velocity.version>2.4</velocity.version>
 
         <!-- JGit -->
-        <jgit.version>7.6.0.202603022253-r</jgit.version>
+        <jgit.version>7.7.0.202606012155-r</jgit.version>
 
         <!-- Flowable -->
         <flowable.version>8.0.0</flowable.version>
@@ -200,8 +200,8 @@
 
         <!-- JDBC -->
         <mongodb.version>3.12.14</mongodb.version>
-        <ngdbc.version>2.28.8</ngdbc.version>
-        <snowflake.version>4.2.0</snowflake.version>
+        <ngdbc.version>2.29.7</ngdbc.version>
+        <snowflake.version>4.3.1</snowflake.version>
         <mysql.version>8.4.0</mysql.version>
 
         <!-- QLDB -->
@@ -212,14 +212,14 @@
         <jetcd.core.version>0.8.6</jetcd.core.version>
 
         <!-- Various -->
-        <c3p0.version>0.14.0</c3p0.version>
+        <c3p0.version>0.14.1</c3p0.version>
         <guava.version>33.6.0-jre</guava.version>
         <icu4j.version>78.3</icu4j.version>
         <classgraph.version>4.8.184</classgraph.version>
         <logcaptor.version>2.12.6</logcaptor.version>
 
         <!-- UI -->
-        <blimpkit.version>2.3.0</blimpkit.version>
+        <blimpkit.version>2.3.1</blimpkit.version>
         <sap-theming__theming-base-content.version>11.18.2</sap-theming__theming-base-content.version>
         <chart.js.version>4.4.3</chart.js.version>
         <sortablejs.version>1.15.7</sortablejs.version>
@@ -227,7 +227,7 @@
         <angular-aria.version>1.8.2</angular-aria.version>
         <split.js.version>1.6.5</split.js.version>
         <diff.version>5.1.0</diff.version>
-        <monaco-editor.version>0.40.0</monaco-editor.version>
+        <monaco-editor.version>0.55.1</monaco-editor.version>
         <requirejs.version>2.3.6</requirejs.version>
         <stompjs.version>7.2.1</stompjs.version>
         <jstree.version>3.3.12</jstree.version>
@@ -266,7 +266,10 @@
         <skip.code.formatting>false</skip.code.formatting>
         <maven.javadoc.skip>false</maven.javadoc.skip>
         <license.skip>false</license.skip>
-        <skipTCs>true</skipTCs>
+        <!-- Testcontainers-based tests are tagged "testcontainers" and excluded by default;
+             the "testcontainers" profile runs only them (see surefire config below). -->
+        <surefire.groups></surefire.groups>
+        <surefire.excludedGroups>testcontainers</surefire.excludedGroups>
     </properties>
 
     <build>
@@ -361,6 +364,8 @@
                         <skipTests>${skipTests}</skipTests>
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
+                        <groups>${surefire.groups}</groups>
+                        <excludedGroups>${surefire.excludedGroups}</excludedGroups>
                         <argLine>
                             --add-opens=java.base/java.lang=ALL-UNNAMED
                             --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
@@ -480,7 +485,6 @@
             </activation>
             <properties>
                 <maven.javadoc.skip>true</maven.javadoc.skip>
-                <skipTCs>true</skipTCs>
             </properties>
             <build>
                 <plugins>
@@ -633,7 +637,7 @@
                             <dependency>
                                 <groupId><![CDATA[com.github.spotbugs]]></groupId>
                                 <artifactId>spotbugs</artifactId>
-                                <version>4.9.8</version>
+                                <version>4.10.2</version>
                             </dependency>
                         </dependencies>
                     </plugin>
@@ -679,7 +683,7 @@
                     <plugin>
                         <groupId>org.sonatype.central</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.10.0</version>
+                        <version>0.11.0</version>
                         <extensions>true</extensions>
                         <configuration>
                             <publishingServerId>ossrh</publishingServerId>
@@ -748,7 +752,8 @@
         <profile>
             <id>testcontainers</id>
             <properties>
-                <skipTCs>false</skipTCs>
+                <surefire.groups>testcontainers</surefire.groups>
+                <surefire.excludedGroups></surefire.excludedGroups>
             </properties>
             <build>
                 <plugins>

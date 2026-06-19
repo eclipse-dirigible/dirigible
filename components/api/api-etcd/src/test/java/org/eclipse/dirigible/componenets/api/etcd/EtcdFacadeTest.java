@@ -17,6 +17,7 @@ import io.etcd.jetcd.test.EtcdClusterExtension;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.etcd.EtcdFacade;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /**
  * The Class EtcdFacadeTest.
  */
+@Tag("testcontainers")
 @WithMockUser
 @ExtendWith(SpringExtension.class)
 @SpringBootTest

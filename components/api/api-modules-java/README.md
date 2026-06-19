@@ -118,6 +118,40 @@ Existing import statements that used the old `org.eclipse.dirigible.engine.java.
 paths have been migrated across the codebase (engine-java consumers, data-store-java consumers,
 IT fixtures, IDE snippets, `EntityController.java.template` and the DAO templates).
 
+## Optional typed handler interfaces
+
+Three of the runtime-callback decorators — `@Scheduled`, `@Listener`, `@Websocket` — accept an
+optional companion interface that the annotated class can implement. When present, the engine
+dispatches the callback through a direct virtual call instead of `Method.invoke`. The annotation
+remains the marker (binds the class to a cron / queue / endpoint); the interface only describes
+the callback shape.
+
+| Decorator                                         | Optional contract                                                | Methods                                                                  |
+|---------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------|
+| `@Scheduled`                                      | `org.eclipse.dirigible.sdk.job.JobHandler`                       | `void run()`                                                              |
+| `@Listener`                                       | `org.eclipse.dirigible.sdk.messaging.MessageHandler`             | `void onMessage(String)`, `default void onError(String) {}`               |
+| `@Websocket`                                      | `org.eclipse.dirigible.sdk.net.WebsocketHandler`                 | all 4 lifecycle methods default to no-op — override only what you need    |
+
+Implementing the interface is **not** required. The legacy reflective path (look up the method by
+name on the class) is preserved as a fallback, so existing handlers that don't implement the
+interface keep working unchanged. The typed path is opt-in: implement the interface and get
+compile-time signature checking, IDE autocomplete + refactoring, and direct dispatch.
+
+Example with `WebsocketHandler`:
+
+```java
+@Websocket(name = "Java Chat", endpoint = "java-chat")
+public class ChatHandler implements WebsocketHandler {
+    @Override public void onMessage(String text, String from) { ... }
+    // onOpen, onError, onClose inherit the no-op default — no boilerplate needed
+}
+```
+
+`dirigiblelabs/sample-java-entity-decorators` migrates its `CleanupJob`, `OrderListener` and
+`ChatHandler` to the typed interfaces and is the canonical typed example end-to-end. The four
+single-decorator standalone samples (`sample-java-{job,listener,websocket,extension}-decorator`)
+stay on the reflective form so the fallback path remains exercised by CI as well.
+
 ## Typed extension points
 
 Java `@Extension` does not carry a `to = "<string>"` attribute. Contributions declare the

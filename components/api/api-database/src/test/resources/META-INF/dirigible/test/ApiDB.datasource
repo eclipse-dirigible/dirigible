@@ -2,7 +2,7 @@
   "location":"/test/ApiDB.datasource",
   "name":"ApiDB",
   "driver":"org.h2.Driver",
-  "url":"jdbc:h2:~/test;LOCK_TIMEOUT=10000",
+  "url":"jdbc:h2:mem:apidb;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000",
   "username":"sa",
   "password":"",
   "nature":"local"

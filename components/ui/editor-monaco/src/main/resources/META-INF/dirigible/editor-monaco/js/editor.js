@@ -784,6 +784,21 @@ class DirigibleEditor {
             },
         });
 
+        // Reveal + place the cursor at a line/column on request (e.g. the Problems view double-click).
+        themingHub.addMessageListener({
+            topic: 'editor.reveal.line',
+            handler: (msg) => {
+                const { filePath, line, column } = msg || {};
+                const myPath = editorParameters.resourcePath;
+                if (filePath && myPath && (filePath.endsWith(myPath) || myPath.endsWith(filePath.replace(/^file:\/\//, ''))) && line > 0) {
+                    const col = column && column > 0 ? column : 1;
+                    editor.revealLineInCenter(line);
+                    editor.setPosition({ lineNumber: line, column: col });
+                    editor.focus();
+                }
+            },
+        });
+
         // Restore breakpoint glyphs from the debug view's persisted state
         themingHub.addMessageListener({
             topic: 'java.debug.breakpoints',
@@ -826,7 +841,7 @@ class DirigibleEditor {
     configureMonaco() {
         const fileObject = this.fileObject;
 
-        this.monaco.languages.typescript.javascriptDefaults.setDiagnosticsOptions({
+        this.monaco.typescript.javascriptDefaults.setDiagnosticsOptions({
             noSemanticValidation: false,
             noSyntaxValidation: false,
             noSuggestionDiagnostics: false,
@@ -844,7 +859,7 @@ class DirigibleEditor {
             ]
         });
 
-        this.monaco.languages.typescript.typescriptDefaults.setDiagnosticsOptions({
+        this.monaco.typescript.typescriptDefaults.setDiagnosticsOptions({
             noSemanticValidation: false,
             noSyntaxValidation: false,
             noSuggestionDiagnostics: false,
@@ -854,8 +869,8 @@ class DirigibleEditor {
             ]
         });
 
-        this.monaco.languages.typescript.javascriptDefaults.setCompilerOptions({
-            target: this.monaco.languages.typescript.ScriptTarget.ESNext,
+        this.monaco.typescript.javascriptDefaults.setCompilerOptions({
+            target: this.monaco.typescript.ScriptTarget.ESNext,
             strict: true,
             strictNullChecks: true,
             strictPropertyInitialization: true,
@@ -867,14 +882,14 @@ class DirigibleEditor {
             noUnusedLocals: true,
             checkJs: true,
             noFallthroughCasesInSwitch: true,
-            module: (this.fileName?.endsWith(".mjs") === true) ? this.monaco.languages.typescript.ModuleKind.ESNext : this.monaco.languages.typescript.ModuleKind.CommonJS,
-            moduleResolution: this.monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+            module: (this.fileName?.endsWith(".mjs") === true) ? this.monaco.typescript.ModuleKind.ESNext : this.monaco.typescript.ModuleKind.CommonJS,
+            moduleResolution: this.monaco.typescript.ModuleResolutionKind.NodeJs,
             resolveJsonModule: true,
             jsx: (this.fileName?.endsWith(".jsx") === true) ? "react" : undefined
         });
 
-        this.monaco.languages.typescript.typescriptDefaults.setCompilerOptions({
-            target: this.monaco.languages.typescript.ScriptTarget.ESNext,
+        this.monaco.typescript.typescriptDefaults.setCompilerOptions({
+            target: this.monaco.typescript.ScriptTarget.ESNext,
             strict: true,
             strictNullChecks: true,
             strictPropertyInitialization: true,
@@ -886,18 +901,18 @@ class DirigibleEditor {
             noUnusedLocals: true,
             checkJs: true,
             noFallthroughCasesInSwitch: true,
-            module: this.monaco.languages.typescript.ModuleKind.ESNext,
-            moduleResolution: this.monaco.languages.typescript.ModuleResolutionKind.NodeJs,
+            module: this.monaco.typescript.ModuleKind.ESNext,
+            moduleResolution: this.monaco.typescript.ModuleResolutionKind.NodeJs,
             esModuleInterop: true,
             resolveJsonModule: true,
             jsx: (this.fileName?.endsWith(".tsx") === true) ? "react" : undefined
         });
 
-        this.monaco.languages.typescript.javascriptDefaults.addExtraLib('/** $. XSJS API */ var $: any;', 'ts:$.js');
+        this.monaco.typescript.javascriptDefaults.addExtraLib('/** $. XSJS API */ var $: any;', 'ts:$.js');
 
-        this.monaco.languages.html.registerHTMLLanguageService('xml', {}, { documentFormattingEdits: true });
+        this.monaco.html.registerHTMLLanguageService('xml', {}, { documentFormattingEdits: true });
 
-        this.monaco.languages.html.htmlDefaults.setOptions({
+        this.monaco.html.htmlDefaults.setOptions({
             format: {
                 tabSize: 2,
                 insertSpaces: true,
@@ -1286,7 +1301,7 @@ class TypeScriptUtils {
                 const importedFileMetadata = await fileIO.loadText(importedFilePath);
                 let uriPath = importedFileMetadata.filePath;
                 if (TypeScriptUtils.isGlobalImport(importedFile)) {
-                    monaco.languages.typescript.typescriptDefaults.addExtraLib(
+                    monaco.typescript.typescriptDefaults.addExtraLib(
                         importedFileMetadata.sourceCode,
                         `file:///node_modules/@types/${importedFile.substring(0, importedFile.indexOf('.ts'))}.d.ts`
                     );
@@ -1316,14 +1331,14 @@ class TypeScriptUtils {
         const res = await fetch('/services/js/all-dts');
         const allDts = await res.json();
         for (const dts of allDts) {
-            monaco.languages.typescript.javascriptDefaults.addExtraLib(dts.content, dts.filePath);
-            monaco.languages.typescript.typescriptDefaults.addExtraLib(dts.content, dts.filePath);
+            monaco.typescript.javascriptDefaults.addExtraLib(dts.content, dts.filePath);
+            monaco.typescript.typescriptDefaults.addExtraLib(dts.content, dts.filePath);
         }
 
         const cachedDts = window.sessionStorage.getItem('dtsContent');
         if (cachedDts) {
-            monaco.languages.typescript.javascriptDefaults.addExtraLib(cachedDts, "");
-            monaco.languages.typescript.typescriptDefaults.addExtraLib(cachedDts, "");
+            monaco.typescript.javascriptDefaults.addExtraLib(cachedDts, "");
+            monaco.typescript.typescriptDefaults.addExtraLib(cachedDts, "");
         } else {
             const xhrModules = new XMLHttpRequest();
             xhrModules.open('GET', '/services/js/editor-monaco-extensions/api/dts.js');
@@ -1331,8 +1346,8 @@ class TypeScriptUtils {
             xhrModules.onload = function (xhrModules) {
                 // @ts-ignore
                 const dtsContent = xhrModules.target.responseText;
-                monaco.languages.typescript.javascriptDefaults.addExtraLib(dtsContent, "");
-                monaco.languages.typescript.typescriptDefaults.addExtraLib(dtsContent, "");
+                monaco.typescript.javascriptDefaults.addExtraLib(dtsContent, "");
+                monaco.typescript.typescriptDefaults.addExtraLib(dtsContent, "");
                 window.sessionStorage.setItem('dtsContent', dtsContent);
             };
             xhrModules.onerror = function (error) {

@@ -156,6 +156,10 @@ jobs:
       - name: Maven Build
         run: mvn clean install -P unit-tests
 
+      - name: Container Tests
+        if: runner.os == 'Linux'
+        run: mvn test -P testcontainers
+
   integration-tests-h2:
     runs-on: ubuntu-latest
     steps:

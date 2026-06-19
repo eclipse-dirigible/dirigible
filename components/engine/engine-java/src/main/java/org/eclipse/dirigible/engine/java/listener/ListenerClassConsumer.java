@@ -14,9 +14,14 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
+import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.sdk.messaging.Listener;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
@@ -38,9 +43,12 @@ import jakarta.jms.TextMessage;
  * ActiveMQ queues or topics.
  *
  * <p>
- * The annotated class must expose a public {@code onMessage(String message)} method and optionally
- * a public {@code onError(String error)} method. The class is instantiated once per load cycle; a
- * dedicated JMS Connection is created for each registered listener and torn down on unload.
+ * Implementing the optional {@link MessageHandler} interface gives compile-time signature checking
+ * and a direct, non-reflective dispatch path (Java's virtual dispatch goes straight to the impl,
+ * including the default {@code onError} no-op). Classes that don't implement it still work — the
+ * consumer falls back to looking up {@code onMessage(String)} (and the optional
+ * {@code onError(String)}) by name and invoking them reflectively. A dedicated JMS Connection is
+ * created for each registered listener and torn down on unload.
  */
 @Component
 @Order(500)
@@ -49,13 +57,20 @@ public class ListenerClassConsumer implements JavaClassConsumer {
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerClassConsumer.class);
 
     private final ActiveMQConnectionArtifactsFactory connectionFactory;
+    private final TenantContext tenantContext;
+    private final TenantPropertyManager tenantPropertyManager;
+    private final Tenant defaultTenant;
 
     /** fqn → open JMS Connection for teardown. */
     private final ConcurrentMap<String, Connection> connections = new ConcurrentHashMap<>();
 
     @Autowired
-    public ListenerClassConsumer(ActiveMQConnectionArtifactsFactory connectionFactory) {
+    public ListenerClassConsumer(ActiveMQConnectionArtifactsFactory connectionFactory, TenantContext tenantContext,
+            TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant) {
         this.connectionFactory = connectionFactory;
+        this.tenantContext = tenantContext;
+        this.tenantPropertyManager = tenantPropertyManager;
+        this.defaultTenant = defaultTenant;
     }
 
     @Override
@@ -68,20 +83,28 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         Listener ann = info.type()
                            .getAnnotation(Listener.class);
 
-        Method onMessage;
-        try {
-            onMessage = info.type()
-                            .getMethod("onMessage", String.class);
-        } catch (NoSuchMethodException e) {
-            LOGGER.error("@Listener class [{}] must expose a public onMessage(String) method; skipped.", info.fqn());
-            return;
-        }
-
-        Method onError = findOptionalMethod(info.type(), "onError", String.class);
-
         Object instance = instantiate(info);
         if (instance == null) {
             return;
+        }
+
+        Dispatcher dispatcher;
+        if (instance instanceof MessageHandler typed) {
+            // Typed path: Java virtual dispatch lands directly on the impl's onMessage / onError.
+            // The interface's default onError() is a no-op, so callers don't need to override it.
+            dispatcher = new TypedDispatcher(typed);
+        } else {
+            Method onMessage;
+            try {
+                onMessage = info.type()
+                                .getMethod("onMessage", String.class);
+            } catch (NoSuchMethodException e) {
+                LOGGER.error("@Listener class [{}] must implement MessageHandler or expose a public onMessage(String) method; skipped.",
+                        info.fqn());
+                return;
+            }
+            Method onError = findOptionalMethod(info.type(), "onError", String.class);
+            dispatcher = new ReflectiveDispatcher(instance, onMessage, onError);
         }
 
         stopExisting(info.fqn());
@@ -94,10 +117,11 @@ public class ListenerClassConsumer implements JavaClassConsumer {
             Destination destination = ann.kind() == ListenerKind.TOPIC ? session.createTopic(ann.name()) : session.createQueue(ann.name());
 
             MessageConsumer consumer = session.createConsumer(destination);
-            consumer.setMessageListener(msg -> dispatch(msg, onMessage, onError, instance, info.fqn()));
+            consumer.setMessageListener(msg -> dispatch(msg, dispatcher, info.fqn()));
 
             connections.put(info.fqn(), connection);
-            LOGGER.info("Java @Listener [{}] connected to {} '{}'.", info.fqn(), ann.kind(), ann.name());
+            LOGGER.info("Java @Listener [{}] connected to {} '{}' ({} dispatch).", info.fqn(), ann.kind(), ann.name(),
+                    instance instanceof MessageHandler ? "typed" : "reflective");
         } catch (JMSException e) {
             LOGGER.error("Failed to start listener for [{}]: {}", info.fqn(), e.getMessage(), e);
         }
@@ -140,24 +164,84 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         }
     }
 
-    private static void dispatch(Message msg, Method onMessage, Method onError, Object instance, String fqn) {
+    private void dispatch(Message msg, Dispatcher dispatcher, String fqn) {
         if (!(msg instanceof TextMessage textMsg)) {
             LOGGER.warn("@Listener [{}] received a non-text message; ignored.", fqn);
             return;
         }
+        String text;
         try {
-            String text = textMsg.getText();
-            onMessage.invoke(instance, text);
-        } catch (ReflectiveOperationException | JMSException e) {
+            text = textMsg.getText();
+        } catch (JMSException e) {
+            LOGGER.error("@Listener [{}] failed to read text message: {}", fqn, e.getMessage(), e);
+            dispatcher.onError(e.getMessage(), fqn);
+            return;
+        }
+        // The message arrives on a broker thread with no tenant context. Recover the originating
+        // tenant the producer stamped on it and re-establish it for the handler, the same way the
+        // built-in asynchronous listener does - otherwise handler code that touches tenant-scoped
+        // services (DB, BPM via Process.start, ...) fails with "current tenant is not initialized".
+        // Messages from outside the platform producer carry no tenant; fall back to the default
+        // tenant so the handler still runs within a valid context.
+        String tenantId;
+        try {
+            tenantId = tenantPropertyManager.getCurrentTenantId(msg);
+        } catch (JMSException | RuntimeException e) {
+            LOGGER.debug("@Listener [{}] message carries no tenant; using the default tenant. {}", fqn, e.getMessage());
+            tenantId = defaultTenant.getId();
+        }
+        try {
+            tenantContext.execute(tenantId, () -> {
+                dispatcher.onMessage(text);
+                return null;
+            });
+        } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            if (onError != null) {
-                try {
-                    onError.invoke(instance, cause.getMessage());
-                } catch (ReflectiveOperationException ex) {
-                    LOGGER.error("@Listener [{}] onError() threw: {}", fqn, ex.getMessage(), ex);
-                }
-            } else {
-                LOGGER.error("@Listener [{}] onMessage() threw: {}", fqn, cause.getMessage(), cause);
+            dispatcher.onError(cause.getMessage(), fqn);
+        }
+    }
+
+    /** Abstraction over the typed and reflective callback paths so {@link #dispatch} stays uniform. */
+    private interface Dispatcher {
+        void onMessage(String text) throws Exception;
+
+        void onError(String error, String fqn);
+    }
+
+    private record TypedDispatcher(MessageHandler handler) implements Dispatcher {
+
+        @Override
+        public void onMessage(String text) {
+            handler.onMessage(text);
+        }
+
+        @Override
+        public void onError(String error, String fqn) {
+            try {
+                handler.onError(error);
+            } catch (RuntimeException ex) {
+                LOGGER.error("@Listener [{}] onError() threw: {}", fqn, ex.getMessage(), ex);
+            }
+        }
+    }
+
+    private record ReflectiveDispatcher(Object instance, Method onMessage, Method onError) implements Dispatcher {
+
+        @Override
+        public void onMessage(String text) throws ReflectiveOperationException {
+            onMessage.invoke(instance, text);
+        }
+
+        @Override
+        public void onError(String error, String fqn) {
+            if (onError == null) {
+                LOGGER.error("@Listener [{}] onMessage() threw: {}", fqn, error);
+                return;
+            }
+            try {
+                onError.invoke(instance, error);
+            } catch (ReflectiveOperationException ex) {
+                LOGGER.error("@Listener [{}] onError() threw: {}", fqn, ex.getMessage(), ex);
             }
         }
     }

@@ -11,6 +11,10 @@ package org.eclipse.dirigible.components.api.db;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.data.sources.domain.DataSource;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
@@ -18,6 +22,7 @@ import org.eclipse.dirigible.components.data.sources.repository.DataSourceReposi
 import org.eclipse.dirigible.components.engine.javascript.service.JavascriptService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.TestInstance;
 import org.junit.jupiter.api.TestInstance.Lifecycle;
@@ -80,6 +85,21 @@ public class DatabaseSuiteTest {
     @AfterAll
     public void cleanup() {
         Configuration.set("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB");
+    }
+
+    /**
+     * Wipes the test database before every test so leftover objects from an interrupted run cannot fail
+     * a subsequent {@code CREATE TABLE}.
+     *
+     * @throws SQLException if the cleanup statement fails
+     */
+    @BeforeEach
+    public void cleanDatabase() throws SQLException {
+        try (Connection connection = datasourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                Statement statement = connection.createStatement()) {
+            statement.execute("DROP ALL OBJECTS");
+        }
     }
 
     /**

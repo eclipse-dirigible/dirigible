@@ -441,8 +441,14 @@ jobs:
       - name: Create dummy reports folder
         run: mkdir reports
 
+      # rsdmike/github-security-report-action calls out to a hosted PDF-generation
+      # service; that service has been timing out on every release attempt. Mark the
+      # step as continue-on-error so a third-party SaaS outage does not block the
+      # GitHub Release / Helm publish — the real security artefacts (CodeQL SARIFs,
+      # Docker Scout SARIF, ZAP HTML) are uploaded by their own jobs and are unaffected.
       - name: Generate GitHub Security Report
         uses: rsdmike/github-security-report-action@v3.0.4
+        continue-on-error: true
         with:
           template: summary
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -450,6 +456,7 @@ jobs:
           outputDir: "security-report"
 
       - name: Upload Generated GitHub Security Report as Artifact
+        if: ${{ hashFiles('security-report/**') != '' }}
         uses: actions/upload-artifact@v4
         with:
           name: security_report
@@ -520,15 +527,22 @@ jobs:
       - name: Copy report files due to naming collisions
         if: ${{ inputs.code-scans }}
         run: |
-          cp uploaded-artifacts/security_report/summary.pdf release_files/security-report.pdf
-          
+          # security-report.pdf is best-effort: the upstream PDF generator action
+          # (rsdmike/github-security-report-action) calls a hosted service that
+          # sometimes times out. Skip the copy rather than fail the release.
+          if [ -f uploaded-artifacts/security_report/summary.pdf ]; then
+            cp uploaded-artifacts/security_report/summary.pdf release_files/security-report.pdf
+          else
+            echo "::warning::security_report/summary.pdf not produced; skipping security-report.pdf from the release."
+          fi
+
           cp uploaded-artifacts/sast_codeql_sarif_java-kotlin/java.sarif release_files/sast_codeql_sarif_java-kotlin.sarif
           cp uploaded-artifacts/sast_codeql_sarif_javascript-typescript/javascript.sarif release_files/sast_codeql_sarif_javascript-typescript.sarif
-          
+
           cp uploaded-artifacts/sast_docker_scout_sarif.json/sast_docker_scout_sarif.json release_files/sast_docker_scout_sarif.json
-          
+
           cp uploaded-artifacts/dast_zap_report/report_html.html release_files/dast_zap_report.html
-          
+
           cp uploaded-artifacts/application-all/application-all.zip release_files/application-all.zip
 
       - name: Create GitHub Release

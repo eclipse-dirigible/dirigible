@@ -64,6 +64,10 @@ Enterprise Services.
       - [Usage:](#usage)
       - [Test environment with LocalStack](#test-environment-with-localstack)
       - [Setup:](#setup-1)
+  - [Claude Code Commands](#claude-code-commands)
+    - [Available commands](#available-commands)
+    - [Examples](#examples)
+    - [Without Claude Code](#without-claude-code)
   - [Additional Information](#additional-information)
     - [License](#license)
     - [Contributors](#contributors)
@@ -409,6 +413,70 @@ If you prefer working with a test environment you can use [LocalStack](https://w
 
 - Start `LocalStack` using - `localstack start -d`
 - Set up the environment variables, mainly `DIRIGIBLE_S3_PROVIDER=localstack`, exposed by Eclipse Dirigible
+
+## Claude Code Commands
+
+If you use [Claude Code](https://claude.com/claude-code), this repository ships a few slash commands
+that drive the everyday loop for you — build and run Dirigible, watch its logs, debug, run the tests,
+and prepare a pull request — so you don't have to remember the `mvn` and `java` incantations. Just
+type the command in a Claude Code session opened in this repo.
+
+### Available commands
+
+| Command            | What it does                                                                                 |
+| ------------------ | -------------------------------------------------------------------------------------------- |
+| `/dirigible-start` | Builds the project and starts Dirigible, then waits until it's ready and shows you the URL.   |
+| `/dirigible-logs`  | Shows the running server's log (live).                                                        |
+| `/dirigible-stop`  | Stops the running instance.                                                                    |
+| `/dirigible-test`  | Runs the tests — all by default, or just the unit or just the integration tests.               |
+| `/dirigible-pr`    | Gets your branch ready for a pull request (formats the code and checks the docs build).        |
+
+`/dirigible-start` accepts two optional keywords you can add in any combination:
+
+- **`debug`** — start with the remote debugger enabled (attach your IDE to port `8000`).
+- **`clean`** — wipe the build output first, resetting the local database and repository. Use this
+  when you want a completely fresh instance; omit it to keep your existing data between restarts.
+
+### Examples
+
+```text
+/dirigible-start              # build + start; open http://localhost:8080 (admin/admin)
+/dirigible-start clean        # start fresh — reset the local database and repository
+/dirigible-start debug        # start with the debugger on port 8000
+/dirigible-start debug clean   # both at once
+
+/dirigible-logs               # watch the server log live
+/dirigible-logs snapshot      # show the last minute of logs, once
+/dirigible-logs snapshot 5    # show the last 5 minutes of logs, once
+
+/dirigible-stop               # stop the server
+
+/dirigible-test               # run all tests (unit + integration)
+/dirigible-test unit          # run only the unit tests
+/dirigible-test integration   # run only the integration tests
+
+/dirigible-pr                 # format + validate before you open a PR
+```
+
+> **Note:** the integration tests boot the whole application and drive a headless Chrome, so they
+> take a while and need [`ttyd`](https://github.com/tsl0922/ttyd) installed. `/dirigible-test` runs
+> them long-running in the background and reports pass/fail when finished.
+
+> **Tip:** to watch the log continuously, keep `.claude/run/dirigible.log` open in your editor — it's
+> rewritten fresh each time you start the server.
+
+### Without Claude Code
+
+The commands are backed by one small, dependency-free script that you can also run directly (it works
+the same on macOS, Linux, and Windows; needs [Node.js 22+](https://nodejs.org/), already a build
+prerequisite):
+
+```shell
+node .claude/scripts/dirigible.mjs start          # add --debug and/or --clean
+node .claude/scripts/dirigible.mjs logs           # snapshot; add --follow to tail, or --since MIN for a time window
+node .claude/scripts/dirigible.mjs stop
+node .claude/scripts/dirigible.mjs test           # all tests; or `test unit` / `test integration`
+```
 
 ## Additional Information
 

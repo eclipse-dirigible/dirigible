@@ -142,12 +142,47 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         return internalRegistryPath;
     }
 
+    /** How long {@link #forceProcessSynchronizers()} waits for a full pass to run after the force. */
+    private static final long FORCE_SYNC_TIMEOUT_MILLIS = 5 * 60 * 1000L;
+
+    /** Pause between retries while another synchronization run holds the processing slot. */
+    private static final long FORCE_SYNC_RETRY_MILLIS = 100L;
+
     /**
-     * Force process synchronizers.
+     * Force process synchronizers and wait (bounded) until a full pass has actually run.
+     *
+     * <p>
+     * {@link #processSynchronizers()} silently skips when the runtime is not prepared yet or when
+     * another synchronization (e.g. the scheduled {@code SynchronizationJob}) is mid-run. Callers of
+     * the <i>force</i> variant - tests and the IDE publish flow - rely on the registry state being
+     * reconciled when this method returns, so a silent skip is a race: the caller immediately queries
+     * for an artefact the skipped pass never persisted. This method therefore retries until the force
+     * flag has been consumed by a completed pass (ours or a concurrent one) and no run is still in
+     * progress, up to {@link #FORCE_SYNC_TIMEOUT_MILLIS}.
      */
     public void forceProcessSynchronizers() {
         this.synchronizationWatcher.force();
-        processSynchronizers();
+        long deadline = System.currentTimeMillis() + FORCE_SYNC_TIMEOUT_MILLIS;
+        while (true) {
+            processSynchronizers();
+            if (!synchronizationWatcher.isModified() && !isSynchronizationRunning()) {
+                return;
+            }
+            if (System.currentTimeMillis() >= deadline) {
+                logger.warn("Forced synchronization did not complete within [{}] ms - modified: [{}], running: [{}]",
+                        FORCE_SYNC_TIMEOUT_MILLIS, synchronizationWatcher.isModified(), isSynchronizationRunning());
+                return;
+            }
+            logger.debug("Forced synchronization is waiting for a concurrent run to finish...");
+            try {
+                Thread.sleep(FORCE_SYNC_RETRY_MILLIS);
+            } catch (InterruptedException e) {
+                Thread.currentThread()
+                      .interrupt();
+                logger.warn("Forced synchronization wait interrupted", e);
+                return;
+            }
+        }
     }
 
     /**

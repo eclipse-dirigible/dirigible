@@ -181,16 +181,18 @@
                                     containerEl.removeChild(containerEl.children.item(i));
                             }
                             let editor = monaco.editor.createDiffEditor(containerEl, {
+                                renderSideBySide: true,
+                                diffAlgorithm: "advanced",
+                                renderIndicators: true,
+                                renderOverviewRuler: true,
+                                originalEditable: false,
                                 automaticLayout: true,
                                 readOnly: true,
                                 scrollBeyondLastLine: false,
                                 enableSplitViewResizing: false,
+                                ignoreTrimWhitespace: false,
                             });
 
-                            monaco.editor.createDiffNavigator(editor, {
-                                followsCaret: true,
-                                ignoreCharChanges: true,
-                            });
                             resolve(editor);
                             window.onresize = function () {
                                 diffEditor.layout();

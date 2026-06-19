@@ -69,7 +69,8 @@
                 <bk-list-item interactive="true" ng-repeat="t in filteredTopics track by t.name" selected="isSelected(t)" ng-click="select(t)">
                     <bk-list-icon glyph="sap-icon--marketing-campaign"></bk-list-icon>
                     <bk-list-title class="bk-font--normal" title="{{ t.name }}">{{ t.name }}</bk-list-title>
-                    <bk-list-secondary class="bk-font--bold" ng-class="{ 'bk-text--subtitle bk-font--normal': !t.consumerCount }">{{ t.consumerCount }}</bk-list-secondary>
+                    <bk-list-secondary ng-if="!t.consumerCount" class="bk-text--subtitle bk-font--normal">{{ t.consumerCount }}</bk-list-secondary>
+                    <bk-list-secondary ng-if="t.consumerCount" class="bk-font--bold">{{ t.consumerCount }}</bk-list-secondary>
                 </bk-list-item>
             </bk-list>
             <bk-list ng-if="!filteredTopics.length && !loading" compact="true">
@@ -148,9 +149,14 @@
 
                 $scope.applyFilter = () => {
                     const needle = ($scope.filterText || '').trim().toLowerCase();
-                    const matches = (item) => !needle || (item.name && item.name.toLowerCase().indexOf(needle) !== -1);
-                    $scope.filteredQueues = ($scope.summary.queues || []).filter(matches);
-                    $scope.filteredTopics = ($scope.summary.topics || []).filter(matches);
+                    if (!needle) {
+                        $scope.filteredQueues = $scope.summary.queues;
+                        $scope.filteredTopics = $scope.summary.topics;
+                    } else {
+                        const matches = (item) => !needle || (item.name && item.name.toLowerCase().indexOf(needle) !== -1);
+                        $scope.filteredQueues = ($scope.summary.queues || []).filter(matches);
+                        $scope.filteredTopics = ($scope.summary.topics || []).filter(matches);
+                    }
                 };
 
                 $scope.isSelected = (item) => $scope.selected && $scope.selected.name === item.name && $scope.selected.type === item.type;

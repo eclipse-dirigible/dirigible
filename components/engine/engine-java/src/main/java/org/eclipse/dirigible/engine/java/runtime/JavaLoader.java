@@ -190,7 +190,7 @@ public class JavaLoader {
         currentBytecode.putAll(effectiveBytecode);
 
         RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed));
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()));
 
         // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
         // (failed-to-recompile) classes keep their existing .class files untouched.
@@ -279,10 +279,14 @@ public class JavaLoader {
      * @param succeededFqns FQNs that compiled successfully <em>this cycle</em> (not the whole live
      *        generation - classes kept on last-good bytecode are reported via {@code failures}, not
      *        here)
-     * @param failures per-FQN compile error message for the ones that failed to (re)compile
+     * @param failures per failed FQN → a formatted error message
      * @param unloadedFqns FQNs removed from the generation because their source was deleted
+     * @param diagnostics per failed FQN → the structured compiler diagnostics behind the failure
+     *        (line/column/message); empty for failures with no attributable diagnostic (e.g. a class
+     *        that compiled but could not be loaded)
      */
-    public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns) {
+    public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns,
+            Map<String, List<CompileDiagnostic>> diagnostics) {
     }
 
 }

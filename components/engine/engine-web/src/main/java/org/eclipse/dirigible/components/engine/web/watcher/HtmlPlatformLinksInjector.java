@@ -24,12 +24,27 @@ import org.jsoup.nodes.Node;
 import org.jsoup.select.Elements;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Component;
 
+/**
+ * Replaces a {@code <meta name="platform-links" category="...">} placeholder in a page with the
+ * concrete {@code <link>}/{@code <script>} bundles registered for the requested categories. Applied
+ * at request time by {@code WebService} when serving registry HTML, so published files stay
+ * pristine on disk and there is no dependency on file-watcher timing.
+ */
+@Component
 public class HtmlPlatformLinksInjector {
 
     private static final Logger logger = LoggerFactory.getLogger(HtmlPlatformLinksInjector.class);
 
-    Map<String, List<PlatformAsset>> assetsByCategory;
+    private final Map<String, List<PlatformAsset>> assetsByCategory;
+
+    /**
+     * Spring constructor - loads the asset registry from {@code platform-links.json}.
+     */
+    public HtmlPlatformLinksInjector() {
+        this(PlatformAssetsJsonLoader.loadAssetsFromJson());
+    }
 
     public HtmlPlatformLinksInjector(Map<String, List<PlatformAsset>> assets) {
         this.assetsByCategory = assets;

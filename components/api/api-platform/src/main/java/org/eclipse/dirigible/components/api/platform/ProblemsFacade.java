@@ -94,6 +94,21 @@ public class ProblemsFacade implements InitializingBean {
     }
 
     /**
+     * Delete every problem for the given artefact location, type and category. Symmetric with
+     * {@link #save} for producers that key their problems on a custom category (e.g. compilation) and
+     * want to replace the previous set on each run.
+     *
+     * @param location the location
+     * @param type the type
+     * @param category the category
+     */
+    public static final void deleteProblem(String location, String type, String category) {
+        ProblemsFacade.get()
+                      .getProblemService()
+                      .deleteByLocationAndTypeAndCategory(location, type, category);
+    }
+
+    /**
      * Get Artefact Synchronization Problem.
      *
      * @param artefact the artefact
