@@ -160,6 +160,11 @@ class IntentEngineIT extends IntegrationTest {
                 event: { onCreate: Order }
                 method: POST
                 url: "@config:WAREHOUSE_URL"
+
+            inbound:
+              - name: ingestOrder
+                path: /ingest
+                create: Order
             """;
 
     @Autowired
@@ -395,6 +400,16 @@ class IntentEngineIT extends IntegrationTest {
                 integration.contains("HttpClient.post(url, Json.stringify(options))")
                         && integration.contains("options.put(\"text\", message)"),
                 "a POST integration should forward the entity JSON as the request body");
+
+        // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
+        String webhook = contentOf("gen/events/IngestOrderWebhook.java");
+        assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
+                "the inbound webhook should be a @Controller");
+        assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
+        assertTrue(
+                webhook.contains("OrderEntity entity = Json.parse(body, OrderEntity.class)")
+                        && webhook.contains("new OrderRepository().save(entity)"),
+                "the webhook should deserialize the payload and save it through the repository");
     }
 
     @Test
@@ -609,6 +624,9 @@ class IntentEngineIT extends IntegrationTest {
                 && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
         assertTrue(glue.contains("Configurations.get(\\\"WAREHOUSE_URL\\\")"),
                 "glue should carry the integration URL as a config lookup expression");
+        // Inbound: one per webhook, carrying the path + the entity to create.
+        assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
+                "glue should carry the ingestOrder inbound webhook with its path");
     }
 
     private void assertSettings() {

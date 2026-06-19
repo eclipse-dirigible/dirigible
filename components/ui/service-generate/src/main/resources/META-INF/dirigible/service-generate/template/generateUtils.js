@@ -415,6 +415,29 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "inbound":
+                    // Inbound webhooks (intent layer): one @Controller per webhook - ingest a posted JSON
+                    // payload as an entity. Not entity-shaped, own loop.
+                    if (model.inbound) {
+                        for (let w = 0; w < model.inbound.length; w++) {
+                            const inboundParameters = {
+                                ...parameters,
+                                name: model.inbound[w].name,
+                                className: model.inbound[w].className,
+                                entity: model.inbound[w].entity,
+                                perspective: model.inbound[w].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.inbound[w].perspective),
+                                path: model.inbound[w].path
+                            };
+                            const cleanInboundParameters = cleanData(inboundParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanInboundParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanInboundParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

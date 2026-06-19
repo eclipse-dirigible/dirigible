@@ -17,6 +17,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -71,8 +72,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
+        List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()
+                && inbound.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -83,9 +86,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("notifications", notifications);
         glue.put("schedules", schedules);
         glue.put("integrations", integrations);
+        glue.put("inbound", inbound);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
-        LOGGER.debug("Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s) and [{}] integration(s)",
-                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size());
+        LOGGER.debug(
+                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s), [{}] integration(s)"
+                        + " and [{}] inbound webhook(s)",
+                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size(), inbound.size());
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
@@ -150,6 +156,33 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             notifications.add(entry);
         }
         return notifications;
+    }
+
+    private static List<Map<String, Object>> buildInbound(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> inbound = new ArrayList<>();
+        for (InboundIntent webhook : model.getInbound()) {
+            if (webhook.getName() == null || webhook.getName()
+                                                    .isBlank()) {
+                continue;
+            }
+            String entity = webhook.getCreate();
+            if (entity == null || !byName.containsKey(entity)) {
+                continue;
+            }
+            if (!settings.shouldGenerate("inbound", webhook.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing controller for inbound webhook [{}] (not generated)", webhook.getName());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", webhook.getName());
+            entry.put("className", IntentNaming.pascalCase(webhook.getName()));
+            entry.put("entity", entity);
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("path", webhook.getPath());
+            inbound.add(entry);
+        }
+        return inbound;
     }
 
     private static List<Map<String, Object>> buildIntegrations(IntentModel model, Map<String, EntityIntent> byName,
