@@ -18,6 +18,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
@@ -68,6 +69,8 @@ public final class IntentParser {
     private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
     /** Comparison operators a schedule's {@code where} condition may use. */
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
+    /** HTTP methods an outbound integration may use. */
+    private static final Set<String> HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
 
     /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
@@ -120,6 +123,7 @@ public final class IntentParser {
         validateSeeds(model, entityNames, issues);
         validateNotifications(model, entityNames, issues);
         validateSchedules(model, entityNames, issues);
+        validateIntegrations(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
@@ -169,6 +173,47 @@ public final class IntentParser {
                                                   .count() >= 2) {
                     issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
                 }
+            }
+        }
+    }
+
+    /**
+     * Each integration must have a unique name, bind to exactly one entity lifecycle event of a
+     * declared entity, use a supported HTTP method, and name a target URL.
+     */
+    private static void validateIntegrations(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (IntegrationIntent integration : model.getIntegrations()) {
+            String name = integration.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("integration has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate integration [" + name + "]");
+            }
+            int eventCount = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = integration.getEvent()
+                                           .get(kind);
+                if (target != null) {
+                    eventCount++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("integration [" + name + "] " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (eventCount != 1) {
+                issues.add("integration [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
+            }
+            String method = integration.getMethod();
+            if (method != null && !method.isBlank() && !HTTP_METHODS.contains(method.trim()
+                                                                                    .toUpperCase(Locale.ROOT))) {
+                issues.add("integration [" + name + "] has unsupported HTTP method [" + method + "]");
+            }
+            if (integration.getUrl() == null || integration.getUrl()
+                                                           .isBlank()) {
+                issues.add("integration [" + name + "] has no url");
             }
         }
     }

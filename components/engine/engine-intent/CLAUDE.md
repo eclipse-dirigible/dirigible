@@ -339,12 +339,12 @@ Every action below has a real SDK surface to generate against, so none of this n
        notify: { to: member.email, subject: "Overdue: {book.title}", body: "Your loan is overdue." }
    ```
    → `gen/events/<Name>Job.java`: a `@Scheduled(expression=cron)` `JobHandler` that runs `new <Entity>Repository().findAll(Criteria...)` (the typed `Criteria` query API) and performs the per-row `notify` (reusing `NotificationSupport.plan` against the row entity - same relation-load + interpolation as notifications). `ScheduleSupport.criteriaExpression` builds the `Criteria` chain (`where` -> typed conditions; field names PascalCased to the entity properties). Honors the `.settings` override. **Gap:** the action is `notify` only (other actions + `between`/`in` operators are later); process `trigger: { onSchedule: <cron> }` (timer start event) is still open.
-4. **Outbound calls** — "tell another system" on an event.
+4. **Outbound integrations** — "tell another system" on an event. **(v1 implemented.)**
    ```yaml
    integrations:
-     - { name: pushBookToCatalog, event: { onCreate: Book }, callHttp: { method: POST, url: "@config:CATALOG_URL", body: { isbn: id, title: title } } }
+     - { name: pushBookToCatalog, event: { onCreate: Book }, method: POST, url: "@config:CATALOG_URL" }
    ```
-   → `@Listener` using `sdk.http.HttpClient`; URL/secret via `Configurations`.
+   → `gen/events/<Name>Integration.java`: an `@Listener` that forwards the entity-event JSON to the URL via `sdk.http.HttpClient` (`IntegrationSupport` maps the method + the `@config:KEY` URL sugar to `Configurations.get`). The event-binding (`EventBinding`) + topic are shared with notifications. **Gap:** body forwards the whole entity (custom body mapping + headers/auth are later).
 
 **Tier 2 — high value:**
 

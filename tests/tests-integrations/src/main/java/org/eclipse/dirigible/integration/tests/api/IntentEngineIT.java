@@ -154,6 +154,12 @@ class IntentEngineIT extends IntegrationTest {
                   to: ops@example.com
                   subject: "Stale order {id} for {customer.name}"
                   body: "This order is stale."
+
+            integrations:
+              - name: pushOrderToWarehouse
+                event: { onCreate: Order }
+                method: POST
+                url: "@config:WAREHOUSE_URL"
             """;
 
     @Autowired
@@ -376,6 +382,19 @@ class IntentEngineIT extends IntegrationTest {
                         "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
                 "the per-row notify should load the one-hop related entity");
         assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
+
+        // The integration is an @Listener that forwards the entity JSON to an external endpoint.
+        String integration = contentOf("gen/events/PushOrderToWarehouseIntegration.java");
+        assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
+                "the integration should be a message-handling listener");
+        assertTrue(integration.contains("@Listener(name = \"intent-test-Order-Order\""),
+                "an onCreate integration should bind to the entity's base (create) topic");
+        assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
+                "an @config: URL should resolve through the configuration at run time");
+        assertTrue(
+                integration.contains("HttpClient.post(url, Json.stringify(options))")
+                        && integration.contains("options.put(\"text\", message)"),
+                "a POST integration should forward the entity JSON as the request body");
     }
 
     @Test
@@ -585,6 +604,11 @@ class IntentEngineIT extends IntegrationTest {
                 "glue should carry the staleOrders schedule with its cron");
         assertTrue(glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now())"),
                 "glue should carry the schedule's typed Criteria expression");
+        // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
+        assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
+                && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
+        assertTrue(glue.contains("Configurations.get(\\\"WAREHOUSE_URL\\\")"),
+                "glue should carry the integration URL as a config lookup expression");
     }
 
     private void assertSettings() {

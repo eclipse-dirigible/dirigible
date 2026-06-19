@@ -52,6 +52,13 @@ export function getTemplate(parameters) {
                 collection: "schedules"
             },
             {
+                location: "/template-application-events-java/events/Integration.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Integration.java",
+                engine: "velocity",
+                collection: "integrations"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",
