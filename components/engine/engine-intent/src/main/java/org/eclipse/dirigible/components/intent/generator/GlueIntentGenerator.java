@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -67,8 +68,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
+        List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -77,9 +79,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
         glue.put("notifications", notifications);
+        glue.put("schedules", schedules);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
-        LOGGER.debug("Wrote glue with [{}] trigger(s), [{}] resolver(s) and [{}] notification(s)", triggers.size(), resolvers.size(),
-                notifications.size());
+        LOGGER.debug("Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s) and [{}] schedule(s)", triggers.size(),
+                resolvers.size(), notifications.size(), schedules.size());
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
@@ -144,6 +147,47 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             notifications.add(entry);
         }
         return notifications;
+    }
+
+    private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> schedules = new ArrayList<>();
+        for (ScheduleIntent schedule : model.getSchedules()) {
+            if (schedule.getName() == null || schedule.getName()
+                                                      .isBlank()) {
+                continue;
+            }
+            String entity = schedule.getEntity();
+            if (entity == null || !byName.containsKey(entity) || schedule.getNotify() == null) {
+                continue;
+            }
+            if (!settings.shouldGenerate("schedules", schedule.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
+                continue;
+            }
+            // The per-row action reuses the notification machinery against the queried row entity.
+            NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName, compositionParents);
+            if (plan == null) {
+                LOGGER.warn("Schedule [{}] notify recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
+                        schedule.getName(), schedule.getNotify()
+                                                    .getTo(),
+                        entity);
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", schedule.getName());
+            entry.put("className", IntentNaming.pascalCase(schedule.getName()));
+            entry.put("cron", schedule.getCron());
+            entry.put("entity", entity);
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
+            entry.put("relationLoads", relationLoads(plan));
+            entry.put("toExpression", plan.toExpression());
+            entry.put("subjectExpression", plan.subjectExpression());
+            entry.put("bodyExpression", plan.bodyExpression());
+            schedules.add(entry);
+        }
+        return schedules;
     }
 
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {

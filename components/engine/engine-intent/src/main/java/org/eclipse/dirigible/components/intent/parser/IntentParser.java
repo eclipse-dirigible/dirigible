@@ -23,6 +23,8 @@ import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -64,6 +66,8 @@ public final class IntentParser {
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
     private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
+    /** Comparison operators a schedule's {@code where} condition may use. */
+    private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
 
     /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
@@ -115,8 +119,57 @@ public final class IntentParser {
         validateReports(model, entityNames, issues);
         validateSeeds(model, entityNames, issues);
         validateNotifications(model, entityNames, issues);
+        validateSchedules(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * Each schedule must have a unique name, a cron expression, an entity to query, supported
+     * {@code where} operators, and a notify action with a valid recipient.
+     */
+    private static void validateSchedules(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (ScheduleIntent schedule : model.getSchedules()) {
+            String name = schedule.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("schedule has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate schedule [" + name + "]");
+            }
+            if (schedule.getCron() == null || schedule.getCron()
+                                                      .isBlank()) {
+                issues.add("schedule [" + name + "] has no cron expression");
+            }
+            if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
+                issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+            }
+            for (ScheduleConditionIntent condition : schedule.getWhere()) {
+                if (condition.getField() == null || condition.getField()
+                                                             .isBlank()) {
+                    issues.add("schedule [" + name + "] has a where-condition with no field");
+                }
+                if (!SCHEDULE_OPERATORS.contains(condition.getOp())) {
+                    issues.add("schedule [" + name + "] where-condition uses unsupported operator [" + condition.getOp()
+                            + "] (supported: eq/ne/gt/ge/lt/le/like)");
+                }
+            }
+            if (schedule.getNotify() == null) {
+                issues.add("schedule [" + name + "] has no notify action");
+            } else {
+                String to = schedule.getNotify()
+                                    .getTo();
+                if (to == null || to.isBlank()) {
+                    issues.add("schedule [" + name + "] notify has no recipient (to)");
+                } else if (!to.contains("@") && to.chars()
+                                                  .filter(c -> c == '.')
+                                                  .count() >= 2) {
+                    issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
+                }
+            }
         }
     }
 

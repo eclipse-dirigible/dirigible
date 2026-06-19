@@ -359,6 +359,37 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "schedules":
+                    // Schedules (intent layer): one @Scheduled JobHandler per schedule - query the entity
+                    // via a typed Criteria and notify per matching row. Not entity-shaped, own loop.
+                    if (model.schedules) {
+                        for (let s = 0; s < model.schedules.length; s++) {
+                            const scheduleParameters = {
+                                ...parameters,
+                                name: model.schedules[s].name,
+                                className: model.schedules[s].className,
+                                cron: model.schedules[s].cron,
+                                entity: model.schedules[s].entity,
+                                perspective: model.schedules[s].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.schedules[s].perspective),
+                                criteriaExpression: model.schedules[s].criteriaExpression,
+                                relationLoads: (model.schedules[s].relationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                })),
+                                toExpression: model.schedules[s].toExpression,
+                                subjectExpression: model.schedules[s].subjectExpression,
+                                bodyExpression: model.schedules[s].bodyExpression
+                            };
+                            const cleanScheduleParameters = cleanData(scheduleParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanScheduleParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanScheduleParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
