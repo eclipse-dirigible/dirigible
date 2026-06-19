@@ -136,7 +136,22 @@ public enum DirigibleConfig {
     NATIVE_APP_MONITOR_INTERVAL_SECONDS("DIRIGIBLE_NATIVE_APP_MONITOR_INTERVAL_SECONDS", "30"),
 
     /** TTL in seconds for the native-app proxy lookup cache. */
-    NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60");
+    NATIVE_APP_REGISTRY_TTL_SECONDS("DIRIGIBLE_NATIVE_APP_REGISTRY_TTL_SECONDS", "60"),
+
+    /** Anthropic API key powering the Intent Editor's AI assistant; blank disables the assistant. */
+    INTENT_AI_API_KEY("DIRIGIBLE_INTENT_AI_API_KEY", null),
+
+    /** Claude model the Intent Editor's AI assistant talks to. */
+    INTENT_AI_MODEL("DIRIGIBLE_INTENT_AI_MODEL", "claude-opus-4-8"),
+
+    /** Base URL of the Anthropic-compatible API the Intent assistant calls. */
+    INTENT_AI_BASE_URL("DIRIGIBLE_INTENT_AI_BASE_URL", "https://api.anthropic.com"),
+
+    /** Maximum tokens the Intent assistant may generate in a single proposal. */
+    INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "8192"),
+
+    /** Anthropic API version header sent by the Intent assistant. */
+    INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);

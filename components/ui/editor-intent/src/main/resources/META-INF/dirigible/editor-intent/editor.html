@@ -88,6 +88,80 @@
             .intent-issues li {
                 margin: 2px 0;
             }
+            .intent-chat-pane {
+                flex: 0 0 360px;
+                display: flex;
+                flex-direction: column;
+                min-width: 0;
+                border-left: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                background: var(--sapBackgroundColor, #fff);
+            }
+            .intent-chat-messages {
+                flex: 1;
+                overflow-y: auto;
+                padding: 8px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .intent-chat-msg {
+                padding: 6px 10px;
+                border-radius: 8px;
+                font-size: 13px;
+                white-space: pre-wrap;
+                word-break: break-word;
+                max-width: 92%;
+            }
+            .intent-chat-msg.user {
+                align-self: flex-end;
+                background: var(--sapButton_Emphasized_Background, #0a6ed1);
+                color: var(--sapButton_Emphasized_TextColor, #fff);
+            }
+            .intent-chat-msg.assistant {
+                align-self: flex-start;
+                background: var(--sapList_Background, #f4f4f4);
+                color: var(--sapTextColor, #1d2d3e);
+            }
+            .intent-chat-msg.error {
+                align-self: stretch;
+                background: var(--sapErrorBackground, #ffeaf4);
+                color: var(--sapNegativeTextColor, #aa0808);
+            }
+            .intent-chat-empty {
+                color: var(--sapNeutralTextColor, #6a6d70);
+                font-style: italic;
+                font-size: 13px;
+                padding: 8px;
+            }
+            .intent-chat-proposal {
+                border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
+                display: flex;
+                flex-direction: column;
+            }
+            .intent-chat-diff {
+                height: 240px;
+                min-height: 240px;
+            }
+            .intent-chat-proposal-bar {
+                display: flex;
+                gap: 8px;
+                padding: 6px 8px;
+                align-items: center;
+            }
+            .intent-chat-proposal-bar .intent-chat-proposal-label {
+                flex: 1;
+                font-size: 12px;
+                color: var(--sapNeutralTextColor, #6a6d70);
+            }
+            .intent-chat-input {
+                display: flex;
+                gap: 6px;
+                padding: 8px;
+                border-top: 1px solid var(--sapList_BorderColor, #e5e5e5);
+            }
+            .intent-chat-input bk-textarea {
+                flex: 1;
+            }
         </style>
     </head>
 
@@ -98,6 +172,8 @@
             <bk-button state="transparent" glyph="sap-icon--save" title="Save" aria-label="Save" ng-click="save()" ng-disabled="!changed || state.isBusy"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="emphasized" glyph="sap-icon--generate-shortcut" label="Generate" title="Generate the model files into the project" aria-label="Generate" ng-click="generate()" ng-disabled="state.isBusy || issues.length"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
+            <bk-button state="{{chat.open ? 'emphasized' : 'transparent'}}" glyph="sap-icon--discussion" title="AI assistant" aria-label="AI assistant" ng-click="toggleChat()"></bk-button>
         </bk-toolbar>
 
         <bk-message-page glyph="sap-icon--error" ng-if="state.error">
@@ -153,6 +229,27 @@
                             <span>&mdash; {{s.rows.length}} row(s)</span>
                         </li>
                     </ul>
+                </div>
+            </div>
+            <div class="intent-chat-pane" ng-if="chat.open">
+                <div class="intent-chat-messages" id="intent-chat-messages">
+                    <div class="intent-chat-empty" ng-if="!chat.messages.length">
+                        Ask the assistant to change the intent in plain language &mdash; e.g. &ldquo;add a <em>country</em> field to Customer&rdquo;. It proposes a diff you can accept into the editor.
+                    </div>
+                    <div ng-repeat="m in chat.messages" class="intent-chat-msg {{m.role}}">{{m.text}}</div>
+                    <div class="intent-chat-msg assistant" ng-if="chat.busy">Thinking&hellip;</div>
+                </div>
+                <div class="intent-chat-proposal" ng-if="chat.proposalPending">
+                    <div class="intent-chat-diff" id="intent-chat-diff"></div>
+                    <div class="intent-chat-proposal-bar">
+                        <span class="intent-chat-proposal-label">Proposed change</span>
+                        <bk-button state="emphasized" glyph="sap-icon--accept" label="Accept" title="Replace the editor content with the proposal" ng-click="acceptProposal()"></bk-button>
+                        <bk-button state="transparent" glyph="sap-icon--decline" label="Reject" title="Discard the proposal" ng-click="rejectProposal()"></bk-button>
+                    </div>
+                </div>
+                <div class="intent-chat-input">
+                    <bk-textarea placeholder="Describe a change..." ng-model="chat.input" ng-keydown="onChatKey($event)" ng-disabled="chat.busy"></bk-textarea>
+                    <bk-button state="emphasized" glyph="sap-icon--paper-plane" title="Send" aria-label="Send" ng-click="sendChat()" ng-disabled="chat.busy || !chat.input"></bk-button>
                 </div>
             </div>
         </div>
