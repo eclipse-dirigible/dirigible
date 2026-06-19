@@ -70,6 +70,7 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: name,        type: string,  required: true, length: 200 }
                   - { name: active,      type: boolean, defaultValue: "true" }
                   - { name: creditLimit, type: decimal }
+                  - { name: orderCount,  type: integer }
                 relations:
                   - { name: country, kind: manyToOne, to: Country }
                   - { name: orders,  kind: oneToMany, to: Order }
@@ -165,6 +166,12 @@ class IntentEngineIT extends IntegrationTest {
               - name: ingestOrder
                 path: /ingest
                 create: Order
+
+            rollups:
+              - name: customerOrderCount
+                entity: Order
+                via: customer
+                field: orderCount
             """;
 
     @Autowired
@@ -410,6 +417,20 @@ class IntentEngineIT extends IntegrationTest {
                 webhook.contains("OrderEntity entity = Json.parse(body, OrderEntity.class)")
                         && webhook.contains("new OrderRepository().save(entity)"),
                 "the webhook should deserialize the payload and save it through the repository");
+
+        // Rollups: two @Listeners (child create/delete) that recompute the parent counter via Criteria.
+        // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
+        // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
+        // from a single app.intent.
+        String rollupCreate = contentOf("gen/events/CustomerOrderCountRollupOnCreate.java");
+        assertTrue(
+                rollupCreate.contains("@Listener(name = \"intent-test-Order-Order\"")
+                        && rollupCreate.contains(
+                                "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
+                        && rollupCreate.contains("parent.OrderCount = count"),
+                "the rollup create-listener should recompute the parent count via Criteria");
+        assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
+                "the rollup delete-listener should bind the child's -deleted topic");
     }
 
     @Test
@@ -701,6 +722,9 @@ class IntentEngineIT extends IntegrationTest {
         // Inbound: one per webhook, carrying the path + the entity to create.
         assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
                 "glue should carry the ingestOrder inbound webhook with its path");
+        // Rollups: the two recompute listeners for the customerOrderCount counter.
+        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"CustomerOrderCountRollupOnCreate\"")
+                && glue.contains("\"countField\": \"OrderCount\""), "glue should carry the customerOrderCount rollup listeners");
     }
 
     private void assertSettings() {
@@ -747,7 +771,10 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("scrubbed", hasItem("ApproveOrder.form")));
         assertFalse(resource("ApproveOrder.form").exists(), "an opted-out form must not be generated");
         String glue = contentOf("orders.glue");
-        assertFalse(glue.contains("\"entity\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
+        // keyProperty is unique to trigger entries (other glue blocks don't emit it), so its absence
+        // means the opted-out trigger was not generated - other glue (notifications, etc.) still uses
+        // "entity".
+        assertFalse(glue.contains("\"keyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
         // The resolver was not opted out, so it survives.
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.
