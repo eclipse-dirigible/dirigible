@@ -38,6 +38,13 @@ export function getTemplate(parameters) {
                 collection: "resolvers"
             },
             {
+                location: "/template-application-events-java/events/Notification.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Notification.java",
+                engine: "velocity",
+                collection: "notifications"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

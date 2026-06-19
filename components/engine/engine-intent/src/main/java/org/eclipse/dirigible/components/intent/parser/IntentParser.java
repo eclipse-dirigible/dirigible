@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
@@ -59,6 +60,10 @@ public final class IntentParser {
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
+    /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
+    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
+    /** Notification delivery channels supported today. */
+    private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
 
     /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
@@ -109,8 +114,59 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
         validateSeeds(model, entityNames, issues);
+        validateNotifications(model, entityNames, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * Each notification must have a unique name, bind to exactly one entity lifecycle event
+     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}) of a declared entity, use a supported
+     * channel, and name a recipient. The {@code when} guard and the {@code to} resolver path are
+     * carried through to the generator (a later increment), which validates the path against the entity
+     * at generation time.
+     */
+    private static void validateNotifications(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (NotificationIntent notification : model.getNotifications()) {
+            String name = notification.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("notification has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate notification [" + name + "]");
+            }
+            int eventCount = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = notification.getEvent()
+                                            .get(kind);
+                if (target != null) {
+                    eventCount++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("notification [" + name + "] " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (eventCount != 1) {
+                issues.add("notification [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
+            }
+            String channel = notification.getChannel();
+            if (channel != null && !channel.isBlank() && !NOTIFICATION_CHANNELS.contains(channel)) {
+                issues.add("notification [" + name + "] has unsupported channel [" + channel + "] (supported: email)");
+            }
+            String to = notification.getTo();
+            if (to == null || to.isBlank()) {
+                issues.add("notification [" + name + "] has no recipient (to)");
+            } else if (!to.contains("@") && to.chars()
+                                              .filter(c -> c == '.')
+                                              .count() >= 2) {
+                // A recipient is a literal address, a direct field, or a one-hop relation.field; multi-hop
+                // paths are not supported (the generator resolves a single to-one relation by FK id).
+                issues.add("notification [" + name + "] recipient [" + to
+                        + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
+            }
         }
     }
 
