@@ -108,7 +108,7 @@ from this module so the SDK surface — facades **and** decorators — has a sin
 | `db/decorators#Generated / GenerationType` | `org.eclipse.dirigible.sdk.db.{GeneratedValue, GenerationType}`                 |
 | `db/decorators#CreatedAt / UpdatedAt / CreatedBy / UpdatedBy / Transient` | `org.eclipse.dirigible.sdk.db.{CreatedAt, UpdatedAt, CreatedBy, UpdatedBy, Transient}` |
 | `Documentation` (cross-cutting)            | `org.eclipse.dirigible.sdk.platform.Documentation`                              |
-| `component/decorators#Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Inject, Repository}`                      |
+| `component/decorators#Component / Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Component, Inject, Repository}`  |
 | `job/decorators#Scheduled`                 | `org.eclipse.dirigible.sdk.job.Scheduled`                                       |
 | `net/decorators#Websocket`                 | `org.eclipse.dirigible.sdk.net.Websocket`                                       |
 | `extensions/decorators#Extension`          | `org.eclipse.dirigible.sdk.extensions.{Extension, ExtensionPoint}`               |
@@ -118,13 +118,44 @@ Existing import statements that used the old `org.eclipse.dirigible.engine.java.
 paths have been migrated across the codebase (engine-java consumers, data-store-java consumers,
 IT fixtures, IDE snippets, `EntityController.java.template` and the DAO templates).
 
-## Optional typed handler interfaces
+## Dependency injection & beans
 
-Three of the runtime-callback decorators — `@Scheduled`, `@Listener`, `@Websocket` — accept an
-optional companion interface that the annotated class can implement. When present, the engine
-dispatches the callback through a direct virtual call instead of `Method.invoke`. The annotation
-remains the marker (binds the class to a cron / queue / endpoint); the interface only describes
-the callback shape.
+Client Java runs in a small IoC container, one generation per `ClientClassLoader` rebuild (see
+`engine-java`'s `ComponentContainer`). Any class (meta-)annotated with
+`org.eclipse.dirigible.sdk.component.Component` is a singleton bean — `@Repository`, `@Controller`,
+`@Extension`, `@Scheduled`, `@Listener` and `@Websocket` are all meta-annotated with `@Component`,
+so they are beans too. Beans are named by Spring's convention (decapitalized simple class name, or
+`@Component("name")`).
+
+Beans are wired by:
+
+* **constructor injection** (preferred, testable) — declare collaborators as constructor parameters;
+  with several constructors annotate one with `@Inject`;
+* **field injection** — `@Inject` on a field (backward compatible);
+* **collection injection** — a `List<T>` / `Collection<T>` / `Set<T>` injection point receives every
+  bean assignable to `T`. This is the Spring-style way to consume all implementations of an
+  interface (see "Typed extension points" below).
+
+`@PostConstruct` / `@PreDestroy` (`jakarta.annotation`) run on bean creation / generation teardown.
+To reach a *platform* service from client code use `org.eclipse.dirigible.sdk.component.Beans`
+(`get(Class)`, `get(name, Class)`, `getAll(Class)`) — the client-facing counterpart to the
+platform-internal `BeanProvider`, which client code should not use directly.
+
+## Optional typed handler interfaces and method-level callbacks
+
+The runtime-callback decorators — `@Scheduled`, `@Listener`, `@Websocket` — support three callback
+styles; pick whichever fits:
+
+1. an optional companion interface (`JobHandler`, `MessageHandler`, `WebsocketHandler`) — direct
+   virtual dispatch, compile-time signature checking;
+2. **method-level annotations** on a bean (Spring `@Scheduled` / `@JmsListener` style): annotate a
+   method with `@Scheduled` or `@Listener`, or a `@Websocket` class's methods with
+   `@OnOpen` / `@OnMessage` / `@OnError` / `@OnClose` (`org.eclipse.dirigible.sdk.net`);
+3. the legacy method-name convention (`run()`, `onMessage(String)`, `onOpen()`/…) — the reflective
+   fallback.
+
+In the interface/convention form the class-level annotation is the marker (binds the class to a
+cron / queue / endpoint); the interface only describes the callback shape.
 
 | Decorator                                         | Optional contract                                                | Methods                                                                  |
 |---------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------|

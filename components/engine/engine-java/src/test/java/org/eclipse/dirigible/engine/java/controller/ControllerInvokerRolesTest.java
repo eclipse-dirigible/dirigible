@@ -33,7 +33,8 @@ class ControllerInvokerRolesTest {
 
     private final ControllerRouter router = new ControllerRouter();
 
-    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty());
+    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty(),
+            org.eclipse.dirigible.engine.java.component.TestComponentContainers.of(Restricted.class, MixedRoles.class));
 
     private final ControllerInvoker invoker = new ControllerInvoker(new ObjectMapper());
 

@@ -19,7 +19,11 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 @Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
 public class ${process}Trigger implements MessageHandler {
 
-    private final ${entity}Repository repository = new ${entity}Repository();
+    private final ${entity}Repository repository;
+
+    public ${process}Trigger(${entity}Repository repository) {
+        this.repository = repository;
+    }
 
     @Override
     public void onMessage(String message) {

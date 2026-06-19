@@ -10,8 +10,6 @@
 package org.eclipse.dirigible.engine.java.controller;
 
 import java.lang.annotation.Annotation;
-import java.lang.reflect.Constructor;
-import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
@@ -23,7 +21,6 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
-import org.eclipse.dirigible.sdk.component.Inject;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.http.Context;
 import org.eclipse.dirigible.sdk.http.Controller;
@@ -35,9 +32,9 @@ import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.Put;
 import org.eclipse.dirigible.sdk.http.QueryParam;
 import org.eclipse.dirigible.sdk.security.Roles;
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.controller.openapi.JavaControllerOpenApiPublisher;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
-import org.eclipse.dirigible.engine.java.spi.DependencyResolver;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
@@ -60,8 +57,8 @@ import jakarta.servlet.http.HttpServletResponse;
  * {@link ControllerEntry}. Hot-reload swaps the entry atomically through the router.
  */
 @Component
-@Order(300) // Run after EntityClassConsumer (100) and RepositoryClassConsumer (200) so @Inject
-            // fields on controllers find their repository in the registry on the same cycle.
+@Order(300) // Run after the ComponentContainer (built in JavaLoader before this load pass) has
+            // instantiated and injected every bean, so the controller instance fetched here is ready.
 public class ControllerClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ControllerClassConsumer.class);
@@ -70,19 +67,14 @@ public class ControllerClassConsumer implements JavaClassConsumer {
 
     private final JavaControllerOpenApiPublisher openApiPublisher;
 
-    private final List<DependencyResolver> dependencyResolvers;
+    private final ComponentContainer componentContainer;
 
     @Autowired
     public ControllerClassConsumer(ControllerRouter router, Optional<JavaControllerOpenApiPublisher> openApiPublisher,
-            List<DependencyResolver> dependencyResolvers) {
+            ComponentContainer componentContainer) {
         this.router = router;
         this.openApiPublisher = openApiPublisher.orElse(null);
-        this.dependencyResolvers = dependencyResolvers == null ? List.of() : List.copyOf(dependencyResolvers);
-    }
-
-    /** Test-friendly constructor that defaults to an empty resolver chain. */
-    public ControllerClassConsumer(ControllerRouter router, Optional<JavaControllerOpenApiPublisher> openApiPublisher) {
-        this(router, openApiPublisher, List.of());
+        this.componentContainer = componentContainer;
     }
 
     @Override
@@ -132,8 +124,9 @@ public class ControllerClassConsumer implements JavaClassConsumer {
      */
     public ControllerEntry build(LoadedClass info) {
         Class<?> type = info.type();
-        Object instance = instantiate(type);
-        injectDependencies(type, instance);
+        Object instance = componentContainer.instanceOf(type)
+                                            .orElseThrow(() -> new IllegalStateException("Controller [" + info.fqn()
+                                                    + "] was not instantiated by the bean container — check earlier logs for construction or injection errors."));
         List<String> classRoles = readRoles(type.getAnnotation(Roles.class));
 
         List<Route> routes = new ArrayList<>();
@@ -164,62 +157,6 @@ public class ControllerClassConsumer implements JavaClassConsumer {
                                                                                             .size())));
 
         return new ControllerEntry(info.project(), info.fqn(), ControllerRouter.fqnToBasePath(info.fqn()), instance, List.copyOf(routes));
-    }
-
-    /**
-     * Walk the controller's declared fields, locate ones annotated with {@link Inject}, and resolve
-     * each through the {@link DependencyResolver} chain. Walks the class hierarchy (excluding
-     * {@code Object}) so that fields declared on superclasses are also satisfied. A missing resolver
-     * match is a fail-fast error — controllers that ask for a dependency we can't supply should not be
-     * silently registered with a {@code null} field.
-     */
-    private void injectDependencies(Class<?> type, Object instance) {
-        Class<?> walk = type;
-        while (walk != null && walk != Object.class) {
-            for (Field field : walk.getDeclaredFields()) {
-                if (!field.isAnnotationPresent(Inject.class)) {
-                    continue;
-                }
-                Object value = resolveDependency(field.getType());
-                if (value == null) {
-                    throw new IllegalStateException("No @Inject candidate registered for field [" + walk.getSimpleName() + "."
-                            + field.getName() + "] of type [" + field.getType()
-                                                                     .getName()
-                            + "]. Ensure a @Repository implementation is present, or register a custom DependencyResolver.");
-                }
-                field.setAccessible(true);
-                try {
-                    field.set(instance, value);
-                } catch (IllegalAccessException e) {
-                    throw new IllegalStateException(
-                            "Failed to inject [" + field.getName() + "] on [" + type.getName() + "]: " + e.getMessage(), e);
-                }
-            }
-            walk = walk.getSuperclass();
-        }
-    }
-
-    private Object resolveDependency(Class<?> type) {
-        for (DependencyResolver resolver : dependencyResolvers) {
-            Optional<Object> candidate = resolver.resolve(type);
-            if (candidate.isPresent()) {
-                return candidate.get();
-            }
-        }
-        return null;
-    }
-
-    private static Object instantiate(Class<?> type) {
-        try {
-            Constructor<?> ctor = type.getDeclaredConstructor();
-            ctor.setAccessible(true);
-            return ctor.newInstance();
-        } catch (NoSuchMethodException e) {
-            throw new IllegalStateException("Controller [" + type.getName() + "] must have a public no-arg constructor: " + e.getMessage(),
-                    e);
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException("Failed to instantiate controller [" + type.getName() + "]: " + e.getMessage(), e);
-        }
     }
 
     private static HttpMethod httpMethodOf(Method method) {

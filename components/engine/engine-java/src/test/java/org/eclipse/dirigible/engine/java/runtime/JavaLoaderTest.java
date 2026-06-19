@@ -23,6 +23,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.handler.HandlerClassConsumer;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
@@ -76,7 +77,8 @@ class JavaLoaderTest {
         recording = new RecordingConsumer();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        loader = new JavaLoader(new JavaSourceCompiler(), holder, List.of(handlerConsumer, recording), outputDirectory, NOOP_PUBLISHER);
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, new ComponentContainer(new ClientBeansHolder()),
+                List.of(handlerConsumer, recording), outputDirectory, NOOP_PUBLISHER);
     }
 
     @Test
@@ -162,8 +164,8 @@ class JavaLoaderTest {
         ClientClassLoaderHolder freshHolder = new ClientClassLoaderHolder();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, List.of(throwingConsumer, recording),
-                outputDirectory, NOOP_PUBLISHER);
+        JavaLoader localLoader = new JavaLoader(new JavaSourceCompiler(), freshHolder, new ComponentContainer(new ClientBeansHolder()),
+                List.of(throwingConsumer, recording), outputDirectory, NOOP_PUBLISHER);
 
         localLoader.rebuild(List.of(handlerSource("client.Bomb", "boom"), handlerSource("client.Bystander", "fine")));
 

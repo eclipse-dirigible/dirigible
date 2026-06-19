@@ -14,11 +14,19 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.eclipse.dirigible.sdk.component.Component;
+
 /**
  * Registers a client Java class as a contribution to a typed Dirigible extension point. The class
  * must implement the {@link #target()} interface; the runtime validates this at registration time
  * and rejects any class that does not, so consumers can cast results from
  * {@link Extensions#find(Class)} in a type-safe manner without reflection.
+ *
+ * <p>
+ * {@code @Extension} is meta-annotated with {@link Component @Component}, so every contribution is
+ * also a managed bean. A consumer can therefore receive all contributions by collection injection
+ * (a {@code List<TargetInterface>} constructor parameter or {@code @Inject} field) in addition to
+ * the programmatic {@link Extensions#find(Class)} lookup.
  *
  * <p>
  * The {@code target} interface should be marked with {@link ExtensionPoint @ExtensionPoint} and
@@ -46,6 +54,7 @@ import java.lang.annotation.Target;
  * logical point) are not expressible in the typed Java surface — a JS module cannot safely satisfy
  * a Java interface contract. Use the TypeScript {@code @Extension} decorator for those.
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Extension {

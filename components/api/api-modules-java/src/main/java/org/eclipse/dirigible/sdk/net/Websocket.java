@@ -14,31 +14,36 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.eclipse.dirigible.sdk.component.Component;
+
 /**
- * Marks a client Java class as a WebSocket handler managed by the Dirigible runtime.
+ * Marks a client Java class as a WebSocket handler bound to an endpoint. The lifecycle callbacks
+ * can be supplied in any of three styles:
+ * <ul>
+ * <li>implement {@link WebsocketHandler} (typed, compile-checked) — override only what you
+ * need;</li>
+ * <li>annotate methods with {@link OnOpen}, {@link OnMessage}, {@link OnError}, {@link OnClose}
+ * (Jakarta-WebSocket flavour);</li>
+ * <li>expose the lifecycle methods by name ({@code onOpen()}, {@code onMessage(String, String)},
+ * {@code onError(String)}, {@code onClose()}) — the reflective fallback.</li>
+ * </ul>
+ * All callbacks are optional; missing ones are skipped.
  *
  * <p>
- * The annotated class may expose any combination of the following public methods:
- * <ul>
- * <li>{@code onOpen()} — called when a client connects</li>
- * <li>{@code onMessage(String message, String from)} — called for each inbound message</li>
- * <li>{@code onError(String error)} — called on transport or handler error</li>
- * <li>{@code onClose()} — called when the connection is closed</li>
- * </ul>
- * All methods are optional; missing ones are silently skipped.
+ * {@code @Websocket} is meta-annotated with {@link Component @Component}, so the handler is a
+ * managed bean and may declare injected collaborators in its constructor.
  *
  * <p>
  * Example:
  *
  * <pre>
  * {@literal @}Websocket(name = "chat", endpoint = "chat")
- * public class ChatHandler {
- *     public void onOpen() { ... }
- *     public void onMessage(String message, String from) { ... }
- *     public void onClose() { ... }
+ * public class ChatHandler implements WebsocketHandler {
+ *     {@literal @}Override public void onMessage(String message, String from) { ... }
  * }
  * </pre>
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Websocket {

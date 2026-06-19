@@ -9,11 +9,10 @@
  */
 package org.eclipse.dirigible.engine.java.websocket;
 
-import java.lang.reflect.Constructor;
-
-import org.eclipse.dirigible.sdk.net.Websocket;
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
+import org.eclipse.dirigible.sdk.net.Websocket;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -22,21 +21,15 @@ import org.springframework.stereotype.Component;
 
 /**
  * {@link JavaClassConsumer} that registers client classes annotated with {@link Websocket} in the
- * {@link JavaWebsocketRegistry}.
+ * {@link JavaWebsocketRegistry}. The handler instance is built (with constructor + field injection)
+ * by the {@link ComponentContainer}; this consumer only fetches it and binds it to the endpoint.
  *
  * <p>
- * {@code WebsocketProcessor} in {@code engine-websockets} optionally injects the registry and
- * dispatches incoming events to the Java handler before falling back to JS.
- *
- * <p>
- * The handler class may expose any combination of:
- * <ul>
- * <li>{@code onOpen()}</li>
- * <li>{@code onMessage(String message, String from)}</li>
- * <li>{@code onError(String error)}</li>
- * <li>{@code onClose()}</li>
- * </ul>
- * All methods are optional — missing ones are silently skipped by {@code WebsocketProcessor}.
+ * {@code WebsocketProcessor} in {@code engine-websockets} dispatches incoming events to the Java
+ * handler before falling back to JS. The lifecycle callbacks may be supplied as
+ * {@code org.eclipse.dirigible.sdk.net.WebsocketHandler}, via {@code @OnOpen}/{@code @OnMessage}/
+ * {@code @OnError}/{@code @OnClose} method annotations, or by the legacy method-name convention —
+ * see {@code WebsocketProcessor} for the dispatch precedence.
  */
 @Component
 @Order(600)
@@ -44,10 +37,12 @@ public class WebsocketClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WebsocketClassConsumer.class);
 
+    private final ComponentContainer componentContainer;
     private final JavaWebsocketRegistry registry;
 
     @Autowired
-    public WebsocketClassConsumer(JavaWebsocketRegistry registry) {
+    public WebsocketClassConsumer(ComponentContainer componentContainer, JavaWebsocketRegistry registry) {
+        this.componentContainer = componentContainer;
         this.registry = registry;
     }
 
@@ -61,8 +56,10 @@ public class WebsocketClassConsumer implements JavaClassConsumer {
         Websocket ann = info.type()
                             .getAnnotation(Websocket.class);
 
-        Object instance = instantiate(info);
+        Object instance = componentContainer.instanceOf(info.type())
+                                            .orElse(null);
         if (instance == null) {
+            LOGGER.error("@Websocket [{}] was not instantiated by the bean container; skipped.", info.fqn());
             return;
         }
 
@@ -76,17 +73,5 @@ public class WebsocketClassConsumer implements JavaClassConsumer {
                             .getAnnotation(Websocket.class);
         registry.unregister(ann.endpoint());
         LOGGER.info("Java @Websocket [{}] unregistered from endpoint '{}'.", info.fqn(), ann.endpoint());
-    }
-
-    private static Object instantiate(LoadedClass info) {
-        try {
-            Constructor<?> ctor = info.type()
-                                      .getDeclaredConstructor();
-            ctor.setAccessible(true);
-            return ctor.newInstance();
-        } catch (ReflectiveOperationException e) {
-            LOGGER.error("Failed to instantiate @Websocket class [{}]: {}", info.fqn(), e.getMessage(), e);
-            return null;
-        }
     }
 }

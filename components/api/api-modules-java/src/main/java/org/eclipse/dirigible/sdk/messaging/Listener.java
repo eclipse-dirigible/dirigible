@@ -14,28 +14,43 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+import org.eclipse.dirigible.sdk.component.Component;
+
 /**
- * Marks a client Java class as an ActiveMQ message listener managed by the Dirigible runtime.
+ * Subscribes a client handler to an ActiveMQ queue or topic. Two styles are supported, like
+ * Spring's {@code @JmsListener}:
  *
  * <p>
- * The annotated class must expose a public {@code onMessage(String message)} method and optionally
- * a {@code onError(String error)} method. Dirigible instantiates the class once, connects it to the
- * specified queue or topic, and routes incoming messages to {@code onMessage}. Hot-reload replaces
- * the listener transparently.
- *
- * <p>
- * Example:
+ * <b>Class level</b> — annotate a class that either implements {@link MessageHandler} or exposes a
+ * public {@code onMessage(String)} method (and optionally {@code onError(String)}):
  *
  * <pre>
  * {@literal @}Listener(name = "my-queue", kind = ListenerKind.QUEUE)
- * public class OrderListener {
+ * public class OrderListener implements MessageHandler {
  *     public void onMessage(String message) { ... }
- *     public void onError(String error) { ... }
  * }
  * </pre>
+ *
+ * <p>
+ * <b>Method level</b> — annotate a public {@code void m(String message)} method on a
+ * {@link org.eclipse.dirigible.sdk.component.Component @Component} bean; the bean can host several
+ * listeners and use injected collaborators:
+ *
+ * <pre>
+ * {@literal @}Component
+ * public class Orders {
+ *     {@literal @}Listener(name = "orders-new", kind = ListenerKind.TOPIC)
+ *     public void onNewOrder(String message) { ... }
+ * }
+ * </pre>
+ *
+ * <p>
+ * Dirigible connects the handler to the destination and routes incoming messages to it; hot-reload
+ * replaces the subscription transparently.
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
+@Target({ElementType.TYPE, ElementType.METHOD})
 public @interface Listener {
 
     /** Logical name of the queue or topic destination. */
