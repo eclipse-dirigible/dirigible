@@ -34,6 +34,7 @@ public class IntentModel {
     private List<ReportIntent> reports = new ArrayList<>();
     private List<PermissionIntent> permissions = new ArrayList<>();
     private List<SeedIntent> seeds = new ArrayList<>();
+    private List<NotificationIntent> notifications = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -105,5 +106,13 @@ public class IntentModel {
 
     public void setSeeds(List<SeedIntent> seeds) {
         this.seeds = seeds == null ? new ArrayList<>() : seeds;
+    }
+
+    public List<NotificationIntent> getNotifications() {
+        return notifications;
+    }
+
+    public void setNotifications(List<NotificationIntent> notifications) {
+        this.notifications = notifications == null ? new ArrayList<>() : notifications;
     }
 }
