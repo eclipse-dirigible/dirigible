@@ -287,6 +287,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 // topic the DAO publishes to (${projectName}-${perspectiveName}-${name}).
                                 javaPerspective: sanitizeJavaIdentifier(model.triggers[t].perspective),
                                 keyProperty: model.triggers[t].keyProperty,
+                                businessKeyProperty: model.triggers[t].businessKeyProperty,
+                                generateBusinessKey: model.triggers[t].generateBusinessKey,
                                 topicSuffix: model.triggers[t].topicSuffix,
                                 guardExpression: model.triggers[t].guardExpression
                             };

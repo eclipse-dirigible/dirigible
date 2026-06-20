@@ -428,6 +428,12 @@ public final class IntentParser {
 
     private static void validateProcesses(IntentModel model, Set<String> entityNames, List<String> issues) {
         Set<String> processNames = new HashSet<>();
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
                                                     .isBlank()) {
@@ -438,11 +444,13 @@ public final class IntentParser {
                 issues.add("duplicate process [" + process.getName() + "]");
             }
             int triggerEvents = 0;
+            String triggerEntity = null;
             for (String kind : EVENT_KINDS) {
                 Object target = process.getTrigger()
                                        .get(kind);
                 if (target != null) {
                     triggerEvents++;
+                    triggerEntity = target.toString();
                     if (!entityNames.contains(target.toString())) {
                         issues.add("process [" + process.getName() + "] trigger " + kind + " references unknown entity [" + target + "]");
                     }
@@ -450,6 +458,40 @@ public final class IntentParser {
             }
             if (triggerEvents > 1) {
                 issues.add("process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete");
+            }
+            // An optional businessKey flags which trigger-entity field becomes the started process
+            // instance's BPM business key; it must be a field of the triggered entity.
+            Object businessKey = process.getTrigger()
+                                        .get("businessKey");
+            FieldIntent businessKeyField = null;
+            if (businessKey != null) {
+                if (triggerEntity == null) {
+                    issues.add("process [" + process.getName()
+                            + "] trigger declares businessKey but no onCreate/onUpdate/onDelete event to start on");
+                } else {
+                    EntityIntent triggered = byName.get(triggerEntity);
+                    businessKeyField = triggered == null ? null : fieldByName(triggered, businessKey.toString());
+                    if (triggered != null && businessKeyField == null) {
+                        issues.add("process [" + process.getName() + "] trigger businessKey [" + businessKey + "] is not a field of ["
+                                + triggerEntity + "]");
+                    }
+                }
+            }
+            // An optional businessKeyStrategy mints the businessKey field's value when blank. Only
+            // "timestamp" (a yyyyMMddHHmmss string) is supported today, and it needs a string field.
+            Object strategy = process.getTrigger()
+                                     .get("businessKeyStrategy");
+            if (strategy != null) {
+                if (!"timestamp".equals(strategy.toString())) {
+                    issues.add("process [" + process.getName() + "] trigger businessKeyStrategy [" + strategy
+                            + "] is not supported (supported: timestamp)");
+                } else if (businessKey == null) {
+                    issues.add("process [" + process.getName() + "] trigger businessKeyStrategy needs a businessKey field to populate");
+                } else if (businessKeyField != null && businessKeyField.getType() != null && !"string".equals(businessKeyField.getType())
+                        && !"text".equals(businessKeyField.getType())) {
+                    issues.add("process [" + process.getName() + "] trigger businessKey field [" + businessKey
+                            + "] must be a string/text field to hold a generated timestamp");
+                }
             }
             Set<String> stepNames = new HashSet<>();
             for (StepIntent step : process.getSteps()) {

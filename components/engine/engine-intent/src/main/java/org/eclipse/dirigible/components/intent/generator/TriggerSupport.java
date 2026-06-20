@@ -48,6 +48,28 @@ public final class TriggerSupport {
     }
 
     /**
+     * The optional {@code businessKey} field flagged on the trigger - the trigger entity field whose
+     * value becomes the started process instance's BPM business key. Null when omitted, in which case
+     * the generator defaults the business key to the entity's primary key.
+     */
+    public static String triggerBusinessKey(ProcessIntent process) {
+        Object value = process.getTrigger()
+                              .get("businessKey");
+        return value == null ? null : value.toString();
+    }
+
+    /**
+     * The optional {@code businessKeyStrategy} on the trigger - how the {@code businessKey} field is
+     * populated when blank. Today the only strategy is {@code timestamp} (a {@code yyyyMMddHHmmss}
+     * value minted by the listener). Null when the field is used as-is.
+     */
+    public static String triggerBusinessKeyStrategy(ProcessIntent process) {
+        Object value = process.getTrigger()
+                              .get("businessKeyStrategy");
+        return value == null ? null : value.toString();
+    }
+
+    /**
      * Entity names that some process triggers on - they get the {@code ProcessId} back-reference,
      * regardless of which lifecycle event starts the process.
      */

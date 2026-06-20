@@ -120,6 +120,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             trigger.put("entity", entity);
             trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
             trigger.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            // The BPM business key: the flagged trigger field's property, or the primary key when none
+            // is flagged (preserving the historical default). keyProperty stays the PK - the listener
+            // still loads the entity by id via findById; only the business key may differ.
+            String businessKey = TriggerSupport.triggerBusinessKey(process);
+            boolean hasBusinessKey = businessKey != null && !businessKey.isBlank();
+            trigger.put("businessKeyProperty",
+                    hasBusinessKey ? IntentNaming.pascalCase(businessKey) : IntentEntities.keyFieldName(byName.get(entity)));
+            // When a businessKeyStrategy is set, the listener mints the value into the flagged field if
+            // it is blank (today: a yyyyMMddHHmmss timestamp) and persists it via the existing update.
+            boolean generateBusinessKey = hasBusinessKey && "timestamp".equals(TriggerSupport.triggerBusinessKeyStrategy(process));
+            trigger.put("generateBusinessKey", String.valueOf(generateBusinessKey));
             trigger.put("topicSuffix", EventBinding.topicSuffix(TriggerSupport.triggerKind(process)));
             trigger.put("guardExpression", NotificationSupport.guard(TriggerSupport.triggerWhen(process)));
             triggers.add(trigger);

@@ -284,6 +284,30 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void parse_rejects_a_trigger_business_key_that_is_not_a_field() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder, businessKey: nope }
+                    steps:
+                      - { name: done, kind: end }
+                """;
+        restAssuredExecutor.execute(() -> given().contentType("text/plain")
+                                                 .body(yaml)
+                                                 .when()
+                                                 .post(PARSE_URL)
+                                                 .then()
+                                                 .statusCode(422)
+                                                 .body("issues", hasItem(
+                                                         "process [Approve] trigger businessKey [nope] is not a field of [SalesOrder]")));
+    }
+
+    @Test
     void generate_writes_all_model_files_into_the_workspace_project() {
         writeIntent(INTENT_YAML);
 
@@ -505,6 +529,76 @@ class IntentEngineIT extends IntegrationTest {
         String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
         assertTrue(onDelete.contains("@Listener(name = \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic");
+    }
+
+    @Test
+    void process_trigger_business_key_uses_the_flagged_field_not_the_primary_key() {
+        // The trigger flags `orderNumber` as the business key; the listener must still LOAD the entity
+        // by its primary key (findById), but start the process with the flagged field as the BPM
+        // business key - so it is correlatable by the domain identifier, not the surrogate id.
+        String yaml = """
+                name: orders
+                entities:
+                  - name: SalesOrder
+                    fields:
+                      - { name: id,          type: integer, primaryKey: true, generated: true }
+                      - { name: orderNumber, type: string }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder, businessKey: orderNumber }
+                    steps:
+                      - { name: review, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String trigger = contentOf("gen/events/ApproveTrigger.java");
+        assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
+        assertTrue(trigger.contains("String businessKey = String.valueOf(entity.OrderNumber);"),
+                "the BPM business key must be the flagged field (OrderNumber), not the primary key");
+        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey, message)"),
+                "the started process should receive the resolved business key");
+    }
+
+    @Test
+    void process_trigger_business_key_strategy_timestamp_mints_and_persists_the_field() {
+        // businessKeyStrategy: timestamp -> the listener mints a yyyyMMddHHmmss value into the (blank)
+        // number field, persists it via the existing update, and uses it as the business key.
+        String yaml = """
+                name: orders
+                entities:
+                  - name: SalesOrder
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder, businessKey: number, businessKeyStrategy: timestamp }
+                    steps:
+                      - { name: review, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String trigger = contentOf("gen/events/ApproveTrigger.java");
+        assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
+        assertTrue(
+                trigger.contains("if (entity.Number == null || entity.Number.isBlank())")
+                        && trigger.contains("DateTimeFormatter.ofPattern(\"yyyyMMddHHmmss\")"),
+                "a timestamp strategy should mint a yyyyMMddHHmmss value into the flagged field when blank");
+        assertTrue(trigger.contains("String businessKey = String.valueOf(entity.Number);"),
+                "the business key must be the minted number field");
+        assertTrue(trigger.contains("repository.update(entity)"), "the minted number must be persisted via the existing update");
     }
 
     @Test
