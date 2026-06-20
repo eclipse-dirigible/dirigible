@@ -141,12 +141,11 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
         managerIDE.openInbox();
 
         Browser browser = managerIDE.getBrowser();
-        browser.clickOnElementContainingText(HtmlElementType.TR, "Process request");
+        // The redesigned inbox is an Outlook-style master-detail list: tasks are bk-list links (not
+        // table rows), and claiming embeds the task's form in the detail pane (no "Open Form" tab).
+        browser.clickOnElementContainingText(HtmlElementType.ANCHOR, "Process request");
 
         browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Claim");
-
-        browser.clickOnElementContainingText(HtmlElementType.BUTTON, "Open Form");
-        browser.switchToLatestTab();
     }
 
     private void assertLeaveRequestEmail() throws MessagingException {
