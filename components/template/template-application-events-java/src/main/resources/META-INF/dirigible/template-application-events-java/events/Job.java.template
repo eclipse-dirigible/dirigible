@@ -1,0 +1,54 @@
+package gen.events;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.core.Configurations;
+import org.eclipse.dirigible.sdk.job.JobHandler;
+import org.eclipse.dirigible.sdk.job.Scheduled;
+import org.eclipse.dirigible.sdk.mail.Mail;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+#foreach($load in $relationLoads)
+import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
+
+/**
+ * Runs the ${name} schedule: on each cron tick, query ${entity} and notify per matching row.
+ *
+ * Generated from the intent schedules block - do not edit; it is re-generated with the application.
+ * The sender address comes from the DIRIGIBLE_MAIL_SENDER configuration.
+ */
+@Scheduled(expression = "${cron}")
+public class ${className}Job implements JobHandler {
+
+    @Override
+    public void run() {
+        List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
+        for (${entity}Entity entity : rows) {
+#foreach($load in $relationLoads)
+            ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+            String to = ${toExpression};
+            if (to == null || to.isBlank()) {
+                continue;
+            }
+            String subject = ${subjectExpression};
+            String body = ${bodyExpression};
+            Map part = new HashMap();
+            part.put("type", "text");
+            part.put("contentType", "text/plain");
+            part.put("text", body);
+            String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+            try {
+                Mail.send(from, new String[] {to}, new String[0], new String[0], subject, List.of(part));
+            } catch (Exception ex) {
+                throw new RuntimeException("Failed to send schedule ${name}", ex);
+            }
+        }
+    }
+}

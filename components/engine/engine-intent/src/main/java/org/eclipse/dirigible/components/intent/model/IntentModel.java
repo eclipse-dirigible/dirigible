@@ -34,6 +34,11 @@ public class IntentModel {
     private List<ReportIntent> reports = new ArrayList<>();
     private List<PermissionIntent> permissions = new ArrayList<>();
     private List<SeedIntent> seeds = new ArrayList<>();
+    private List<NotificationIntent> notifications = new ArrayList<>();
+    private List<ScheduleIntent> schedules = new ArrayList<>();
+    private List<IntegrationIntent> integrations = new ArrayList<>();
+    private List<InboundIntent> inbound = new ArrayList<>();
+    private List<RollupIntent> rollups = new ArrayList<>();
 
     public String getName() {
         return name;
@@ -105,5 +110,45 @@ public class IntentModel {
 
     public void setSeeds(List<SeedIntent> seeds) {
         this.seeds = seeds == null ? new ArrayList<>() : seeds;
+    }
+
+    public List<NotificationIntent> getNotifications() {
+        return notifications;
+    }
+
+    public void setNotifications(List<NotificationIntent> notifications) {
+        this.notifications = notifications == null ? new ArrayList<>() : notifications;
+    }
+
+    public List<ScheduleIntent> getSchedules() {
+        return schedules;
+    }
+
+    public void setSchedules(List<ScheduleIntent> schedules) {
+        this.schedules = schedules == null ? new ArrayList<>() : schedules;
+    }
+
+    public List<IntegrationIntent> getIntegrations() {
+        return integrations;
+    }
+
+    public void setIntegrations(List<IntegrationIntent> integrations) {
+        this.integrations = integrations == null ? new ArrayList<>() : integrations;
+    }
+
+    public List<InboundIntent> getInbound() {
+        return inbound;
+    }
+
+    public void setInbound(List<InboundIntent> inbound) {
+        this.inbound = inbound == null ? new ArrayList<>() : inbound;
+    }
+
+    public List<RollupIntent> getRollups() {
+        return rollups;
+    }
+
+    public void setRollups(List<RollupIntent> rollups) {
+        this.rollups = rollups == null ? new ArrayList<>() : rollups;
     }
 }

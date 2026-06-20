@@ -255,7 +255,7 @@ Semantics worth knowing:
 - **`composition: true` on a to-one relation makes it a composition.** The owning entity becomes DEPENDENT (managed as details under its parent's perspective) and the FK is NOT NULL. `required: true` *alone* only makes the FK NOT NULL - the entity stays a top-level PRIMARY association (plain dropdown, its own perspective). Composition is **opt-in**, matching the Dirigible convention (where it is an explicit `relationshipType="COMPOSITION"` and most required FKs are plain associations); `composition` already implies NOT NULL, so `required` need not also be set. Only a `manyToOne`/`oneToOne` can be a composition; an entity's *first* `composition` to-one is its composition parent. Declare the inverse `oneToMany` on the master (`Member` with `loans: oneToMany to Loan` + `Loan.member` `composition: true`) so `Loan` is managed as a detail of `Member`; the `oneToMany` itself is navigation-only (the EDM generator ignores `oneToMany`/`manyToMany` since the FK lives on the child). (This replaced the earlier "first required to-one is automatically a composition" heuristic, which made entities like a `Loan` with a required `member` FK silently nest under `Member` instead of staying top-level.) **Every to-one FK property** (composition or association) carries `relationshipType` / `relationshipCardinality` (`1_n` / `n_1` / `1_1`) / `relationshipName` (`<owner>_<target>`) / `relationshipEntityName` / `relationshipEntityPerspectiveName` - the last two drive the generated dropdown's data URL, so they are not optional.
 - **`kind: setting` on an entity marks it as nomenclature / configuration.** `EntityIntent.kind` (default null = a regular managed entity); `kind: setting` makes `EdmIntentGenerator` emit the entity with `type="SETTING"` (and `entityType="SETTING"` in the mxGraph cell) instead of PRIMARY. The template engine keys on `entity.type === "SETTING"` (`service-generate/template/generateUtils.js`) to route it under the dashboard's global **Settings** perspective (it nulls the layout and sets `perspectiveName = "Settings"`), so a setting entity does NOT get its own generated perspective. Crucially the EDM generator also resolves any relation **targeting** a setting entity to the `Settings` perspective (`perspectiveFor(...)`), so an FK dropdown to a setting points at `api/Settings/<Entity>` rather than a missing per-entity perspective. Settings are still real entities (own table, CSVIM seeds, FK columns) - only their UI placement differs.
 - **Decision steps**: `if` + `then` are mandatory; `else` is optional and receives the gateway-default flow (so the conditioned branch can actually be skipped - without `else` the default falls through to the next step in the chain). `then`/`else` must name a declared step or the literal `end`; the parser validates this so a typo fails at parse time instead of producing BPMN Flowable rejects.
-- **`trigger: { onCreate: <Entity> }` starts the process when an `<Entity>` is created** - fully wired (Java). Three parts: (1) the parser validates the target is a declared entity; (2) the EDM generator adds a `ProcessId` back-reference property (VARCHAR) to that entity and a `triggers` collection to the `.model` (`TriggerSupport` + `EdmIntentGenerator.buildTriggers`); (3) the **`template-application-events-java`** template (intent-driven, like the other language templates) reads that `triggers` collection and emits one **`gen/events/<Process>Trigger.java`** per trigger - a client-Java `@Listener` (kind TOPIC, bound to the entity's event topic) `implements MessageHandler` that loads the entity, calls `Process.start(<process>, businessKey, <entity JSON>)`, and writes the instance id back to `ProcessId`. The Java DAO template (`template-application-dao-java`) now publishes the create event (`Producer.sendToTopic('${projectName}-${perspectiveName}-${name}', json)`) the way the TS DAO does - that's the topic the handler binds to. `gen/events` is a sibling of `gen/<model>`, so it survives the per-model regeneration wipe. The events template iterates the model's `triggers` via a new **`triggers` collection case in `service-generate/template/generateUtils.js`** (the engine's collection switch is hardcoded; the case has its own loop because triggers are not entity-shaped). The business key is the entity id for now (`keyProperty`); `onSchedule` is still unmodelled. **Casing subtlety in the generated handler:** its `import gen.<genFolder>.data.<perspective>.<Entity>{Entity,Repository}` must use the **lowercased** Java package segment (`javaPerspective` = `sanitizeJavaIdentifier(perspective)`, matching the DAO/entity templates' `javaPerspectiveName` folder), while the `@Listener(name = "<project>-<perspective>-<entity>")` topic keeps the **raw** perspective so it matches the topic the DAO publishes to (`${projectName}-${perspectiveName}-${name}`). The `triggers` collection case in `generateUtils.js` supplies both (`javaPerspective` for the import, `perspective` for the topic). Using the raw perspective in the import compiled on macOS (case-insensitive FS) but failed `javac` with "package gen.x.data.Member does not exist" because the entity files declare the lowercased package.
+- **`trigger: { onCreate|onUpdate|onDelete: <Entity>, when: "<expr>" }` starts the process on the named `<Entity>` lifecycle event** - fully wired (Java). Any of the three events is supported: `onCreate` binds the entity's base topic, `onUpdate`/`onDelete` the `-updated`/`-deleted` topics the Java DAO publishes (`TriggerSupport` + `EventBinding`); an optional `when` guard (a single `field ==|!= literal`, via `NotificationSupport.guard`) gates `Process.start`. Three parts: (1) the parser validates at most one event kind and that the target is a declared entity; (2) the EDM generator adds a `ProcessId` back-reference property (VARCHAR) to that entity and a `triggers` collection to the `.model` (`TriggerSupport` + `EdmIntentGenerator.buildTriggers`); (3) the **`template-application-events-java`** template (intent-driven, like the other language templates) reads that `triggers` collection and emits one **`gen/events/<Process>Trigger.java`** per trigger - a client-Java `@Listener` (kind TOPIC, bound to the entity's per-operation topic via `topicSuffix`) `implements MessageHandler` that loads the entity, applies the `when` guard, calls `Process.start(<process>, businessKey, <entity JSON>)`, and writes the instance id back to `ProcessId` (so it starts at most once). The Java DAO template (`template-application-dao-java`) now publishes the create event (`Producer.sendToTopic('${projectName}-${perspectiveName}-${name}', json)`) the way the TS DAO does - that's the topic the handler binds to. `gen/events` is a sibling of `gen/<model>`, so it survives the per-model regeneration wipe. The events template iterates the model's `triggers` via a new **`triggers` collection case in `service-generate/template/generateUtils.js`** (the engine's collection switch is hardcoded; the case has its own loop because triggers are not entity-shaped). The business key is the entity id for now (`keyProperty`); `onSchedule` is still unmodelled. **Casing subtlety in the generated handler:** its `import gen.<genFolder>.data.<perspective>.<Entity>{Entity,Repository}` must use the **lowercased** Java package segment (`javaPerspective` = `sanitizeJavaIdentifier(perspective)`, matching the DAO/entity templates' `javaPerspectiveName` folder), while the `@Listener(name = "<project>-<perspective>-<entity>")` topic keeps the **raw** perspective so it matches the topic the DAO publishes to (`${projectName}-${perspectiveName}-${name}`). The `triggers` collection case in `generateUtils.js` supplies both (`javaPerspective` for the import, `perspective` for the topic). Using the raw perspective in the import compiled on macOS (case-insensitive FS) but failed `javac` with "package gen.x.data.Member does not exist" because the entity files declare the lowercased package.
 - **The YAML `name:` field is the intent's identity for outputs.** `IntentNaming.baseName` prefers it over the artefact name derived from the file name (which is conventionally just `app` from `app.intent`); single-file outputs are `<name>.edm` / `<name>.model` / `<name>.roles` and the table prefix is its upper-snake.
 - **Physical table names are intent-prefixed**: `<INTENT>_<ENTITY>` upper-snake (`ORDERS_ORDER`), via `IntentNaming.tableName`, consistently across `.edm` `dataName`, `.report` `table` and `.csvim` `table`. This avoids SQL reserved words (`ORDER`, `USER`, ...) and cross-project collisions in a shared schema. If the downstream "Generate from EDM" wizard asks for a table prefix, intent projects must leave it empty - the prefix is already part of `dataName`.
 
@@ -278,6 +278,126 @@ Semantics worth knowing:
 - **Don't reuse the existing modelers for intent projects.** That would re-expose `gen/` as an authoring surface and undo the whole point.
 - **Don't read env vars or system properties directly** - go through `DirigibleConfig` per the platform-wide rule.
 
+## Planned: declarative glue — integrations & activities (`on <event> → do <action>`)
+
+The intent already generates two kinds of process glue (`.glue` → `template-application-events-java`): **triggers** (`onCreate` → start a process) and **decision resolvers** (load a related entity's field for a gateway). These are the first two instances of one abstraction we want to grow, so that **common integrations and activities are declared in the intent and need no hand-written code**:
+
+> **glue = `on <event> → do <action>`, with action parameters bound by resolver paths.**
+
+Three axes:
+- **Event** — entity `onCreate` / `onUpdate` / `onDelete` (+ a `when:` guard), a process step reached/completed, `onSchedule: <cron>`, or an inbound message / webhook / file. **The event-binding map key is `event:`, not `on:`** — YAML 1.1 resolves a bare `on` (also `off`/`yes`/`no`) to the boolean `true`, so SnakeYAML would swallow an `on:` key and the binding would silently never populate (this bit the notifications increment; `IntentEngineIT` caught it). Likewise an action key is `do:`, never `on:`.
+- **Action** — `startProcess`, `notify`, `callHttp` / `publish`, `setField` / `upsert`, `generateDocument`, `assign`.
+- **Binding** — the existing **resolver path grammar** (`member.email`, `book.genre.name`): relation walks off the triggering entity / process context, validated at parse time like `then`/`else`. Already built — reuse it everywhere, don't re-invent data access per action.
+
+### Glue is generated **annotated client-Java**, and that *is* the artefact — not "code we avoid"
+
+Decision (supersedes, **for the glue layer only**, the "prefer a model artifact, Java glue is the exception" wording elsewhere in this guide): every glue activity is generated as an **annotated client-Java class against the SDK** (`org.eclipse.dirigible.sdk.*`) under `gen/events`, exactly as the trigger glue already is (`@Listener` + `MessageHandler`, `Process.start(...)`, `Json`). The annotated class **is** the model/artefact — `engine-java` synchronizes and runs it; it is deterministic, regenerated with the app, and replaceable via a `/custom/` override. We do **not** emit `.listener` / `.job` XML/JSON artefacts that point at a handler, and we do **not** target TypeScript.
+
+**Why: TypeScript is being deprecated.** Client-Java (`engine-java` + `data-store-java`; the `@Entity`/`@Controller`/`@Repository`/`@Listener`/`@Scheduled` SDK surface) is now the primary runtime; the GraalJS path is a dead-end and TS will be removed once the Java surface is comfortable. So all new code-gen — glue, and increasingly the template engine via the `*-java` templates the `.settings` recipe already prefers — targets annotated Java; **do not invest in TS-handler-shaped glue.** The line we still hold is unchanged: **no hand-written business logic in `gen/`** — the moment an action needs real logic it is a `script` step or a `/custom/` hook, never more intent syntax. (The *core* model generators — entities→`.edm`, processes→`.bpmn`, forms→`.form`, reports→`.report`, roles→`.roles`, seeds→`.csvim` — stay model files: they feed the modelers and the template engine.)
+
+Every action below has a real SDK surface to generate against, so none of this needs a new runtime:
+
+| Action | SDK surface (`org.eclipse.dirigible.sdk.*`) |
+|---|---|
+| react to an entity event | `messaging.Listener` + `MessageHandler` (topic per entity, as the trigger glue) |
+| schedule | `job.Scheduled` (`expression()` = cron) + `job.JobHandler` |
+| notify — email | `mail.Mail` |
+| notify — in-app / push | `net.Websockets` / `messaging.Producer` |
+| call out (HTTP / webhook) | `http.HttpClient` |
+| publish / consume message | `messaging` / `kafka` / `rabbitmq` Producer/Consumer |
+| inbound webhook | `http.Controller` + `@Get`/`@Post` |
+| read / write / upsert data | `db.Store` / the generated `<Entity>Repository` |
+| generate a document | `pdf.Pdf` (+ `cms.Cmis` to file it) |
+| start process / complete task | `bpm.Process` / `bpm.Tasks` |
+| config / secrets | `core.Configurations` / `core.Env` (the `@config:` sugar) |
+| dynamic assignment / auth | `security.Roles` / `security.User` |
+
+### Catalog (prioritized by frequency × glue-ness)
+
+**Tier 1 — build first (reuses trigger + resolver almost entirely):**
+
+1. **Generalized lifecycle reactions** — generalize the trigger from "onCreate→startProcess" to `{onCreate|onUpdate|onDelete} + when:` → any action. Prereq: the Java DAO must publish update/delete events (create is already published). → `gen/events/<name>Reaction.java` (`@Listener`).
+   ```yaml
+   reactions:
+     - { event: { onUpdate: Loan, when: "status == 'APPROVED'" }, do: notify(loanApprovedEmail) }
+   ```
+2. **Notifications** — the most-requested business glue. **(v1 implemented.)**
+   ```yaml
+   notifications:
+     - { name: orderUpdated, event: { onUpdate: Order }, channel: email, to: ops@example.com, subject: "Order {id} updated, total {total}", body: "The order changed." }
+   ```
+   → `gen/events/<Name>Notification.java` (`@Listener`) using `sdk.mail.Mail`, bound to the entity's create / `-updated` / `-deleted` topic; sender from `DIRIGIBLE_MAIL_SENDER`. The author-facing fields are translated to Java by `NotificationSupport` (unit-tested) and emitted into `.glue` (`GlueIntentGenerator`), rendered by `Notification.java.template` via the `notifications` collection case in `generateUtils.js`. **Scope:** `to`/`{placeholder}` resolve a literal, a **direct field**, or a **one-hop `relation.field`** of a to-one relation — the listener loads the related entity once by FK id (same one-hop mechanism as the decision resolvers; `NotificationSupport.plan` emits the `relationLoads` the template renders). `when:` supports a single `field ==|!= literal` on a direct field. **Multi-hop** paths (`a.b.c`) and relation-path `when:` are the remaining gap; the parser rejects multi-hop `to` with a clear message.
+3. **Scheduled activities** — cron reminders / cleanups; query an entity and act per matching row. **(v1 implemented.)**
+   ```yaml
+   schedules:
+     - name: overdueLoans
+       cron: "0 0 9 * * ?"
+       entity: Loan
+       where:
+         - { field: dueOn,  op: lt, value: CURRENT_DATE }   # eq/ne/gt/ge/lt/le/like; CURRENT_DATE/CURRENT_TIMESTAMP -> now()
+         - { field: status, op: eq, value: "ACTIVE" }
+       notify: { to: member.email, subject: "Overdue: {book.title}", body: "Your loan is overdue." }
+   ```
+   → `gen/events/<Name>Job.java`: a `@Scheduled(expression=cron)` `JobHandler` that runs `new <Entity>Repository().findAll(Criteria...)` (the typed `Criteria` query API) and performs the per-row `notify` (reusing `NotificationSupport.plan` against the row entity - same relation-load + interpolation as notifications). `ScheduleSupport.criteriaExpression` builds the `Criteria` chain (`where` -> typed conditions; field names PascalCased to the entity properties). Honors the `.settings` override. **Gap:** the action is `notify` only (other actions + `between`/`in` operators are later); process `trigger: { onSchedule: <cron> }` (timer start event) is still open.
+4. **Outbound integrations** — "tell another system" on an event. **(v1 implemented.)**
+   ```yaml
+   integrations:
+     - { name: pushBookToCatalog, event: { onCreate: Book }, method: POST, url: "@config:CATALOG_URL" }
+   ```
+   → `gen/events/<Name>Integration.java`: an `@Listener` that forwards the entity-event JSON to the URL via `sdk.http.HttpClient` (`IntegrationSupport` maps the method + the `@config:KEY` URL sugar to `Configurations.get`). The event-binding (`EventBinding`) + topic are shared with notifications. **Gap:** body forwards the whole entity (custom body mapping + headers/auth are later).
+
+**Tier 2 — high value:**
+
+5. **Inbound webhooks** — "another system tells us": a webhook that ingests a JSON payload into an entity. **(v1 implemented.)**
+   ```yaml
+   inbound:
+     - { name: ingestOrder, path: /ingest, create: Order }
+   ```
+   → `gen/events/<Name>Webhook.java`: a `@Controller` with a `@Post("<path>")` that deserializes the body (via the java.time-aware SDK `Json`) into the entity and `save`s it through the repository, returning the saved JSON. Served at `/services/java/<project>/gen/events/<Name>Webhook<path>`. **Gap:** v1 action is `create` (ingest); upsert/match-set and start-process, plus queue/topic sources (`@Listener`/`Consumer`), are later.
+6. **Status lifecycle (state machine) on an entity** — order/ticket/loan status; the highest "removes custom code" leverage of the set.
+   ```yaml
+   entities:
+     - name: Loan
+       lifecycle:
+         field: status
+         states: [REQUESTED, APPROVED, ACTIVE, RETURNED, OVERDUE]
+         transitions:
+           - { from: REQUESTED, to: APPROVED, guard: "book.available", do: notify(loanApprovedEmail) }
+   ```
+   → guarded-transition glue (+ optionally a small `.bpmn`), reusing resolvers for guards and reactions for `do:`.
+7. **Document generation (PDF)** — agreements / invoices.
+   ```yaml
+   documents:
+     - { name: loanAgreement, event: { onUpdate: Loan, when: "status=='APPROVED'" }, template: loan-agreement, data: { member: member.name, book: book.title }, output: attachTo(Loan) }
+   ```
+   → `@Listener` using `sdk.pdf.Pdf` + `sdk.cms.Cmis`.
+
+**Tier 3 — denormalization & compliance (cheap once Tier 1 exists):**
+
+8. **Audit / history** — `audit: true` on an entity → shadow `<Entity>History` entity + a write-on-change `@Listener`.
+9. **Rollups / counters** — maintain a denormalized count on a parent. **(v1 implemented.)**
+   ```yaml
+   rollups:
+     - { name: memberLoanCount, entity: Loan, via: member, field: loanCount }   # Member.loanCount = #Loans whose `member` FK = that Member
+   ```
+   → two `gen/events/<Name>RollupOn{Create,Delete}.java` `@Listener`s on the child's create/delete topics that recompute the affected parent's count via a typed `Criteria` (`findAll(Criteria.create().eq("<Fk>", entity.<Fk>)).size()`) and write it back. Recompute-on-event (self-healing); **eventually consistent, not transactionally exact** under heavy concurrency. **Gap:** no `where` filter (counts all children), and re-parenting on child update isn't tracked (only create/delete).
+10. **Dynamic user-task assignment** — `assignee: { fromPath: member.branch.manager }`, resolver-driven (extends the existing user-task glue).
+
+### Guardrails (so this doesn't become the MDE expressiveness trap)
+- **Curated action vocabulary, not a DSL.** Real logic → a `script` step or a `/custom/` hook (the escape hatch is non-negotiable; pure MDE always loses here).
+- **Every generated glue artefact gets an override switch** — the `.settings` `overrides.{...}.generate=false` mechanism (already honored for triggers/resolvers/forms) lets a hand-written `/custom/` class replace any single generated one.
+- **Secrets / endpoints via `DirigibleConfig` / `sdk.core.Configurations`** (`@config:` sugar), never inline — and grep-clean before publish.
+- **Bindings validated at parse**, like `then`/`else` today (a dangling `member.branchz` fails fast, not at runtime).
+- **Determinism + diff stability + comment preservation**, as for every generator; each generated class carries the "generated from intent — do not edit" header the trigger/resolver templates already use.
+
+### Sequencing
+Build **#1 (reactions) + #2 (notify)** first: one new concept ("reaction"), reuses trigger + resolver, unlocks the most apps per line of new code. Then **#3 (schedules)** (`sdk.job.Scheduled` already exists). **#6 (state machine)** is the highest later-leverage item but needs the most design. Each ships behind a `.settings` override and a parser-validated binding grammar.
+
+### Status of the catalog (what one `app.intent` can declare today)
+Implemented and generating annotated client-Java off the shared `EventBinding` / `NotificationSupport` / `ScheduleSupport` / `Criteria` core: **notifications** (#2, email; direct field / one-hop `relation.field` / literal; `when` guard), **schedules** (#3, cron → typed-`Criteria` query → per-row notify), **outbound integrations** (#4, event → `HttpClient`), **inbound webhooks** (#5, `@Controller` ingest → entity), **lifecycle triggers** (process `trigger` on `onCreate`/`onUpdate`/`onDelete` + `when` guard), and **rollups** (#9, recompute a parent counter via `Criteria`). Still open / blocked: **documents** (#7 - the PDF engine is XSLT/XSL-FO, needs an HTML→PDF path first), **state machine** (#6 - needs write-path transition enforcement, deeper than a listener), **audit/history** (#8 - needs a generated shadow entity), **dynamic task assignment** (#10 - touches BPMN user-task generation).
+
+**The canonical, verified showcase is `IntentEngineIT`'s `INTENT_YAML` fixture** - a single Orders `app.intent` that declares entities (incl. a `setting` + a composition), a process (trigger + decision/resolver + user/service tasks), forms, reports, roles, seeds, **and** every glue block above; the `glue_template_generates_the_trigger_and_resolver_handlers` test generates from it and asserts the whole catalog (trigger, resolver, notification, schedule job, integration, webhook, rollup×2) is produced from that one file. Mirror it into `dirigiblelabs/sample-intent-model` when publishing a runnable sample.
+
 ## Follow-ups
 
 - `.access` rules from intent. The current PermissionIntentGenerator deliberately emits only `.roles`; URL-shaped constraints (the `<path, method, roles>` table in `.access`) need to know the paths the downstream template engine will publish, so they live with that template. A future pass should either (a) wire intent to feed those paths into the EDM template generator so it can emit the matching `.access`, or (b) add a custom-action `.access` block to intent for non-CRUD operations like {@code Order:approve} where there is no template-owned URL.
@@ -288,7 +408,7 @@ Semantics worth knowing:
 - Mark intent-generated model files as not-for-hand-editing in the IDE (decoration in the Projects view or a banner in the modelers).
 - `/custom/` escape-hatch directory + per-slice hook points in the generators (the generators must learn to preserve `/custom/` files alongside their gen output).
 - `reverse-engineer intent` command for migrating classic projects.
-- `onSchedule` triggers -> timer start event / `.job` (only `onCreate` is wired today). A TypeScript counterpart to `template-application-events-java` (the TS DAO already publishes events) and a configurable business key (beyond the entity id) are also open.
+- `onSchedule` triggers (only `onCreate` is wired today) and a configurable business key (beyond the entity id) are folded into the **"Planned: declarative glue"** section above. Note: **no TypeScript counterpart** - TS is being deprecated; all glue targets annotated client-Java (`@Scheduled` etc.).
 
 **Done:**
 

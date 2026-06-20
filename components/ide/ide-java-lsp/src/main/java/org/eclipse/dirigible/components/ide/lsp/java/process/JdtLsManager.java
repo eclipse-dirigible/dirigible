@@ -25,6 +25,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -248,9 +249,16 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     /**
      * Returns {@code true} if the given directory contains at least one {@code .java} file within the
      * first five levels of nesting.
+     *
+     * <p>
+     * {@link FileVisitOption#FOLLOW_LINKS} is required because git-backed workspace projects are
+     * symlinks into the repository's {@code .git} store. Without it, {@link Files#walk} treats the
+     * symlinked project directory as a non-traversable file, finds no {@code .java}, and the project is
+     * silently skipped — so {@code .project}/{@code .classpath} are never generated and JDT.LS falls
+     * back to a JRE-only default project (SDK and project types do not resolve).
      */
     private boolean containsJavaFile(Path dir) {
-        try (Stream<Path> walk = Files.walk(dir, 5)) {
+        try (Stream<Path> walk = Files.walk(dir, 5, FileVisitOption.FOLLOW_LINKS)) {
             return walk.anyMatch(p -> !Files.isDirectory(p) && p.getFileName()
                                                                 .toString()
                                                                 .endsWith(".java"));

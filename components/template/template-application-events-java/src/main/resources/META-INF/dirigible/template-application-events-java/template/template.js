@@ -38,6 +38,41 @@ export function getTemplate(parameters) {
                 collection: "resolvers"
             },
             {
+                location: "/template-application-events-java/events/Notification.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Notification.java",
+                engine: "velocity",
+                collection: "notifications"
+            },
+            {
+                location: "/template-application-events-java/events/Job.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Job.java",
+                engine: "velocity",
+                collection: "schedules"
+            },
+            {
+                location: "/template-application-events-java/events/Integration.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Integration.java",
+                engine: "velocity",
+                collection: "integrations"
+            },
+            {
+                location: "/template-application-events-java/events/Webhook.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Webhook.java",
+                engine: "velocity",
+                collection: "inbound"
+            },
+            {
+                location: "/template-application-events-java/events/Rollup.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}.java",
+                engine: "velocity",
+                collection: "rollups"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

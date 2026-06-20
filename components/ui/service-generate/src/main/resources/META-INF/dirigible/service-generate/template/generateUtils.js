@@ -286,7 +286,9 @@ export function generateFiles(model, parameters, templateSources) {
                                 // The event-topic name keeps the raw perspective so it matches the
                                 // topic the DAO publishes to (${projectName}-${perspectiveName}-${name}).
                                 javaPerspective: sanitizeJavaIdentifier(model.triggers[t].perspective),
-                                keyProperty: model.triggers[t].keyProperty
+                                keyProperty: model.triggers[t].keyProperty,
+                                topicSuffix: model.triggers[t].topicSuffix,
+                                guardExpression: model.triggers[t].guardExpression
                             };
                             const cleanTriggerParameters = cleanData(triggerParameters);
                             generatedFiles.push({
@@ -320,6 +322,147 @@ export function generateFiles(model, parameters, templateSources) {
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanResolverParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanResolverParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "notifications":
+                    // Notifications (intent layer): one @Listener per declarative notification, binding
+                    // to the entity's event topic and sending via the SDK. Not entity-shaped, so it gets
+                    // its own loop. The Java package segment is the lowercased perspective (matching the
+                    // entity/DAO templates); the event-topic name keeps the raw perspective + the
+                    // operation suffix so it matches what the DAO publishes to.
+                    if (model.notifications) {
+                        for (let n = 0; n < model.notifications.length; n++) {
+                            const notificationParameters = {
+                                ...parameters,
+                                name: model.notifications[n].name,
+                                className: model.notifications[n].className,
+                                entity: model.notifications[n].entity,
+                                perspective: model.notifications[n].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.notifications[n].perspective),
+                                topicSuffix: model.notifications[n].topicSuffix,
+                                // Each one-hop relation load needs the lowercased Java package of its target.
+                                relationLoads: (model.notifications[n].relationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                })),
+                                guardExpression: model.notifications[n].guardExpression,
+                                toExpression: model.notifications[n].toExpression,
+                                subjectExpression: model.notifications[n].subjectExpression,
+                                bodyExpression: model.notifications[n].bodyExpression
+                            };
+                            const cleanNotificationParameters = cleanData(notificationParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanNotificationParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanNotificationParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "schedules":
+                    // Schedules (intent layer): one @Scheduled JobHandler per schedule - query the entity
+                    // via a typed Criteria and notify per matching row. Not entity-shaped, own loop.
+                    if (model.schedules) {
+                        for (let s = 0; s < model.schedules.length; s++) {
+                            const scheduleParameters = {
+                                ...parameters,
+                                name: model.schedules[s].name,
+                                className: model.schedules[s].className,
+                                cron: model.schedules[s].cron,
+                                entity: model.schedules[s].entity,
+                                perspective: model.schedules[s].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.schedules[s].perspective),
+                                criteriaExpression: model.schedules[s].criteriaExpression,
+                                relationLoads: (model.schedules[s].relationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                })),
+                                toExpression: model.schedules[s].toExpression,
+                                subjectExpression: model.schedules[s].subjectExpression,
+                                bodyExpression: model.schedules[s].bodyExpression
+                            };
+                            const cleanScheduleParameters = cleanData(scheduleParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanScheduleParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanScheduleParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "integrations":
+                    // Integrations (intent layer): one @Listener per outbound integration - forward the
+                    // entity event to an external HTTP endpoint. Not entity-shaped, own loop.
+                    if (model.integrations) {
+                        for (let i = 0; i < model.integrations.length; i++) {
+                            const integrationParameters = {
+                                ...parameters,
+                                name: model.integrations[i].name,
+                                className: model.integrations[i].className,
+                                entity: model.integrations[i].entity,
+                                perspective: model.integrations[i].perspective,
+                                topicSuffix: model.integrations[i].topicSuffix,
+                                clientMethod: model.integrations[i].clientMethod,
+                                hasBody: model.integrations[i].hasBody,
+                                urlExpression: model.integrations[i].urlExpression
+                            };
+                            const cleanIntegrationParameters = cleanData(integrationParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanIntegrationParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanIntegrationParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "inbound":
+                    // Inbound webhooks (intent layer): one @Controller per webhook - ingest a posted JSON
+                    // payload as an entity. Not entity-shaped, own loop.
+                    if (model.inbound) {
+                        for (let w = 0; w < model.inbound.length; w++) {
+                            const inboundParameters = {
+                                ...parameters,
+                                name: model.inbound[w].name,
+                                className: model.inbound[w].className,
+                                entity: model.inbound[w].entity,
+                                perspective: model.inbound[w].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.inbound[w].perspective),
+                                path: model.inbound[w].path
+                            };
+                            const cleanInboundParameters = cleanData(inboundParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanInboundParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanInboundParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "rollups":
+                    // Rollups (intent layer): per rollup, two @Listeners (child create/delete) that
+                    // recompute a parent counter. Not entity-shaped, own loop.
+                    if (model.rollups) {
+                        for (let r = 0; r < model.rollups.length; r++) {
+                            const rollupParameters = {
+                                ...parameters,
+                                className: model.rollups[r].className,
+                                childEntity: model.rollups[r].childEntity,
+                                childPerspective: model.rollups[r].childPerspective,
+                                javaChildPerspective: sanitizeJavaIdentifier(model.rollups[r].childPerspective),
+                                parentEntity: model.rollups[r].parentEntity,
+                                javaParentPerspective: sanitizeJavaIdentifier(model.rollups[r].parentPerspective),
+                                fkProperty: model.rollups[r].fkProperty,
+                                countField: model.rollups[r].countField,
+                                topicSuffix: model.rollups[r].topicSuffix,
+                                criteriaExpression: model.rollups[r].criteriaExpression
+                            };
+                            const cleanRollupParameters = cleanData(rollupParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanRollupParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanRollupParameters)
                             });
                         }
                     }

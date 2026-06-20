@@ -1,0 +1,42 @@
+package gen.events;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.core.Configurations;
+import org.eclipse.dirigible.sdk.http.HttpClient;
+import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Forwards a ${entity} event to an external endpoint via ${clientMethod}.
+ *
+ * Generated from the intent integrations block - do not edit; it is re-generated with the
+ * application. The event payload (the entity JSON) is sent as the request body. The target URL comes
+ * from the intent (a literal or a configuration value).
+ */
+@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
+public class ${className}Integration implements MessageHandler {
+
+    @Override
+    public void onMessage(String message) {
+        String url = ${urlExpression};
+        if (url == null || url.isBlank()) {
+            return;
+        }
+        try {
+#if($hasBody)
+            Map<String, Object> options = new HashMap<>();
+            options.put("text", message);
+            options.put("contentType", "application/json");
+            HttpClient.${clientMethod}(url, Json.stringify(options));
+#else
+            HttpClient.${clientMethod}(url, null);
+#end
+        } catch (Exception ex) {
+            throw new RuntimeException("Integration ${name} failed", ex);
+        }
+    }
+}

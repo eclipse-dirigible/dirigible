@@ -70,7 +70,7 @@ Eclipse Dirigible — a high-productivity application platform (hpaPaaS). The ru
 
 ## Prerequisites
 
-- Java JDK 21 (project compiles to Java 21; CI uses Corretto 21)
+- Java JDK 21 (project compiles to Java 21; CI builds/tests run on Corretto 24, bytecode target stays 21)
 - Maven 3.8.x
 - Node.js 22.x with global installs of `typescript` and `esbuild` (frontend WebJars are transpiled/bundled at build time)
 - `ttyd` (only required at runtime for the in-IDE terminal on port 9000, and for integration tests)
@@ -127,6 +127,10 @@ For remote debugging:
 ```
 java -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=8000 -jar build/application/target/dirigible-application-*-executable.jar
 ```
+
+## Local dev-loop automation (`.claude/` commands + script)
+
+The repo ships Claude Code slash commands (`/dirigible-start`, `/dirigible-stop`, `/dirigible-logs`, `/dirigible-test`, `/dirigible-pr` in `.claude/commands/`) wrapping one cross-platform Node.js driver (`.claude/scripts/dirigible.mjs`) for the local build/run/log/test/PR loop. Prefer these over hand-running `mvn`/`java`. **Maintainer reference (read before changing the commands or driver): [`.claude/scripts/README.md`](.claude/scripts/README.md)** — driver subcommands, cross-platform mechanics, the background-task log-tail rationale, and the team-wide permission whitelist in `.claude/settings.json`. The user-facing guide is the "Claude Code Commands" section of the root `README.md`.
 
 ## Repository layout
 

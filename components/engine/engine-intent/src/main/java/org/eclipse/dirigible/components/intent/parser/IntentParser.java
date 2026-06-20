@@ -18,10 +18,16 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.InboundIntent;
+import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -59,6 +65,14 @@ public final class IntentParser {
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
+    /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
+    private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
+    /** Notification delivery channels supported today. */
+    private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
+    /** Comparison operators a schedule's {@code where} condition may use. */
+    private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
+    /** HTTP methods an outbound integration may use. */
+    private static final Set<String> HTTP_METHODS = Set.of("GET", "POST", "PUT", "PATCH", "DELETE");
 
     /**
      * Plain Gson for the YAML-Map -> JSON -> POJO round-trip. The platform's {@code JsonHelper} /
@@ -109,8 +123,234 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
         validateSeeds(model, entityNames, issues);
+        validateNotifications(model, entityNames, issues);
+        validateSchedules(model, entityNames, issues);
+        validateIntegrations(model, entityNames, issues);
+        validateInbound(model, entityNames, issues);
+        validateRollups(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * Each schedule must have a unique name, a cron expression, an entity to query, supported
+     * {@code where} operators, and a notify action with a valid recipient.
+     */
+    private static void validateSchedules(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (ScheduleIntent schedule : model.getSchedules()) {
+            String name = schedule.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("schedule has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate schedule [" + name + "]");
+            }
+            if (schedule.getCron() == null || schedule.getCron()
+                                                      .isBlank()) {
+                issues.add("schedule [" + name + "] has no cron expression");
+            }
+            if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
+                issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+            }
+            for (ScheduleConditionIntent condition : schedule.getWhere()) {
+                if (condition.getField() == null || condition.getField()
+                                                             .isBlank()) {
+                    issues.add("schedule [" + name + "] has a where-condition with no field");
+                }
+                if (!SCHEDULE_OPERATORS.contains(condition.getOp())) {
+                    issues.add("schedule [" + name + "] where-condition uses unsupported operator [" + condition.getOp()
+                            + "] (supported: eq/ne/gt/ge/lt/le/like)");
+                }
+            }
+            if (schedule.getNotify() == null) {
+                issues.add("schedule [" + name + "] has no notify action");
+            } else {
+                String to = schedule.getNotify()
+                                    .getTo();
+                if (to == null || to.isBlank()) {
+                    issues.add("schedule [" + name + "] notify has no recipient (to)");
+                } else if (!to.contains("@") && to.chars()
+                                                  .filter(c -> c == '.')
+                                                  .count() >= 2) {
+                    issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
+                }
+            }
+        }
+    }
+
+    /**
+     * Each roll-up must have a unique name, a child entity, a {@code via} to-one relation of that child
+     * pointing at a parent, and an integer {@code field} on the parent to maintain.
+     */
+    private static void validateRollups(IntentModel model, List<String> issues) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            String name = rollup.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("rollup has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate rollup [" + name + "]");
+            }
+            EntityIntent child = byName.get(rollup.getEntity());
+            if (child == null) {
+                issues.add("rollup [" + name + "] counts unknown entity [" + rollup.getEntity() + "]");
+                continue;
+            }
+            RelationIntent via = null;
+            for (RelationIntent relation : child.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null && relation.getName()
+                                                                   .equals(rollup.getVia())) {
+                    via = relation;
+                }
+            }
+            if (via == null) {
+                issues.add("rollup [" + name + "] via [" + rollup.getVia() + "] is not a to-one relation of [" + rollup.getEntity() + "]");
+                continue;
+            }
+            EntityIntent parent = byName.get(via.getTo());
+            FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
+            if (counter == null) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
+            } else if (!INTEGER_PK_TYPES.contains(counter.getType())) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
+            }
+        }
+    }
+
+    private static FieldIntent fieldByName(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name != null && name.equals(field.getName())) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Each inbound webhook must have a unique name, a path, and a declared entity to create from the
+     * posted payload.
+     */
+    private static void validateInbound(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (InboundIntent inbound : model.getInbound()) {
+            String name = inbound.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("inbound webhook has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate inbound webhook [" + name + "]");
+            }
+            if (inbound.getPath() == null || inbound.getPath()
+                                                    .isBlank()) {
+                issues.add("inbound webhook [" + name + "] has no path");
+            }
+            if (inbound.getCreate() == null || !entityNames.contains(inbound.getCreate())) {
+                issues.add("inbound webhook [" + name + "] creates unknown entity [" + inbound.getCreate() + "]");
+            }
+        }
+    }
+
+    /**
+     * Each integration must have a unique name, bind to exactly one entity lifecycle event of a
+     * declared entity, use a supported HTTP method, and name a target URL.
+     */
+    private static void validateIntegrations(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (IntegrationIntent integration : model.getIntegrations()) {
+            String name = integration.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("integration has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate integration [" + name + "]");
+            }
+            int eventCount = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = integration.getEvent()
+                                           .get(kind);
+                if (target != null) {
+                    eventCount++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("integration [" + name + "] " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (eventCount != 1) {
+                issues.add("integration [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
+            }
+            String method = integration.getMethod();
+            if (method != null && !method.isBlank() && !HTTP_METHODS.contains(method.trim()
+                                                                                    .toUpperCase(Locale.ROOT))) {
+                issues.add("integration [" + name + "] has unsupported HTTP method [" + method + "]");
+            }
+            if (integration.getUrl() == null || integration.getUrl()
+                                                           .isBlank()) {
+                issues.add("integration [" + name + "] has no url");
+            }
+        }
+    }
+
+    /**
+     * Each notification must have a unique name, bind to exactly one entity lifecycle event
+     * ({@code onCreate}/{@code onUpdate}/{@code onDelete}) of a declared entity, use a supported
+     * channel, and name a recipient. The {@code when} guard and the {@code to} resolver path are
+     * carried through to the generator (a later increment), which validates the path against the entity
+     * at generation time.
+     */
+    private static void validateNotifications(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> names = new HashSet<>();
+        for (NotificationIntent notification : model.getNotifications()) {
+            String name = notification.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("notification has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate notification [" + name + "]");
+            }
+            int eventCount = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = notification.getEvent()
+                                            .get(kind);
+                if (target != null) {
+                    eventCount++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("notification [" + name + "] " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (eventCount != 1) {
+                issues.add("notification [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
+            }
+            String channel = notification.getChannel();
+            if (channel != null && !channel.isBlank() && !NOTIFICATION_CHANNELS.contains(channel)) {
+                issues.add("notification [" + name + "] has unsupported channel [" + channel + "] (supported: email)");
+            }
+            String to = notification.getTo();
+            if (to == null || to.isBlank()) {
+                issues.add("notification [" + name + "] has no recipient (to)");
+            } else if (!to.contains("@") && to.chars()
+                                              .filter(c -> c == '.')
+                                              .count() >= 2) {
+                // A recipient is a literal address, a direct field, or a one-hop relation.field; multi-hop
+                // paths are not supported (the generator resolves a single to-one relation by FK id).
+                issues.add("notification [" + name + "] recipient [" + to
+                        + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
+            }
         }
     }
 
@@ -197,10 +437,19 @@ public final class IntentParser {
             if (!processNames.add(process.getName())) {
                 issues.add("duplicate process [" + process.getName() + "]");
             }
-            Object onCreate = process.getTrigger()
-                                     .get("onCreate");
-            if (onCreate != null && !entityNames.contains(onCreate.toString())) {
-                issues.add("process [" + process.getName() + "] trigger onCreate references unknown entity [" + onCreate + "]");
+            int triggerEvents = 0;
+            for (String kind : EVENT_KINDS) {
+                Object target = process.getTrigger()
+                                       .get(kind);
+                if (target != null) {
+                    triggerEvents++;
+                    if (!entityNames.contains(target.toString())) {
+                        issues.add("process [" + process.getName() + "] trigger " + kind + " references unknown entity [" + target + "]");
+                    }
+                }
+            }
+            if (triggerEvents > 1) {
+                issues.add("process [" + process.getName() + "] trigger must declare at most one of onCreate/onUpdate/onDelete");
             }
             Set<String> stepNames = new HashSet<>();
             for (StepIntent step : process.getSteps()) {

@@ -70,6 +70,7 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: name,        type: string,  required: true, length: 200 }
                   - { name: active,      type: boolean, defaultValue: "true" }
                   - { name: creditLimit, type: decimal }
+                  - { name: orderCount,  type: integer }
                 relations:
                   - { name: country, kind: manyToOne, to: Country }
                   - { name: orders,  kind: oneToMany, to: Order }
@@ -136,6 +137,41 @@ class IntentEngineIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Afghanistan, code2: AF }
                   - { id: 2, name: Albania,     code2: AL }
+
+            notifications:
+              - name: orderUpdated
+                event: { onUpdate: Order }
+                to: ops@example.com
+                subject: "Order {id} for {customer.name}, total {total}"
+                body: "The order changed."
+
+            schedules:
+              - name: staleOrders
+                cron: "0 0 9 * * ?"
+                entity: Order
+                where:
+                  - { field: orderDate, op: lt, value: CURRENT_DATE }
+                notify:
+                  to: ops@example.com
+                  subject: "Stale order {id} for {customer.name}"
+                  body: "This order is stale."
+
+            integrations:
+              - name: pushOrderToWarehouse
+                event: { onCreate: Order }
+                method: POST
+                url: "@config:WAREHOUSE_URL"
+
+            inbound:
+              - name: ingestOrder
+                path: /ingest
+                create: Order
+
+            rollups:
+              - name: customerOrderCount
+                entity: Order
+                via: customer
+                field: orderCount
             """;
 
     @Autowired
@@ -320,6 +356,155 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should read the FK id from the process variables");
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
+
+        // The notification (onUpdate: Order) is an @Listener that sends mail when an Order is updated -
+        // exercises the generateUtils.js "notifications" collection case end to end.
+        String notification = contentOf("gen/events/OrderUpdatedNotification.java");
+        assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
+                "the notification should be a message-handling listener (PascalCased class name)");
+        assertTrue(notification.contains("@Listener(name = \"intent-test-Order-Order-updated\""),
+                "an onUpdate notification should bind to the entity's -updated topic");
+        assertTrue(notification.contains("Mail.send("), "the notification should send via the SDK Mail API");
+        assertTrue(notification.contains("String to = \"ops@example.com\""), "a literal recipient should be emitted as a literal");
+        assertTrue(notification.contains("import gen.orders.data.order.OrderEntity"),
+                "the notification should import the event entity from its real (lowercased) Java package");
+        // The subject references a one-hop relation.field ({customer.name}), so the listener loads the
+        // related Customer by FK id and the subject reads its field - the same one-hop mechanism as the
+        // decision resolvers.
+        assertTrue(
+                notification.contains("import gen.orders.data.customer.CustomerEntity")
+                        && notification.contains("import gen.orders.data.customer.CustomerRepository"),
+                "the notification should import the related entity + repository it loads");
+        assertTrue(
+                notification.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "the listener should load the one-hop related entity by FK id");
+        assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
+                "the subject should interpolate the relation.field against the loaded related entity");
+
+        // The schedule is a @Scheduled JobHandler that queries via a typed Criteria and notifies per row.
+        String job = contentOf("gen/events/StaleOrdersJob.java");
+        assertTrue(job.contains("@Scheduled(expression = \"0 0 9 * * ?\")") && job.contains("class StaleOrdersJob implements JobHandler"),
+                "the schedule should generate a @Scheduled JobHandler");
+        assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
+                "the job should query the entity with a typed Criteria built from the where clause");
+        assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
+        assertTrue(
+                job.contains(
+                        "CustomerEntity customer = entity.Customer == null ? null : new CustomerRepository().findById(entity.Customer)"),
+                "the per-row notify should load the one-hop related entity");
+        assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
+
+        // The integration is an @Listener that forwards the entity JSON to an external endpoint.
+        String integration = contentOf("gen/events/PushOrderToWarehouseIntegration.java");
+        assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
+                "the integration should be a message-handling listener");
+        assertTrue(integration.contains("@Listener(name = \"intent-test-Order-Order\""),
+                "an onCreate integration should bind to the entity's base (create) topic");
+        assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
+                "an @config: URL should resolve through the configuration at run time");
+        assertTrue(
+                integration.contains("HttpClient.post(url, Json.stringify(options))")
+                        && integration.contains("options.put(\"text\", message)"),
+                "a POST integration should forward the entity JSON as the request body");
+
+        // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
+        String webhook = contentOf("gen/events/IngestOrderWebhook.java");
+        assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
+                "the inbound webhook should be a @Controller");
+        assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
+        assertTrue(
+                webhook.contains("OrderEntity entity = Json.parse(body, OrderEntity.class)")
+                        && webhook.contains("new OrderRepository().save(entity)"),
+                "the webhook should deserialize the payload and save it through the repository");
+
+        // Rollups: two @Listeners (child create/delete) that recompute the parent counter via Criteria.
+        // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
+        // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
+        // from a single app.intent.
+        String rollupCreate = contentOf("gen/events/CustomerOrderCountRollupOnCreate.java");
+        assertTrue(
+                rollupCreate.contains("@Listener(name = \"intent-test-Order-Order\"")
+                        && rollupCreate.contains(
+                                "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
+                        && rollupCreate.contains("parent.OrderCount = count"),
+                "the rollup create-listener should recompute the parent count via Criteria");
+        assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
+                "the rollup delete-listener should bind the child's -deleted topic");
+    }
+
+    @Test
+    void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
+        String yaml = """
+                name: shipping
+                entities:
+                  - name: Shipment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                processes:
+                  - name: Deliver
+                    trigger: { onUpdate: Shipment, when: "status == 'SHIPPED'" }
+                    steps:
+                      - { name: handle, kind: serviceTask }
+                      - { name: done,   kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
+
+        String trigger = contentOf("gen/events/DeliverTrigger.java");
+        assertTrue(trigger.contains("@Listener(name = \"intent-test-Shipment-Shipment-updated\""),
+                "an onUpdate trigger should bind to the entity's -updated topic");
+        assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
+                "the trigger should gate Process.start on the translated when-guard");
+        assertTrue(trigger.contains("Process.start(\"Deliver\""), "the trigger should start the process when the guard holds");
+    }
+
+    @Test
+    void rollup_generates_create_and_delete_listeners_that_recompute_the_parent_count() {
+        String yaml = """
+                name: library
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: loanCount, type: integer }
+                  - name: Loan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: member, kind: manyToOne, to: Member }
+                rollups:
+                  - name: memberLoanCount
+                    entity: Loan
+                    via: member
+                    field: loanCount
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "library.glue");
+
+        String onCreate = contentOf("gen/events/MemberLoanCountRollupOnCreate.java");
+        assertTrue(onCreate.contains("class MemberLoanCountRollupOnCreate implements MessageHandler"),
+                "the create-side rollup listener should be generated");
+        assertTrue(onCreate.contains("@Listener(name = \"intent-test-Loan-Loan\""), "the create listener binds the child's base topic");
+        assertTrue(onCreate.contains("MemberEntity parent = parents.findById(entity.Member)"),
+                "it should load the parent via the child's FK");
+        assertTrue(
+                onCreate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member)).size()")
+                        && onCreate.contains("parent.LoanCount = count"),
+                "it should recompute the count via a typed Criteria and write it to the parent counter");
+
+        String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
+        assertTrue(onDelete.contains("@Listener(name = \"intent-test-Loan-Loan-deleted\""),
+                "the delete listener binds the child's -deleted topic");
     }
 
     @Test
@@ -516,6 +701,30 @@ class IntentEngineIT extends IntegrationTest {
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
                 "the resolver should carry the FK property, target entity/field and the resolved variable");
+        // Notifications: one per declarative notification, carrying the rendered Java expressions.
+        assertTrue(
+                glue.contains("\"notifications\"") && glue.contains("\"name\": \"orderUpdated\"")
+                        && glue.contains("\"topicSuffix\": \"-updated\""),
+                "glue should carry the orderUpdated notification bound to the -updated topic");
+        assertTrue(glue.contains("\"toExpression\": \"\\\"ops@example.com\\\"\""),
+                "glue should carry the notification recipient as a Java string expression");
+        // Schedules: one per declarative schedule, carrying the cron + the typed Criteria expression.
+        assertTrue(
+                glue.contains("\"schedules\"") && glue.contains("\"name\": \"staleOrders\"") && glue.contains("\"cron\": \"0 0 9 * * ?\""),
+                "glue should carry the staleOrders schedule with its cron");
+        assertTrue(glue.contains("Criteria.create().lt(\\\"OrderDate\\\", java.time.LocalDate.now())"),
+                "glue should carry the schedule's typed Criteria expression");
+        // Integrations: one per outbound integration, carrying the HTTP method + URL expression.
+        assertTrue(glue.contains("\"integrations\"") && glue.contains("\"name\": \"pushOrderToWarehouse\"")
+                && glue.contains("\"clientMethod\": \"post\""), "glue should carry the pushOrderToWarehouse integration as a POST");
+        assertTrue(glue.contains("Configurations.get(\\\"WAREHOUSE_URL\\\")"),
+                "glue should carry the integration URL as a config lookup expression");
+        // Inbound: one per webhook, carrying the path + the entity to create.
+        assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
+                "glue should carry the ingestOrder inbound webhook with its path");
+        // Rollups: the two recompute listeners for the customerOrderCount counter.
+        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"CustomerOrderCountRollupOnCreate\"")
+                && glue.contains("\"countField\": \"OrderCount\""), "glue should carry the customerOrderCount rollup listeners");
     }
 
     private void assertSettings() {
@@ -562,7 +771,10 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("scrubbed", hasItem("ApproveOrder.form")));
         assertFalse(resource("ApproveOrder.form").exists(), "an opted-out form must not be generated");
         String glue = contentOf("orders.glue");
-        assertFalse(glue.contains("\"entity\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
+        // keyProperty is unique to trigger entries (other glue blocks don't emit it), so its absence
+        // means the opted-out trigger was not generated - other glue (notifications, etc.) still uses
+        // "entity".
+        assertFalse(glue.contains("\"keyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
         // The resolver was not opted out, so it survives.
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.

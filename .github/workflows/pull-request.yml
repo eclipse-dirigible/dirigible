@@ -15,11 +15,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
           architecture: x64
 
       - name: Validate Java code formatting
@@ -42,11 +42,11 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
           architecture: x64
 
       - name: Install NodeJS
@@ -59,6 +59,10 @@ jobs:
 
       - name: Maven Build
         run: mvn clean install -P unit-tests -U
+
+      - name: Container Tests
+        if: runner.os == 'Linux'
+        run: mvn test -P testcontainers
 
   docker-build:
     runs-on: ${{ matrix.runner }}
@@ -75,11 +79,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
 
       - name: Install NodeJS
         uses: actions/setup-node@v4
@@ -116,11 +120,11 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
           architecture: x64
 
       - name: Install NodeJS
@@ -188,11 +192,11 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
           architecture: x64
 
       - name: Install NodeJS
@@ -258,11 +262,11 @@ jobs:
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-maven-
 
-      - name: Set up JDK Corretto 21
+      - name: Set up JDK Corretto 24
         uses: actions/setup-java@v4
         with:
           distribution: 'corretto'
-          java-version: '21'
+          java-version: '24'
           architecture: x64
 
       - name: Install NodeJS

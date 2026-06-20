@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.engine.java.runtime;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
@@ -17,6 +18,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -188,6 +190,152 @@ class JavaLoaderTest {
                          .containsKey("client.Broken"));
         assertNotNull(handlerRegistry.find(PROJECT, "client.Good")
                                      .orElse(null));
+    }
+
+    /**
+     * Multi-project, two-cycle proof of the question "if I break one class, do the others survive?".
+     *
+     * <p>
+     * Five projects, two {@code JavaHandler} classes each (10 total) compile cleanly on the first cycle
+     * and register. On the second cycle exactly one class ({@code p2.C0}) is given an unresolvable
+     * import ({@code import asdasdasd.DoesNotExist;}) - the worst case, because that error makes
+     * {@code javac} emit ZERO bytecode for the <em>entire</em> batch. The assertions prove the
+     * keep-last-good contract:
+     * <ul>
+     * <li>the broken class is reported in {@code failures} but is NOT reported as succeeded;</li>
+     * <li>nothing is unloaded ({@code unloadedFqns} is empty) - the generation is not cleared;</li>
+     * <li>all ten handlers stay registered on their last-good version (including the broken one, so its
+     * dependents keep linking);</li>
+     * <li>all ten {@code .class} files remain on disk - a single bad import does not wipe the
+     * others.</li>
+     * </ul>
+     * The numbers (5x2) are arbitrary; the behaviour is identical at 5x10.
+     */
+    @Test
+    void breaking_one_class_keeps_every_other_class_on_disk_and_in_the_generation() {
+        List<JavaLoader.ClientSource> good = new ArrayList<>();
+        for (int p = 0; p < 5; p++) {
+            for (int c = 0; c < 2; c++) {
+                good.add(projectHandler("p" + p, "C" + c, "v1"));
+            }
+        }
+
+        JavaLoader.RebuildResult first = loader.rebuild(good);
+        assertEquals(10, first.succeededFqns()
+                              .size(),
+                "all ten classes compile on the first cycle");
+        assertTrue(first.failures()
+                        .isEmpty(),
+                "no failures on the first cycle");
+        assertEquals(10, handlerRegistry.size(), "all ten handlers register on the first cycle");
+        for (JavaLoader.ClientSource s : good) {
+            assertTrue(Files.exists(classFile(s.fqn())), "missing .class after first build: " + s.fqn());
+        }
+
+        // Second cycle: break exactly one class (p2.C0) with an unresolvable import. This is the worst
+        // case - javac emits ZERO bytecode for the whole batch - so it is the strongest test of "do the
+        // others survive".
+        String brokenFqn = "p2.C0";
+        List<JavaLoader.ClientSource> next = new ArrayList<>();
+        for (JavaLoader.ClientSource s : good) {
+            if (s.fqn()
+                 .equals(brokenFqn)) {
+                next.add(new JavaLoader.ClientSource("p2", brokenFqn, """
+                        package p2;
+                        import asdasdasd.DoesNotExist;
+                        public class C0 {
+                            DoesNotExist broken;
+                        }
+                        """));
+            } else {
+                next.add(s);
+            }
+        }
+
+        JavaLoader.RebuildResult second = loader.rebuild(next);
+
+        // The broken class is reported failed, but is NOT counted as succeeded this cycle.
+        assertTrue(second.failures()
+                         .containsKey(brokenFqn),
+                "the broken class is reported as a failure");
+        assertFalse(second.succeededFqns()
+                          .contains(brokenFqn),
+                "the broken class is not reported as succeeded");
+
+        // Nothing is unloaded and nothing is deleted: every class keeps its last-good version, in the
+        // live generation AND on disk.
+        assertTrue(second.unloadedFqns()
+                         .isEmpty(),
+                "no class is unloaded when a sibling fails to recompile");
+        assertEquals(10, handlerRegistry.size(), "all ten handlers stay registered on their last-good version");
+        assertTrue(handlerRegistry.find("p2", brokenFqn)
+                                  .isPresent(),
+                "the broken class keeps running its last-good version (so its dependents still link)");
+        for (JavaLoader.ClientSource s : good) {
+            assertTrue(Files.exists(classFile(s.fqn())),
+                    ".class cleared for " + s.fqn() + " - a single bad import must not wipe the others");
+        }
+    }
+
+    /**
+     * The isolated-error regime: when {@code javac} can still emit bytecode for the good sibling (a
+     * method-body error rather than a whole-batch abort), the good sibling recompiles to its new
+     * version while the broken one falls back to its last-good version - it is neither unloaded nor
+     * deleted.
+     */
+    @Test
+    void recompile_failure_keeps_last_good_while_the_good_sibling_recompiles() {
+        loader.rebuild(List.of(projectHandler("px", "A", "v1"), projectHandler("px", "B", "v1")));
+        assertEquals(2, handlerRegistry.size());
+
+        JavaLoader.RebuildResult second =
+                loader.rebuild(List.of(projectHandler("px", "A", "v2"), new JavaLoader.ClientSource("px", "px.B", """
+                        package px;
+                        import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                        import jakarta.servlet.http.HttpServletRequest;
+                        import jakarta.servlet.http.HttpServletResponse;
+                        public class B implements JavaHandler {
+                            public void handle(HttpServletRequest req, HttpServletResponse resp) {
+                                thisMethodDoesNotExist();
+                            }
+                        }
+                        """)));
+
+        assertTrue(second.succeededFqns()
+                         .contains("px.A"),
+                "the good sibling recompiles to its new version");
+        assertTrue(second.failures()
+                         .containsKey("px.B"),
+                "the broken class is reported as failed");
+        assertTrue(second.unloadedFqns()
+                         .isEmpty(),
+                "the broken class is not unloaded - it keeps last-good");
+        assertEquals(2, handlerRegistry.size(), "both classes remain registered");
+        assertTrue(handlerRegistry.find("px", "px.B")
+                                  .isPresent(),
+                "B keeps running its last-good version");
+        assertTrue(Files.exists(classFile("px.A")), "A's recompiled .class is present");
+        assertTrue(Files.exists(classFile("px.B")), "B's last-good .class is retained");
+    }
+
+    /** A compilable {@code JavaHandler} for {@code <project>.<simple>}, package = project name. */
+    private static JavaLoader.ClientSource projectHandler(String project, String simple, String body) {
+        return new JavaLoader.ClientSource(project, project + "." + simple, """
+                package %s;
+                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                import jakarta.servlet.http.HttpServletRequest;
+                import jakarta.servlet.http.HttpServletResponse;
+                public class %s implements JavaHandler {
+                    public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+                        resp.getWriter().write("%s");
+                    }
+                }
+                """.formatted(project, simple, body));
+    }
+
+    /** On-disk location of a compiled class within the loader's output directory. */
+    private Path classFile(String fqn) {
+        return tempDir.resolve(fqn.replace('.', '/') + ".class");
     }
 
     private static JavaLoader.ClientSource handlerSource(String fqn, String body) {
