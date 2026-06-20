@@ -36,6 +36,7 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonSyntaxException;
 import com.google.gson.ToNumberPolicy;
 
 /**
@@ -104,12 +105,34 @@ public final class IntentParser {
             return new IntentModel();
         }
         String json = GSON.toJson(tree);
-        IntentModel model = GSON.fromJson(json, IntentModel.class);
+        IntentModel model;
+        try {
+            model = GSON.fromJson(json, IntentModel.class);
+        } catch (JsonSyntaxException ex) {
+            // A scalar with the wrong shape (commonly a {..} YAML flow-mapping where a string is
+            // expected - e.g. an unquoted brace recipient like `to: {member.email}`) fails the typed
+            // mapping here, before validate() runs. Surface it as a normal validation issue so the
+            // editor shows a helpful message in its problem list instead of a raw 500.
+            throw new IntentValidationException(List.of("intent has a value of the wrong type: " + rootMessage(ex)
+                    + " - note that brace interpolation ({...}) is only valid inside quoted subject/body strings;"
+                    + " a recipient/path field must be a plain scalar (e.g. `to: member.email`, not `to: {member.email}`)"));
+        }
         if (model == null) {
             return new IntentModel();
         }
         validate(model);
         return model;
+    }
+
+    /**
+     * The deepest cause message - Gson wraps the informative "Expected ... path $...." in its cause.
+     */
+    private static String rootMessage(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return cause.getMessage() == null ? ex.toString() : cause.getMessage();
     }
 
     /**
