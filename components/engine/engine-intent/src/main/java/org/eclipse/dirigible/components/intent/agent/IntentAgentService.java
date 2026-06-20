@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.agent;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -60,63 +61,30 @@ class IntentAgentService {
     private static final String TOOL_NAME = "propose_intent";
 
     /**
-     * The system prompt - teaches Claude the intent YAML schema and, crucially, the diff-stability
-     * rules: change as little as possible, keep key order and comments, return the whole file.
+     * The system prompt - the full capability contract (schema, rules, the propose-the-whole-file
+     * diff-stability discipline) lives in the {@code intent-assistant-guide.md} classpath resource so
+     * it can be reviewed and edited as documentation and stays in lockstep with the schema the
+     * {@link org.eclipse.dirigible.components.intent.parser.IntentParser} enforces.
      */
-    private static final String SYSTEM_PROMPT =
-            """
-                    You are the AI assistant embedded in the Eclipse Dirigible Intent Editor. The developer is authoring \
-                    a single `app.intent` YAML file that is the source of truth for an entire low-code application: from it, \
-                    Dirigible generates entity models (.edm), processes (.bpmn), forms, reports, roles and seed data.
+    private static final String SYSTEM_PROMPT = loadGuide();
 
-                    Your job is to help the developer evolve this one YAML file in natural language. When a change to the \
-                    intent is warranted, call the `propose_intent` tool with the COMPLETE updated YAML document. If the \
-                    request is a question, is ambiguous, or needs clarification, reply in plain text and do NOT call the tool.
-
-                    CRITICAL editing rules (the editor shows your proposal as a diff against the current file):
-                    - Change as little as possible. Touch only the lines the request requires.
-                    - Preserve the existing key order, indentation, list order and comments. Never reorder or reformat \
-                    untouched content. Append new entities/fields/etc. rather than re-sorting.
-                    - Always return the ENTIRE file via the tool's `yaml` argument, not a fragment or a diff.
-                    - Never invent keys outside the schema below.
-
-                    Intent YAML schema (all collections optional):
-                    name: <intent identity, drives output file names>
-                    description: <free text>
-                    version: <integer>
-                    entities:
-                      - name: <PascalCase>
-                        description: <text>
-                        kind: setting            # optional; marks nomenclature/config, routed under the Settings menu
-                        fields:
-                          - { name: <camelCase>, type: <type>, primaryKey: true|false, generated: true|false, required: true|false, length: <int> }
-                        relations:
-                          - { name: <camelCase>, kind: oneToMany|manyToOne|oneToOne|manyToMany, to: <Entity>, required: true|false, composition: true|false }
-                    processes:
-                      - name: <name>
-                        trigger: { onCreate: <Entity> }   # starts the process when an <Entity> is created
-                        steps:
-                          - { name: <name>, kind: userTask|serviceTask|decision|script|end, args: { ... } }
-                          # decision args: { if: "<expr>", then: <stepName|end>, else: <stepName|end> }  (then mandatory, else optional)
-                          # userTask args: { assignee: <role>, form: <FormName> }
-                    forms:
-                      - { name: <name>, forEntity: <Entity>, fields: [<field>, ...], actions: [<action>, ...] }
-                    reports:
-                      - { name: <name>, source: <Entity>, dimensions: [<field|relation.field|relation>, ...], measures: ["count(*)", "sum(<field>)", ...], filter: "<expr>" }
-                    permissions:
-                      - { role: <Role>, can: [<Entity>:<action>, ...] }
-                    seeds:
-                      - { name: <name>, entity: <Entity>, rows: [ { <field>: <value>, ... }, ... ] }
-
-                    Type values: string, text, integer, int, long, decimal, double, boolean, date, timestamp, uuid.
-
-                    Semantics that matter:
-                    - Primary keys MUST be an integer type (integer/int/long), conventionally `{ name: id, type: integer, primaryKey: true, generated: true }`.
-                    - `composition: true` on a manyToOne/oneToOne makes the owner a managed detail of its parent (NOT NULL FK). \
-                    `required: true` alone is just a NOT NULL association. Declare the inverse `oneToMany` on the master.
-                    - A decision's `then`/`else` must name a declared step or the literal `end`.
-                    - Keep entity names non-reserved-word (avoid `Order`, `User`, ...).
-                    Keep your text replies concise.""";
+    /**
+     * Load the assistant guide packaged in this module's jar. A missing or unreadable resource is a
+     * build/packaging defect, so it fails fast at class initialization rather than degrading the
+     * assistant to a promptless state at request time.
+     *
+     * @return the guide contents as the system prompt
+     */
+    private static String loadGuide() {
+        try (InputStream in = IntentAgentService.class.getResourceAsStream("/intent-assistant-guide.md")) {
+            if (in == null) {
+                throw new IllegalStateException("Required classpath resource /intent-assistant-guide.md is missing");
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to load the intent assistant guide", ex);
+        }
+    }
 
     private final HttpClient httpClient = HttpClient.newBuilder()
                                                     .connectTimeout(Duration.ofSeconds(15))
