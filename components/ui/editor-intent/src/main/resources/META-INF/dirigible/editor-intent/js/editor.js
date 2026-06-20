@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const editorView = angular.module('intentEditor', ['blimpKit', 'platformView', 'platformShortcuts', 'WorkspaceService']);
+const editorView = angular.module('intentEditor', ['blimpKit', 'platformView', 'platformShortcuts', 'platformSplit', 'WorkspaceService']);
 editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, WorkspaceService) => {
     const statusBarHub = new StatusBarHub();
     const workspaceHub = new WorkspaceHub();
