@@ -20,7 +20,7 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/editor-intent/configs/intent-editor.js"></script>
-        <meta name="platform-links" category="ng-view,ng-editor">
+        <meta name="platform-links" category="ng-view,ng-editor,ng-split">
         <script type="text/javascript">
             mxBasePath = '/services/web/resources/mxgraph/4.2.2/src';
         </script>
@@ -28,25 +28,11 @@
         <link type="text/css" rel="stylesheet" href="/webjars/monaco-editor/min/vs/editor/editor.main.css">
         <script type="text/javascript" src="/webjars/monaco-editor/min/vs/loader.js"></script>
         <style>
-            .intent-split {
-                display: flex;
-                flex: 1;
-                min-height: 0;
-            }
-            .intent-text-pane {
-                flex: 1 1 45%;
-                display: flex;
-                min-width: 0;
-                border-right: 1px solid var(--sapList_BorderColor, #e5e5e5);
-            }
             .intent-monaco {
-                flex: 1;
-                min-width: 0;
                 position: relative;
                 overflow: hidden;
             }
             .intent-diagram-pane {
-                flex: 1 1 55%;
                 overflow: auto;
                 padding: 16px;
                 background: var(--sapBackgroundColor, #fff);
@@ -89,11 +75,10 @@
                 margin: 2px 0;
             }
             .intent-chat-pane {
-                flex: 0 0 360px;
+                height: 100%;
                 display: flex;
                 flex-direction: column;
                 min-width: 0;
-                border-left: 1px solid var(--sapList_BorderColor, #e5e5e5);
                 background: var(--sapBackgroundColor, #fff);
             }
             .intent-chat-messages {
@@ -185,12 +170,14 @@
             <li ng-repeat="issue in issues">{{issue}}</li>
         </ul>
 
-        <div class="intent-split" ng-if="!state.error">
-            <div class="intent-text-pane">
-                <div id="intent-monaco" class="intent-monaco"></div>
-            </div>
-            <div class="intent-diagram-pane">
-                <div id="intent-diagrams" class="intent-diagrams"></div>
+        <div class="bk-stretch" ng-if="!state.error">
+            <split direction="horizontal">
+            <split-pane size="45" min-size="320">
+                <div id="intent-monaco" class="intent-monaco bk-fill-parent"></div>
+            </split-pane>
+            <split-pane size="55" min-size="320">
+                <div class="intent-diagram-pane bk-fill-parent">
+                    <div id="intent-diagrams" class="intent-diagrams"></div>
                 <div ng-if="model.forms.length">
                     <h4 class="intent-section-title">Forms</h4>
                     <ul class="intent-summary">
@@ -230,8 +217,10 @@
                         </li>
                     </ul>
                 </div>
-            </div>
-            <div class="intent-chat-pane" ng-if="chat.open">
+                </div>
+            </split-pane>
+            <split-pane size="30" min-size="320" ng-if="chat.open">
+                <div class="intent-chat-pane bk-fill-parent">
                 <div class="intent-chat-messages" id="intent-chat-messages">
                     <div class="intent-chat-empty" ng-if="!chat.messages.length">
                         Ask the assistant to change the intent in plain language &mdash; e.g. &ldquo;add a <em>country</em> field to Customer&rdquo;. It proposes a diff you can accept into the editor.
@@ -251,7 +240,9 @@
                     <bk-textarea placeholder="Describe a change..." ng-model="chat.input" ng-keydown="onChatKey($event)" ng-disabled="chat.busy"></bk-textarea>
                     <bk-button state="emphasized" glyph="sap-icon--paper-plane" title="Send" aria-label="Send" ng-click="sendChat()" ng-disabled="chat.busy || !chat.input"></bk-button>
                 </div>
-            </div>
+                </div>
+            </split-pane>
+            </split>
         </div>
 
         <script type="text/javascript" src="/services/web/editor-intent/js/editor.js"></script>
