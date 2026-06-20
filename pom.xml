@@ -383,6 +383,7 @@
                         <failIfNoTests>false</failIfNoTests>
                         <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
                         <argLine>
+                            -Xmx6g
                             --add-opens=java.base/java.lang=ALL-UNNAMED
                             --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
                             --add-opens=java.base/java.nio=ALL-UNNAMED
