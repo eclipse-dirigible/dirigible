@@ -86,6 +86,10 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible);
         Selenide.$(By.xpath("//div[contains(@class, 'intent-diagram')]//*[contains(text(), 'Book')]"))
                 .shouldBe(Condition.visible);
+        // The "Glue & Outputs" diagram visualizes the declarative glue: the sample's loanUpdated
+        // notification appears as an icon card, proving the glue collections are diagrammed too.
+        Selenide.$(By.xpath("//div[contains(@class, 'intent-diagram')]//*[contains(text(), 'loanUpdated')]"))
+                .shouldBe(Condition.visible);
 
         // Generate writes the model files into the workspace project.
         Selenide.$(By.xpath("//button[contains(normalize-space(.), 'Generate')]"))

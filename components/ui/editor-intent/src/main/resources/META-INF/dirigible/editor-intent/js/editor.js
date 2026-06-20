@@ -23,7 +23,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.errorMessage = '';
     $scope.changed = false;
     $scope.text = '';
-    $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [] };
+    $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [], notifications: [], schedules: [], integrations: [], inbound: [], rollups: [] };
     $scope.issues = [];
     let savedText = '';
     let parseTimer = null;
@@ -40,7 +40,24 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         decision: '#e9a319', // amber  - decision gateways
         terminal: '#708090', // slate  - start / end events
         edge: '#7a8896',     // mid-gray - relations and sequence flows, visible on both themes
+        output: '#9141ac',   // purple - authoring outputs (forms, reports)
+        glue: '#c64600',     // rust   - declarative glue (notifications, schedules, integrations, inbound, rollups)
         label: '#ffffff'     // white  - on-shape text
+    };
+
+    // SAP-icon glyphs that badge each non-entity artifact in the "Glue & Outputs" diagram, so forms,
+    // reports and the event-driven glue are recognizable at a glance. These are the platform's icon
+    // font (the same family the toolbar buttons use, loaded via the ng-editor platform-links category);
+    // the diagram renders HTML labels, so an <i class="sap-icon--..."> draws the glyph and inherits the
+    // label colour - monochrome and theme-consistent, not decorative emoji.
+    const ICON = {
+        form: 'sap-icon--form',
+        report: 'sap-icon--bar-chart',
+        notification: 'sap-icon--email',
+        schedule: 'sap-icon--date-time',
+        integration: 'sap-icon--chain-link',
+        inbound: 'sap-icon--inbox',
+        rollup: 'sap-icon--sum'
     };
 
     // ----- File location -----------------------------------------------------
@@ -206,6 +223,11 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         model.reports = model.reports || [];
         model.permissions = model.permissions || [];
         model.seeds = model.seeds || [];
+        model.notifications = model.notifications || [];
+        model.schedules = model.schedules || [];
+        model.integrations = model.integrations || [];
+        model.inbound = model.inbound || [];
+        model.rollups = model.rollups || [];
         return model;
     };
 
@@ -441,6 +463,81 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         fitIntoView(graph, container);
     };
 
+    // The single lifecycle event a glue binding reacts to: { kind: 'onCreate'|'onUpdate'|'onDelete',
+    // entity: <Entity> }. Returns null when none is declared.
+    const eventOf = (ev) => {
+        if (!ev) return null;
+        for (const kind of ['onCreate', 'onUpdate', 'onDelete']) {
+            if (ev[kind]) return { kind, entity: ev[kind] };
+        }
+        return null;
+    };
+    const eventVerb = (kind) => ({ onCreate: 'on create', onUpdate: 'on update', onDelete: 'on delete' }[kind] || '');
+
+    // The roll-up's parent entity is the target of its `via` to-one relation on the counted child entity.
+    const rollupParent = (rollup) => {
+        const child = $scope.model.entities.find(e => e && e.name === rollup.entity);
+        const relation = child && (child.relations || []).find(r => r && r.name === rollup.via);
+        return relation ? relation.to : null;
+    };
+
+    // Card label: an icon-badged name over a one-line binding detail (escaped; the detail is optional).
+    const cardLabel = (icon, name, detail) =>
+        `<div style="font-weight:bold"><i class="${icon}" style="margin-right:6px"></i>${escapeHtml(name)}</div>`
+        + (detail ? `<div style="font-size:11px;opacity:.9">${escapeHtml(detail)}</div>` : '');
+
+    // One section diagramming the artifacts that hang off the entities - authoring outputs (forms,
+    // reports) and the declarative glue (notifications, schedules, integrations, inbound webhooks,
+    // roll-ups). Each is an icon card edged to the entity it binds to, so the "express the integration
+    // as intent" story is visible alongside the ER and process diagrams.
+    const renderGlue = () => {
+        const categories = [
+            { list: $scope.model.forms, icon: ICON.form, color: COLOR.output, entity: f => f.forEntity, detail: () => 'form' },
+            { list: $scope.model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: () => 'report' },
+            { list: $scope.model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => (eventOf(n.event) || {}).entity, detail: n => eventVerb((eventOf(n.event) || {}).kind) + ' → email' },
+            { list: $scope.model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.entity, detail: s => s.cron || 'scheduled' },
+            { list: $scope.model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => (eventOf(i.event) || {}).entity, detail: i => (i.method || 'POST') + ' ' + eventVerb((eventOf(i.event) || {}).kind) },
+            { list: $scope.model.inbound, icon: ICON.inbound, color: COLOR.glue, entity: w => w.create, detail: w => 'POST ' + (w.path || '') },
+            { list: $scope.model.rollups, icon: ICON.rollup, color: COLOR.glue, entity: r => r.entity, detail: r => '→ ' + (rollupParent(r) || '?') + '.' + (r.field || '') }
+        ];
+
+        const items = [];
+        for (const category of categories) {
+            for (const item of (category.list || [])) {
+                if (item && item.name) items.push({ category, item });
+            }
+        }
+        if (!items.length) return;
+
+        const graph = newSection('Glue & Outputs');
+        const container = graph.container;
+        const parent = graph.getDefaultParent();
+        graph.getModel().beginUpdate();
+        try {
+            // Entity anchor nodes are created on demand so only entities actually referenced appear.
+            const anchors = {};
+            const anchor = (name) => {
+                if (!name) return null;
+                if (!anchors[name]) {
+                    anchors[name] = graph.insertVertex(parent, null, `<div style="font-weight:bold">${escapeHtml(name)}</div>`, 0, 0, 130, 34, nodeStyle(COLOR.entity));
+                }
+                return anchors[name];
+            };
+            for (const { category, item } of items) {
+                const card = graph.insertVertex(parent, null, cardLabel(category.icon, item.name, category.detail(item)), 0, 0, 190, 48, nodeStyle(category.color));
+                const entity = anchor(category.entity(item));
+                if (entity) graph.insertEdge(parent, null, '', entity, card, edgeStyle(false));
+            }
+            const layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_WEST);
+            layout.intraCellSpacing = 30;
+            layout.interRankCellSpacing = 80;
+            layout.execute(parent);
+        } finally {
+            graph.getModel().endUpdate();
+        }
+        fitIntoView(graph, container);
+    };
+
     const render = () => {
         const host = document.getElementById('intent-diagrams');
         if (!host || typeof mxGraph === 'undefined') return;
@@ -449,10 +546,11 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         for (const process of $scope.model.processes) {
             if (process && process.name) renderProcess(process);
         }
+        renderGlue();
         if (!diagrams.length) {
             const empty = document.createElement('div');
             empty.className = 'intent-diagram-empty';
-            empty.textContent = 'Nothing to diagram yet - declare entities or processes.';
+            empty.textContent = 'Nothing to diagram yet - declare entities, processes or glue.';
             host.appendChild(empty);
         }
     };
