@@ -36,7 +36,12 @@ public class ${process}Trigger implements MessageHandler {
             return;
         }
 #end
-        String businessKey = String.valueOf(entity.${keyProperty});
+#if(${generateBusinessKey} == "true")
+        if (entity.${businessKeyProperty} == null || entity.${businessKeyProperty}.isBlank()) {
+            entity.${businessKeyProperty} = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+        }
+#end
+        String businessKey = String.valueOf(entity.${businessKeyProperty});
         String processId = Process.start("${process}", businessKey, message);
         entity.ProcessId = processId;
         repository.update(entity);
