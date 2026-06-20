@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.agent;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -60,63 +61,36 @@ class IntentAgentService {
     private static final String TOOL_NAME = "propose_intent";
 
     /**
-     * The system prompt - teaches Claude the intent YAML schema and, crucially, the diff-stability
-     * rules: change as little as possible, keep key order and comments, return the whole file.
+     * The system prompt. The capability schema, rules and "use when" guidance live in
+     * {@code intent-assistant-guide.md} (a classpath resource kept in lockstep with the parser, so the
+     * assistant never drifts from what actually validates). To it we append the editor-specific
+     * mechanism - the {@code propose_intent} tool and diff-stable editing - which is coupled to this
+     * integration and therefore stays in code.
      */
-    private static final String SYSTEM_PROMPT =
-            """
-                    You are the AI assistant embedded in the Eclipse Dirigible Intent Editor. The developer is authoring \
-                    a single `app.intent` YAML file that is the source of truth for an entire low-code application: from it, \
-                    Dirigible generates entity models (.edm), processes (.bpmn), forms, reports, roles and seed data.
+    private static final String SYSTEM_PROMPT = loadSystemPrompt();
 
-                    Your job is to help the developer evolve this one YAML file in natural language. When a change to the \
-                    intent is warranted, call the `propose_intent` tool with the COMPLETE updated YAML document. If the \
-                    request is a question, is ambiguous, or needs clarification, reply in plain text and do NOT call the tool.
+    /** Classpath location of the capability guide, bundled in this module's resources. */
+    private static final String GUIDE_RESOURCE = "/intent-assistant-guide.md";
 
-                    CRITICAL editing rules (the editor shows your proposal as a diff against the current file):
-                    - Change as little as possible. Touch only the lines the request requires.
-                    - Preserve the existing key order, indentation, list order and comments. Never reorder or reformat \
-                    untouched content. Append new entities/fields/etc. rather than re-sorting.
-                    - Always return the ENTIRE file via the tool's `yaml` argument, not a fragment or a diff.
-                    - Never invent keys outside the schema below.
+    private static String loadSystemPrompt() {
+        try (InputStream in = IntentAgentService.class.getResourceAsStream(GUIDE_RESOURCE)) {
+            if (in == null) {
+                throw new IllegalStateException("Intent assistant guide not found on the classpath: " + GUIDE_RESOURCE);
+            }
+            String guide = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+            String mechanism = """
+                    ## Returning your change
 
-                    Intent YAML schema (all collections optional):
-                    name: <intent identity, drives output file names>
-                    description: <free text>
-                    version: <integer>
-                    entities:
-                      - name: <PascalCase>
-                        description: <text>
-                        kind: setting            # optional; marks nomenclature/config, routed under the Settings menu
-                        fields:
-                          - { name: <camelCase>, type: <type>, primaryKey: true|false, generated: true|false, required: true|false, length: <int> }
-                        relations:
-                          - { name: <camelCase>, kind: oneToMany|manyToOne|oneToOne|manyToMany, to: <Entity>, required: true|false, composition: true|false }
-                    processes:
-                      - name: <name>
-                        trigger: { onCreate: <Entity> }   # starts the process when an <Entity> is created
-                        steps:
-                          - { name: <name>, kind: userTask|serviceTask|decision|script|end, args: { ... } }
-                          # decision args: { if: "<expr>", then: <stepName|end>, else: <stepName|end> }  (then mandatory, else optional)
-                          # userTask args: { assignee: <role>, form: <FormName> }
-                    forms:
-                      - { name: <name>, forEntity: <Entity>, fields: [<field>, ...], actions: [<action>, ...] }
-                    reports:
-                      - { name: <name>, source: <Entity>, dimensions: [<field|relation.field|relation>, ...], measures: ["count(*)", "sum(<field>)", ...], filter: "<expr>" }
-                    permissions:
-                      - { role: <Role>, can: [<Entity>:<action>, ...] }
-                    seeds:
-                      - { name: <name>, entity: <Entity>, rows: [ { <field>: <value>, ... }, ... ] }
-
-                    Type values: string, text, integer, int, long, decimal, double, boolean, date, timestamp, uuid.
-
-                    Semantics that matter:
-                    - Primary keys MUST be an integer type (integer/int/long), conventionally `{ name: id, type: integer, primaryKey: true, generated: true }`.
-                    - `composition: true` on a manyToOne/oneToOne makes the owner a managed detail of its parent (NOT NULL FK). \
-                    `required: true` alone is just a NOT NULL association. Declare the inverse `oneToMany` on the master.
-                    - A decision's `then`/`else` must name a declared step or the literal `end`.
-                    - Keep entity names non-reserved-word (avoid `Order`, `User`, ...).
-                    Keep your text replies concise.""";
+                    When a change to the intent is warranted, call the `propose_intent` tool with the COMPLETE \
+                    updated YAML document in its `yaml` argument - the full file, never a fragment or a diff. The \
+                    editor shows it as a diff against the current buffer and the developer accepts or rejects it; \
+                    you never write to disk. If the request is a question, is ambiguous, or needs clarification, \
+                    reply in plain text and do NOT call the tool.""";
+            return guide + "\n\n" + mechanism;
+        } catch (IOException ex) {
+            throw new IllegalStateException("Failed to load the intent assistant guide: " + GUIDE_RESOURCE, ex);
+        }
+    }
 
     private final HttpClient httpClient = HttpClient.newBuilder()
                                                     .connectTimeout(Duration.ofSeconds(15))
