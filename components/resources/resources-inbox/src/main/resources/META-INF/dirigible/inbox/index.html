@@ -20,15 +20,9 @@
         <title config-title></title>
         <link href="data:;base64,iVBORw0KGgo=" rel="icon" sizes="any" />
         <script src="/services/web/inbox/configs/inbox.js" type="text/javascript"></script>
-        <meta name="platform-links" category="ng-view,ng-perspective,date-time-util">
+        <meta name="platform-links" category="ng-view,ng-perspective,date-time-util,ng-split">
         <script src="/services/web/inbox/js/inbox.js" type="text/javascript"></script>
         <style>
-            .inbox-master {
-                width: 22rem;
-                min-width: 18rem;
-                max-width: 32rem;
-            }
-
             .inbox-detail-row {
                 display: flex;
                 gap: 0.5rem;
@@ -63,9 +57,11 @@
                 ng-click="toggleAutoRefresh()" title="{{(autoRefresh ? 'inbox:pauseRefresh' : 'inbox:resumeRefresh') | t:(autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh')}}"></bk-button>
         </bk-toolbar>
 
-        <div class="bk-hbox bk-flex-1">
+        <div class="bk-stretch">
+            <split direction="horizontal">
             <!-- Master pane: the task list -->
-            <div class="inbox-master bk-vbox bk-border--right">
+            <split-pane size="30" min-size="260">
+            <div class="bk-vbox bk-fill-parent">
                 <div class="bk-padding--tiny">
                     <bk-input compact="true" type="search" ng-model="filterText" placeholder="{{'inbox:filterPlaceholder' | t:'Filter tasks...'}}"></bk-input>
                 </div>
@@ -89,9 +85,11 @@
                     </bk-list>
                 </bk-scrollbar>
             </div>
+            </split-pane>
 
             <!-- Detail pane: task details, claim action and the embedded form -->
-            <div class="bk-vbox bk-flex-1">
+            <split-pane size="70">
+            <div class="bk-vbox bk-fill-parent">
                 <bk-message-page glyph="sap-icon--inbox" ng-if="!selectedTask">
                     <bk-message-page-title>{{'inbox:selectTaskTitle' | t:'No task selected'}}</bk-message-page-title>
                     <bk-message-page-subtitle>{{'inbox:selectTaskSubtitle' | t:'Select a task from the list to claim it or open its form.'}}</bk-message-page-subtitle>
@@ -161,6 +159,8 @@
                     </bk-scrollbar>
                 </div>
             </div>
+            </split-pane>
+            </split>
         </div>
         <theme></theme>
     </body>
