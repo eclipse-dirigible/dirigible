@@ -230,7 +230,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("  <process id=\"")
           .append(escapeXmlAttribute(processId))
           .append("\" name=\"")
-          .append(escapeXmlAttribute(processId))
+          .append(escapeXmlAttribute(IntentNaming.humanize(processId)))
           .append("\" isExecutable=\"true\">\n");
         sb.append("    <startEvent id=\"")
           .append(START_ID)
@@ -273,7 +273,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             }
             for (Resolver resolver : stepResolvers) {
-                result.add(javaServiceTaskStep(resolver.handler(), "gen.events." + resolver.handler()));
+                // The task id is the lower-camel form of the handler so it matches the casing of the
+                // authored step ids; the delegate still resolves the PascalCase handler class.
+                result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
             }
             result.add(rewriteDecision(step, stepResolvers, ownFieldPascalCase));
         }
@@ -401,7 +403,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    <userTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
-          .append(escapeXmlAttribute(step.getName()))
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
           .append("\"");
         if (assignee != null && !assignee.isBlank()) {
             String candidateGroups = resolveCandidateGroup(assignee, rolesByLowerName);
@@ -444,7 +446,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    <serviceTask id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
-          .append(escapeXmlAttribute(step.getName()))
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
           .append("\" flowable:async=\"true\" flowable:delegateExpression=\"")
           .append(java ? "${JavaTask}" : "${JSTask}")
           .append("\">\n");
@@ -480,7 +482,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    <exclusiveGateway id=\"")
           .append(escapeXmlAttribute(step.getName()))
           .append("\" name=\"")
-          .append(escapeXmlAttribute(step.getName()))
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
           .append("\" default=\"")
           .append(escapeXmlAttribute("flow_" + step.getName() + "_default"))
           .append("\"></exclusiveGateway>\n");

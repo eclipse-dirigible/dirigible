@@ -92,4 +92,44 @@ public final class IntentNaming {
         }
         return out.toString();
     }
+
+    /**
+     * Lower-case the first letter to make a lowerCamelCase name, preserving the rest - the mirror of
+     * {@link #pascalCase(String)} ({@code ResolveBookPrice} -> {@code resolveBookPrice}). Used to
+     * normalise generated identifiers (e.g. a PascalCase handler) to the lower-camel form authored step
+     * names already use, so BPMN element ids are uniform.
+     *
+     * @param name the identifier to convert (may be null)
+     * @return the lowerCamelCase form, empty for null/empty input
+     */
+    public static String camelCase(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        return Character.toLowerCase(name.charAt(0)) + name.substring(1);
+    }
+
+    /**
+     * Turn a camel-/Pascal-case identifier into a human-readable Title Case label by splitting on case
+     * boundaries ({@code librarianReview} -> {@code Librarian Review}, {@code LoanApproval} ->
+     * {@code Loan Approval}). Used for BPMN display names (process and task {@code name}) while the
+     * machine ids stay the compact identifier.
+     *
+     * @param name the identifier to humanize (may be null)
+     * @return the spaced Title Case label, empty for null/empty input
+     */
+    public static String humanize(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(name.length() + 8);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
+                out.append(' ');
+            }
+            out.append(i == 0 ? Character.toUpperCase(c) : c);
+        }
+        return out.toString();
+    }
 }

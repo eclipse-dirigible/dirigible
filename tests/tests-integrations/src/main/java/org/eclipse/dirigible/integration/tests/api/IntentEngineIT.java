@@ -878,7 +878,11 @@ class IntentEngineIT extends IntegrationTest {
 
     private void assertBpmn() {
         String body = contentOf("OrderApproval.bpmn");
-        assertTrue(body.contains("<userTask id=\"managerReview\""), "BPMN should map managerReview to a userTask");
+        // The process keeps its compact id but gets a human-readable name; tasks likewise.
+        assertTrue(body.contains("<process id=\"OrderApproval\" name=\"Order Approval\""),
+                "the process should keep its id but carry a humanized name");
+        assertTrue(body.contains("<userTask id=\"managerReview\" name=\"Manager Review\""),
+                "BPMN should map managerReview to a userTask with a humanized name");
         // The assignee "manager" resolves to the declared role "Manager" (case-insensitive); the
         // settings' candidateGroupsExtra (ADMINISTRATOR by default) is appended so an admin can claim.
         assertTrue(body.contains("flowable:candidateGroups=\"Manager,ADMINISTRATOR\""),
@@ -888,9 +892,12 @@ class IntentEngineIT extends IntegrationTest {
         // (a bare name resolves relative to the inbox and 404s).
         assertTrue(body.contains("flowable:formKey=\"/services/web/intent-test/gen/ApproveOrder/forms/ApproveOrder/index.html\""),
                 "the userTask formKey must be the generated form page URL");
-        assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\""), "BPMN should map the decision step to an exclusiveGateway");
+        assertTrue(body.contains("<exclusiveGateway id=\"bigOrder\" name=\"Big Order\""),
+                "BPMN should map the decision step to an exclusiveGateway with a humanized name");
         // A service task with no `call` binds to a generated Java handler under custom/.
-        assertTrue(body.contains("<serviceTask id=\"notifyCustomer\"") && body.contains("<![CDATA[custom.NotifyCustomer]]>"),
+        assertTrue(
+                body.contains("<serviceTask id=\"notifyCustomer\" name=\"Notify Customer\"")
+                        && body.contains("<![CDATA[custom.NotifyCustomer]]>"),
                 "a no-call service task should bind to ${JavaTask} -> custom.<Step>");
         assertTrue(body.contains("id=\"flow_bigOrder_then\" sourceRef=\"bigOrder\" targetRef=\"cfoReview\""),
                 "the conditioned flow should target the `then` step");
@@ -898,14 +905,17 @@ class IntentEngineIT extends IntegrationTest {
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
         // The decision references customer.creditLimit, so a JavaTask resolver is inserted before the
         // gateway and the condition is rewritten to test the resolved variable.
+        // The resolver task id is the lower-camel form of the handler (unified with the authored step
+        // ids), with a humanized name; the delegate still resolves the PascalCase handler class.
         assertTrue(
-                body.contains("<serviceTask id=\"ResolveCustomerCreditLimit\"")
+                body.contains("<serviceTask id=\"resolveCustomerCreditLimit\" name=\"Resolve Customer Credit Limit\"")
                         && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
-                "a JavaTask resolver service task should precede the decision");
-        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit"), "the resolver task should point at the generated handler FQN");
+                "a JavaTask resolver service task should precede the decision with a unified id and humanized name");
+        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit"),
+                "the resolver task should point at the generated PascalCase handler FQN");
         assertTrue(
-                body.contains("sourceRef=\"managerReview\" targetRef=\"ResolveCustomerCreditLimit\"")
-                        && body.contains("sourceRef=\"ResolveCustomerCreditLimit\" targetRef=\"bigOrder\""),
+                body.contains("sourceRef=\"managerReview\" targetRef=\"resolveCustomerCreditLimit\"")
+                        && body.contains("sourceRef=\"resolveCustomerCreditLimit\" targetRef=\"bigOrder\""),
                 "the resolver should sit on the linear flow right before the decision");
         assertTrue(body.contains("${customer_creditLimit > 10000}"),
                 "the decision condition should be rewritten to test the resolved variable");

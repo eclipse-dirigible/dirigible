@@ -117,7 +117,8 @@ public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-icon-tab-bar__tag",
                 "LoanApproval.bpmn");
         browser.findElementInAllFrames(By.id("canvasSection"), Condition.visible);
-        Selenide.$(By.xpath("//*[contains(text(), 'librarianReview')]"))
+        // The canvas renders the task's human-readable name (the userTask `name`), not its id.
+        Selenide.$(By.xpath("//*[contains(text(), 'Librarian Review')]"))
                 .shouldBe(Condition.visible);
     }
 }
