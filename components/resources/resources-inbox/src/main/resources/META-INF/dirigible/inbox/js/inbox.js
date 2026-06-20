@@ -9,7 +9,7 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const inboxApp = angular.module('app', ['platformView', 'blimpKit', 'platformLocale']);
+const inboxApp = angular.module('app', ['platformView', 'blimpKit', 'platformLocale', 'platformSplit']);
 inboxApp.filter('trusted', ['$sce', ($sce) => (url) => url ? $sce.trustAsResourceUrl(url) : url]);
 inboxApp.controller('ApplicationController', ($scope, $http, $window, $interval, LocaleService) => {
     const Notifications = new NotificationHub();
