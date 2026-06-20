@@ -9,87 +9,166 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-angular.module('app', ['platformView', 'blimpKit', 'platformLocale']).controller('ApplicationController', ($scope, $http, $window, LocaleService) => {
-    const Dialogs = new DialogHub();
+const inboxApp = angular.module('app', ['platformView', 'blimpKit', 'platformLocale']);
+inboxApp.filter('trusted', ['$sce', ($sce) => (url) => url ? $sce.trustAsResourceUrl(url) : url]);
+inboxApp.controller('ApplicationController', ($scope, $http, $window, $interval, LocaleService) => {
+    const Notifications = new NotificationHub();
     const dateTimeUtil = new DateTimeUtil();
-    $scope.tasksList = [];
-    $scope.tasksListAssignee = [];
-    $scope.selectedClaimTask = null;
-    $scope.selectedUnclaimTask = null;
+    const REFRESH_INTERVAL = 3000;
 
-    $scope.currentFetchDataTask = null;
+    $scope.tasks = [];
+    $scope.selectedTask = null;
+    $scope.formUrl = null;
+    $scope.filterText = '';
+    $scope.autoRefresh = true;
+    $scope.lastUpdated = null;
 
-    setInterval(() => {
-        $scope.reload();
-    }, 3000);
+    let refreshPromise = null;
 
-    $scope.reload = () => {
-        $scope.fetchData();
+    $scope.filteredTasks = () => {
+        if (!$scope.filterText) return $scope.tasks;
+        const needle = $scope.filterText.toLowerCase();
+        return $scope.tasks.filter((task) => [task.processInstanceBusinessKey, task.processDefinitionName, task.name]
+            .some((value) => value && value.toLowerCase().includes(needle)));
     };
+
+    $scope.reload = () => $scope.fetchData();
 
     $scope.fetchData = () => {
-        $http.get('/services/inbox/tasks?type=groups', { params: { 'limit': 100 } }).then((response) => {
-            $scope.tasksList = response.data;
-        }, (error) => {
+        const assignedReq = $http.get('/services/inbox/tasks?type=assignee', { params: { 'limit': 100 } });
+        const candidateReq = $http.get('/services/inbox/tasks?type=groups', { params: { 'limit': 100 } });
+
+        Promise.all([assignedReq, candidateReq]).then(([assignedResp, candidateResp]) => {
+            const merged = [];
+            const seen = new Set();
+            // Assigned tasks take precedence: they are "mine" and carry the form to fill in.
+            for (const task of assignedResp.data) {
+                task.mine = true;
+                merged.push(task);
+                seen.add(task.id);
+            }
+            for (const task of candidateResp.data) {
+                if (seen.has(task.id)) continue;
+                task.mine = false;
+                merged.push(task);
+                seen.add(task.id);
+            }
+
+            $scope.$evalAsync(() => {
+                $scope.tasks = merged;
+                $scope.lastUpdated = new Date();
+                $scope.reconcileSelection();
+            });
+        }).catch((error) => {
             console.error(error);
         });
-
-        $http.get('/services/inbox/tasks?type=assignee', { params: { 'limit': 100 } }).then((response) => {
-            $scope.tasksListAssignee = response.data;
-        }, (error) => {
-            console.error(error);
-        });
     };
 
-    $scope.formatTime = (isoDate) => {
-        return dateTimeUtil.format(isoDate, "YYYY-MM-DD HH:mm:ss");
+    // Keep the current selection (and its open form) intact across silent refreshes,
+    // but reset the pane once the task is gone (completed, reassigned, claimed by someone else).
+    $scope.reconcileSelection = () => {
+        if (!$scope.selectedTask) return;
+        const current = $scope.tasks.find((task) => task.id === $scope.selectedTask.id);
+        if (!current) {
+            $scope.clearSelection();
+            return;
+        }
+        const wasMine = $scope.selectedTask.mine;
+        $scope.selectedTask = current;
+        if (current.mine && !wasMine) $scope.loadForm(current); // claimed elsewhere - surface the form
     };
 
-    $scope.selectionClaimChanged = (variable) => {
-        if (variable) $scope.selectedClaimTask = variable;
+    $scope.clearSelection = () => {
+        $scope.selectedTask = null;
+        $scope.formUrl = null;
     };
 
-    $scope.selectionUnclaimChanged = (variable) => {
-        if (variable) $scope.selectedUnclaimTask = variable;
+    $scope.selectTask = (task) => {
+        $scope.selectedTask = task;
+        if (task.mine) $scope.loadForm(task);
+        else $scope.formUrl = null;
     };
 
-    $scope.openForm = (url) => {
-        $window.open(url, '_blank');
+    $scope.buildFormUrl = (task) => {
+        if (!task || !task.formKey) return null;
+        const separator = task.formKey.indexOf('?') >= 0 ? '&' : '?';
+        return task.formKey + separator + 'taskId=' + encodeURIComponent(task.id) + '&processInstanceId=' + encodeURIComponent(task.processInstanceId);
     };
+
+    $scope.loadForm = (task) => {
+        $scope.formUrl = $scope.buildFormUrl(task);
+    };
+
+    $scope.openFormInNewTab = (task) => {
+        const url = $scope.buildFormUrl(task);
+        if (url) $window.open(url, '_blank');
+    };
+
+    $scope.formatTime = (isoDate) => isoDate ? dateTimeUtil.format(isoDate, 'YYYY-MM-DD HH:mm:ss') : '';
 
     $scope.claimTask = () => {
-        $scope.executeAction($scope.selectedClaimTask.id, { 'action': 'CLAIM' }, true, () => { $scope.selectedClaimTask = null });
+        const task = $scope.selectedTask;
+        if (!task) return;
+        $scope.executeAction(task.id, { 'action': 'CLAIM' }, true, () => {
+            task.mine = true;
+            $scope.loadForm(task);
+            $scope.fetchData();
+        });
     };
 
     $scope.unclaimTask = () => {
-        $scope.executeAction($scope.selectedUnclaimTask.id, { 'action': 'UNCLAIM' }, false, () => { $scope.selectedUnclaimTask = null });
+        const task = $scope.selectedTask;
+        if (!task) return;
+        $scope.executeAction(task.id, { 'action': 'UNCLAIM' }, false, () => {
+            task.mine = false;
+            $scope.formUrl = null;
+            $scope.fetchData();
+        });
     };
 
-    $scope.executeAction = (taskId, requestBody, claimed, clearCallback) => {
-        const apiUrl = '/services/inbox/tasks/' + taskId;
-
+    $scope.executeAction = (taskId, requestBody, claimed, successCallback) => {
         $http({
             method: 'POST',
-            url: apiUrl,
+            url: '/services/inbox/tasks/' + taskId,
             data: requestBody,
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            headers: { 'Content-Type': 'application/json' }
         }).then(() => {
-            Dialogs.showAlert({
+            Notifications.show({
+                type: 'positive',
                 title: LocaleService.t('inbox:actionConfirm', 'Action confirmation'),
-                message: LocaleService.t(claimed ? 'inbox:actionClaimSuccess' : 'inbox:actionUnclaimSuccess', claimed ? 'Task claimed successfully' : 'Task unclaimed successfully'),
-                type: AlertTypes.Success
+                description: LocaleService.t(claimed ? 'inbox:actionClaimSuccess' : 'inbox:actionUnclaimSuccess', claimed ? 'Task claimed successfully' : 'Task unclaimed successfully')
             });
-            $scope.reload();
-            clearCallback();
+            successCallback();
         }).catch((error) => {
-            Dialogs.showAlert({
+            Notifications.show({
+                type: 'negative',
                 title: LocaleService.t('inbox:errMsg.actionTitle', 'Action failed'),
-                message: LocaleService.t(claimed ? 'inbox:errMsg.actionClaim' : 'inbox:errMsg.actionUnclaim', { name: error.message }),
-                type: AlertTypes.Error
+                description: LocaleService.t(claimed ? 'inbox:errMsg.actionClaim' : 'inbox:errMsg.actionUnclaim', { name: error.message })
             });
             console.error('Error making POST request:', error);
         });
     };
+
+    $scope.toggleAutoRefresh = () => {
+        $scope.autoRefresh = !$scope.autoRefresh;
+        if ($scope.autoRefresh) startAutoRefresh();
+        else stopAutoRefresh();
+    };
+
+    function startAutoRefresh() {
+        stopAutoRefresh();
+        refreshPromise = $interval(() => $scope.fetchData(), REFRESH_INTERVAL);
+    }
+
+    function stopAutoRefresh() {
+        if (refreshPromise) {
+            $interval.cancel(refreshPromise);
+            refreshPromise = null;
+        }
+    }
+
+    $scope.$on('$destroy', stopAutoRefresh);
+
+    $scope.fetchData();
+    startAutoRefresh();
 });
