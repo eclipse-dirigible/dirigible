@@ -145,21 +145,22 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 """
                         const __taskParams = new URLSearchParams(window.location.search);
                         const __taskId = __taskParams.get('taskId');
+                        const __notifications = new NotificationHub();
 
                         function __completeTask(action) {
                             if (!__taskId) {
-                                Dialogs.showAlert({ title: 'Cannot submit', message: 'This form was not opened from a task (no taskId).', type: AlertTypes.Error });
+                                __notifications.show({ type: 'negative', title: 'Cannot submit', description: 'This form was not opened from a task (no taskId).' });
                                 return;
                             }
                             $http.post('/services/bpm/bpm-processes/tasks/' + __taskId, {
                                 action: 'COMPLETE',
                                 data: Object.assign({ action: action }, $scope.model || {})
                             }).then(() => {
-                                Dialogs.showAlert({ title: 'Task submitted', message: 'The task was completed (' + action + ').', type: AlertTypes.Success });
+                                __notifications.show({ type: 'positive', title: 'Task submitted', description: 'The task was completed (' + action + ').' });
                                 window.close();
                             }).catch((error) => {
                                 const message = error && error.data && error.data.message ? error.data.message : 'Unknown error';
-                                Dialogs.showAlert({ title: 'Submit failed', message: message, type: AlertTypes.Error });
+                                __notifications.show({ type: 'negative', title: 'Submit failed', description: message });
                             });
                         }
 
