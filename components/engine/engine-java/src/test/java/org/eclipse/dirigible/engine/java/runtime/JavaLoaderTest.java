@@ -73,12 +73,13 @@ class JavaLoaderTest {
     void setUp() {
         handlerRegistry = new JavaClassRegistry();
         holder = new ClientClassLoaderHolder();
-        handlerConsumer = new HandlerClassConsumer(handlerRegistry);
+        ComponentContainer container = new ComponentContainer(new ClientBeansHolder());
+        handlerConsumer = new HandlerClassConsumer(handlerRegistry, container);
         recording = new RecordingConsumer();
         JavaCompiledOutputDirectory outputDirectory = mock(JavaCompiledOutputDirectory.class);
         when(outputDirectory.get()).thenReturn(tempDir);
-        loader = new JavaLoader(new JavaSourceCompiler(), holder, new ComponentContainer(new ClientBeansHolder()),
-                List.of(handlerConsumer, recording), outputDirectory, NOOP_PUBLISHER);
+        loader = new JavaLoader(new JavaSourceCompiler(), holder, container, List.of(handlerConsumer, recording), outputDirectory,
+                NOOP_PUBLISHER);
     }
 
     @Test

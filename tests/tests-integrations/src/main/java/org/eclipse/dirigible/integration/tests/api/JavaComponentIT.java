@@ -54,6 +54,13 @@ class JavaComponentIT extends IntegrationTest {
         assertReturns("/greet", "Hello, World");
         // Two @Component Greeter implementations collected into the injected List<Greeter>.
         assertReturns("/count", "2");
+        // A @Component JavaHandler is dispatched as the injected container bean (constructor injection).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/java/" + PROJECT + "/demo/HelloHandler")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(containsString("Hello, Handler")),
+                TIMEOUT_SECONDS);
     }
 
     private void writeAllAndSync() {
@@ -105,6 +112,23 @@ class JavaComponentIT extends IntegrationTest {
                     public String greet() { return greetings.greet("World"); }
                     @Get("/count")
                     public int count() { return greeters.size(); }
+                }
+                """);
+        // A JavaHandler that is also a @Component must be dispatched as the injected container bean,
+        // not instantiated via a no-arg constructor.
+        sources.put("HelloHandler.java", """
+                package demo;
+                import jakarta.servlet.http.HttpServletRequest;
+                import jakarta.servlet.http.HttpServletResponse;
+                import org.eclipse.dirigible.sdk.component.Component;
+                import org.eclipse.dirigible.engine.java.handler.JavaHandler;
+                @Component
+                public class HelloHandler implements JavaHandler {
+                    private final GreetingService greetings;
+                    public HelloHandler(GreetingService greetings) { this.greetings = greetings; }
+                    public void handle(HttpServletRequest req, HttpServletResponse resp) throws Exception {
+                        resp.getWriter().print(greetings.greet("Handler"));
+                    }
                 }
                 """);
         sources.forEach((name, source) -> repository.createResource(BASE + name, source.getBytes(StandardCharsets.UTF_8), false,
