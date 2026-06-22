@@ -9,6 +9,9 @@
         <script type="text/javascript" src="view.js"></script>
         <meta name="platform-links" category="ng-view">
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+#if($hasProcess)
+        <script type="text/javascript" src="/services/web/dashboard/services/process-tasks.js"></script>
+#end
         <script type="text/javascript" src="controller.js"></script>
 	</head>
 
@@ -92,6 +95,9 @@
 #end
 #end
 						<td bk-table-cell fit-content="true">
+#if($hasProcess)
+							<entity-process-tasks entity="next"></entity-process-tasks>
+#end
 							<bk-popover>
 								<bk-popover-control>
 									<bk-button compact="true" glyph="sap-icon--overflow" state="transparent" aria-label="{{'$projectName:${tprefix}.aria.tableRowMenuBtn' | t}}" ng-click="setTristate()"></bk-button>

@@ -1,5 +1,5 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'#if($hasProcess), 'ProcessTasks'#end])
 	.config(["EntityServiceProvider", (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller';
 	}])
