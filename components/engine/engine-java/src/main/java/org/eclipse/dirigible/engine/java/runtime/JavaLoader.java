@@ -199,7 +199,7 @@ public class JavaLoader {
         currentBytecode.putAll(effectiveBytecode);
 
         RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()));
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
 
         // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
         // (failed-to-recompile) classes keep their existing .class files untouched.
@@ -293,9 +293,12 @@ public class JavaLoader {
      * @param diagnostics per failed FQN → the structured compiler diagnostics behind the failure
      *        (line/column/message); empty for failures with no attributable diagnostic (e.g. a class
      *        that compiled but could not be loaded)
+     * @param wiringErrors per FQN → a bean-container wiring error (unsatisfied/ambiguous dependency,
+     *        construction cycle, duplicate bean name, throwing constructor) for classes that compiled
+     *        but could not be wired
      */
     public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns,
-            Map<String, List<CompileDiagnostic>> diagnostics) {
+            Map<String, List<CompileDiagnostic>> diagnostics, Map<String, String> wiringErrors) {
     }
 
 }

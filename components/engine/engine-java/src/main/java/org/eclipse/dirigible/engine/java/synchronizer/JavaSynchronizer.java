@@ -255,6 +255,17 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
                 recordCompilationProblems(file.getLocation(), result.diagnostics()
                                                                     .getOrDefault(fqn, List.of()),
                         message);
+            } else if (result.wiringErrors()
+                             .containsKey(fqn)) {
+                // Compiled cleanly but the bean container could not wire it (unsatisfied/ambiguous
+                // dependency, cycle, duplicate name, throwing constructor). Surface it on the file so
+                // the developer sees it in the Problems view, not only in the server log.
+                String message = result.wiringErrors()
+                                       .get(fqn);
+                file.setLifecycle(ArtefactLifecycle.FAILED);
+                file.setError(message);
+                javaFileService.save(file);
+                recordCompilationProblems(file.getLocation(), List.of(), message);
             } else if (result.succeededFqns()
                              .contains(fqn)) {
                 file.setLifecycle(ArtefactLifecycle.CREATED);

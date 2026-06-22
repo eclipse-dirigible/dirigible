@@ -90,15 +90,20 @@ class ComponentContainerTest {
                             .isEmpty());
         assertTrue(container.get(Pong.class)
                             .isEmpty());
+        // The failure is reported so the synchronizer can surface it on the offending file.
+        assertFalse(container.wiringErrors()
+                             .isEmpty());
     }
 
     @Test
-    void unsatisfied_dependency_leaves_the_bean_uncreated() {
+    void unsatisfied_dependency_leaves_the_bean_uncreated_and_reports_a_wiring_error() {
         // Car needs Engine, which is absent from this generation.
         ComponentContainer container = TestComponentContainers.of(Car.class);
 
         assertTrue(container.get(Car.class)
                             .isEmpty());
+        assertTrue(container.wiringErrors()
+                            .containsKey(Car.class.getName()));
     }
 
     // --- fixtures --------------------------------------------------------------------------------

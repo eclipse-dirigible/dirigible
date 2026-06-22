@@ -66,8 +66,23 @@ public class ComponentContainer implements ClientBeanResolver {
     /** name → singleton for the live generation (immutable snapshot, registration order). */
     private volatile Map<String, Object> singletons = Map.of();
 
+    /** client class FQN → wiring error from the last rebuild (so the synchronizer can surface it). */
+    private volatile Map<String, String> wiringErrors = Map.of();
+
     public ComponentContainer(ClientBeansHolder holder) {
         holder.swap(this);
+    }
+
+    /**
+     * Wiring errors from the last {@link #rebuild(Collection)} keyed by client class FQN — an
+     * unsatisfied/ambiguous dependency, a construction cycle, a duplicate bean name or a throwing
+     * constructor. The synchronizer projects these onto the IDE Problems view so a developer sees the
+     * failure on the offending source file, not only in the server log.
+     *
+     * @return an immutable FQN → message map (empty if the last rebuild had no wiring errors)
+     */
+    public Map<String, String> wiringErrors() {
+        return wiringErrors;
     }
 
     /**
@@ -84,6 +99,7 @@ public class ComponentContainer implements ClientBeanResolver {
 
         Map<String, BeanDefinition> byName = new LinkedHashMap<>();
         List<BeanDefinition> ordered = new ArrayList<>();
+        Map<String, String> errors = new LinkedHashMap<>();
         ClassLoader loader = null;
         for (LoadedClass info : loaded) {
             if (info == null) {
@@ -98,11 +114,11 @@ public class ComponentContainer implements ClientBeanResolver {
                 String name = beanName(type);
                 BeanDefinition existing = byName.get(name);
                 if (existing != null) {
-                    LOGGER.error(
-                            "Duplicate client bean name [{}] for [{}] and [{}]; keeping the first. Use @Component(\"...\") to disambiguate.",
-                            name, existing.type()
-                                          .getName(),
-                            type.getName());
+                    String message = "Duplicate client bean name [" + name + "] also used by [" + existing.type()
+                                                                                                          .getName()
+                            + "]; keeping the first. Use @Component(\"...\") to disambiguate.";
+                    LOGGER.error(message);
+                    errors.put(type.getName(), message);
                     continue;
                 }
                 BeanDefinition definition = new BeanDefinition(name, type);
@@ -110,6 +126,7 @@ public class ComponentContainer implements ClientBeanResolver {
                 ordered.add(definition);
             } catch (RuntimeException e) {
                 LOGGER.error("Failed to define client bean [{}]: {}", type.getName(), e.getMessage(), e);
+                errors.put(type.getName(), e.getMessage());
             }
         }
 
@@ -128,6 +145,9 @@ public class ComponentContainer implements ClientBeanResolver {
                     LOGGER.error("Failed to instantiate client bean [{}] ([{}]): {}", definition.name(), definition.type()
                                                                                                                    .getName(),
                             e.getMessage(), e);
+                    errors.put(definition.type()
+                                         .getName(),
+                            e.getMessage());
                 }
             }
         } finally {
@@ -144,6 +164,7 @@ public class ComponentContainer implements ClientBeanResolver {
         }
         this.definitions = List.copyOf(ordered);
         this.singletons = java.util.Collections.unmodifiableMap(snapshot);
+        this.wiringErrors = Map.copyOf(errors);
 
         destroy(previousDefinitions, previousSingletons);
         LOGGER.info("Client bean container rebuilt: {} bean(s).", snapshot.size());
