@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
+@org.junit.jupiter.api.Disabled("Temporarily disabled: clones the dirigiblelabs sample repo whose master is mid-migration to the new client-Java API (eclipse-dirigible/dirigible PR 6051). Re-enable once the matching sample PR is merged.")
 public class JavaExtensionDecoratorSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-extension-decorator";
