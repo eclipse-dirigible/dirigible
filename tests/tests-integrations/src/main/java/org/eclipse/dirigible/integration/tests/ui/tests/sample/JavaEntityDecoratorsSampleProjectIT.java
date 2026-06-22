@@ -17,7 +17,6 @@ import static org.hamcrest.Matchers.containsString;
  * verifies the {@code @Entity} / {@code @Repository} / {@code @Controller} annotation stack with
  * CSVIM-seeded country CRUD and OpenAPI registration.
  */
-@org.junit.jupiter.api.Disabled("Temporarily disabled: clones the dirigiblelabs sample repo whose master is mid-migration to the new client-Java API (eclipse-dirigible/dirigible PR 6051). Re-enable once the matching sample PR is merged.")
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";

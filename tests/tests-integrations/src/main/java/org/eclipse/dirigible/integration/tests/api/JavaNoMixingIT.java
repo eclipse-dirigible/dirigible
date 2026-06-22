@@ -12,16 +12,11 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
-import java.nio.charset.StandardCharsets;
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
-import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
+import org.eclipse.dirigible.tests.base.ProjectUtil;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -31,17 +26,20 @@ import org.springframework.beans.factory.annotation.Autowired;
  * {@code @OnMessage} (annotation style) must NOT be wired, while a clean interface-style handler in
  * the same project IS — proving the rejection is selective, not a whole-project failure. The
  * WebSocket registry is the observable, deterministic signal (it is consulted synchronously after
- * the sync cycle). The same no-mixing guard applies to jobs and listeners.
+ * the sync cycle). The same no-mixing guard applies to jobs and listeners. The fixture project
+ * lives under {@code src/main/resources/JavaNoMixingIT}.
  */
 class JavaNoMixingIT extends IntegrationTest {
 
-    private static final String PROJECT = "java-no-mixing-it";
-    private static final String BASE = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/demo/";
+    private static final String PROJECT = "JavaNoMixingIT";
     private static final String STATUS = "/services/java/" + PROJECT + "/demo/StatusController";
     private static final long TIMEOUT_SECONDS = 30;
 
     @Autowired
     private IRepository repository;
+
+    @Autowired
+    private ProjectUtil projectUtil;
 
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
@@ -51,57 +49,12 @@ class JavaNoMixingIT extends IntegrationTest {
 
     @Test
     void mixed_style_handler_is_rejected_while_clean_one_is_registered() {
-        writeAllAndSync();
+        ClientJavaProjectDeployer.deploy(repository, projectUtil, synchronizationProcessor, PROJECT, PROJECT);
 
         // Clean interface-style handler registers (positive control — proves wiring works at all).
         assertRegistered("good-no-mixing", true);
         // Handler that mixes WebsocketHandler + @Websocket/@OnMessage is rejected: not registered.
         assertRegistered("mixed-no-mixing", false);
-    }
-
-    private void writeAllAndSync() {
-        Map<String, String> sources = new LinkedHashMap<>();
-        sources.put("GoodSocket.java", """
-                package demo;
-                import org.eclipse.dirigible.sdk.component.Component;
-                import org.eclipse.dirigible.sdk.net.WebsocketHandler;
-                @Component
-                public class GoodSocket implements WebsocketHandler {
-                    public String endpoint() { return "good-no-mixing"; }
-                    public void onMessage(String message, String from) { }
-                }
-                """);
-        sources.put("MixedSocket.java", """
-                package demo;
-                import org.eclipse.dirigible.sdk.net.OnMessage;
-                import org.eclipse.dirigible.sdk.net.Websocket;
-                import org.eclipse.dirigible.sdk.net.WebsocketHandler;
-                @Websocket(name = "Mixed", endpoint = "mixed-no-mixing")
-                public class MixedSocket implements WebsocketHandler {
-                    public String endpoint() { return "mixed-no-mixing"; }
-                    @OnMessage public void onMessage(String message, String from) { }
-                }
-                """);
-        sources.put("StatusController.java", """
-                package demo;
-                import java.util.Map;
-                import org.eclipse.dirigible.components.base.spring.BeanProvider;
-                import org.eclipse.dirigible.engine.java.websocket.JavaWebsocketRegistry;
-                import org.eclipse.dirigible.sdk.http.Controller;
-                import org.eclipse.dirigible.sdk.http.Get;
-                import org.eclipse.dirigible.sdk.http.PathParam;
-                @Controller
-                public class StatusController {
-                    @Get("/{endpoint}")
-                    public Map<String, Object> status(@PathParam("endpoint") String endpoint) {
-                        JavaWebsocketRegistry registry = BeanProvider.getBean(JavaWebsocketRegistry.class);
-                        return Map.of("registered", registry.contains(endpoint));
-                    }
-                }
-                """);
-        sources.forEach((name, source) -> repository.createResource(BASE + name, source.getBytes(StandardCharsets.UTF_8), false,
-                "text/x-java", true));
-        synchronizationProcessor.forceProcessSynchronizers();
     }
 
     private void assertRegistered(String endpoint, boolean expected) {
@@ -111,14 +64,5 @@ class JavaNoMixingIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body(containsString("\"registered\":" + expected)),
                 TIMEOUT_SECONDS);
-    }
-
-    @AfterEach
-    void cleanup() {
-        String project = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT;
-        if (repository.hasCollection(project)) {
-            repository.removeCollection(project);
-            synchronizationProcessor.forceProcessSynchronizers();
-        }
     }
 }

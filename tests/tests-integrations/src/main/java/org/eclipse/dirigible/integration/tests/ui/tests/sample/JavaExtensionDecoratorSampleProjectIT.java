@@ -12,11 +12,11 @@ package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
-@org.junit.jupiter.api.Disabled("Temporarily disabled: clones the dirigiblelabs sample repo whose master is mid-migration to the new client-Java API (eclipse-dirigible/dirigible PR 6051). Re-enable once the matching sample PR is merged.")
 public class JavaExtensionDecoratorSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-extension-decorator";
     private static final String EXTENSION_CONSUMER_BASE = "/services/java/" + PROJECT + "/demo/extension/ExtensionConsumer";
+    private static final String INJECTING_CONSUMER_BASE = "/services/java/" + PROJECT + "/demo/extension/InjectingConsumer";
 
     @Override
     protected String getRepositoryURL() {
@@ -25,15 +25,24 @@ public class JavaExtensionDecoratorSampleProjectIT extends SampleProjectReposito
 
     @Override
     protected void verifyProject() {
-        // The typed Extensions.find(SampleExtensionPoint.class) lookup returns
-        // SampleContribution instances; the consumer maps each via describe() so the
-        // /contributions response body carries the contribution's own string. Asserting on
-        // that string also implicitly verifies the cast — only a real implementor reaches it.
-        restAssuredExecutor.execute(() -> given().when()
-                                                 .get(EXTENSION_CONSUMER_BASE + "/contributions")
-                                                 .then()
-                                                 .statusCode(200)
-                                                 .body(containsString("Hello from SampleContribution!")));
+        restAssuredExecutor.execute(() -> {
+            // Style 1 — Extensions.find(SampleExtensionPoint.class) returns the SampleContribution
+            // instances; the consumer maps each via describe(), so the body carries the contribution's
+            // own string. Asserting on it also verifies the cast — only a real implementor reaches it.
+            given().when()
+                   .get(EXTENSION_CONSUMER_BASE + "/contributions")
+                   .then()
+                   .statusCode(200)
+                   .body(containsString("Hello from SampleContribution!"));
+
+            // Style 2 — collection injection: the container populates the controller's
+            // List<SampleExtensionPoint> with every @Component contribution, no explicit lookup.
+            given().when()
+                   .get(INJECTING_CONSUMER_BASE + "/injected-contributions")
+                   .then()
+                   .statusCode(200)
+                   .body(containsString("Hello from SampleContribution!"));
+        });
     }
 
 }
