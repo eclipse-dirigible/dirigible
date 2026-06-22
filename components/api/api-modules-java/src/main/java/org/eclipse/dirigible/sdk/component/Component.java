@@ -28,9 +28,10 @@ import java.lang.annotation.Target;
  * by-name injection when several beans share a type.
  *
  * <p>
- * {@link Repository @Repository}, {@code @Controller} and {@code @Extension} are themselves
- * meta-annotated with {@code @Component}, so they are all beans and participate in injection
- * without any extra annotation.
+ * {@link Repository @Repository} and {@code @Controller} are themselves meta-annotated with
+ * {@code @Component}, so they are beans and participate in injection without any extra annotation.
+ * An extension point is just an interface; a contribution is a {@code @Component} implementing it,
+ * consumed via {@code List<...>} collection injection.
  *
  * <p>
  * Example:

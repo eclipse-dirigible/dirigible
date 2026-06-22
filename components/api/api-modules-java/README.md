@@ -111,7 +111,7 @@ from this module so the SDK surface — facades **and** decorators — has a sin
 | `component/decorators#Component / Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Component, Inject, Repository}`  |
 | `job/decorators#Scheduled`                 | `org.eclipse.dirigible.sdk.job.Scheduled`                                       |
 | `net/decorators#Websocket`                 | `org.eclipse.dirigible.sdk.net.Websocket`                                       |
-| `extensions/decorators#Extension`          | `org.eclipse.dirigible.sdk.extensions.{Extension, ExtensionPoint}`               |
+| `extensions/decorators#Extension`          | _(none — a contribution is a `@Component` implementing the extension-point interface; see "Extension points")_ |
 | Message listeners                          | `org.eclipse.dirigible.sdk.messaging.{Listener, ListenerKind}`                  |
 
 Existing import statements that used the old `org.eclipse.dirigible.engine.java.annotations.*`
@@ -122,10 +122,9 @@ IT fixtures, IDE snippets, `EntityController.java.template` and the DAO template
 
 Client Java runs in a small IoC container, one generation per `ClientClassLoader` rebuild (see
 `engine-java`'s `ComponentContainer`). Any class (meta-)annotated with
-`org.eclipse.dirigible.sdk.component.Component` is a singleton bean — `@Repository`, `@Controller`,
-`@Extension`, `@Scheduled`, `@Listener` and `@Websocket` are all meta-annotated with `@Component`,
-so they are beans too. Beans are named by Spring's convention (decapitalized simple class name, or
-`@Component("name")`).
+`org.eclipse.dirigible.sdk.component.Component` is a singleton bean — `@Repository`, `@Controller`
+and `@Websocket` are meta-annotated with `@Component`, so they are beans too. Beans are named by
+Spring's convention (decapitalized simple class name, or `@Component("name")`).
 
 Beans are wired by:
 
@@ -134,7 +133,7 @@ Beans are wired by:
 * **field injection** — `@Inject` on a field (backward compatible);
 * **collection injection** — a `List<T>` / `Collection<T>` / `Set<T>` injection point receives every
   bean assignable to `T`. This is the Spring-style way to consume all implementations of an
-  interface (see "Typed extension points" below).
+  interface (see "Extension points" below).
 
 `@PostConstruct` / `@PreDestroy` (`jakarta.annotation`) run on bean creation / generation teardown.
 To reach a *platform* service from client code use `org.eclipse.dirigible.sdk.component.Beans`
@@ -182,25 +181,33 @@ public class Orders {
 The `dirigiblelabs/sample-java-{job,listener,websocket}-decorator` samples each demonstrate both
 styles end-to-end.
 
-## Typed extension points
+## Extension points
 
-Java `@Extension` does not carry a `to = "<string>"` attribute. Contributions declare the
-extension point they implement as a `Class<?> target()` — the marker `@ExtensionPoint` on the
-target interface documents the contract:
+There is no dedicated extension annotation. An extension point is just an interface; a contribution
+is a `@Component` bean that implements it (its `@Component` name is the contribution name):
 
 ```java
-@ExtensionPoint("Order processors")
 public interface OrderProcessor {
     void process(Order order);
 }
 
-@Extension(target = OrderProcessor.class, name = "fast")
+@Component("fast")
 public class FastOrderProcessor implements OrderProcessor {
     public void process(Order order) { ... }
 }
 ```
 
-The consumer retrieves implementations as the interface type — no reflection, no `Map<String, ?>`:
+Consume them with **collection injection** — the Spring-style way to get all implementations:
+
+```java
+@Component
+public class Orders {
+    private final List<OrderProcessor> processors;
+    public Orders(List<OrderProcessor> processors) { this.processors = processors; }
+}
+```
+
+Outside an injection point, `Extensions.find(OrderProcessor.class)` returns the same beans:
 
 ```java
 for (OrderProcessor processor : Extensions.find(OrderProcessor.class)) {
@@ -208,20 +215,10 @@ for (OrderProcessor processor : Extensions.find(OrderProcessor.class)) {
 }
 ```
 
-`ExtensionClassConsumer` validates `target.isAssignableFrom(annotatedClass)` at registration —
-a class that declares `@Extension(target = X)` but doesn't actually implement `X` is logged
-and skipped, so a runtime `Extensions.find(X.class)` can never receive an instance that fails
-the cast.
-
-The interface's fully qualified name is the persisted extension-point identifier in the
-`DIRIGIBLE_EXTENSIONS` table. Renaming the interface invalidates every persisted reference, so
-treat the FQN as part of the contract.
-
-Cross-runtime extension points (where TS / JS modules also contribute to the same logical point)
-are not expressible in the typed Java surface — a JS module cannot safely satisfy a Java
-interface contract. Use the TypeScript `@Extension` decorator for those; the legacy string-keyed
-`Extensions.getExtensions(String)` lookup remains available for callers that need to enumerate
-JS contributions.
+Cross-runtime extension points (where TS / JS modules contribute to the same logical point) are not
+expressible as a Java interface — a JS module cannot satisfy a Java contract. Use the TypeScript
+`@Extension` decorator for those; the legacy string-keyed `Extensions.getExtensions(String)` lookup
+remains available to enumerate JS contributions.
 
 ## DAO / ORM / Repository builders
 

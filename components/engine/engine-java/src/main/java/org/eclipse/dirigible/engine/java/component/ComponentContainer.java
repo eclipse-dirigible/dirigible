@@ -66,6 +66,9 @@ public class ComponentContainer implements ClientBeanResolver {
     /** name → singleton for the live generation (immutable snapshot, registration order). */
     private volatile Map<String, Object> singletons = Map.of();
 
+    /** runtime class → singleton, for O(1) {@link #instanceOf(Class)} during the load pass. */
+    private volatile Map<Class<?>, Object> instancesByType = Map.of();
+
     /** client class FQN → wiring error from the last rebuild (so the synchronizer can surface it). */
     private volatile Map<String, String> wiringErrors = Map.of();
 
@@ -156,14 +159,17 @@ public class ComponentContainer implements ClientBeanResolver {
         }
 
         Map<String, Object> snapshot = new LinkedHashMap<>();
+        Map<Class<?>, Object> byType = new LinkedHashMap<>();
         for (BeanDefinition definition : ordered) {
             Object instance = created.get(definition.name());
             if (instance != null) {
                 snapshot.put(definition.name(), instance);
+                byType.put(instance.getClass(), instance);
             }
         }
         this.definitions = List.copyOf(ordered);
         this.singletons = java.util.Collections.unmodifiableMap(snapshot);
+        this.instancesByType = java.util.Collections.unmodifiableMap(byType);
         this.wiringErrors = Map.copyOf(errors);
 
         destroy(previousDefinitions, previousSingletons);
@@ -309,12 +315,7 @@ public class ComponentContainer implements ClientBeanResolver {
      * @return the bean, or empty if it is not a bean or failed to instantiate
      */
     public Optional<Object> instanceOf(Class<?> type) {
-        for (Object instance : singletons.values()) {
-            if (instance.getClass() == type) {
-                return Optional.of(instance);
-            }
-        }
-        return Optional.empty();
+        return Optional.ofNullable(instancesByType.get(type));
     }
 
     @Override

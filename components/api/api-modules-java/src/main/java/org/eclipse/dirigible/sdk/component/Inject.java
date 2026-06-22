@@ -28,10 +28,10 @@ import java.lang.annotation.Target;
  *
  * <p>
  * Each injection point is resolved from the other beans ({@code @Component} / {@code @Repository} /
- * {@code @Controller} / {@code @Extension}) in the same {@code ClientClassLoader} generation. A
- * {@code List<T>} / {@code Collection<T>} / {@code Set<T>} injection point receives <em>every</em>
- * bean assignable to {@code T} (collection injection); any other type resolves to the single
- * matching bean (disambiguated by name when several share a type).
+ * {@code @Controller}) in the same {@code ClientClassLoader} generation. A {@code List<T>} /
+ * {@code Collection<T>} / {@code Set<T>} injection point receives <em>every</em> bean assignable to
+ * {@code T} (collection injection); any other type resolves to the single matching bean
+ * (disambiguated by name when several share a type).
  *
  * <p>
  * Unlike Spring's {@code @Autowired}, this is resolved by the engine's own client bean container —
