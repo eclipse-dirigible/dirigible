@@ -38,7 +38,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. |
 | `db/store`                           | `sdk.db.Store`                                                 | Dynamic-entity Hibernate store. For typed `@Entity` CRUD on client classes, resolve `JavaEntityStore` via `BeanProvider`. |
 | `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. |
-| `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer the typed `Extensions.find(Class<T>)`; see "Typed extension points" below. |
+| `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer `List<...>` collection injection or `Extensions.find(Class<T>)`; see "Extension points" below. |
 | `git/client`                         | `sdk.git.Git`                                                  |       |
 | `http/client`                        | `sdk.http.HttpClient`                                          | Options passed as JSON, same shape as TS. |
 | `http/request`                       | `sdk.http.Request`                                             |       |
