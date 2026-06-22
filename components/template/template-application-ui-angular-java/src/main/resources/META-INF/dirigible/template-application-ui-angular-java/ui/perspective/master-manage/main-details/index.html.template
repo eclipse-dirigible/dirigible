@@ -10,6 +10,9 @@
         <script type="text/javascript" src="view.js"></script>
         <meta name="platform-links" category="ng-view">
 		<script type="text/javascript" src="/services/web/dashboard/services/entity.js"></script>
+#if($hasProcess)
+        <script type="text/javascript" src="/services/web/dashboard/services/process-tasks.js"></script>
+#end
         <script type="text/javascript" src="controller.js"></script>
     </head>
 
@@ -576,6 +579,15 @@
 				</bk-bar-element>
 			</bk-bar-right>
 		</bk-bar>
+#if($hasProcess)
+		<bk-bar bar-design="footer" compact="true" ng-show="action === 'select' && entity.${primaryKeysString}">
+			<bk-bar-right>
+				<bk-bar-element>
+					<entity-process-tasks entity="entity"></entity-process-tasks>
+				</bk-bar-element>
+			</bk-bar-right>
+		</bk-bar>
+#end
 		<bk-bar bar-design="footer" compact="true" ng-show="action === 'select' && entityActions.length && entity.${primaryKeysString}">
 			<bk-bar-right>
 				<bk-bar-element ng-repeat="action in entityActions track by $index">

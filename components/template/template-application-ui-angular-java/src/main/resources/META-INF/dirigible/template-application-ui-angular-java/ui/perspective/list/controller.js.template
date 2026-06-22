@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'#if($hasProcess), 'ProcessTasks'#end])
 	.config(['EntityServiceProvider', (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller';
 	}])
-	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService) => {
+	.controller('PageController', (${dollar}scope,#if($hasDropdowns) ${dollar}http,#end EntityService, Extensions, LocaleService#if($hasProcess), ProcessTasks#end) => {
 		const Dialogs = new DialogHub();
 		$scope.dataPage = 1;
 		$scope.dataCount = 0;
@@ -120,6 +120,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 
 #end
 					$scope.data = response.data;
+#if($hasProcess)
+					ProcessTasks.refresh();
+#end
 				}, (error) => {
 					const message = error.data ? error.data.message : '';
 					Dialogs.showAlert({

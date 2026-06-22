@@ -61,7 +61,11 @@ import org.springframework.stereotype.Component;
  * complete the current BPM user task: the Inbox/Process perspective opens the form with
  * {@code ?taskId=&processInstanceId=}, and the handler POSTs {@code COMPLETE} to
  * {@code /services/bpm/bpm-processes/tasks/<taskId>} with the action name and the form model as
- * process variables (so a downstream gateway can branch on the action). Forms opened outside a task
+ * process variables (so a downstream gateway can branch on the action). On success the handler
+ * closes its host via both {@code DialogHub.closeWindow()} and {@code window.close()} - the former
+ * closes the dialog when the form is opened from an entity view, the latter a standalone
+ * (script-opened) window; each is a harmless no-op where it does not apply, including the Inbox's
+ * inline iframe (which clears its own pane on its refresh cycle). Forms opened outside a task
  * report the missing {@code taskId} instead of failing silently. Business logic beyond completing
  * the task belongs in a hand-written form override under {@code custom/}.
  *
@@ -146,6 +150,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                         const __taskParams = new URLSearchParams(window.location.search);
                         const __taskId = __taskParams.get('taskId');
                         const __notifications = new NotificationHub();
+                        const __dialogs = new DialogHub();
 
                         function __completeTask(action) {
                             if (!__taskId) {
@@ -157,6 +162,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                 data: Object.assign({ action: action }, $scope.model || {})
                             }).then(() => {
                                 __notifications.show({ type: 'positive', title: 'Task submitted', description: 'The task was completed (' + action + ').' });
+                                __dialogs.closeWindow();
                                 window.close();
                             }).catch((error) => {
                                 const message = error && error.data && error.data.message ? error.data.message : 'Unknown error';

@@ -1,5 +1,5 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'platformLocale']).controller('PageController', ($scope, Extensions, LocaleService) => {
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale'#if($hasProcess), 'ProcessTasks'#end]).controller('PageController', ($scope, Extensions, LocaleService) => {
 	const Dialogs = new DialogHub();
 	$scope.entity = {};
 

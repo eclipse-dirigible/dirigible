@@ -71,6 +71,10 @@ export function process(model, parameters) {
 			p.isReadOnlyProperty = p.isReadOnlyProperty === "true";
             p.widgetIsMajor = p.widgetIsMajor === "true";
             p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
+
+            if (p.name === "ProcessId") {
+                e.hasProcess = true;
+            }
             p.widgetDropdownUrl = "";
             p.widgetDropdownControllerUrl = "";
 
