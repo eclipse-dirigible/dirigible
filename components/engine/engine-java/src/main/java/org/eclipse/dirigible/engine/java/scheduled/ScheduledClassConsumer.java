@@ -101,7 +101,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
         if (jobHandler) {
             JobHandler job = (JobHandler) instance;
-            schedule(scheduled, () -> runJob(job, info.fqn()), job.cron(), info.fqn(), info.fqn());
+            schedule(scheduled, () -> runJob(job, info.fqn()), job.cron(), info.fqn());
         } else {
             for (Method method : type.getDeclaredMethods()) {
                 Scheduled annotation = method.getAnnotation(Scheduled.class);
@@ -114,7 +114,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 }
                 method.setAccessible(true);
                 String label = info.fqn() + "#" + method.getName();
-                schedule(scheduled, () -> invoke(method, instance, label), annotation.expression(), label, info.fqn());
+                schedule(scheduled, () -> invoke(method, instance, label), annotation.expression(), label);
             }
         }
 
@@ -149,7 +149,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
     }
 
-    private void schedule(List<ScheduledFuture<?>> sink, Runnable task, String expression, String label, String fqn) {
+    private void schedule(List<ScheduledFuture<?>> sink, Runnable task, String expression, String label) {
         CronTrigger trigger;
         try {
             trigger = new CronTrigger(expression);

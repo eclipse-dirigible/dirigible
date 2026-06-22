@@ -158,15 +158,19 @@ class ComponentContainerTest {
 
     @Component
     static class Ping {
+        final Pong pong;
+
         Ping(Pong pong) {
-            // cycle
+            this.pong = pong; // cycle: Ping needs Pong
         }
     }
 
     @Component
     static class Pong {
+        final Ping ping;
+
         Pong(Ping ping) {
-            // cycle
+            this.ping = ping; // cycle: Pong needs Ping
         }
     }
 }
