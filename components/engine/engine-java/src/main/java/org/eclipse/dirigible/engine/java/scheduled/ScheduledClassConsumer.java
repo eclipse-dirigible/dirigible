@@ -33,14 +33,13 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link JavaClassConsumer} that schedules client {@link Scheduled @Scheduled} tasks on a cron
- * trigger. Two styles are supported:
+ * {@link JavaClassConsumer} that schedules client jobs on a cron trigger. Two styles, never mixed
+ * on one class:
  * <ul>
- * <li><b>class level</b> — a {@code @Scheduled} class that implements {@link JobHandler} (direct
- * dispatch) or exposes a public no-arg {@code run()} (reflective fallback);</li>
- * <li><b>method level</b> — public no-arg methods annotated {@code @Scheduled} on any client bean
- * ({@code @Component} / {@code @Controller} / …), Spring's {@code @Scheduled}-on-a-method
- * style.</li>
+ * <li><b>self-describing interface</b> — a {@code @Component} bean implementing {@link JobHandler},
+ * which supplies its own {@code cron()} and {@code run()};</li>
+ * <li><b>method level</b> — public no-arg methods annotated {@link Scheduled @Scheduled} on a
+ * client bean, Spring's {@code @Scheduled}-on-a-method style.</li>
  * </ul>
  * The bean instance is built (with constructor + field injection) by the
  * {@link ComponentContainer}; this consumer only fetches it and wires the cron schedule. Hot-reload
@@ -75,7 +74,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     @Override
     public boolean accepts(Class<?> clazz) {
-        return clazz.isAnnotationPresent(Scheduled.class) || hasScheduledMethod(clazz);
+        return JobHandler.class.isAssignableFrom(clazz) || hasScheduledMethod(clazz);
     }
 
     @Override
@@ -84,39 +83,43 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         Object instance = componentContainer.instanceOf(type)
                                             .orElse(null);
         if (instance == null) {
-            LOGGER.error("@Scheduled [{}] was not instantiated as a bean (a method-level @Scheduled must live on a @Component); skipped.",
-                    info.fqn());
+            LOGGER.error("Scheduled job [{}] was not instantiated as a bean — a JobHandler and a @Scheduled method both require "
+                    + "the class to be a @Component; skipped.", info.fqn());
+            return;
+        }
+
+        boolean jobHandler = instance instanceof JobHandler;
+        boolean methodLevel = hasScheduledMethod(type);
+        if (jobHandler && methodLevel) {
+            LOGGER.error("[{}] mixes scheduling styles — it implements JobHandler and also declares @Scheduled methods. "
+                    + "Use one style or the other; skipped.", info.fqn());
             return;
         }
 
         cancelExisting(info.fqn());
         List<ScheduledFuture<?>> scheduled = new ArrayList<>();
 
-        Scheduled classLevel = type.getAnnotation(Scheduled.class);
-        if (classLevel != null) {
-            Runnable task = classLevelTask(instance, info.fqn());
-            if (task != null) {
-                schedule(scheduled, task, classLevel.expression(), info.fqn(), info.fqn());
+        if (jobHandler) {
+            JobHandler job = (JobHandler) instance;
+            schedule(scheduled, () -> runJob(job, info.fqn()), job.cron(), info.fqn(), info.fqn());
+        } else {
+            for (Method method : type.getDeclaredMethods()) {
+                Scheduled annotation = method.getAnnotation(Scheduled.class);
+                if (annotation == null) {
+                    continue;
+                }
+                if (!isEligibleMethod(method)) {
+                    LOGGER.error("@Scheduled method [{}#{}] must be public and take no parameters; skipped.", info.fqn(), method.getName());
+                    continue;
+                }
+                method.setAccessible(true);
+                String label = info.fqn() + "#" + method.getName();
+                schedule(scheduled, () -> invoke(method, instance, label), annotation.expression(), label, info.fqn());
             }
-        }
-
-        for (Method method : type.getDeclaredMethods()) {
-            Scheduled methodLevel = method.getAnnotation(Scheduled.class);
-            if (methodLevel == null) {
-                continue;
-            }
-            if (!isEligibleMethod(method)) {
-                LOGGER.error("@Scheduled method [{}#{}] must be public and take no parameters; skipped.", info.fqn(), method.getName());
-                continue;
-            }
-            method.setAccessible(true);
-            String label = info.fqn() + "#" + method.getName();
-            schedule(scheduled, () -> invoke(method, instance, label), methodLevel.expression(), label, info.fqn());
         }
 
         if (scheduled.isEmpty()) {
-            LOGGER.warn("@Scheduled [{}] produced no schedule — a class-level @Scheduled needs JobHandler or a run() method, "
-                    + "a method-level one needs a public no-arg @Scheduled method.", info.fqn());
+            LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
             return;
         }
         futures.put(info.fqn(), scheduled);
@@ -138,25 +141,12 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
     }
 
-    private Runnable classLevelTask(Object instance, String fqn) {
-        if (instance instanceof JobHandler typed) {
-            return () -> {
-                try {
-                    typed.run();
-                } catch (RuntimeException ex) {
-                    LOGGER.error("@Scheduled class [{}] run() threw: {}", fqn, ex.getMessage(), ex);
-                }
-            };
-        }
-        Method runMethod;
+    private static void runJob(JobHandler job, String fqn) {
         try {
-            runMethod = instance.getClass()
-                                .getMethod("run");
-        } catch (NoSuchMethodException e) {
-            // Only an error if there are no method-level @Scheduled either; the caller logs that case.
-            return null;
+            job.run();
+        } catch (RuntimeException ex) {
+            LOGGER.error("Job [{}] run() threw: {}", fqn, ex.getMessage(), ex);
         }
-        return () -> invoke(runMethod, instance, fqn);
     }
 
     private void schedule(List<ScheduledFuture<?>> sink, Runnable task, String expression, String label, String fqn) {

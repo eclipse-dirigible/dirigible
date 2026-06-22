@@ -140,8 +140,8 @@ public class JavaWebsocketRegistry {
                 return new Endpoint(instance, typed, null, null, null, null);
             }
             Class<?> type = instance.getClass();
-            return new Endpoint(instance, null, find(type, OnOpen.class, "onOpen"), findMessage(type),
-                    find(type, OnError.class, "onError", String.class), find(type, OnClose.class, "onClose"));
+            return new Endpoint(instance, null, find(type, OnOpen.class), find(type, OnMessage.class), find(type, OnError.class),
+                    find(type, OnClose.class));
         }
 
         Object onMessage(String message, String from) throws ReflectiveOperationException {
@@ -181,36 +181,14 @@ public class JavaWebsocketRegistry {
             }
         }
 
-        private static Method find(Class<?> type, Class<? extends Annotation> annotation, String name, Class<?>... params) {
+        private static Method find(Class<?> type, Class<? extends Annotation> annotation) {
             for (Method method : type.getMethods()) {
                 if (method.isAnnotationPresent(annotation)) {
                     method.setAccessible(true);
                     return method;
                 }
             }
-            try {
-                return type.getMethod(name, params);
-            } catch (NoSuchMethodException e) {
-                return null;
-            }
-        }
-
-        private static Method findMessage(Class<?> type) {
-            for (Method method : type.getMethods()) {
-                if (method.isAnnotationPresent(OnMessage.class)) {
-                    method.setAccessible(true);
-                    return method;
-                }
-            }
-            try {
-                return type.getMethod("onMessage", String.class, String.class);
-            } catch (NoSuchMethodException e) {
-                try {
-                    return type.getMethod("onMessage", String.class);
-                } catch (NoSuchMethodException ex) {
-                    return null;
-                }
-            }
+            return null;
         }
     }
 }

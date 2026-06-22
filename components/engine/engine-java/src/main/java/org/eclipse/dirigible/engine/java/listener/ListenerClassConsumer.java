@@ -42,14 +42,15 @@ import jakarta.jms.Session;
 import jakarta.jms.TextMessage;
 
 /**
- * {@link JavaClassConsumer} that connects client {@link Listener @Listener} handlers to ActiveMQ
- * queues or topics. Two styles are supported:
+ * {@link JavaClassConsumer} that connects client listeners to ActiveMQ queues or topics. Two
+ * styles, never mixed on one class:
  * <ul>
- * <li><b>class level</b> — a {@code @Listener} class that implements {@link MessageHandler} (direct
- * dispatch, including the default no-op {@code onError}) or exposes {@code onMessage(String)} (and
- * optionally {@code onError(String)}) reflectively;</li>
- * <li><b>method level</b> — public {@code void m(String)} methods annotated {@code @Listener} on
- * any client bean, Spring's {@code @JmsListener}-on-a-method style; a bean may host several.</li>
+ * <li><b>self-describing interface</b> — a {@code @Component} bean implementing
+ * {@link MessageHandler}, which supplies its own {@code destination()} / {@code kind()} and
+ * {@code onMessage(String)};</li>
+ * <li><b>method level</b> — public {@code void m(String)} methods annotated
+ * {@link Listener @Listener} on a client bean, Spring's {@code @JmsListener}-on-a-method style; a
+ * bean may host several.</li>
  * </ul>
  * The bean is built (with constructor + field injection) by the {@link ComponentContainer}; this
  * consumer fetches it and opens a JMS connection per subscription, tearing them down on unload.
@@ -81,7 +82,7 @@ public class ListenerClassConsumer implements JavaClassConsumer {
 
     @Override
     public boolean accepts(Class<?> clazz) {
-        return clazz.isAnnotationPresent(Listener.class) || hasListenerMethod(clazz);
+        return MessageHandler.class.isAssignableFrom(clazz) || hasListenerMethod(clazz);
     }
 
     @Override
@@ -90,40 +91,44 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         Object instance = componentContainer.instanceOf(type)
                                             .orElse(null);
         if (instance == null) {
-            LOGGER.error("@Listener [{}] was not instantiated as a bean (a method-level @Listener must live on a @Component); skipped.",
-                    info.fqn());
+            LOGGER.error("Listener [{}] was not instantiated as a bean — a MessageHandler and a @Listener method both require "
+                    + "the class to be a @Component; skipped.", info.fqn());
+            return;
+        }
+
+        boolean messageHandler = instance instanceof MessageHandler;
+        boolean methodLevel = hasListenerMethod(type);
+        if (messageHandler && methodLevel) {
+            LOGGER.error("[{}] mixes listener styles — it implements MessageHandler and also declares @Listener methods. "
+                    + "Use one style or the other; skipped.", info.fqn());
             return;
         }
 
         stopExisting(info.fqn());
         List<Connection> opened = new ArrayList<>();
 
-        Listener classLevel = type.getAnnotation(Listener.class);
-        if (classLevel != null) {
-            Dispatcher dispatcher = classDispatcher(instance, info.fqn());
-            if (dispatcher != null) {
-                subscribe(opened, classLevel.name(), classLevel.kind(), dispatcher, info.fqn());
+        if (messageHandler) {
+            MessageHandler handler = (MessageHandler) instance;
+            subscribe(opened, handler.destination(), handler.kind(), new TypedDispatcher(handler), info.fqn());
+        } else {
+            for (Method method : type.getDeclaredMethods()) {
+                Listener annotation = method.getAnnotation(Listener.class);
+                if (annotation == null) {
+                    continue;
+                }
+                if (!isEligibleMethod(method)) {
+                    LOGGER.error("@Listener method [{}#{}] must be public and take a single String parameter; skipped.", info.fqn(),
+                            method.getName());
+                    continue;
+                }
+                method.setAccessible(true);
+                String label = info.fqn() + "#" + method.getName();
+                subscribe(opened, annotation.name(), annotation.kind(), new MethodDispatcher(instance, method), label);
             }
-        }
-
-        for (Method method : type.getDeclaredMethods()) {
-            Listener methodLevel = method.getAnnotation(Listener.class);
-            if (methodLevel == null) {
-                continue;
-            }
-            if (!isEligibleMethod(method)) {
-                LOGGER.error("@Listener method [{}#{}] must be public and take a single String parameter; skipped.", info.fqn(),
-                        method.getName());
-                continue;
-            }
-            method.setAccessible(true);
-            String label = info.fqn() + "#" + method.getName();
-            subscribe(opened, methodLevel.name(), methodLevel.kind(), new MethodDispatcher(instance, method), label);
         }
 
         if (opened.isEmpty()) {
-            LOGGER.warn("@Listener [{}] produced no subscription — a class-level @Listener needs MessageHandler or onMessage(String), "
-                    + "a method-level one needs a public void m(String) method.", info.fqn());
+            LOGGER.warn("Listener [{}] produced no subscription.", info.fqn());
             return;
         }
         connections.put(info.fqn(), opened);
@@ -133,22 +138,6 @@ public class ListenerClassConsumer implements JavaClassConsumer {
     public void onClassUnloaded(LoadedClass info) {
         stopExisting(info.fqn());
         LOGGER.info("Java @Listener [{}] disconnected.", info.fqn());
-    }
-
-    private Dispatcher classDispatcher(Object instance, String fqn) {
-        if (instance instanceof MessageHandler typed) {
-            return new TypedDispatcher(typed);
-        }
-        Method onMessage;
-        try {
-            onMessage = instance.getClass()
-                                .getMethod("onMessage", String.class);
-        } catch (NoSuchMethodException e) {
-            LOGGER.error("@Listener class [{}] must implement MessageHandler or expose a public onMessage(String) method; skipped.", fqn);
-            return null;
-        }
-        Method onError = findOptionalMethod(instance.getClass(), "onError", String.class);
-        return new ReflectiveDispatcher(instance, onMessage, onError);
     }
 
     private void subscribe(List<Connection> opened, String destinationName, ListenerKind kind, Dispatcher dispatcher, String label) {
@@ -194,14 +183,6 @@ public class ListenerClassConsumer implements JavaClassConsumer {
                 && !method.isSynthetic();
     }
 
-    private static Method findOptionalMethod(Class<?> type, String name, Class<?>... params) {
-        try {
-            return type.getMethod(name, params);
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
-    }
-
     private void dispatch(Message msg, Dispatcher dispatcher, String label) {
         if (!(msg instanceof TextMessage textMsg)) {
             LOGGER.warn("@Listener [{}] received a non-text message; ignored.", label);
@@ -239,7 +220,7 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         }
     }
 
-    /** Abstraction over the typed, reflective and method-level callback paths. */
+    /** Abstraction over the typed (MessageHandler) and method-level callback paths. */
     private interface Dispatcher {
         void onMessage(String text) throws Exception;
 
@@ -258,27 +239,6 @@ public class ListenerClassConsumer implements JavaClassConsumer {
             try {
                 handler.onError(error);
             } catch (RuntimeException ex) {
-                LOGGER.error("@Listener [{}] onError() threw: {}", label, ex.getMessage(), ex);
-            }
-        }
-    }
-
-    private record ReflectiveDispatcher(Object instance, Method onMessage, Method onError) implements Dispatcher {
-
-        @Override
-        public void onMessage(String text) throws ReflectiveOperationException {
-            onMessage.invoke(instance, text);
-        }
-
-        @Override
-        public void onError(String error, String label) {
-            if (onError == null) {
-                LOGGER.error("@Listener [{}] onMessage() threw: {}", label, error);
-                return;
-            }
-            try {
-                onError.invoke(instance, error);
-            } catch (ReflectiveOperationException ex) {
                 LOGGER.error("@Listener [{}] onError() threw: {}", label, ex.getMessage(), ex);
             }
         }

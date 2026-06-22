@@ -17,29 +17,28 @@ import java.lang.annotation.Target;
 import org.eclipse.dirigible.sdk.component.Component;
 
 /**
- * Marks a client Java class as a WebSocket handler bound to an endpoint. The lifecycle callbacks
- * can be supplied in any of three styles:
- * <ul>
- * <li>implement {@link WebsocketHandler} (typed, compile-checked) — override only what you
- * need;</li>
- * <li>annotate methods with {@link OnOpen}, {@link OnMessage}, {@link OnError}, {@link OnClose}
- * (Jakarta-WebSocket flavour);</li>
- * <li>expose the lifecycle methods by name ({@code onOpen()}, {@code onMessage(String, String)},
- * {@code onError(String)}, {@code onClose()}) — the reflective fallback.</li>
- * </ul>
- * All callbacks are optional; missing ones are skipped.
+ * Marks a client Java class as a WebSocket handler bound to an endpoint — the annotation style. The
+ * class carries the endpoint (which has no method-level home, like Jakarta {@code @ServerEndpoint})
+ * and its lifecycle callbacks are public methods annotated {@link OnOpen}, {@link OnMessage},
+ * {@link OnError}, {@link OnClose}. All callbacks are optional; missing ones are skipped.
  *
  * <p>
  * {@code @Websocket} is meta-annotated with {@link Component @Component}, so the handler is a
  * managed bean and may declare injected collaborators in its constructor.
  *
  * <p>
+ * The alternative, strong-interface style is a {@code @Component} bean implementing
+ * {@link WebsocketHandler} (which supplies its own {@code endpoint()}). A class uses one style or
+ * the other, never both — annotating a {@code WebsocketHandler} with {@code @Websocket} is
+ * rejected.
+ *
+ * <p>
  * Example:
  *
  * <pre>
  * {@literal @}Websocket(name = "chat", endpoint = "chat")
- * public class ChatHandler implements WebsocketHandler {
- *     {@literal @}Override public void onMessage(String message, String from) { ... }
+ * public class ChatHandler {
+ *     {@literal @}OnMessage public String message(String message, String from) { return "echo: " + message; }
  * }
  * </pre>
  */

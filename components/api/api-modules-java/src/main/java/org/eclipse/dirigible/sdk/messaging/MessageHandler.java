@@ -10,28 +10,45 @@
 package org.eclipse.dirigible.sdk.messaging;
 
 /**
- * Optional typed contract for a {@link Listener @Listener} class. Implementing this interface is
- * not required — the runtime still accepts any class that exposes a public
- * {@code onMessage(String)} (and optionally {@code onError(String)}) method via reflection — but
- * implementations gain compile-time signature checking and the listener container dispatches
- * messages via a direct method call instead of a reflective {@code invoke}.
+ * Self-describing contract for a message listener — the strong-interface style. A
+ * {@link org.eclipse.dirigible.sdk.component.Component @Component} bean that implements this
+ * interface IS a listener: it supplies its own destination via {@link #destination()} (and
+ * optionally {@link #kind()}) and its handling via {@link #onMessage(String)}, with no
+ * {@code @Listener} annotation. This mirrors implementing {@code jakarta.jms.MessageListener} in
+ * Spring — the implementation carries everything.
  *
  * <p>
- * The {@code @Listener} annotation remains the marker that binds the class to a JMS destination;
- * this interface only describes the callback shape.
+ * The alternative, method-level style is {@code @Listener} on a {@code @Component} method. A single
+ * class uses one style or the other, never both.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Listener(name = "orders", kind = ListenerKind.QUEUE)
+ * {@literal @}Component
  * public class OrderListener implements MessageHandler {
- *     {@literal @}Override public void onMessage(String message) { ... }
- *     {@literal @}Override public void onError(String error)    { ... } // optional
+ *     public String destination() { return "orders"; }
+ *     public void onMessage(String message) { ... }
  * }
  * </pre>
  */
 public interface MessageHandler {
+
+    /**
+     * The queue or topic this listener binds to.
+     *
+     * @return the destination name
+     */
+    String destination();
+
+    /**
+     * Whether {@link #destination()} is a queue (default) or a topic.
+     *
+     * @return the destination kind
+     */
+    default ListenerKind kind() {
+        return ListenerKind.QUEUE;
+    }
 
     /** Fires for every text message received on the bound destination. */
     void onMessage(String message);

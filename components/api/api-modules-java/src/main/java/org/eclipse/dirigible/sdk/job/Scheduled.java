@@ -14,30 +14,21 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.eclipse.dirigible.sdk.component.Component;
-
 /**
- * Schedules a client task on a Quartz cron expression. Two styles are supported, like Spring:
+ * Schedules a public no-arg method of a {@link org.eclipse.dirigible.sdk.component.Component
+ * &#64;Component} bean on a Quartz cron expression — the method-level style, like Spring's
+ * {@code @Scheduled}-on-a-method. One bean can host several scheduled methods and use injected
+ * collaborators.
  *
  * <p>
- * <b>Class level</b> — annotate a class that either implements {@link JobHandler} or exposes a
- * public no-arg {@code run()} method:
+ * The alternative, strong-interface style is a {@code @Component} bean implementing
+ * {@link JobHandler} (which supplies its own {@code cron()}). A class uses one style or the other,
+ * never both.
+ *
+ * <p>
+ * Example:
  *
  * <pre>
- * {@literal @}Scheduled(expression = "0/30 * * * * ?")
- * public class CleanupJob implements JobHandler {
- *     public void run() { ... }
- * }
- * </pre>
- *
- * <p>
- * <b>Method level</b> — annotate a public no-arg method on a
- * {@link org.eclipse.dirigible.sdk.component.Component
- *
- * @Component} bean (Spring's {@code @Scheduled}-on-a-method style); the bean can host several such
- *             methods and use injected collaborators:
- *
- *             <pre>
  * {@literal @}Component
  * public class Maintenance {
  *     {@literal @}Scheduled(expression = "0 0 2 * * ?")
@@ -45,13 +36,12 @@ import org.eclipse.dirigible.sdk.component.Component;
  * }
  * </pre>
  *
- *             <p>
- *             Hot-reload replaces the schedule transparently: the old trigger is cancelled and a
- *             new one registered with the updated class/method.
+ * <p>
+ * Hot-reload replaces the schedule transparently: the old trigger is cancelled and a new one
+ * registered.
  */
-@Component
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.METHOD})
+@Target(ElementType.METHOD)
 public @interface Scheduled {
 
     /**

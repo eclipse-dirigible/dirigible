@@ -14,27 +14,19 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-import org.eclipse.dirigible.sdk.component.Component;
-
 /**
- * Subscribes a client handler to an ActiveMQ queue or topic. Two styles are supported, like
- * Spring's {@code @JmsListener}:
+ * Subscribes a public {@code void m(String message)} method of a
+ * {@link org.eclipse.dirigible.sdk.component.Component &#64;Component} bean to an ActiveMQ queue or
+ * topic — the method-level style, like Spring's {@code @JmsListener}. One bean can host several
+ * listener methods and use injected collaborators.
  *
  * <p>
- * <b>Class level</b> — annotate a class that either implements {@link MessageHandler} or exposes a
- * public {@code onMessage(String)} method (and optionally {@code onError(String)}):
- *
- * <pre>
- * {@literal @}Listener(name = "my-queue", kind = ListenerKind.QUEUE)
- * public class OrderListener implements MessageHandler {
- *     public void onMessage(String message) { ... }
- * }
- * </pre>
+ * The alternative, strong-interface style is a {@code @Component} bean implementing
+ * {@link MessageHandler} (which supplies its own {@code destination()} / {@code kind()}). A class
+ * uses one style or the other, never both.
  *
  * <p>
- * <b>Method level</b> — annotate a public {@code void m(String message)} method on a
- * {@link org.eclipse.dirigible.sdk.component.Component @Component} bean; the bean can host several
- * listeners and use injected collaborators:
+ * Example:
  *
  * <pre>
  * {@literal @}Component
@@ -43,14 +35,9 @@ import org.eclipse.dirigible.sdk.component.Component;
  *     public void onNewOrder(String message) { ... }
  * }
  * </pre>
- *
- * <p>
- * Dirigible connects the handler to the destination and routes incoming messages to it; hot-reload
- * replaces the subscription transparently.
  */
-@Component
 @Retention(RetentionPolicy.RUNTIME)
-@Target({ElementType.TYPE, ElementType.METHOD})
+@Target(ElementType.METHOD)
 public @interface Listener {
 
     /** Logical name of the queue or topic destination. */

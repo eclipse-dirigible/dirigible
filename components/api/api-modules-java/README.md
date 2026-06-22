@@ -141,47 +141,46 @@ To reach a *platform* service from client code use `org.eclipse.dirigible.sdk.co
 (`get(Class)`, `get(name, Class)`, `getAll(Class)`) — the client-facing counterpart to the
 platform-internal `BeanProvider`, which client code should not use directly.
 
-## Optional typed handler interfaces and method-level callbacks
+## Handler styles — strong interface OR method-level annotation
 
-The runtime-callback decorators — `@Scheduled`, `@Listener`, `@Websocket` — support three callback
-styles; pick whichever fits:
+The runtime-callback components — jobs, listeners, websockets — offer exactly **two** styles, like
+Spring. A given `@Component` class uses one or the other, **never both** (the engine rejects a class
+that mixes them). There is no reflective by-name fallback.
 
-1. an optional companion interface (`JobHandler`, `MessageHandler`, `WebsocketHandler`) — direct
-   virtual dispatch, compile-time signature checking;
-2. **method-level annotations** on a bean (Spring `@Scheduled` / `@JmsListener` style): annotate a
-   method with `@Scheduled` or `@Listener`, or a `@Websocket` class's methods with
-   `@OnOpen` / `@OnMessage` / `@OnError` / `@OnClose` (`org.eclipse.dirigible.sdk.net`);
-3. the legacy method-name convention (`run()`, `onMessage(String)`, `onOpen()`/…) — the reflective
-   fallback.
+**1. Self-describing interface** — a `@Component` bean implements the typed interface, which carries
+both the callback shape *and* the binding (so no `@Scheduled`/`@Listener`/`@Websocket` annotation).
+This is like implementing `org.quartz.Job` / `jakarta.jms.MessageListener` / `TextWebSocketHandler`:
 
-In the interface/convention form the class-level annotation is the marker (binds the class to a
-cron / queue / endpoint); the interface only describes the callback shape.
-
-| Decorator                                         | Optional contract                                                | Methods                                                                  |
-|---------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `@Scheduled`                                      | `org.eclipse.dirigible.sdk.job.JobHandler`                       | `void run()`                                                              |
-| `@Listener`                                       | `org.eclipse.dirigible.sdk.messaging.MessageHandler`             | `void onMessage(String)`, `default void onError(String) {}`               |
-| `@Websocket`                                      | `org.eclipse.dirigible.sdk.net.WebsocketHandler`                 | all 4 lifecycle methods default to no-op — override only what you need    |
-
-Implementing the interface is **not** required. The legacy reflective path (look up the method by
-name on the class) is preserved as a fallback, so existing handlers that don't implement the
-interface keep working unchanged. The typed path is opt-in: implement the interface and get
-compile-time signature checking, IDE autocomplete + refactoring, and direct dispatch.
-
-Example with `WebsocketHandler`:
+| Interface | Binding method(s) | Callback(s) |
+|---|---|---|
+| `org.eclipse.dirigible.sdk.job.JobHandler` | `String cron()` | `void run()` |
+| `org.eclipse.dirigible.sdk.messaging.MessageHandler` | `String destination()`, `default ListenerKind kind()` | `void onMessage(String)`, `default void onError(String)` |
+| `org.eclipse.dirigible.sdk.net.WebsocketHandler` | `String endpoint()` | 4 lifecycle methods, all `default` no-op |
 
 ```java
-@Websocket(name = "Java Chat", endpoint = "java-chat")
+@Component
 public class ChatHandler implements WebsocketHandler {
+    public String endpoint() { return "java-chat"; }
     @Override public void onMessage(String text, String from) { ... }
-    // onOpen, onError, onClose inherit the no-op default — no boilerplate needed
 }
 ```
 
-`dirigiblelabs/sample-java-entity-decorators` migrates its `CleanupJob`, `OrderListener` and
-`ChatHandler` to the typed interfaces and is the canonical typed example end-to-end. The four
-single-decorator standalone samples (`sample-java-{job,listener,websocket,extension}-decorator`)
-stay on the reflective form so the fallback path remains exercised by CI as well.
+**2. Method-level annotation** — Spring `@Scheduled` / `@JmsListener` style:
+- `@Scheduled(expression = …)` on a public no-arg method of a `@Component`;
+- `@Listener(name = …, kind = …)` on a public `void m(String)` method of a `@Component`;
+- websockets keep a `@Websocket(endpoint = …)` class (the endpoint has no method-level home, like
+  Jakarta `@ServerEndpoint`) with `@OnOpen`/`@OnMessage`/`@OnError`/`@OnClose` methods.
+
+```java
+@Component
+public class Orders {
+    @Listener(name = "orders-new", kind = ListenerKind.QUEUE)
+    public void onOrder(String message) { ... }
+}
+```
+
+The `dirigiblelabs/sample-java-{job,listener,websocket}-decorator` samples each demonstrate both
+styles end-to-end.
 
 ## Typed extension points
 
