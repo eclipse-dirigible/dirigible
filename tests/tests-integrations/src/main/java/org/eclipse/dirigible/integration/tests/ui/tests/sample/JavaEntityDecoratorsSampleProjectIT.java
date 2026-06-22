@@ -15,12 +15,14 @@ import static org.hamcrest.Matchers.containsString;
 /**
  * Clones {@code dirigiblelabs/sample-java-entity-decorators}, publishes it through the IDE, and
  * verifies the {@code @Entity} / {@code @Repository} / {@code @Controller} annotation stack with
- * CSVIM-seeded country CRUD and OpenAPI registration.
+ * CSVIM-seeded country CRUD and OpenAPI registration, plus the Spring-style DI showcase
+ * (constructor injection and the {@code Beans} facade).
  */
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";
     private static final String CONTROLLER_BASE = "/services/java/" + PROJECT + "/demo/CountryController";
+    private static final String GREETING_BASE = "/services/java/" + PROJECT + "/demo/GreetingController";
 
     @Override
     protected String getRepositoryURL() {
@@ -50,6 +52,20 @@ public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepository
                    .statusCode(200)
                    .body(containsString(CONTROLLER_BASE))
                    .body(containsString(CONTROLLER_BASE + "/{id}"));
+
+            // DI showcase — constructor injection of the @Component GreetingService.
+            given().when()
+                   .get(GREETING_BASE + "/greet/World")
+                   .then()
+                   .statusCode(200)
+                   .body(containsString("Hello, World!"));
+
+            // DI showcase — the Beans facade for programmatic lookup.
+            given().when()
+                   .get(GREETING_BASE + "/greet-via-beans/World")
+                   .then()
+                   .statusCode(200)
+                   .body(containsString("Hello, World!"));
         });
     }
 

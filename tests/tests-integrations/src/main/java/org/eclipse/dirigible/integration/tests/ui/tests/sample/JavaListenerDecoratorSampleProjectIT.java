@@ -43,9 +43,16 @@ public class JavaListenerDecoratorSampleProjectIT extends SampleProjectRepositor
                                                  .then()
                                                  .statusCode(200));
 
-        await().atMost(10, TimeUnit.SECONDS)
+        // Self-describing interface style — OrderListener implements MessageHandler.
+        await().atMost(15, TimeUnit.SECONDS)
                .pollInterval(1, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage("OrderListener received:", Level.INFO));
+
+        // Method-level annotation style — InvoiceListener's @Listener method records via the injected
+        // Auditor.
+        await().atMost(15, TimeUnit.SECONDS)
+               .pollInterval(1, TimeUnit.SECONDS)
+               .until(() -> consoleLogAsserter.containsMessage("Auditor: invoice received:", Level.INFO));
     }
 
 }

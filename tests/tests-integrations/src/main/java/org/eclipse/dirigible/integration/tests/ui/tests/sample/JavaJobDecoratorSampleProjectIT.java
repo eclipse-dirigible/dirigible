@@ -34,9 +34,15 @@ public class JavaJobDecoratorSampleProjectIT extends SampleProjectRepositoryIT {
 
     @Override
     protected void verifyProject() {
-        await().atMost(10, TimeUnit.SECONDS)
+        // Self-describing interface style — CleanupJob implements JobHandler (schedule from cron()).
+        await().atMost(20, TimeUnit.SECONDS)
                .pollInterval(1, TimeUnit.SECONDS)
                .until(() -> consoleLogAsserter.containsMessage("CleanupJob executed!", Level.INFO));
+
+        // Method-level annotation style — Maintenance's @Scheduled method.
+        await().atMost(20, TimeUnit.SECONDS)
+               .pollInterval(1, TimeUnit.SECONDS)
+               .until(() -> consoleLogAsserter.containsMessage("Maintenance.purgeTempFiles executed", Level.INFO));
     }
 
 }
