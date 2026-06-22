@@ -26,12 +26,24 @@ public final class LoadedHandler {
     private final String classFqn;
     private final ClassLoader loader;
     private final Class<? extends JavaHandler> handlerClass;
+    private final JavaHandler beanInstance;
 
     public LoadedHandler(String project, String classFqn, ClassLoader loader, Class<? extends JavaHandler> handlerClass) {
+        this(project, classFqn, loader, handlerClass, null);
+    }
+
+    /**
+     * @param beanInstance the container-managed (and injected) singleton when the handler class is a
+     *        {@code @Component}; {@code null} for a plain handler instantiated per request via its
+     *        no-arg constructor
+     */
+    public LoadedHandler(String project, String classFqn, ClassLoader loader, Class<? extends JavaHandler> handlerClass,
+            JavaHandler beanInstance) {
         this.project = project;
         this.classFqn = classFqn;
         this.loader = loader;
         this.handlerClass = handlerClass;
+        this.beanInstance = beanInstance;
     }
 
     public String getProject() {
@@ -50,10 +62,15 @@ public final class LoadedHandler {
         return handlerClass;
     }
 
-    /** Instantiate a fresh handler. We do not pool instances; user code must be stateless. */
-    public JavaHandler newInstance() throws ReflectiveOperationException {
-        return handlerClass.getDeclaredConstructor()
-                           .newInstance();
+    /**
+     * The handler instance to dispatch: the container-managed (constructor/field-injected) singleton
+     * when the handler is a {@code @Component} bean, otherwise a fresh instance from its no-arg
+     * constructor (plain handlers are not pooled; their code must be stateless).
+     */
+    public JavaHandler instance() throws ReflectiveOperationException {
+        return beanInstance != null ? beanInstance
+                : handlerClass.getDeclaredConstructor()
+                              .newInstance();
     }
 
 }

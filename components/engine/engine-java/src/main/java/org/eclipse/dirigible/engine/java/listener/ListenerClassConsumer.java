@@ -9,8 +9,10 @@
  */
 package org.eclipse.dirigible.engine.java.listener;
 
-import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -19,11 +21,12 @@ import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
 import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
+import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
+import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.eclipse.dirigible.sdk.messaging.Listener;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
-import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
-import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,16 +42,18 @@ import jakarta.jms.Session;
 import jakarta.jms.TextMessage;
 
 /**
- * {@link JavaClassConsumer} that connects client classes annotated with {@link Listener} to
- * ActiveMQ queues or topics.
- *
- * <p>
- * Implementing the optional {@link MessageHandler} interface gives compile-time signature checking
- * and a direct, non-reflective dispatch path (Java's virtual dispatch goes straight to the impl,
- * including the default {@code onError} no-op). Classes that don't implement it still work — the
- * consumer falls back to looking up {@code onMessage(String)} (and the optional
- * {@code onError(String)}) by name and invoking them reflectively. A dedicated JMS Connection is
- * created for each registered listener and torn down on unload.
+ * {@link JavaClassConsumer} that connects client listeners to ActiveMQ queues or topics. Two
+ * styles, never mixed on one class:
+ * <ul>
+ * <li><b>self-describing interface</b> — a {@code @Component} bean implementing
+ * {@link MessageHandler}, which supplies its own {@code destination()} / {@code kind()} and
+ * {@code onMessage(String)};</li>
+ * <li><b>method level</b> — public {@code void m(String)} methods annotated
+ * {@link Listener @Listener} on a client bean, Spring's {@code @JmsListener}-on-a-method style; a
+ * bean may host several.</li>
+ * </ul>
+ * The bean is built (with constructor + field injection) by the {@link ComponentContainer}; this
+ * consumer fetches it and opens a JMS connection per subscription, tearing them down on unload.
  */
 @Component
 @Order(500)
@@ -56,17 +61,19 @@ public class ListenerClassConsumer implements JavaClassConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ListenerClassConsumer.class);
 
+    private final ComponentContainer componentContainer;
     private final ActiveMQConnectionArtifactsFactory connectionFactory;
     private final TenantContext tenantContext;
     private final TenantPropertyManager tenantPropertyManager;
     private final Tenant defaultTenant;
 
-    /** fqn → open JMS Connection for teardown. */
-    private final ConcurrentMap<String, Connection> connections = new ConcurrentHashMap<>();
+    /** fqn → open JMS Connections (one per subscription) for teardown. */
+    private final ConcurrentMap<String, List<Connection>> connections = new ConcurrentHashMap<>();
 
     @Autowired
-    public ListenerClassConsumer(ActiveMQConnectionArtifactsFactory connectionFactory, TenantContext tenantContext,
-            TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant) {
+    public ListenerClassConsumer(ComponentContainer componentContainer, ActiveMQConnectionArtifactsFactory connectionFactory,
+            TenantContext tenantContext, TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant) {
+        this.componentContainer = componentContainer;
         this.connectionFactory = connectionFactory;
         this.tenantContext = tenantContext;
         this.tenantPropertyManager = tenantPropertyManager;
@@ -75,56 +82,56 @@ public class ListenerClassConsumer implements JavaClassConsumer {
 
     @Override
     public boolean accepts(Class<?> clazz) {
-        return clazz.isAnnotationPresent(Listener.class);
+        return MessageHandler.class.isAssignableFrom(clazz) || hasListenerMethod(clazz);
     }
 
     @Override
     public void onClassLoaded(LoadedClass info) {
-        Listener ann = info.type()
-                           .getAnnotation(Listener.class);
-
-        Object instance = instantiate(info);
+        Class<?> type = info.type();
+        Object instance = componentContainer.instanceOf(type)
+                                            .orElse(null);
         if (instance == null) {
+            LOGGER.error("Listener [{}] was not instantiated as a bean — a MessageHandler and a @Listener method both require "
+                    + "the class to be a @Component; skipped.", info.fqn());
             return;
         }
 
-        Dispatcher dispatcher;
-        if (instance instanceof MessageHandler typed) {
-            // Typed path: Java virtual dispatch lands directly on the impl's onMessage / onError.
-            // The interface's default onError() is a no-op, so callers don't need to override it.
-            dispatcher = new TypedDispatcher(typed);
-        } else {
-            Method onMessage;
-            try {
-                onMessage = info.type()
-                                .getMethod("onMessage", String.class);
-            } catch (NoSuchMethodException e) {
-                LOGGER.error("@Listener class [{}] must implement MessageHandler or expose a public onMessage(String) method; skipped.",
-                        info.fqn());
-                return;
-            }
-            Method onError = findOptionalMethod(info.type(), "onError", String.class);
-            dispatcher = new ReflectiveDispatcher(instance, onMessage, onError);
+        boolean messageHandler = instance instanceof MessageHandler;
+        boolean methodLevel = hasListenerMethod(type);
+        if (messageHandler && methodLevel) {
+            LOGGER.error("[{}] mixes listener styles — it implements MessageHandler and also declares @Listener methods. "
+                    + "Use one style or the other; skipped.", info.fqn());
+            return;
         }
 
         stopExisting(info.fqn());
+        List<Connection> opened = new ArrayList<>();
 
-        try {
-            Connection connection = connectionFactory.createConnection(
-                    ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", info.fqn(), ex.getMessage(), ex));
-            Session session = connectionFactory.createSession(connection);
-
-            Destination destination = ann.kind() == ListenerKind.TOPIC ? session.createTopic(ann.name()) : session.createQueue(ann.name());
-
-            MessageConsumer consumer = session.createConsumer(destination);
-            consumer.setMessageListener(msg -> dispatch(msg, dispatcher, info.fqn()));
-
-            connections.put(info.fqn(), connection);
-            LOGGER.info("Java @Listener [{}] connected to {} '{}' ({} dispatch).", info.fqn(), ann.kind(), ann.name(),
-                    instance instanceof MessageHandler ? "typed" : "reflective");
-        } catch (JMSException e) {
-            LOGGER.error("Failed to start listener for [{}]: {}", info.fqn(), e.getMessage(), e);
+        if (messageHandler) {
+            MessageHandler handler = (MessageHandler) instance;
+            subscribe(opened, handler.destination(), handler.kind(), new TypedDispatcher(handler), info.fqn());
+        } else {
+            for (Method method : type.getDeclaredMethods()) {
+                Listener annotation = method.getAnnotation(Listener.class);
+                if (annotation == null) {
+                    continue;
+                }
+                if (!isEligibleMethod(method)) {
+                    LOGGER.error("@Listener method [{}#{}] must be public and take a single String parameter; skipped.", info.fqn(),
+                            method.getName());
+                    continue;
+                }
+                method.setAccessible(true);
+                String label = info.fqn() + "#" + method.getName();
+                subscribe(opened, annotation.name(), annotation.kind(), new MethodDispatcher(instance, method), label);
+            }
         }
+
+        if (opened.isEmpty()) {
+            LOGGER.warn("Listener [{}] produced no subscription.", info.fqn());
+            return;
+        }
+        connections.put(info.fqn(), opened);
     }
 
     @Override
@@ -133,48 +140,60 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         LOGGER.info("Java @Listener [{}] disconnected.", info.fqn());
     }
 
+    private void subscribe(List<Connection> opened, String destinationName, ListenerKind kind, Dispatcher dispatcher, String label) {
+        try {
+            Connection connection = connectionFactory.createConnection(
+                    ex -> LOGGER.error("[java-listener] JMS error for [{}]: {}", label, ex.getMessage(), ex));
+            Session session = connectionFactory.createSession(connection);
+            Destination destination =
+                    kind == ListenerKind.TOPIC ? session.createTopic(destinationName) : session.createQueue(destinationName);
+            MessageConsumer consumer = session.createConsumer(destination);
+            consumer.setMessageListener(msg -> dispatch(msg, dispatcher, label));
+            opened.add(connection);
+            LOGGER.info("Java @Listener [{}] connected to {} '{}'.", label, kind, destinationName);
+        } catch (JMSException e) {
+            LOGGER.error("Failed to start listener for [{}]: {}", label, e.getMessage(), e);
+        }
+    }
+
     private void stopExisting(String fqn) {
-        Connection old = connections.remove(fqn);
+        List<Connection> old = connections.remove(fqn);
         if (old != null) {
-            try {
-                old.close();
-            } catch (JMSException e) {
-                LOGGER.warn("Failed to close JMS connection for [{}]: {}", fqn, e.getMessage());
+            for (Connection connection : old) {
+                try {
+                    connection.close();
+                } catch (JMSException e) {
+                    LOGGER.warn("Failed to close JMS connection for [{}]: {}", fqn, e.getMessage(), e);
+                }
             }
         }
     }
 
-    private static Object instantiate(LoadedClass info) {
-        try {
-            Constructor<?> ctor = info.type()
-                                      .getDeclaredConstructor();
-            ctor.setAccessible(true);
-            return ctor.newInstance();
-        } catch (ReflectiveOperationException e) {
-            LOGGER.error("Failed to instantiate @Listener class [{}]: {}", info.fqn(), e.getMessage(), e);
-            return null;
+    private static boolean hasListenerMethod(Class<?> clazz) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(Listener.class)) {
+                return true;
+            }
         }
+        return false;
     }
 
-    private static Method findOptionalMethod(Class<?> type, String name, Class<?>... params) {
-        try {
-            return type.getMethod(name, params);
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
+    private static boolean isEligibleMethod(Method method) {
+        return Modifier.isPublic(method.getModifiers()) && method.getParameterCount() == 1 && method.getParameterTypes()[0] == String.class
+                && !method.isSynthetic();
     }
 
-    private void dispatch(Message msg, Dispatcher dispatcher, String fqn) {
+    private void dispatch(Message msg, Dispatcher dispatcher, String label) {
         if (!(msg instanceof TextMessage textMsg)) {
-            LOGGER.warn("@Listener [{}] received a non-text message; ignored.", fqn);
+            LOGGER.warn("@Listener [{}] received a non-text message; ignored.", label);
             return;
         }
         String text;
         try {
             text = textMsg.getText();
         } catch (JMSException e) {
-            LOGGER.error("@Listener [{}] failed to read text message: {}", fqn, e.getMessage(), e);
-            dispatcher.onError(e.getMessage(), fqn);
+            LOGGER.error("@Listener [{}] failed to read text message: {}", label, e.getMessage(), e);
+            dispatcher.onError(e.getMessage(), label);
             return;
         }
         // The message arrives on a broker thread with no tenant context. Recover the originating
@@ -187,7 +206,7 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         try {
             tenantId = tenantPropertyManager.getCurrentTenantId(msg);
         } catch (JMSException | RuntimeException e) {
-            LOGGER.debug("@Listener [{}] message carries no tenant; using the default tenant. {}", fqn, e.getMessage());
+            LOGGER.debug("@Listener [{}] message carries no tenant; using the default tenant. {}", label, e.getMessage(), e);
             tenantId = defaultTenant.getId();
         }
         try {
@@ -197,15 +216,15 @@ public class ListenerClassConsumer implements JavaClassConsumer {
             });
         } catch (Exception e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
-            dispatcher.onError(cause.getMessage(), fqn);
+            dispatcher.onError(cause.getMessage(), label);
         }
     }
 
-    /** Abstraction over the typed and reflective callback paths so {@link #dispatch} stays uniform. */
+    /** Abstraction over the typed (MessageHandler) and method-level callback paths. */
     private interface Dispatcher {
         void onMessage(String text) throws Exception;
 
-        void onError(String error, String fqn);
+        void onError(String error, String label);
     }
 
     private record TypedDispatcher(MessageHandler handler) implements Dispatcher {
@@ -216,33 +235,25 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         }
 
         @Override
-        public void onError(String error, String fqn) {
+        public void onError(String error, String label) {
             try {
                 handler.onError(error);
             } catch (RuntimeException ex) {
-                LOGGER.error("@Listener [{}] onError() threw: {}", fqn, ex.getMessage(), ex);
+                LOGGER.error("@Listener [{}] onError() threw: {}", label, ex.getMessage(), ex);
             }
         }
     }
 
-    private record ReflectiveDispatcher(Object instance, Method onMessage, Method onError) implements Dispatcher {
+    private record MethodDispatcher(Object instance, Method method) implements Dispatcher {
 
         @Override
         public void onMessage(String text) throws ReflectiveOperationException {
-            onMessage.invoke(instance, text);
+            method.invoke(instance, text);
         }
 
         @Override
-        public void onError(String error, String fqn) {
-            if (onError == null) {
-                LOGGER.error("@Listener [{}] onMessage() threw: {}", fqn, error);
-                return;
-            }
-            try {
-                onError.invoke(instance, error);
-            } catch (ReflectiveOperationException ex) {
-                LOGGER.error("@Listener [{}] onError() threw: {}", fqn, ex.getMessage(), ex);
-            }
+        public void onError(String error, String label) {
+            LOGGER.error("@Listener [{}] handler threw: {}", label, error);
         }
     }
 }

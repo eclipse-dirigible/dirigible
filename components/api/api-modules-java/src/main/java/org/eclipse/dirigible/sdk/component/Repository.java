@@ -21,12 +21,12 @@ import java.lang.annotation.Target;
  * so non-entity components can plug into the same injection mechanism.
  *
  * <p>
- * The {@code data-store-java} module ships a {@code RepositoryClassConsumer} that instantiates
- * annotated classes via the public no-arg constructor and registers them in a
- * {@code RepositoryRegistry}, which in turn implements
- * {@code org.eclipse.dirigible.engine.java.spi.DependencyResolver} so the controller consumer can
- * satisfy {@link Inject} field bindings.
+ * {@code @Repository} is meta-annotated with {@link Component @Component}, so a repository is a
+ * fully managed bean: it is instantiated once per generation (with constructor injection) and is
+ * itself injectable into controllers and other beans via {@link Inject @Inject} or a constructor
+ * parameter.
  */
+@Component
 @Retention(RetentionPolicy.RUNTIME)
 @Target(ElementType.TYPE)
 public @interface Repository {

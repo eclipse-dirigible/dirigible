@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
@@ -59,6 +60,7 @@ public class JavaLoader {
 
     private final JavaSourceCompiler compiler;
     private final ClientClassLoaderHolder loaderHolder;
+    private final ComponentContainer componentContainer;
     private final List<JavaClassConsumer> consumers;
     private final JavaCompiledOutputDirectory outputDirectory;
     private final ApplicationEventPublisher eventPublisher;
@@ -74,10 +76,11 @@ public class JavaLoader {
     private final Map<String, byte[]> currentBytecode = new HashMap<>();
 
     @Autowired
-    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, List<JavaClassConsumer> consumers,
-            JavaCompiledOutputDirectory outputDirectory, ApplicationEventPublisher eventPublisher) {
+    public JavaLoader(JavaSourceCompiler compiler, ClientClassLoaderHolder loaderHolder, ComponentContainer componentContainer,
+            List<JavaClassConsumer> consumers, JavaCompiledOutputDirectory outputDirectory, ApplicationEventPublisher eventPublisher) {
         this.compiler = compiler;
         this.loaderHolder = loaderHolder;
+        this.componentContainer = componentContainer;
         this.consumers = consumers;
         this.outputDirectory = outputDirectory;
         this.eventPublisher = eventPublisher;
@@ -173,14 +176,20 @@ public class JavaLoader {
             toUnload.add(currentGeneration.get(fqn));
         }
         // Consumer-outer / class-inner: every consumer drains its claimed classes before the next
-        // consumer runs. Combined with Spring's @Order on the consumers, this lets dependents
-        // (e.g. ControllerClassConsumer satisfying @Inject) see their providers (e.g.
-        // RepositoryClassConsumer) already registered within the same rebuild cycle.
+        // consumer runs. Bean instantiation + injection happens once, centrally, in the
+        // ComponentContainer rebuild below; the consumers here only wire behaviour over the ready
+        // instances they fetch from the container.
         notifyAll(consumers, toUnload, /* loaded */ false);
 
         // Install the loader BEFORE notifying onClassLoaded so consumers see consistent state via
         // the holder if they look it up.
         loaderHolder.swap(nextLoader);
+
+        // Build the client bean container for the new generation BEFORE the load pass: every
+        // @Component (and the meta-annotated @Controller / @Repository / @Scheduled / @Listener /
+        // @Websocket / @Extension) is instantiated here with constructor + field injection, so the
+        // behaviour consumers below just fetch ready instances via ComponentContainer#instanceOf.
+        componentContainer.rebuild(nextGeneration.values());
 
         notifyAll(consumers, new ArrayList<>(nextGeneration.values()), /* loaded */ true);
 
@@ -190,7 +199,7 @@ public class JavaLoader {
         currentBytecode.putAll(effectiveBytecode);
 
         RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()));
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
 
         // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
         // (failed-to-recompile) classes keep their existing .class files untouched.
@@ -284,9 +293,12 @@ public class JavaLoader {
      * @param diagnostics per failed FQN → the structured compiler diagnostics behind the failure
      *        (line/column/message); empty for failures with no attributable diagnostic (e.g. a class
      *        that compiled but could not be loaded)
+     * @param wiringErrors per FQN → a bean-container wiring error (unsatisfied/ambiguous dependency,
+     *        construction cycle, duplicate bean name, throwing constructor) for classes that compiled
+     *        but could not be wired
      */
     public record RebuildResult(Set<String> succeededFqns, Map<String, String> failures, Set<String> unloadedFqns,
-            Map<String, List<CompileDiagnostic>> diagnostics) {
+            Map<String, List<CompileDiagnostic>> diagnostics, Map<String, String> wiringErrors) {
     }
 
 }

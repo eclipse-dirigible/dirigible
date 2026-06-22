@@ -359,8 +359,9 @@ class IntentEngineIT extends IntegrationTest {
         String handler = contentOf("gen/events/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
                 "the glue template should generate a handler class named after the process");
-        assertTrue(handler.contains("@Listener(name = \"intent-test-Order-Order\""),
-                "the handler should bind to the entity's event topic <project>-<perspective>-<entity>");
+        assertTrue(handler.contains("implements MessageHandler"), "the trigger should be a self-describing MessageHandler");
+        assertTrue(handler.contains("return \"intent-test-Order-Order\""),
+                "the handler should bind to the entity's event topic <project>-<perspective>-<entity> via destination()");
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
         assertTrue(handler.contains("import gen.orders.data.order.OrderRepository"),
                 "the handler should import the generated typed repository from its real (lowercased) Java package");
@@ -481,8 +482,8 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
 
         String trigger = contentOf("gen/events/DeliverTrigger.java");
-        assertTrue(trigger.contains("@Listener(name = \"intent-test-Shipment-Shipment-updated\""),
-                "an onUpdate trigger should bind to the entity's -updated topic");
+        assertTrue(trigger.contains("return \"intent-test-Shipment-Shipment-updated\""),
+                "an onUpdate trigger should bind to the entity's -updated topic via destination()");
         assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
                 "the trigger should gate Process.start on the translated when-guard");
         assertTrue(trigger.contains("Process.start(\"Deliver\""), "the trigger should start the process when the guard holds");

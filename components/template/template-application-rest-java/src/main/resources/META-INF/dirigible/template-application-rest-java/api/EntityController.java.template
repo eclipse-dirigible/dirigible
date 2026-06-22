@@ -14,7 +14,6 @@ import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.sdk.platform.Documentation;
-import org.eclipse.dirigible.sdk.component.Inject;
 import org.eclipse.dirigible.sdk.http.Body;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Delete;
@@ -39,8 +38,11 @@ public class ${name}Controller {
 
     private static final Set<String> FILTER_FIELDS = Set.of(#foreach($property in $properties)"${property.name}"#if($foreach.hasNext), #end#end);
 
-    @Inject
-    private ${name}Repository repository;
+    private final ${name}Repository repository;
+
+    public ${name}Controller(${name}Repository repository) {
+        this.repository = repository;
+    }
 
     @Get
     @Documentation("List ${name}")
