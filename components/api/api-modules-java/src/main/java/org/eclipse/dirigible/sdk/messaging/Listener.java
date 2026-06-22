@@ -15,27 +15,29 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a client Java class as an ActiveMQ message listener managed by the Dirigible runtime.
+ * Subscribes a public {@code void m(String message)} method of a
+ * {@link org.eclipse.dirigible.sdk.component.Component &#64;Component} bean to an ActiveMQ queue or
+ * topic — the method-level style, like Spring's {@code @JmsListener}. One bean can host several
+ * listener methods and use injected collaborators.
  *
  * <p>
- * The annotated class must expose a public {@code onMessage(String message)} method and optionally
- * a {@code onError(String error)} method. Dirigible instantiates the class once, connects it to the
- * specified queue or topic, and routes incoming messages to {@code onMessage}. Hot-reload replaces
- * the listener transparently.
+ * The alternative, strong-interface style is a {@code @Component} bean implementing
+ * {@link MessageHandler} (which supplies its own {@code destination()} / {@code kind()}). A class
+ * uses one style or the other, never both.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Listener(name = "my-queue", kind = ListenerKind.QUEUE)
- * public class OrderListener {
- *     public void onMessage(String message) { ... }
- *     public void onError(String error) { ... }
+ * {@literal @}Component
+ * public class Orders {
+ *     {@literal @}Listener(name = "orders-new", kind = ListenerKind.TOPIC)
+ *     public void onNewOrder(String message) { ... }
  * }
  * </pre>
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
+@Target(ElementType.METHOD)
 public @interface Listener {
 
     /** Logical name of the queue or topic destination. */

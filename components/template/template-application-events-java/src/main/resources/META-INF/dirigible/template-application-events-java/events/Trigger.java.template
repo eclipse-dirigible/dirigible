@@ -1,7 +1,7 @@
 package gen.events;
 
 import org.eclipse.dirigible.sdk.bpm.Process;
-import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -15,11 +15,28 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Generated from the intent process trigger - do not edit; it is re-generated with the application.
  * The ${entity} repository publishes the event to the topic this listener binds to; the started
  * process-instance id is written back to ProcessId (so the process is started at most once).
+ *
+ * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
+ * interface, not an annotation; @Component makes it a managed bean with constructor injection.
  */
-@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
+@Component
 public class ${process}Trigger implements MessageHandler {
 
-    private final ${entity}Repository repository = new ${entity}Repository();
+    private final ${entity}Repository repository;
+
+    public ${process}Trigger(${entity}Repository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
 
     @Override
     public void onMessage(String message) {

@@ -38,7 +38,7 @@ log.info("file size: {}", Files.size("/users/admin/workspace/proj/foo.txt"));
 | `db/database` + `db/sequence` + `db/query` + `db/insert` + `db/update` + `db/sql` + `db/procedure` | `sdk.db.Database` | One static facade with the full `DatabaseFacade` surface. |
 | `db/store`                           | `sdk.db.Store`                                                 | Dynamic-entity Hibernate store. For typed `@Entity` CRUD on client classes, resolve `JavaEntityStore` via `BeanProvider`. |
 | `etcd/client`                        | `sdk.etcd.Client`                                              | Returns the raw `io.etcd.jetcd.KV`. |
-| `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer the typed `Extensions.find(Class<T>)`; see "Typed extension points" below. |
+| `extensions/extensions`              | `sdk.extensions.Extensions`                                    | Java callers should prefer `List<...>` collection injection or `Extensions.find(Class<T>)`; see "Extension points" below. |
 | `git/client`                         | `sdk.git.Git`                                                  |       |
 | `http/client`                        | `sdk.http.HttpClient`                                          | Options passed as JSON, same shape as TS. |
 | `http/request`                       | `sdk.http.Request`                                             |       |
@@ -108,69 +108,106 @@ from this module so the SDK surface — facades **and** decorators — has a sin
 | `db/decorators#Generated / GenerationType` | `org.eclipse.dirigible.sdk.db.{GeneratedValue, GenerationType}`                 |
 | `db/decorators#CreatedAt / UpdatedAt / CreatedBy / UpdatedBy / Transient` | `org.eclipse.dirigible.sdk.db.{CreatedAt, UpdatedAt, CreatedBy, UpdatedBy, Transient}` |
 | `Documentation` (cross-cutting)            | `org.eclipse.dirigible.sdk.platform.Documentation`                              |
-| `component/decorators#Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Inject, Repository}`                      |
+| `component/decorators#Component / Inject / Repository` | `org.eclipse.dirigible.sdk.component.{Component, Inject, Repository}`  |
 | `job/decorators#Scheduled`                 | `org.eclipse.dirigible.sdk.job.Scheduled`                                       |
 | `net/decorators#Websocket`                 | `org.eclipse.dirigible.sdk.net.Websocket`                                       |
-| `extensions/decorators#Extension`          | `org.eclipse.dirigible.sdk.extensions.{Extension, ExtensionPoint}`               |
+| `extensions/decorators#Extension`          | _(none — a contribution is a `@Component` implementing the extension-point interface; see "Extension points")_ |
 | Message listeners                          | `org.eclipse.dirigible.sdk.messaging.{Listener, ListenerKind}`                  |
 
 Existing import statements that used the old `org.eclipse.dirigible.engine.java.annotations.*`
 paths have been migrated across the codebase (engine-java consumers, data-store-java consumers,
 IT fixtures, IDE snippets, `EntityController.java.template` and the DAO templates).
 
-## Optional typed handler interfaces
+## Dependency injection & beans
 
-Three of the runtime-callback decorators — `@Scheduled`, `@Listener`, `@Websocket` — accept an
-optional companion interface that the annotated class can implement. When present, the engine
-dispatches the callback through a direct virtual call instead of `Method.invoke`. The annotation
-remains the marker (binds the class to a cron / queue / endpoint); the interface only describes
-the callback shape.
+Client Java runs in a small IoC container, one generation per `ClientClassLoader` rebuild (see
+`engine-java`'s `ComponentContainer`). Any class (meta-)annotated with
+`org.eclipse.dirigible.sdk.component.Component` is a singleton bean — `@Repository`, `@Controller`
+and `@Websocket` are meta-annotated with `@Component`, so they are beans too. Beans are named by
+Spring's convention (decapitalized simple class name, or `@Component("name")`).
 
-| Decorator                                         | Optional contract                                                | Methods                                                                  |
-|---------------------------------------------------|------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `@Scheduled`                                      | `org.eclipse.dirigible.sdk.job.JobHandler`                       | `void run()`                                                              |
-| `@Listener`                                       | `org.eclipse.dirigible.sdk.messaging.MessageHandler`             | `void onMessage(String)`, `default void onError(String) {}`               |
-| `@Websocket`                                      | `org.eclipse.dirigible.sdk.net.WebsocketHandler`                 | all 4 lifecycle methods default to no-op — override only what you need    |
+Beans are wired by:
 
-Implementing the interface is **not** required. The legacy reflective path (look up the method by
-name on the class) is preserved as a fallback, so existing handlers that don't implement the
-interface keep working unchanged. The typed path is opt-in: implement the interface and get
-compile-time signature checking, IDE autocomplete + refactoring, and direct dispatch.
+* **constructor injection** (preferred, testable) — declare collaborators as constructor parameters;
+  with several constructors annotate one with `@Inject`;
+* **field injection** — `@Inject` on a field (backward compatible);
+* **collection injection** — a `List<T>` / `Collection<T>` / `Set<T>` injection point receives every
+  bean assignable to `T`. This is the Spring-style way to consume all implementations of an
+  interface (see "Extension points" below).
 
-Example with `WebsocketHandler`:
+`@PostConstruct` / `@PreDestroy` (`jakarta.annotation`) run on bean creation / generation teardown.
+To reach a *platform* service from client code use `org.eclipse.dirigible.sdk.component.Beans`
+(`get(Class)`, `get(name, Class)`, `getAll(Class)`) — the client-facing counterpart to the
+platform-internal `BeanProvider`, which client code should not use directly.
+
+## Handler styles — strong interface OR method-level annotation
+
+The runtime-callback components — jobs, listeners, websockets — offer exactly **two** styles, like
+Spring. A given `@Component` class uses one or the other, **never both** (the engine rejects a class
+that mixes them). There is no reflective by-name fallback.
+
+**1. Self-describing interface** — a `@Component` bean implements the typed interface, which carries
+both the callback shape *and* the binding (so no `@Scheduled`/`@Listener`/`@Websocket` annotation).
+This is like implementing `org.quartz.Job` / `jakarta.jms.MessageListener` / `TextWebSocketHandler`:
+
+| Interface | Binding method(s) | Callback(s) |
+|---|---|---|
+| `org.eclipse.dirigible.sdk.job.JobHandler` | `String cron()` | `void run()` |
+| `org.eclipse.dirigible.sdk.messaging.MessageHandler` | `String destination()`, `default ListenerKind kind()` | `void onMessage(String)`, `default void onError(String)` |
+| `org.eclipse.dirigible.sdk.net.WebsocketHandler` | `String endpoint()` | 4 lifecycle methods, all `default` no-op |
 
 ```java
-@Websocket(name = "Java Chat", endpoint = "java-chat")
+@Component
 public class ChatHandler implements WebsocketHandler {
+    public String endpoint() { return "java-chat"; }
     @Override public void onMessage(String text, String from) { ... }
-    // onOpen, onError, onClose inherit the no-op default — no boilerplate needed
 }
 ```
 
-`dirigiblelabs/sample-java-entity-decorators` migrates its `CleanupJob`, `OrderListener` and
-`ChatHandler` to the typed interfaces and is the canonical typed example end-to-end. The four
-single-decorator standalone samples (`sample-java-{job,listener,websocket,extension}-decorator`)
-stay on the reflective form so the fallback path remains exercised by CI as well.
-
-## Typed extension points
-
-Java `@Extension` does not carry a `to = "<string>"` attribute. Contributions declare the
-extension point they implement as a `Class<?> target()` — the marker `@ExtensionPoint` on the
-target interface documents the contract:
+**2. Method-level annotation** — Spring `@Scheduled` / `@JmsListener` style:
+- `@Scheduled(expression = …)` on a public no-arg method of a `@Component`;
+- `@Listener(name = …, kind = …)` on a public `void m(String)` method of a `@Component`;
+- websockets keep a `@Websocket(endpoint = …)` class (the endpoint has no method-level home, like
+  Jakarta `@ServerEndpoint`) with `@OnOpen`/`@OnMessage`/`@OnError`/`@OnClose` methods.
 
 ```java
-@ExtensionPoint("Order processors")
+@Component
+public class Orders {
+    @Listener(name = "orders-new", kind = ListenerKind.QUEUE)
+    public void onOrder(String message) { ... }
+}
+```
+
+The `dirigiblelabs/sample-java-{job,listener,websocket}-decorator` samples each demonstrate both
+styles end-to-end.
+
+## Extension points
+
+There is no dedicated extension annotation. An extension point is just an interface; a contribution
+is a `@Component` bean that implements it (its `@Component` name is the contribution name):
+
+```java
 public interface OrderProcessor {
     void process(Order order);
 }
 
-@Extension(target = OrderProcessor.class, name = "fast")
+@Component("fast")
 public class FastOrderProcessor implements OrderProcessor {
     public void process(Order order) { ... }
 }
 ```
 
-The consumer retrieves implementations as the interface type — no reflection, no `Map<String, ?>`:
+Consume them with **collection injection** — the Spring-style way to get all implementations:
+
+```java
+@Component
+public class Orders {
+    private final List<OrderProcessor> processors;
+    public Orders(List<OrderProcessor> processors) { this.processors = processors; }
+}
+```
+
+Outside an injection point, `Extensions.find(OrderProcessor.class)` returns the same beans:
 
 ```java
 for (OrderProcessor processor : Extensions.find(OrderProcessor.class)) {
@@ -178,20 +215,10 @@ for (OrderProcessor processor : Extensions.find(OrderProcessor.class)) {
 }
 ```
 
-`ExtensionClassConsumer` validates `target.isAssignableFrom(annotatedClass)` at registration —
-a class that declares `@Extension(target = X)` but doesn't actually implement `X` is logged
-and skipped, so a runtime `Extensions.find(X.class)` can never receive an instance that fails
-the cast.
-
-The interface's fully qualified name is the persisted extension-point identifier in the
-`DIRIGIBLE_EXTENSIONS` table. Renaming the interface invalidates every persisted reference, so
-treat the FQN as part of the contract.
-
-Cross-runtime extension points (where TS / JS modules also contribute to the same logical point)
-are not expressible in the typed Java surface — a JS module cannot safely satisfy a Java
-interface contract. Use the TypeScript `@Extension` decorator for those; the legacy string-keyed
-`Extensions.getExtensions(String)` lookup remains available for callers that need to enumerate
-JS contributions.
+Cross-runtime extension points (where TS / JS modules contribute to the same logical point) are not
+expressible as a Java interface — a JS module cannot satisfy a Java contract. Use the TypeScript
+`@Extension` decorator for those; the legacy string-keyed `Extensions.getExtensions(String)` lookup
+remains available to enumerate JS contributions.
 
 ## DAO / ORM / Repository builders
 

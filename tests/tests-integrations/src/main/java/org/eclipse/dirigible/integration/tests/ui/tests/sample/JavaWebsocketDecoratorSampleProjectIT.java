@@ -28,7 +28,10 @@ public class JavaWebsocketDecoratorSampleProjectIT extends SampleProjectReposito
                                                  .get(WEBSOCKET_STATUS_BASE + "/status")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(containsString("true")));
+                                                 // Self-describing interface style — ChatHandler implements WebsocketHandler.
+                                                 .body(containsString("\"chat\":true"))
+                                                 // Method-level annotation style — TickerHandler is @Websocket + @OnX.
+                                                 .body(containsString("\"ticker\":true")));
     }
 
 }

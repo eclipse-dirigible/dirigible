@@ -15,26 +15,33 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Marks a client Java class as a scheduled job managed by the Dirigible runtime.
+ * Schedules a public no-arg method of a {@link org.eclipse.dirigible.sdk.component.Component
+ * &#64;Component} bean on a Quartz cron expression — the method-level style, like Spring's
+ * {@code @Scheduled}-on-a-method. One bean can host several scheduled methods and use injected
+ * collaborators.
  *
  * <p>
- * The annotated class must expose a public no-arg {@code run()} method. Dirigible will instantiate
- * the class once and invoke {@code run()} on the configured Quartz cron schedule. Hot-reload
- * replaces the instance transparently: the old schedule is cancelled and a new one is registered
- * with the updated class.
+ * The alternative, strong-interface style is a {@code @Component} bean implementing
+ * {@link JobHandler} (which supplies its own {@code cron()}). A class uses one style or the other,
+ * never both.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Scheduled(expression = "0/30 * * * * ?")
- * public class CleanupJob {
- *     public void run() { ... }
+ * {@literal @}Component
+ * public class Maintenance {
+ *     {@literal @}Scheduled(expression = "0 0 2 * * ?")
+ *     public void nightlyRollup() { ... }
  * }
  * </pre>
+ *
+ * <p>
+ * Hot-reload replaces the schedule transparently: the old trigger is cancelled and a new one
+ * registered.
  */
 @Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.TYPE)
+@Target(ElementType.METHOD)
 public @interface Scheduled {
 
     /**

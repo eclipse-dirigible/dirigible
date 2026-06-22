@@ -43,7 +43,8 @@ class JavaControllerOpenApiPublisherTest {
 
     private final ControllerRouter router = new ControllerRouter();
 
-    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty());
+    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty(),
+            org.eclipse.dirigible.engine.java.component.TestComponentContainers.of(Sample.class));
 
     @Test
     void publish_persists_a_valid_openapi_fragment() throws Exception {

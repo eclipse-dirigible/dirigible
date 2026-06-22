@@ -163,9 +163,8 @@ public abstract class JavaRepository<T> {
     }
 
     /**
-     * The shared {@link JavaEntityStore} bean. Fetched lazily so the repository can be instantiated via
-     * a no-arg constructor by {@code RepositoryClassConsumer} (the client class is not in Spring's
-     * component scan).
+     * The shared {@link JavaEntityStore} bean. Fetched lazily so the repository (a client bean built by
+     * the engine's component container, not a Spring-scanned bean) can reach the platform store.
      *
      * @return the platform {@link JavaEntityStore} singleton
      */

@@ -10,27 +10,36 @@
 package org.eclipse.dirigible.sdk.job;
 
 /**
- * Optional typed contract for a {@link Scheduled @Scheduled} class. Implementing this interface is
- * not required — the runtime still accepts any class that exposes a public no-arg {@code run()}
- * method via reflection — but implementations gain compile-time signature checking and the
- * scheduler dispatches them via a direct method call instead of a reflective {@code invoke}.
+ * Self-describing contract for a scheduled job — the strong-interface style. A
+ * {@link org.eclipse.dirigible.sdk.component.Component @Component} bean that implements this
+ * interface IS a scheduled job: it supplies its own cron schedule via {@link #cron()} and its work
+ * via {@link #run()}, with no {@code @Scheduled} annotation. This mirrors implementing
+ * {@code org.quartz.Job} in Spring — the implementation carries everything.
  *
  * <p>
- * The {@code @Scheduled} annotation remains the marker that turns a class into a scheduled job;
- * this interface only describes the run callback's shape.
+ * The alternative, method-level style is {@code @Scheduled} on a {@code @Component} method. A
+ * single class uses one style or the other, never both.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Scheduled(expression = "0 0 * * * ?")
+ * {@literal @}Component
  * public class HourlyCleanup implements JobHandler {
- *     {@literal @}Override public void run() { ... }
+ *     public String cron() { return "0 0 * * * ?"; }
+ *     public void run()    { ... }
  * }
  * </pre>
  */
 public interface JobHandler {
 
-    /** Fires at every cron tick declared on {@link Scheduled#expression() @Scheduled.expression}. */
+    /**
+     * The Quartz cron expression (six or seven fields) at which {@link #run()} fires.
+     *
+     * @return the cron expression, e.g. {@code "0/30 * * * * ?"}
+     */
+    String cron();
+
+    /** Fires at every cron tick declared by {@link #cron()}. */
     void run();
 }
