@@ -111,7 +111,7 @@ const JavaNew = (function () {
         return packageName ? `package ${packageName};\n\n` : '';
     }
 
-    function body(kind, name) {
+    function body(kind, name, entity) {
         switch (kind) {
             case 'class':
                 return `public class ${name} {\n\n}\n`;
@@ -185,13 +185,17 @@ const JavaNew = (function () {
                     + `        // TODO handle the inbound frame\n`
                     + `    }\n}\n`;
             case 'repository': {
-                const entity = entityName(name);
-                return `import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;\n`
+                // The managed entity is supplied by the developer; a fully-qualified name adds an import.
+                const provided = (entity || '').trim() || 'Entity';
+                const dot = provided.lastIndexOf('.');
+                const entitySimple = dot >= 0 ? provided.substring(dot + 1) : provided;
+                const entityImport = dot >= 0 ? `import ${provided};\n` : '';
+                return entityImport + `import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;\n`
                     + `import org.eclipse.dirigible.sdk.component.Repository;\n\n`
                     + `@Repository\n`
-                    + `public class ${name} extends JavaRepository<${entity}> {\n\n`
+                    + `public class ${name} extends JavaRepository<${entitySimple}> {\n\n`
                     + `    public ${name}() {\n`
-                    + `        super(${entity}.class);\n`
+                    + `        super(${entitySimple}.class);\n`
                     + `    }\n}\n`;
             }
             default:
@@ -209,18 +213,13 @@ const JavaNew = (function () {
         return name.replace(/(Socket|Handler|Websocket)$/i, '').toLowerCase() || 'endpoint';
     }
 
-    /** Derives the entity type a repository wraps, stripping a trailing {@code Repository}. */
-    function entityName(name) {
-        const stripped = name.replace(/Repository$/, '');
-        return stripped || 'Entity';
-    }
-
     /**
-     * Generates the skeleton source for the given kind.
+     * Generates the skeleton source for the given kind. {@code entity} is only used for the repository
+     * kind, where it is the developer-supplied entity type the repository manages.
      * @returns {string}
      */
-    function generate(kind, packageName, typeName) {
-        return header(packageName) + body(kind, typeName);
+    function generate(kind, packageName, typeName, entity) {
+        return header(packageName) + body(kind, typeName, entity);
     }
 
     return {

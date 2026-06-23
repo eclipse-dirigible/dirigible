@@ -84,12 +84,24 @@ public class Workbench {
      * {@code name} is the dotted package; for the others it is a simple or fully-qualified type name.
      */
     public void createJavaArtifact(String projectName, String leafLabel, String name) {
+        createJavaArtifact(projectName, leafLabel, name, null);
+    }
+
+    /**
+     * Variant for the Repository skeleton, which additionally prompts for the entity type the
+     * repository manages. Pass {@code entity} (simple or fully-qualified); {@code null} for the other
+     * kinds, which only prompt for a name.
+     */
+    public void createJavaArtifact(String projectName, String leafLabel, String name, String entity) {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
         browser.clickCascadingMenuItem("New", "Java", leafLabel);
 
         browser.enterTextInElementById("fdti1", name);
+        if (entity != null) {
+            browser.enterTextInElementById("fdti2", entity);
+        }
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
     }
 

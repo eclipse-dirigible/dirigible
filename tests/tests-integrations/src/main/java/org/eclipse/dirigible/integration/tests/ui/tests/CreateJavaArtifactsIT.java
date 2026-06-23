@@ -71,8 +71,9 @@ class CreateJavaArtifactsIT extends UserInterfaceIntegrationTest {
         workbench.createJavaArtifact(PROJECT, "Listener", "OrderListener");
         assertFileContains("/OrderListener.java", "implements MessageHandler", "ListenerKind");
 
-        workbench.createJavaArtifact(PROJECT, "Repository", "CountryRepository");
-        assertFileContains("/CountryRepository.java", "@Repository", "extends JavaRepository<Country>");
+        // Repository additionally prompts for the entity type it manages.
+        workbench.createJavaArtifact(PROJECT, "Repository", "CountryRepository", "Country");
+        assertFileContains("/CountryRepository.java", "@Repository", "extends JavaRepository<Country>", "super(Country.class)");
 
         // Package -> the full nested folder chain is created from a dotted name.
         workbench.createJavaArtifact(PROJECT, "Package", "com.test.iliyan");

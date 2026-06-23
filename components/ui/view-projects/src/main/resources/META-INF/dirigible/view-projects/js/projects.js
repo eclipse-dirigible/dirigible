@@ -1787,31 +1787,43 @@ projectsView.controller('ProjectsViewController', (
         const projectPath = projectNode.data.path; // /workspace/project
         const folderPath = node.data.path;          // /workspace/project[/sub...]
         const folderRel = folderPath.substring(projectPath.length).replace(/^\/+/, '').replace(/\/+$/, '');
+        const form = {
+            'fdti1': {
+                label: meta.kind === 'package' ? 'Package name' : 'Name',
+                controlType: 'input',
+                type: 'text',
+                placeholder: JavaNew.placeholderFor(meta.kind),
+                submitOnEnter: true,
+                focus: true,
+                required: true,
+            },
+        };
+        // A repository wraps an entity supplied by the developer (e.g. Country or com.example.Country).
+        if (meta.kind === 'repository') {
+            form['fdti2'] = {
+                label: 'Entity type',
+                controlType: 'input',
+                type: 'text',
+                placeholder: 'com.example.Country',
+                submitOnEnter: true,
+                required: true,
+            };
+        }
         Dialogs.showFormDialog({
             title: `New Java ${meta.label}`,
-            form: {
-                'fdti1': {
-                    label: meta.kind === 'package' ? 'Package name' : 'Name',
-                    controlType: 'input',
-                    type: 'text',
-                    placeholder: JavaNew.placeholderFor(meta.kind),
-                    submitOnEnter: true,
-                    focus: true,
-                    required: true,
-                },
-            },
+            form: form,
             submitLabel: 'Create',
             cancelLabel: 'Cancel'
-        }).then((form) => {
-            if (!form) return;
+        }).then((result) => {
+            if (!result) return;
             if (meta.kind === 'package') {
-                const parsed = JavaNew.parsePackage(form['fdti1']);
+                const parsed = JavaNew.parsePackage(result['fdti1']);
                 if (!parsed.ok) { showJavaNameError(parsed.error); return; }
-                createJavaPackage(projectNode, folderPath, parsed.segments);
+                createJavaPackage(node, folderPath, parsed.segments);
             } else {
-                const parsed = JavaNew.parseType(form['fdti1']);
+                const parsed = JavaNew.parseType(result['fdti1']);
                 if (!parsed.ok) { showJavaNameError(parsed.error); return; }
-                createJavaType(projectNode, folderPath, folderRel, meta.kind, parsed);
+                createJavaType(projectNode, node, folderPath, folderRel, meta.kind, parsed, result['fdti2']);
             }
         }, (error) => {
             console.error(error);
@@ -1839,9 +1851,11 @@ projectsView.controller('ProjectsViewController', (
         return WorkspaceService.createFolder(leaf, targetPath);
     }
 
-    function createJavaPackage(projectNode, folderPath, segments) {
+    function createJavaPackage(contextNode, folderPath, segments) {
         createNestedFolder(segments, folderPath).then(() => {
-            jstreeWidget.jstree(true).refresh_node(projectNode);
+            const folderNode = revealFolderNodes(contextNode, folderPath, segments);
+            jstreeWidget.jstree(true).deselect_all(true);
+            jstreeWidget.jstree(true).select_node(folderNode);
             StatusBar.showMessage(`Created package '${segments.join('.')}'`);
         }, (response) => {
             console.error(response);
@@ -1854,16 +1868,16 @@ projectsView.controller('ProjectsViewController', (
         });
     }
 
-    function createJavaType(projectNode, folderPath, folderRel, kind, parsed) {
+    function createJavaType(projectNode, contextNode, folderPath, folderRel, kind, parsed, entity) {
         const relSegments = folderRel ? folderRel.split('/') : [];
         const packageName = relSegments.concat(parsed.packageSegments).join('.');
         const targetFolderPath = parsed.packageSegments.length
             ? `${folderPath}/${parsed.packageSegments.join('/')}`
             : folderPath;
         const fileName = `${parsed.typeName}.java`;
-        const content = JavaNew.generate(kind, packageName, parsed.typeName);
+        const content = JavaNew.generate(kind, packageName, parsed.typeName, entity);
         // Tolerate an already-existing package folder; the file-creation step validates the real path.
-        const proceed = () => createJavaFile(projectNode, targetFolderPath, fileName, content);
+        const proceed = () => createJavaFile(projectNode, contextNode, folderPath, parsed.packageSegments, targetFolderPath, fileName, content);
         if (parsed.packageSegments.length) {
             createNestedFolder(parsed.packageSegments, folderPath).then(proceed, proceed);
         } else {
@@ -1871,7 +1885,7 @@ projectsView.controller('ProjectsViewController', (
         }
     }
 
-    function createJavaFile(projectNode, targetFolderPath, fileName, content) {
+    function createJavaFile(projectNode, contextNode, baseFolderPath, packageSegments, targetFolderPath, fileName, content) {
         const alertBody = {
             title: 'Could not create the Java file',
             message: `There was an error while creating '${fileName}'. It may already exist.`,
@@ -1880,7 +1894,22 @@ projectsView.controller('ProjectsViewController', (
         };
         WorkspaceService.createFile(fileName, targetFolderPath, content).then((response) => {
             WorkspaceService.getMetadataByUrl(response.data).then((metadata) => {
-                jstreeWidget.jstree(true).refresh_node(projectNode);
+                // Build/expand the tree down to the package folder and select the new file, so the
+                // project structure stays open and reveals what was just created.
+                const folderNode = revealFolderNodes(contextNode, baseFolderPath, packageSegments);
+                jstreeWidget.jstree(true).deselect_all(true);
+                jstreeWidget.jstree(true).select_node(
+                    jstreeWidget.jstree(true).create_node(folderNode, {
+                        text: metadata.data.name,
+                        type: 'file',
+                        state: { status: metadata.data.status },
+                        icon: getFileIcon(metadata.data.name),
+                        data: {
+                            path: metadata.data.path,
+                            contentType: metadata.data.contentType,
+                        }
+                    })
+                );
                 Layout.openEditor({
                     path: metadata.data.path,
                     contentType: metadata.data.contentType,
@@ -1898,6 +1927,40 @@ projectsView.controller('ProjectsViewController', (
             console.error(response);
             Dialogs.showAlert(alertBody);
         });
+    }
+
+    /**
+     * Ensures jstree folder nodes exist (and are expanded) for each package segment under
+     * {@code contextNode}, reusing existing nodes and creating the missing ones. Returns the deepest
+     * folder node (or {@code contextNode} when there are no package segments).
+     */
+    function revealFolderNodes(contextNode, baseFolderPath, segments) {
+        const tree = jstreeWidget.jstree(true);
+        tree.open_node(contextNode);
+        let parentNode = contextNode;
+        let parentPath = baseFolderPath;
+        for (let i = 0; i < segments.length; i++) {
+            parentPath = `${parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath}/${segments[i]}`;
+            let childId;
+            const children = parentNode.children || [];
+            for (let j = 0; j < children.length; j++) {
+                const child = tree.get_node(children[j]);
+                if (child.type === 'folder' && child.text === segments[i]) {
+                    childId = children[j];
+                    break;
+                }
+            }
+            if (!childId) {
+                childId = tree.create_node(parentNode, {
+                    text: segments[i],
+                    type: 'folder',
+                    data: { path: parentPath },
+                });
+            }
+            tree.open_node(childId);
+            parentNode = tree.get_node(childId);
+        }
+        return parentNode;
     }
 
     function openRenameDialog(renameNode) {
