@@ -1,0 +1,6 @@
+window.App = {
+  services: {},
+  routes: {},
+  utils: {},
+  config: {}
+};

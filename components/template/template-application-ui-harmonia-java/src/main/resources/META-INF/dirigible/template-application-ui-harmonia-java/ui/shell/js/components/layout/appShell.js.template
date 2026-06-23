@@ -1,0 +1,103 @@
+/**
+ * Adopted from codbex-athena-app (js/components/layout/appShell.js).
+ *
+ * The reusable Harmonia runtime dashboard: sidebar nav, route-derived breadcrumb,
+ * responsive sidebar<->x-h-sheet drawer collapse, theme menu. Model-independent —
+ * its only project-specific input is App.config (js/config.js).
+ *
+ * TODO (Phase 1/2): the `nav` / `routeTitles` / `sections` maps are currently a
+ * demo placeholder. They should be generated from the model (one entry per
+ * navigation node / list perspective) — see template/ui/navigation.js.
+ */
+document.addEventListener('alpine:init', () => {
+  window.PineconeRouter.settings({
+    basePath: (App.config && App.config.basePath) || '',
+    hash: true
+  });
+
+  Alpine.data('app', () => ({
+    hiddenPanels: { left: true },
+    isOpen: false,
+    currentPath: '',
+
+    // TODO (Phase 2): generate from the model.
+    nav: [],
+    routeTitles: {},
+    sections: {},
+
+    init() {
+      const getPath = () => {
+        const p = window.PineconeRouter.context?.path || '/';
+        return p === '/' ? '/dashboard' : p;
+      };
+      this.currentPath = getPath();
+      window.addEventListener('popstate', () => {
+        this.currentPath = getPath();
+        this.refreshIcons();
+      });
+      document.addEventListener('pinecone:end', () => {
+        this.currentPath = getPath();
+        this.refreshIcons();
+      });
+
+      this._bp = Harmonia.getBreakpointListener((isNarrow) => {
+        this.hiddenPanels.left = isNarrow;
+        if (isNarrow) {
+          this.$refs.overlay.appendChild(this.$refs.sidebar);
+        } else {
+          this.$refs.sidebarPanel.appendChild(this.$refs.sidebar);
+        }
+      }, 1024);
+
+      this.refreshIcons();
+    },
+
+    destroy() {
+      if (this._bp) this._bp.remove();
+    },
+
+    get pageTitle() {
+      return this.routeTitles[this.currentPath] || 'Application';
+    },
+
+    get isDashboard() {
+      return this.currentPath === '/' || this.currentPath === '/dashboard';
+    },
+
+    // Section-level crumbs after Home (Home is rendered separately as the icon).
+    get breadcrumbTrail() {
+      if (this.isDashboard) return [];
+      const segments = this.currentPath.split('/').filter(Boolean);
+      const top = segments[0];
+      const crumbs = [];
+      const sectionLabel = this.sections[top];
+      if (sectionLabel) crumbs.push({ label: sectionLabel, route: '/' + top });
+      const isSection = segments.length === 1;
+      if (isSection) {
+        if (crumbs.length) crumbs[crumbs.length - 1].route = null;
+      } else {
+        crumbs.push({ label: this.pageTitle, route: null });
+      }
+      return crumbs;
+    },
+
+    isActive(route) { return this.currentPath === route; },
+
+    navigate(route) {
+      window.PineconeRouter.navigate(route);
+      this.closeSideNav();
+    },
+
+    openSideNav() { this.isOpen = true; },
+
+    closeSideNav() {
+      if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false;
+    },
+
+    refreshIcons() {
+      if (window.lucide && typeof window.lucide.createIcons === 'function') {
+        window.lucide.createIcons();
+      }
+    },
+  }));
+}, { once: true });

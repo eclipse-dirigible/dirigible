@@ -105,6 +105,9 @@ public final class IntentSettings {
      */
     public static IntentSettings scaffold(IntentModel model) {
         IntentSettings settings = new IntentSettings();
+        // The full-stack UI template is named explicitly here (DAO + REST + UI). Default is the
+        // AngularJS + BlimpKit stack; to generate the Alpine.js + Harmonia SPA instead, set this to
+        // "template-application-ui-harmonia-java/template/template.js". One explicit default, no alias.
         settings.generation.put("model", new Recipe("template-application-angular-java/template/template.js",
                 orderedMap("tablePrefix", "", "dataSource", "DefaultDB")));
         settings.generation.put("glue", new Recipe("template-application-events-java/template/template.js", new LinkedHashMap<>()));
