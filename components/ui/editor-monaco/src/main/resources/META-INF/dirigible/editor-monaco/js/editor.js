@@ -38,6 +38,18 @@ window.javaLspMemberPicker = (title, labels) => {
     });
 };
 
+// Cross-file navigation target for the Java LSP client (Go to Definition / Find References to a file
+// that isn't open). Opens the file in the IDE and reveals the line via the shared reveal topic; the
+// re-post covers the case where the target editor iframe is still mounting.
+window.javaLspOpenFile = (path, line, column) => {
+    layoutHub.openEditor({ path: path });
+    if (line && line > 0) {
+        const data = { filePath: path, line: line, column: column || 1 };
+        themingHub.postMessage({ topic: 'editor.reveal.line', data: data });
+        setTimeout(() => themingHub.postMessage({ topic: 'editor.reveal.line', data: data }), 1200);
+    }
+};
+
 const brandingInfo = getBrandingInfo();
 
 let csrfToken;

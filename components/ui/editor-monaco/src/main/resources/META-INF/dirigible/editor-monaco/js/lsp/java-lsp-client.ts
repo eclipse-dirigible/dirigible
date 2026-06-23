@@ -267,19 +267,42 @@ function registerProviders(): void {
         applyCodeAction(action);
     });
 
+    // Cross-file navigation: this single-file editor has no model for other workspace files, so Go to
+    // Definition / Find References to another file would silently do nothing. Hand those off to the IDE
+    // to open the target file (and reveal the line). Same-file targets fall through to Monaco.
+    monaco.editor.registerEditorOpener({
+        openCodeEditor: (source, resource, selectionOrPosition) => {
+            const uri = resource.toString();
+            if (!isWorkspaceFile(uri) || !uri.startsWith(VIRTUAL_FILE_PREFIX)) return false;
+            const currentModel = source.getModel();
+            if (currentModel && currentModel.uri.toString() === uri) return false; // same file — let Monaco jump
+            const opener = (globalThis as any).javaLspOpenFile;
+            if (typeof opener !== 'function') return false;
+            const pos = selectionOrPosition as { startLineNumber?: number; lineNumber?: number; startColumn?: number; column?: number } | undefined;
+            const line = pos ? (pos.startLineNumber ?? pos.lineNumber) : undefined;
+            const column = pos ? (pos.startColumn ?? pos.column) : undefined;
+            opener(uri.substring(VIRTUAL_FILE_PREFIX.length), line, column);
+            return true;
+        },
+    });
+
     monaco.languages.registerCompletionItemProvider('java', {
         triggerCharacters: ['.', '@', '<'],
-        provideCompletionItems: async (model, position) => {
+        provideCompletionItems: async (model, position, context) => {
             if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
             const fileUri = model.uri.toString();
             const result: CompletionList | CompletionItem[] | null = await _conn.sendRequest('textDocument/completion', {
                 textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
-                context:      { triggerKind: 1 },
+                // Monaco trigger kinds are 0-based (Invoke/TriggerCharacter/ForIncomplete); LSP is 1-based.
+                context:      { triggerKind: (context.triggerKind ?? 0) + 1, triggerCharacter: context.triggerCharacter },
             });
             const items = Array.isArray(result) ? result : (result?.items ?? []);
             return {
                 suggestions: items.map(item => lspCompletionToMonaco(item, model, position)),
+                // JDT.LS returns a truncated list on the first keystrokes; propagating "incomplete" makes
+                // Monaco re-query as the user types instead of caching the first (often empty) result.
+                incomplete:  Array.isArray(result) ? false : !!result?.isIncomplete,
             };
         },
         // Resolve documentation and, crucially, the auto-import additionalTextEdits which JDT.LS only
@@ -530,6 +553,9 @@ function lspCompletionToMonaco(
                              : undefined,
         range,
         sortText:            sdkPrioritisedSortText(item),
+        filterText:          item.filterText,
+        preselect:           item.preselect,
+        commitCharacters:    item.commitCharacters,
         additionalTextEdits: item.additionalTextEdits?.map(textEditToMonaco),
     };
     result._lsp = item;
@@ -554,6 +580,9 @@ function sdkPrioritisedSortText(item: CompletionItem): string {
 
 /** Monaco command id used to apply a deferred LSP code action when the user selects it. */
 const APPLY_ACTION_COMMAND = 'dirigible.java.applyCodeAction';
+
+/** Virtual URI prefix of editor models; stripping it yields the IDE workspace path (/ws/proj/...). */
+const VIRTUAL_FILE_PREFIX = 'file:///workspace';
 
 type LspRange = { start: { line: number; character: number }; end: { line: number; character: number } };
 
