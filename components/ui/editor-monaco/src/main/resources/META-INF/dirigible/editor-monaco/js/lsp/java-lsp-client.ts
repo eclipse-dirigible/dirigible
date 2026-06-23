@@ -412,6 +412,19 @@ function registerProviders(): void {
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
                 newName,
             });
+            if (!edit) return { edits: [] };
+            // A JDT.LS rename can span many files and even rename the type's own .java file. Monaco's
+            // single-file editor would drop everything but the current model, so apply the whole edit
+            // through the workspace ourselves when the IDE persistence hook is available.
+            if (typeof (globalThis as any).javaLspPersistRename === 'function') {
+                try {
+                    await applyRenameAcrossWorkspace(model, edit);
+                    return { edits: [] };
+                } catch (e) {
+                    console.error('[java-lsp] cross-file rename failed, applying to the current file only:', e);
+                    return workspaceEditToMonaco(edit);
+                }
+            }
             return workspaceEditToMonaco(edit);
         },
         resolveRenameLocation: async (model, position) => {
@@ -777,6 +790,98 @@ function workspaceEditToMonaco(edit: WorkspaceEdit | null): monaco.languages.Wor
         }
     }
     return { edits };
+}
+
+/** Maps a virtual editor URI back to the IDE workspace path ({@code /ws/proj/...}). */
+function uriToWorkspacePath(uri: string): string | null {
+    if (!uri.startsWith(VIRTUAL_FILE_PREFIX)) return null;
+    return decodeURIComponent(uri.substring(VIRTUAL_FILE_PREFIX.length));
+}
+
+/** Reads a workspace file's current text over the IDE REST API. */
+async function fetchWorkspaceFileText(idePath: string): Promise<string> {
+    const response = await fetch('/services/ide/workspaces' + idePath, { headers: { 'X-Requested-With': 'Fetch' } });
+    if (!response.ok) {
+        throw new Error(`Could not read ${idePath} (HTTP ${response.status})`);
+    }
+    return response.text();
+}
+
+/** Applies LSP text edits to a string. Offsets are resolved against the original text and edits are
+ *  applied from the end backwards, so earlier offsets stay valid. */
+function applyEditsToText(text: string, edits: TextEdit[]): string {
+    const lineStarts = [0];
+    for (let i = 0; i < text.length; i++) {
+        if (text.charCodeAt(i) === 10 /* \n */) lineStarts.push(i + 1);
+    }
+    const offset = (p: { line: number; character: number }) => (lineStarts[p.line] ?? text.length) + p.character;
+    const ordered = edits.slice()
+                         .sort((a, b) => offset(b.range.start) - offset(a.range.start));
+    let result = text;
+    for (const e of ordered) {
+        result = result.slice(0, offset(e.range.start)) + e.newText + result.slice(offset(e.range.end));
+    }
+    return result;
+}
+
+/**
+ * Applies a JDT.LS rename {@link WorkspaceEdit} across the whole workspace: text edits in every
+ * affected file plus any {@code RenameFile} operation (a public-type rename renames its own
+ * {@code .java} file). The current file's edits go through the live Monaco model; the rest are read,
+ * edited and written back over REST. Persistence (CSRF-guarded writes, the tab switch when the current
+ * file is renamed, and reloading other open editors) is delegated to the IDE via javaLspPersistRename.
+ */
+async function applyRenameAcrossWorkspace(model: monaco.editor.ITextModel, edit: WorkspaceEdit): Promise<void> {
+    const currentUri = model.uri.toString();
+    const textByUri: Record<string, TextEdit[]> = {};
+    const renameByUri: Record<string, string> = {};
+
+    if (edit.changes) {
+        for (const uri in edit.changes) textByUri[uri] = (textByUri[uri] ?? []).concat(edit.changes[uri]);
+    }
+    if (edit.documentChanges) {
+        for (const dc of edit.documentChanges as any[]) {
+            if (dc?.kind === 'rename' && dc.oldUri && dc.newUri) {
+                renameByUri[dc.oldUri] = dc.newUri;
+            } else if (dc?.textDocument?.uri && Array.isArray(dc.edits)) {
+                textByUri[dc.textDocument.uri] = (textByUri[dc.textDocument.uri] ?? []).concat(dc.edits);
+            }
+        }
+    }
+
+    const payload: {
+        currentPath: string | null;
+        currentContent: string | null;
+        currentNewPath: string | null;
+        writes: Array<{ path: string | null; content: string }>;
+        renames: Array<{ oldPath: string | null; newPath: string | null; content: string }>;
+    } = { currentPath: uriToWorkspacePath(currentUri), currentContent: null, currentNewPath: null, writes: [], renames: [] };
+
+    const uris = new Set<string>([...Object.keys(textByUri), ...Object.keys(renameByUri)]);
+    for (const uri of uris) {
+        const edits = textByUri[uri] ?? [];
+        let content: string;
+        if (uri === currentUri) {
+            if (edits.length) {
+                model.pushEditOperations([], edits.map(e => ({ range: lspRangeToMonaco(e.range), text: e.newText, forceMoveMarkers: true })), () => null);
+            }
+            content = model.getValue();
+        } else {
+            const source = await fetchWorkspaceFileText(uriToWorkspacePath(uri) ?? uri);
+            content = edits.length ? applyEditsToText(source, edits) : source;
+        }
+        const newUri = renameByUri[uri];
+        if (uri === currentUri) {
+            payload.currentContent = content;
+            payload.currentNewPath = newUri ? uriToWorkspacePath(newUri) : null;
+        } else if (newUri) {
+            payload.renames.push({ oldPath: uriToWorkspacePath(uri), newPath: uriToWorkspacePath(newUri), content });
+        } else {
+            payload.writes.push({ path: uriToWorkspacePath(uri), content });
+        }
+    }
+
+    await (globalThis as any).javaLspPersistRename(payload);
 }
 
 function jdtlsSettings() {

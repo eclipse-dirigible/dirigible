@@ -50,6 +50,42 @@ window.javaLspOpenFile = (path, line, column) => {
     }
 };
 
+// Persists a Java cross-file rename computed by the LSP client: writes the edited files (CSRF-guarded),
+// performs any file rename the refactor implies (a public type renames its own .java file), switches the
+// current tab when the file being edited is the one renamed, and asks other open editors to reload.
+window.javaLspPersistRename = async ({ currentPath, currentContent, currentNewPath, writes, renames }) => {
+    const writeFile = (path, content, method) => fetch(`${WORKSPACE_API}${path}`, {
+        method: method,
+        body: content,
+        headers: { 'X-Requested-With': 'Fetch', 'X-CSRF-Token': csrfToken, 'Dirigible-Editor': 'Monaco', 'Content-Type': 'text/plain' },
+    });
+    const removeFile = (path) => fetch(`${WORKSPACE_API}${path}`, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'Fetch', 'X-CSRF-Token': csrfToken, 'Dirigible-Editor': 'Monaco' },
+    });
+
+    for (const write of (writes || [])) {
+        if (!write.path) continue;
+        await writeFile(write.path, write.content, 'PUT');
+        themingHub.postMessage({ topic: 'monaco.file.reload', data: { path: write.path } });
+    }
+    for (const rename of (renames || [])) {
+        if (!rename.oldPath || !rename.newPath) continue;
+        await writeFile(rename.newPath, rename.content, 'POST');
+        await removeFile(rename.oldPath);
+        workspaceHub.announceFileRenamed({ oldPath: rename.oldPath, newPath: rename.newPath });
+    }
+    if (currentNewPath && currentPath) {
+        await writeFile(currentNewPath, currentContent, 'POST');
+        await removeFile(currentPath);
+        workspaceHub.announceFileRenamed({ oldPath: currentPath, newPath: currentNewPath });
+        layoutHub.openEditor({ path: currentNewPath });
+        layoutHub.closeEditor({ path: currentPath });
+    } else if (currentContent != null && currentPath) {
+        await DirigibleEditor.fileIO.saveText(currentContent, currentPath);
+    }
+};
+
 const brandingInfo = getBrandingInfo();
 
 let csrfToken;
@@ -827,6 +863,26 @@ class DirigibleEditor {
                     editor.revealLineInCenter(line);
                     editor.setPosition({ lineNumber: line, column: col });
                     editor.focus();
+                }
+            },
+        });
+
+        // Reload this editor's content from disk when another file was changed by a cross-file Java
+        // rename. Skip dirty editors so unsaved work is never clobbered.
+        themingHub.addMessageListener({
+            topic: 'monaco.file.reload',
+            handler: async (msg) => {
+                const { path } = msg || {};
+                if (!path || path !== editorParameters.resourcePath || DirigibleEditor.dirty) return;
+                try {
+                    const reloaded = await new FileIO().loadText(editorParameters.resourcePath, true);
+                    DirigibleEditor.sourceBeingChangedProgramatically = true;
+                    editor.getModel().setValue(reloaded.modified);
+                    DirigibleEditor.lastSavedVersionId = editor.getModel().getAlternativeVersionId();
+                    DirigibleEditor.dirty = false;
+                    DirigibleEditor.sourceBeingChangedProgramatically = false;
+                } catch (e) {
+                    console.error('[java-lsp] could not reload after rename', e);
                 }
             },
         });
