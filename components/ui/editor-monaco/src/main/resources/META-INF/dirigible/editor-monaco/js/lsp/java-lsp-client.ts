@@ -64,6 +64,9 @@ const _openFiles: Set<string> = new Set();
 
 let _providersRegistered = false;
 
+/** Semantic-token legend reported by JDT.LS in the initialize result; needed to decode token data. */
+let _semanticTokensLegend: { tokenTypes: string[]; tokenModifiers: string[] } | null = null;
+
 // -------------------------------------------------------------------------
 // Public API
 // -------------------------------------------------------------------------
@@ -133,7 +136,7 @@ export async function connect(resourcePath: string): Promise<void> {
     _conn.listen();
 
     const rootUri = _workspaceRoot;
-    await _conn.sendRequest('initialize', {
+    const initResult: any = await _conn.sendRequest('initialize', {
         processId: null,
         rootUri,
         initializationOptions: {
@@ -170,7 +173,26 @@ export async function connect(resourcePath: string): Promise<void> {
                 signatureHelp:  { dynamicRegistration: true, signatureInformation: { documentationFormat: ['markdown', 'plaintext'], parameterInformation: { labelOffsetSupport: true } } },
                 definition:     { dynamicRegistration: true },
                 references:     { dynamicRegistration: true },
-                documentSymbol: { dynamicRegistration: true },
+                implementation: { dynamicRegistration: true },
+                typeDefinition: { dynamicRegistration: true },
+                documentHighlight: { dynamicRegistration: true },
+                documentSymbol: { dynamicRegistration: true, hierarchicalDocumentSymbolSupport: true },
+                foldingRange:   { dynamicRegistration: true, lineFoldingOnly: false },
+                selectionRange: { dynamicRegistration: true },
+                codeLens:       { dynamicRegistration: true },
+                inlayHint:      { dynamicRegistration: true, resolveSupport: { properties: ['label'] } },
+                semanticTokens: {
+                    dynamicRegistration: true,
+                    requests:        { range: false, full: { delta: false } },
+                    tokenTypes:      ['namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter',
+                        'parameter', 'variable', 'property', 'enumMember', 'event', 'function', 'method', 'macro',
+                        'keyword', 'modifier', 'comment', 'string', 'number', 'regexp', 'operator', 'decorator'],
+                    tokenModifiers:  ['declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract',
+                        'async', 'modification', 'documentation', 'defaultLibrary'],
+                    formats:         ['relative'],
+                    overlappingTokenSupport: false,
+                    multilineTokenSupport:   false,
+                },
                 formatting:     { dynamicRegistration: true },
                 rangeFormatting: { dynamicRegistration: true },
                 rename:         { dynamicRegistration: true, prepareSupport: true },
@@ -197,6 +219,8 @@ export async function connect(resourcePath: string): Promise<void> {
             },
         },
     });
+
+    _semanticTokensLegend = initResult?.capabilities?.semanticTokensProvider?.legend ?? null;
 
     _conn.sendNotification('initialized', {});
     _conn.sendNotification('workspace/didChangeConfiguration', { settings: jdtlsSettings() });
@@ -266,6 +290,7 @@ function registerProviders(): void {
     monaco.editor.registerCommand(APPLY_ACTION_COMMAND, (_accessor: unknown, action: CodeAction | Command) => {
         applyCodeAction(action);
     });
+    monaco.editor.registerCommand(NOOP_COMMAND, () => { /* display-only CodeLens */ });
 
     // Cross-file navigation: this single-file editor has no model for other workspace files, so Go to
     // Definition / Find References to another file would silently do nothing. Hand those off to the IDE
@@ -485,6 +510,162 @@ function registerProviders(): void {
         providedCodeActionKinds: ['quickfix', 'refactor', 'refactor.extract', 'refactor.inline',
             'refactor.rewrite', 'source', 'source.organizeImports'],
     });
+
+    // --- Navigation & structure (Pack 1) ---
+
+    monaco.languages.registerImplementationProvider('java', {
+        provideImplementation: (model, position) => requestLocations('textDocument/implementation', model, position),
+    });
+
+    monaco.languages.registerTypeDefinitionProvider('java', {
+        provideTypeDefinition: (model, position) => requestLocations('textDocument/typeDefinition', model, position),
+    });
+
+    monaco.languages.registerDocumentHighlightProvider('java', {
+        provideDocumentHighlights: async (model, position) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: any[] | null = await _conn.sendRequest('textDocument/documentHighlight', {
+                textDocument: { uri: model.uri.toString() },
+                position:     { line: position.lineNumber - 1, character: position.column - 1 },
+            });
+            if (!result) return null;
+            return result.map(h => ({ range: lspRangeToMonaco(h.range), kind: h.kind ? h.kind - 1 : undefined }));
+        },
+    });
+
+    monaco.languages.registerDocumentSymbolProvider('java', {
+        provideDocumentSymbols: async (model) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: any[] | null = await _conn.sendRequest('textDocument/documentSymbol', {
+                textDocument: { uri: model.uri.toString() },
+            });
+            return result ? mapDocumentSymbols(result) : null;
+        },
+    });
+
+    monaco.languages.registerFoldingRangeProvider('java', {
+        provideFoldingRanges: async (model) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: any[] | null = await _conn.sendRequest('textDocument/foldingRange', {
+                textDocument: { uri: model.uri.toString() },
+            });
+            if (!result) return null;
+            return result.map(r => ({ start: r.startLine + 1, end: r.endLine + 1, kind: foldingKind(r.kind) }));
+        },
+    });
+
+    monaco.languages.registerSelectionRangeProvider('java', {
+        provideSelectionRanges: async (model, positions) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: any[] | null = await _conn.sendRequest('textDocument/selectionRange', {
+                textDocument: { uri: model.uri.toString() },
+                positions:    positions.map(p => ({ line: p.lineNumber - 1, character: p.column - 1 })),
+            });
+            if (!result) return null;
+            return result.map(flattenSelectionRange);
+        },
+    });
+
+    monaco.languages.registerDocumentRangeFormattingEditProvider('java', {
+        provideDocumentRangeFormattingEdits: async (model, range) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const edits: TextEdit[] | null = await _conn.sendRequest('textDocument/rangeFormatting', {
+                textDocument: { uri: model.uri.toString() },
+                range:        monacoRangeToLsp(range),
+                options:      { tabSize: model.getOptions().tabSize, insertSpaces: model.getOptions().insertSpaces },
+            });
+            return edits ? edits.map(textEditToMonaco) : null;
+        },
+    });
+
+    // --- Inlay hints + semantic highlighting (Pack 2) ---
+
+    monaco.languages.registerInlayHintsProvider('java', {
+        provideInlayHints: async (model, range) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: any[] | null = await _conn.sendRequest('textDocument/inlayHint', {
+                textDocument: { uri: model.uri.toString() },
+                range:        monacoRangeToLsp(range),
+            });
+            if (!result) return null;
+            return {
+                hints: result.map(h => ({
+                    position:     { lineNumber: h.position.line + 1, column: h.position.character + 1 },
+                    label:        typeof h.label === 'string' ? h.label : (h.label ?? []).map((p: any) => ({ label: p.value })),
+                    kind:         h.kind,
+                    paddingLeft:  h.paddingLeft,
+                    paddingRight: h.paddingRight,
+                    tooltip:      h.tooltip ? markupToString(h.tooltip) : undefined,
+                })),
+                dispose() { /* nothing to dispose */ },
+            };
+        },
+    });
+
+    monaco.languages.registerDocumentSemanticTokensProvider('java', {
+        getLegend: () => _semanticTokensLegend ?? { tokenTypes: [], tokenModifiers: [] },
+        provideDocumentSemanticTokens: async (model) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString()) || !_semanticTokensLegend) return null;
+            const result: { data: number[]; resultId?: string } | null = await _conn.sendRequest('textDocument/semanticTokens/full', {
+                textDocument: { uri: model.uri.toString() },
+            });
+            if (!result?.data) return null;
+            return { data: new Uint32Array(result.data), resultId: result.resultId };
+        },
+        releaseDocumentSemanticTokens: () => { /* nothing to release */ },
+    });
+
+    // --- CodeLens (Pack 3) ---
+
+    monaco.languages.registerCodeLensProvider('java', {
+        provideCodeLenses: async (model) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return { lenses: [], dispose() { /* */ } };
+            const result: any[] | null = await _conn.sendRequest('textDocument/codeLens', {
+                textDocument: { uri: model.uri.toString() },
+            });
+            const lenses = (result ?? []).map((lens, i) => ({
+                range:    lspRangeToMonaco(lens.range),
+                id:       String(i),
+                command:  lens.command ? mapLensCommand(lens.command) : undefined,
+                _lsp:     lens,
+            }));
+            return { lenses, dispose() { /* */ } };
+        },
+        resolveCodeLens: async (_model, codeLens) => {
+            const lsp = (codeLens as any)._lsp;
+            if (_conn && lsp && !lsp.command) {
+                try {
+                    const resolved: any = await _conn.sendRequest('codeLens/resolve', lsp);
+                    codeLens.command = resolved?.command ? mapLensCommand(resolved.command) : { id: NOOP_COMMAND, title: '' };
+                } catch {
+                    codeLens.command = { id: NOOP_COMMAND, title: '' };
+                }
+            }
+            return codeLens;
+        },
+    });
+
+    // --- Java keyword completion (Pack 1b): always-available, ranked below SDK/LSP results ---
+
+    monaco.languages.registerCompletionItemProvider('java', {
+        provideCompletionItems: (model, position) => {
+            if (!isWorkspaceFile(model.uri.toString())) return null;
+            const word = model.getWordUntilPosition(position);
+            const range: monaco.IRange = {
+                startLineNumber: position.lineNumber, startColumn: word.startColumn,
+                endLineNumber:   position.lineNumber, endColumn:   word.endColumn,
+            };
+            return {
+                suggestions: JAVA_KEYWORDS.map(keyword => ({
+                    label:      keyword,
+                    kind:       monaco.languages.CompletionItemKind.Keyword,
+                    insertText: keyword,
+                    range,
+                    sortText:   `9_${keyword}`,
+                })),
+            };
+        },
+    });
 }
 
 // -------------------------------------------------------------------------
@@ -596,6 +777,77 @@ const APPLY_ACTION_COMMAND = 'dirigible.java.applyCodeAction';
 
 /** Virtual URI prefix of editor models; stripping it yields the IDE workspace path (/ws/proj/...). */
 const VIRTUAL_FILE_PREFIX = 'file:///workspace';
+
+/** Monaco command id used for display-only CodeLenses (e.g. a reference count with no resolved action). */
+const NOOP_COMMAND = 'dirigible.java.noopLens';
+
+/** Java SE keywords/literals offered as low-priority completion so they always appear while typing. */
+const JAVA_KEYWORDS = ['abstract', 'assert', 'boolean', 'break', 'byte', 'case', 'catch', 'char', 'class',
+    'const', 'continue', 'default', 'do', 'double', 'else', 'enum', 'extends', 'final', 'finally', 'float',
+    'for', 'goto', 'if', 'implements', 'import', 'instanceof', 'int', 'interface', 'long', 'native', 'new',
+    'package', 'private', 'protected', 'public', 'return', 'short', 'static', 'strictfp', 'super', 'switch',
+    'synchronized', 'this', 'throw', 'throws', 'transient', 'try', 'void', 'volatile', 'while', 'var',
+    'yield', 'record', 'sealed', 'permits', 'true', 'false', 'null'];
+
+/** Shared definition-style location request used by go-to-definition/implementation/type-definition. */
+async function requestLocations(method: string, model: monaco.editor.ITextModel, position: monaco.Position) {
+    if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+    const result: Location | Location[] | null = await _conn.sendRequest(method, {
+        textDocument: { uri: model.uri.toString() },
+        position:     { line: position.lineNumber - 1, character: position.column - 1 },
+    });
+    if (!result) return null;
+    const locations = Array.isArray(result) ? result : [result];
+    return locations.map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+}
+
+/** Recursively maps LSP hierarchical DocumentSymbols to Monaco's shape (kinds are 1-based vs 0-based). */
+function mapDocumentSymbols(symbols: any[]): monaco.languages.DocumentSymbol[] {
+    return (symbols ?? []).map(s => ({
+        name:           s.name,
+        detail:         s.detail ?? '',
+        kind:           (s.kind ?? 1) - 1,
+        tags:           s.tags ?? [],
+        range:          lspRangeToMonaco(s.range),
+        selectionRange: lspRangeToMonaco(s.selectionRange ?? s.range),
+        children:       s.children ? mapDocumentSymbols(s.children) : [],
+    }));
+}
+
+function foldingKind(kind: string | undefined): monaco.languages.FoldingRangeKind | undefined {
+    const FK = monaco.languages.FoldingRangeKind;
+    switch (kind) {
+        case 'comment': return FK.Comment;
+        case 'imports': return FK.Imports;
+        case 'region':  return FK.Region;
+        default:        return undefined;
+    }
+}
+
+/** Flattens an LSP SelectionRange parent-chain into Monaco's innermost-to-outermost array. */
+function flattenSelectionRange(selectionRange: any): monaco.languages.SelectionRange[] {
+    const ranges: monaco.languages.SelectionRange[] = [];
+    let current = selectionRange;
+    while (current) {
+        ranges.push({ range: lspRangeToMonaco(current.range) });
+        current = current.parent;
+    }
+    return ranges;
+}
+
+/** Maps a JDT.LS CodeLens command to a Monaco command, wiring the references/implementations peek. */
+function mapLensCommand(cmd: any): monaco.languages.Command {
+    const args = cmd.arguments ?? [];
+    if ((cmd.command === 'java.show.references' || cmd.command === 'java.show.implementations') && args.length >= 3) {
+        const locations = (args[2] ?? []).map((l: any) => ({ uri: monaco.Uri.parse(l.uri), range: lspRangeToMonaco(l.range) }));
+        return {
+            id:        'editor.action.showReferences',
+            title:     cmd.title,
+            arguments: [monaco.Uri.parse(args[0]), { lineNumber: args[1].line + 1, column: args[1].character + 1 }, locations],
+        };
+    }
+    return { id: NOOP_COMMAND, title: cmd.title };
+}
 
 type LspRange = { start: { line: number; character: number }; end: { line: number; character: number } };
 
@@ -728,6 +980,16 @@ const GENERATE: Record<string, GenerateSpec> = {
         generate: 'java.action.generateAccessors',
         members: (s) => (s?.accessors ?? s ?? []).map((a: any) => ({ label: fieldLabel(a), ref: a })),
         buildArgs: (args, _s, sel) => [args[0], sel.map(m => m.ref)],
+    },
+    'java.action.overrideMethodsPrompt': {
+        label: 'Select methods to override or implement',
+        status: 'java.action.listOverridableMethods',
+        generate: 'java.action.addOverridableMethods',
+        members: (s) => (s?.methods ?? []).map((m: any) => ({
+            label: `${m.name}(${(m.parameters ?? []).join(', ')})${m.declaringClass ? ' : ' + m.declaringClass : ''}`,
+            ref: m,
+        })),
+        buildArgs: (args, status, sel) => [args[0], { overridableMethods: sel.map(m => m.ref), type: status?.type }],
     },
 };
 
@@ -907,6 +1169,9 @@ function jdtlsSettings() {
             signatureHelp:  { enabled: true },
             format:         { enabled: true },
             saveActions:    { organizeImports: false },
+            inlayHints:     { parameterNames: { enabled: 'all' } },
+            referencesCodeLens:     { enabled: true },
+            implementationsCodeLens: { enabled: true },
         },
     };
 }
