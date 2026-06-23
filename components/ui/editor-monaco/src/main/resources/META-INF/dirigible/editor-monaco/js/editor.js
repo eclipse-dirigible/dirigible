@@ -725,6 +725,9 @@ class DirigibleEditor {
                         minimap: {
                             autohide: DirigibleEditor.isMinimapAutohideEnabled(),
                         },
+                        // Show the code-action lightbulb whenever any action (incl. refactor assists like
+                        // "Assign parameter to new field", Extract, ...) is available, not just on diagnostics.
+                        lightbulb: { enabled: 'on' },
                     };
                     if (TypeScriptUtils.isTypeScriptFile(fileName)) {
                         // @ts-ignore
