@@ -1232,6 +1232,8 @@ function jdtlsSettings() {
             completion: {
                 overwrite:            true,
                 guessMethodArguments: false,
+                // Cap results so import/type completion over the large platform classpath stays snappy.
+                maxResults:           50,
                 filteredTypes: [
                     'com.sun.*', 'sun.*', 'jdk.*',
                     'org.eclipse.jdt.internal.*',

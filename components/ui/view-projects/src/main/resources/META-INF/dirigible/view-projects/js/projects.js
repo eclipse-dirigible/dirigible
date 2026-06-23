@@ -2173,9 +2173,22 @@ projectsView.controller('ProjectsViewController', (
         }
     });
 
-    // A Java refactor (e.g. renaming a class via F2) renames files on disk; refresh the tree so the
-    // renamed file shows up instead of the stale one.
-    Workspace.onFileRenamed(() => {
+    // A Java refactor (e.g. renaming a class/interface via F2) renames files on disk. Rename the matching
+    // tree node in place so it stays revealed and selected; fall back to a reload if it isn't loaded yet.
+    Workspace.onFileRenamed((data) => {
+        if (!data || !data.oldPath || !data.newPath) return;
+        const instance = jstreeWidget.jstree(true);
+        const newName = data.newPath.substring(data.newPath.lastIndexOf('/') + 1);
+        for (let item in instance._model.data) {
+            if (item !== '#' && instance._model.data[item].data && instance._model.data[item].data.path === data.oldPath) {
+                instance.rename_node(item, newName);
+                instance._model.data[item].data.path = data.newPath;
+                instance.set_icon(item, getFileIcon(newName));
+                instance.deselect_all(true);
+                instance.select_node(item);
+                return;
+            }
+        }
         $scope.$evalAsync(() => { $scope.reloadWorkspace(); });
     });
 
