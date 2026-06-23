@@ -537,7 +537,10 @@ function registerProviders(): void {
             const result: Array<CodeAction | Command> | null = await _conn.sendRequest('textDocument/codeAction', {
                 textDocument: { uri: model.uri.toString() },
                 range:        lspRange,
-                context:      { diagnostics, only: context.only ? [context.only] : undefined },
+                // Monaco's CodeActionTriggerType (Invoke=1, Auto=2) maps 1:1 to the LSP trigger kind.
+                // Forwarding it lets JDT.LS compute only quick-fixes for the passive lightbulb (cheap)
+                // and the full assists/refactorings only on explicit Ctrl+. / Refactor… (Invoked).
+                context:      { diagnostics, only: context.only ? [context.only] : undefined, triggerKind: context.trigger },
             });
             if (!result?.length) return empty;
             return {
@@ -1246,8 +1249,10 @@ function jdtlsSettings() {
             format:         { enabled: true },
             saveActions:    { organizeImports: false },
             inlayHints:     { parameterNames: { enabled: 'all' } },
-            referencesCodeLens:     { enabled: true },
-            implementationsCodeLens: { enabled: true },
+            // Off by default: the reference/implementation search behind these CodeLenses runs for every
+            // declaration on open and on every edit and dominates JDT.LS load on a large classpath.
+            referencesCodeLens:     { enabled: false },
+            implementationsCodeLens: { enabled: false },
         },
     };
 }
