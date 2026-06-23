@@ -447,9 +447,13 @@ projectsView.controller('ProjectsViewController', (
                         label: 'Folder',
                         leftIconClass: 'sap-icon--add-folder',
                         separator: true,
-                    }, JavaNew.submenu()],
+                    }],
                     separator: true,
                 };
+                // A dedicated top-level "Java" submenu (sibling of New), NOT nested inside New: BlimpKit
+                // disables scrolling for any menu that contains a submenu child, and the New menu relies
+                // on scrolling once enough artefact templates are registered.
+                const javaSubmenu = JavaNew.submenu();
                 const cutObj = {
                     id: 'cut',
                     label: 'Cut',
@@ -523,6 +527,7 @@ projectsView.controller('ProjectsViewController', (
                 if (node.type === 'project') {
                     if (nodes.length === 1) items.push(
                         newSubmenu,
+                        javaSubmenu,
                         {
                             id: 'duplicateProject',
                             label: 'Duplicate',
@@ -565,6 +570,7 @@ projectsView.controller('ProjectsViewController', (
                 } else if (node.type === 'folder') {
                     items.push(
                         newSubmenu,
+                        javaSubmenu,
                         cutObj,
                         copyObj,
                         pasteObj,

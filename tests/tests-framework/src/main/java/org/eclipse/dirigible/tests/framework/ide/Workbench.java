@@ -96,7 +96,7 @@ public class Workbench {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
-        browser.clickCascadingMenuItem("New", "Java", leafLabel);
+        browser.clickCascadingMenuItem("Java", leafLabel);
 
         browser.enterTextInElementById("fdti1", name);
         if (entity != null) {
