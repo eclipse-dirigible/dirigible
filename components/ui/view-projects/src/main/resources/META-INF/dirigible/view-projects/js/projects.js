@@ -2173,6 +2173,16 @@ projectsView.controller('ProjectsViewController', (
         }
     });
 
+    // A Java refactor (e.g. renaming a class via F2) renames files on disk; refresh the tree so the
+    // renamed file shows up instead of the stale one.
+    Workspace.onFileRenamed(() => {
+        $scope.$evalAsync(() => { $scope.reloadWorkspace(); });
+    });
+
+    Workspace.onFileMoved(() => {
+        $scope.$evalAsync(() => { $scope.reloadWorkspace(); });
+    });
+
     Workspace.onWorkspaceChanged((changed) => {
         if (changed.workspace === $scope.selectedWorkspace) {
             if (changed.params && changed.params.projectsViewId) {

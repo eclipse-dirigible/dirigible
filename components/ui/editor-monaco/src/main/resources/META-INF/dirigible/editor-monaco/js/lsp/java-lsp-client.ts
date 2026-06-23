@@ -65,6 +65,13 @@ const _openFiles: Set<string> = new Set();
 /** Pending debounced didChange timers per file URI, so a change can be flushed before completion. */
 const _changeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
 
+/**
+ * Last diagnostics published per file URI, kept verbatim (with their LSP code/data). Code-action
+ * requests must send these — JDT.LS matches quick-fixes by the diagnostic's code/data, which Monaco's
+ * IMarkerData cannot round-trip, so reconstructing diagnostics from markers yields no quick-fixes.
+ */
+const _diagnostics: Map<string, Diagnostic[]> = new Map();
+
 let _providersRegistered = false;
 
 /** Semantic-token legend reported by JDT.LS in the initialize result; needed to decode token data. */
@@ -106,6 +113,7 @@ export async function connect(resourcePath: string): Promise<void> {
 
     // Diagnostics notification → Monaco markers (applies to any workspace file)
     _conn.onNotification('textDocument/publishDiagnostics', (params: { uri: string; diagnostics: Diagnostic[] }) => {
+        _diagnostics.set(params.uri, params.diagnostics ?? []);
         const model = monaco.editor.getModels().find(m => m.uri.toString() === params.uri);
         if (!model) return;
         monaco.editor.setModelMarkers(model, 'java-lsp', params.diagnostics.map(d => ({
@@ -148,12 +156,11 @@ export async function connect(resourcePath: string): Promise<void> {
                 progressReportProvider:            false,
                 classFileContentsSupport:          true,
                 resolveAdditionalTextEditsSupport: true,
-                advancedGenerateAccessorsSupport:  true,
-                generateToStringPromptSupport:     true,
-                generateConstructorsPromptSupport: true,
-                generateDelegateMethodsPromptSupport: true,
-                hashCodeEqualsPromptSupport:       true,
-                advancedOrganizeImportsSupport:    true,
+                // Do NOT advertise the *PromptSupport flags: those make JDT.LS return source actions
+                // (generate toString/constructors/accessors, override/implement, organize imports) as
+                // client-side "*Prompt" commands the vscode-java extension implements but we don't.
+                // With them off, JDT.LS returns the same actions as resolvable WorkspaceEdits operating
+                // on all members, which applyCodeAction resolves and applies directly.
                 inferSelectionSupport:             ['extractMethod', 'extractVariable', 'extractField'],
             },
         },
@@ -523,10 +530,13 @@ function registerProviders(): void {
         provideCodeActions: async (model, range, context) => {
             const empty = { actions: [], dispose() { /* nothing to dispose */ } };
             if (!_conn || !isWorkspaceFile(model.uri.toString())) return empty;
-            const diagnostics = (context.markers ?? []).map(markerToLspDiagnostic);
+            // Send the original LSP diagnostics that overlap the range (they carry the code/data JDT.LS
+            // needs to compute quick-fixes), not ones reconstructed from Monaco markers.
+            const lspRange = monacoRangeToLsp(range);
+            const diagnostics = (_diagnostics.get(model.uri.toString()) ?? []).filter(d => rangesOverlap(d.range, lspRange));
             const result: Array<CodeAction | Command> | null = await _conn.sendRequest('textDocument/codeAction', {
                 textDocument: { uri: model.uri.toString() },
-                range:        monacoRangeToLsp(range),
+                range:        lspRange,
                 context:      { diagnostics, only: context.only ? [context.only] : undefined },
             });
             if (!result?.length) return empty;
@@ -915,23 +925,11 @@ function monacoRangeToLsp(r: monaco.IRange): LspRange {
     };
 }
 
-function monacoSeverityToLsp(severity: monaco.MarkerSeverity): DiagnosticSeverity {
-    switch (severity) {
-        case monaco.MarkerSeverity.Error:   return DiagnosticSeverity.Error;
-        case monaco.MarkerSeverity.Warning: return DiagnosticSeverity.Warning;
-        case monaco.MarkerSeverity.Info:    return DiagnosticSeverity.Information;
-        default:                            return DiagnosticSeverity.Hint;
-    }
-}
-
-function markerToLspDiagnostic(m: monaco.editor.IMarkerData): Diagnostic {
-    return {
-        range:    { start: { line: m.startLineNumber - 1, character: m.startColumn - 1 },
-                    end:   { line: m.endLineNumber - 1, character: m.endColumn - 1 } },
-        message:  m.message,
-        severity: monacoSeverityToLsp(m.severity),
-        source:   m.source,
-    } as Diagnostic;
+/** True when two LSP ranges intersect (used to pick the diagnostics relevant to a code-action request). */
+function rangesOverlap(a: LspRange, b: LspRange): boolean {
+    const notAfter = (p: { line: number; character: number }, q: { line: number; character: number }) =>
+        p.line < q.line || (p.line === q.line && p.character <= q.character);
+    return notAfter(a.start, b.end) && notAfter(b.start, a.end);
 }
 
 function lspCodeActionToMonaco(action: CodeAction | Command): monaco.languages.CodeAction {
