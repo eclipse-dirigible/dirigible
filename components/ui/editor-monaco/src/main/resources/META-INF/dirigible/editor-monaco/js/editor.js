@@ -725,8 +725,6 @@ class DirigibleEditor {
                         minimap: {
                             autohide: DirigibleEditor.isMinimapAutohideEnabled(),
                         },
-                        // Enable LSP semantic token coloring (off by default unless the theme opts in).
-                        'semanticHighlighting.enabled': true,
                     };
                     if (TypeScriptUtils.isTypeScriptFile(fileName)) {
                         // @ts-ignore

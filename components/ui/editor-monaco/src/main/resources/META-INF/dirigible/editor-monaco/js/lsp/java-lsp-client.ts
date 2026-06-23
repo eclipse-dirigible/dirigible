@@ -62,6 +62,9 @@ let _workspaceRoot = '';
 /** URIs for which textDocument/didOpen has already been sent. */
 const _openFiles: Set<string> = new Set();
 
+/** Pending debounced didChange timers per file URI, so a change can be flushed before completion. */
+const _changeTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
 let _providersRegistered = false;
 
 /** Semantic-token legend reported by JDT.LS in the initialize result; needed to decode token data. */
@@ -256,16 +259,35 @@ function openFile(fileUri: string): void {
     });
 
     if (model) {
-        let timer: ReturnType<typeof setTimeout>;
         model.onDidChangeContent(() => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                _conn?.sendNotification('textDocument/didChange', {
-                    textDocument:   { uri: fileUri, version: model.getVersionId() },
-                    contentChanges: [{ text: model.getValue() }],
-                });
-            }, 400);
+            const existing = _changeTimers.get(fileUri);
+            if (existing) clearTimeout(existing);
+            _changeTimers.set(fileUri, setTimeout(() => sendDidChange(fileUri), 400));
         });
+    }
+}
+
+/** Sends the current model content as a didChange and clears any pending debounce for the file. */
+function sendDidChange(fileUri: string): void {
+    _changeTimers.delete(fileUri);
+    const model = monaco.editor.getModel(monaco.Uri.parse(fileUri));
+    if (_conn && model) {
+        _conn.sendNotification('textDocument/didChange', {
+            textDocument:   { uri: fileUri, version: model.getVersionId() },
+            contentChanges: [{ text: model.getValue() }],
+        });
+    }
+}
+
+/**
+ * Flushes a pending debounced change immediately. Called before a completion request so JDT.LS sees the
+ * just-typed text on the first Ctrl+Space, instead of completing against stale content (the debounce
+ * otherwise delays the change by up to 400ms — the cause of "first Ctrl+Space shows nothing").
+ */
+function flushPendingChange(fileUri: string): void {
+    if (_changeTimers.has(fileUri)) {
+        clearTimeout(_changeTimers.get(fileUri)!);
+        sendDidChange(fileUri);
     }
 }
 
@@ -316,6 +338,8 @@ function registerProviders(): void {
         provideCompletionItems: async (model, position, context) => {
             if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
             const fileUri = model.uri.toString();
+            // Make sure JDT.LS has the just-typed text before completing (see flushPendingChange).
+            flushPendingChange(fileUri);
             const result: CompletionList | CompletionItem[] | null = await _conn.sendRequest('textDocument/completion', {
                 textDocument: { uri: fileUri },
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
@@ -408,11 +432,12 @@ function registerProviders(): void {
                 position:     { line: position.lineNumber - 1, character: position.column - 1 },
             });
             if (!result) return null;
-            const locations = Array.isArray(result) ? result : [result];
-            return locations.map(loc => ({
+            const locations = (Array.isArray(result) ? result : [result]).map(loc => ({
                 uri:   monaco.Uri.parse(loc.uri),
                 range: lspRangeToMonaco(loc.range),
             }));
+            await ensureModelsForLocations(locations);
+            return locations;
         },
     });
 
@@ -425,7 +450,11 @@ function registerProviders(): void {
                 context:      { includeDeclaration: context.includeDeclaration },
             });
             if (!result) return null;
-            return result.map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+            const locations = result.map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+            // The references peek can only show a code preview for files it has a model for; create
+            // in-memory models for the referenced (possibly unopened) files so previews render.
+            await ensureModelsForLocations(locations);
+            return locations;
         },
     });
 
@@ -797,8 +826,29 @@ async function requestLocations(method: string, model: monaco.editor.ITextModel,
         position:     { line: position.lineNumber - 1, character: position.column - 1 },
     });
     if (!result) return null;
-    const locations = Array.isArray(result) ? result : [result];
-    return locations.map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+    const locations = (Array.isArray(result) ? result : [result]).map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+    await ensureModelsForLocations(locations);
+    return locations;
+}
+
+/**
+ * Creates in-memory Monaco models for the workspace files referenced by the given locations (fetched
+ * over REST) so the references / peek widgets can render a code preview — Monaco can only preview files
+ * it has a model for, and this single-file editor otherwise has none for other files.
+ */
+async function ensureModelsForLocations(locations: Array<{ uri: monaco.Uri }>): Promise<void> {
+    const seen = new Set<string>();
+    await Promise.all(locations.map(async ({ uri }) => {
+        const uriStr = uri.toString();
+        if (seen.has(uriStr) || !uriStr.startsWith(VIRTUAL_FILE_PREFIX) || monaco.editor.getModel(uri)) return;
+        seen.add(uriStr);
+        try {
+            const text = await fetchWorkspaceFileText(uriToWorkspacePath(uriStr) ?? uriStr);
+            if (!monaco.editor.getModel(uri)) monaco.editor.createModel(text, 'java', uri);
+        } catch {
+            // preview just won't render for this one
+        }
+    }));
 }
 
 /** Recursively maps LSP hierarchical DocumentSymbols to Monaco's shape (kinds are 1-based vs 0-based). */
