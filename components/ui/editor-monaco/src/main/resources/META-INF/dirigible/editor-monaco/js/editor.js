@@ -17,6 +17,26 @@ const themingHub = new ThemingHub();
 const statusBarHub = new StatusBarHub();
 const layoutHub = new LayoutHub();
 const workspaceHub = new WorkspaceHub();
+const dialogHub = new DialogHub();
+
+// Member picker used by the Java LSP client for "Generate getters/setters/constructor/toString".
+// Returns the labels the user kept, or null when the dialog is cancelled.
+window.javaLspMemberPicker = (title, labels) => {
+    if (!Array.isArray(labels) || labels.length === 0) return Promise.resolve([]);
+    const form = {};
+    labels.forEach((label, i) => {
+        form[`m${i}`] = { label: label, controlType: 'checkbox', value: true };
+    });
+    return dialogHub.showFormDialog({
+        title: title,
+        form: form,
+        submitLabel: 'Generate',
+        cancelLabel: 'Cancel',
+    }).then((result) => {
+        if (!result) return null;
+        return labels.filter((_label, i) => result[`m${i}`]);
+    });
+};
 
 const brandingInfo = getBrandingInfo();
 
@@ -830,6 +850,28 @@ class DirigibleEditor {
         editor.addAction(EditorActionsProvider.createSearchAction());
         if (!this.isTemplate && EditorActionsProvider.isAutoFormattingEnabled()) {
             EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
+        }
+
+        if (this.fileType === 'java' && !this.readOnly) {
+            // Surface the JDT.LS source actions explicitly; rename (F2), references (Shift+F12),
+            // format, and quick-fix (Ctrl+.) are already in Monaco's context menu via the registered
+            // language providers.
+            editor.addAction({
+                id: 'java.organizeImports',
+                label: 'Java: Organize Imports',
+                keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyO],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.5,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.codeAction', { kind: 'source.organizeImports', apply: 'first' }),
+            });
+            editor.addAction({
+                id: 'java.sourceAction',
+                label: 'Java: Generate / Source Action...',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.6,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.codeAction', { kind: 'source', apply: 'never' }),
+            });
         }
 
         DirigibleEditor.computeDiff.onmessage = function (event) {

@@ -447,7 +447,7 @@ projectsView.controller('ProjectsViewController', (
                         label: 'Folder',
                         leftIconClass: 'sap-icon--add-folder',
                         separator: true,
-                    }],
+                    }, JavaNew.submenu()],
                     separator: true,
                 };
                 const cutObj = {
@@ -670,6 +670,8 @@ projectsView.controller('ProjectsViewController', (
                         newNodeData.parent = contextMenuNodes[0].id;
                         newNodeData.path = contextMenuNodes[0].data.path;
                         openNewFolderDialog();
+                    } else if (JavaNew.isJavaMenuId(id)) {
+                        newJavaArtifact(id, contextMenuNodes[0]);
                     } else if (id === 'cut') {
                         jstreeWidget.jstree(true).cut(jstreeWidget.jstree(true).get_top_selected(true));
                     } else if (id === 'copy') {
@@ -1771,6 +1773,130 @@ projectsView.controller('ProjectsViewController', (
                 type: AlertTypes.Error,
                 preformatted: false,
             });
+        });
+    }
+
+    function newJavaArtifact(menuId, node) {
+        const meta = JavaNew.itemById(menuId);
+        if (!meta) return;
+        const projectNode = node.type === 'project' ? node : getProjectNode(node.parents);
+        if (!projectNode) {
+            console.error('Could not resolve the project for the selected node');
+            return;
+        }
+        const projectPath = projectNode.data.path; // /workspace/project
+        const folderPath = node.data.path;          // /workspace/project[/sub...]
+        const folderRel = folderPath.substring(projectPath.length).replace(/^\/+/, '').replace(/\/+$/, '');
+        Dialogs.showFormDialog({
+            title: `New Java ${meta.label}`,
+            form: {
+                'fdti1': {
+                    label: meta.kind === 'package' ? 'Package name' : 'Name',
+                    controlType: 'input',
+                    type: 'text',
+                    placeholder: JavaNew.placeholderFor(meta.kind),
+                    submitOnEnter: true,
+                    focus: true,
+                    required: true,
+                },
+            },
+            submitLabel: 'Create',
+            cancelLabel: 'Cancel'
+        }).then((form) => {
+            if (!form) return;
+            if (meta.kind === 'package') {
+                const parsed = JavaNew.parsePackage(form['fdti1']);
+                if (!parsed.ok) { showJavaNameError(parsed.error); return; }
+                createJavaPackage(projectNode, folderPath, parsed.segments);
+            } else {
+                const parsed = JavaNew.parseType(form['fdti1']);
+                if (!parsed.ok) { showJavaNameError(parsed.error); return; }
+                createJavaType(projectNode, folderPath, folderRel, meta.kind, parsed);
+            }
+        }, (error) => {
+            console.error(error);
+        });
+    }
+
+    function showJavaNameError(message) {
+        Dialogs.showAlert({
+            title: 'Invalid name',
+            message: message,
+            type: AlertTypes.Error,
+            preformatted: false,
+        });
+    }
+
+    /**
+     * Creates the deepest folder of {@code segments} under {@code baseFolderPath}; the server's
+     * forceMkdir creates any missing parents. The leaf is passed as the (single-segment) name and the
+     * parents are folded into the target path, because WorkspaceService URL-encodes the name argument.
+     */
+    function createNestedFolder(segments, baseFolderPath) {
+        const leaf = segments[segments.length - 1];
+        const parents = segments.slice(0, -1);
+        const targetPath = parents.length ? `${baseFolderPath}/${parents.join('/')}` : baseFolderPath;
+        return WorkspaceService.createFolder(leaf, targetPath);
+    }
+
+    function createJavaPackage(projectNode, folderPath, segments) {
+        createNestedFolder(segments, folderPath).then(() => {
+            jstreeWidget.jstree(true).refresh_node(projectNode);
+            StatusBar.showMessage(`Created package '${segments.join('.')}'`);
+        }, (response) => {
+            console.error(response);
+            Dialogs.showAlert({
+                title: 'Could not create the package',
+                message: `There was an error while creating package '${segments.join('.')}'. It may already exist.`,
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    }
+
+    function createJavaType(projectNode, folderPath, folderRel, kind, parsed) {
+        const relSegments = folderRel ? folderRel.split('/') : [];
+        const packageName = relSegments.concat(parsed.packageSegments).join('.');
+        const targetFolderPath = parsed.packageSegments.length
+            ? `${folderPath}/${parsed.packageSegments.join('/')}`
+            : folderPath;
+        const fileName = `${parsed.typeName}.java`;
+        const content = JavaNew.generate(kind, packageName, parsed.typeName);
+        // Tolerate an already-existing package folder; the file-creation step validates the real path.
+        const proceed = () => createJavaFile(projectNode, targetFolderPath, fileName, content);
+        if (parsed.packageSegments.length) {
+            createNestedFolder(parsed.packageSegments, folderPath).then(proceed, proceed);
+        } else {
+            proceed();
+        }
+    }
+
+    function createJavaFile(projectNode, targetFolderPath, fileName, content) {
+        const alertBody = {
+            title: 'Could not create the Java file',
+            message: `There was an error while creating '${fileName}'. It may already exist.`,
+            type: AlertTypes.Error,
+            preformatted: false,
+        };
+        WorkspaceService.createFile(fileName, targetFolderPath, content).then((response) => {
+            WorkspaceService.getMetadataByUrl(response.data).then((metadata) => {
+                jstreeWidget.jstree(true).refresh_node(projectNode);
+                Layout.openEditor({
+                    path: metadata.data.path,
+                    contentType: metadata.data.contentType,
+                    params: {
+                        resourceType: 'workspace',
+                        gitName: projectNode.data.git ? projectNode.data.gitName : undefined,
+                    },
+                });
+                StatusBar.showMessage(`Created '${fileName}'`);
+            }, (response) => {
+                console.error(response);
+                Dialogs.showAlert(alertBody);
+            });
+        }, (response) => {
+            console.error(response);
+            Dialogs.showAlert(alertBody);
         });
     }
 

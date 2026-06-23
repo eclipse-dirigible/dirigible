@@ -32,6 +32,8 @@ import {
     InsertTextFormat,
     MarkupContent,
     MarkupKind,
+    type CodeAction,
+    type Command,
     type CompletionItem,
     type CompletionList,
     type Diagnostic,
@@ -40,6 +42,8 @@ import {
     type ParameterInformation,
     type SignatureHelp,
     type SignatureInformation,
+    type TextEdit,
+    type WorkspaceEdit,
 } from 'vscode-languageserver-types';
 
 // -------------------------------------------------------------------------
@@ -109,6 +113,23 @@ export async function connect(resourcePath: string): Promise<void> {
         })));
     });
 
+    // Server -> client requests that drive refactor / generate results and dynamic registration.
+    _conn.onRequest('workspace/applyEdit', (params: { edit: WorkspaceEdit }) => {
+        applyWorkspaceEdit(params.edit);
+        return { applied: true };
+    });
+    _conn.onRequest('workspace/configuration', (params: { items: Array<{ section?: string }> }) =>
+        (params.items ?? []).map(() => jdtlsSettings().java));
+    _conn.onRequest('client/registerCapability', () => null);
+    _conn.onRequest('client/unregisterCapability', () => null);
+    _conn.onRequest('window/showMessageRequest', () => null);
+    _conn.onRequest('window/workDoneProgress/create', () => null);
+    _conn.onNotification('window/logMessage', (p: { message: string }) => console.debug('[java-lsp]', p?.message));
+    _conn.onNotification('window/showMessage', (p: { message: string }) => console.info('[java-lsp]', p?.message));
+    // JDT.LS language-status / progress notifications — acknowledged silently.
+    _conn.onNotification('language/status', () => { /* indexing/ready status, ignored */ });
+    _conn.onNotification('language/progressReport', () => { /* build progress, ignored */ });
+
     _conn.listen();
 
     const rootUri = _workspaceRoot;
@@ -118,10 +139,16 @@ export async function connect(resourcePath: string): Promise<void> {
         initializationOptions: {
             settings: jdtlsSettings(),
             extendedClientCapabilities: {
-                progressReportProvider:       false,
-                classFileContentsSupport:     true,
+                progressReportProvider:            false,
+                classFileContentsSupport:          true,
                 resolveAdditionalTextEditsSupport: true,
-                inferSelectionSupport:        [],
+                advancedGenerateAccessorsSupport:  true,
+                generateToStringPromptSupport:     true,
+                generateConstructorsPromptSupport: true,
+                generateDelegateMethodsPromptSupport: true,
+                hashCodeEqualsPromptSupport:       true,
+                advancedOrganizeImportsSupport:    true,
+                inferSelectionSupport:             ['extractMethod', 'extractVariable', 'extractField'],
             },
         },
         workspaceFolders: [{ uri: rootUri, name: workspace }],
@@ -130,15 +157,44 @@ export async function connect(resourcePath: string): Promise<void> {
                 synchronization: { dynamicRegistration: true, willSave: false, didSave: true, willSaveWaitUntil: false },
                 completion: {
                     dynamicRegistration: true,
-                    completionItem: { snippetSupport: true, documentationFormat: ['markdown', 'plaintext'], deprecatedSupport: true, commitCharactersSupport: true },
+                    completionItem: {
+                        snippetSupport:        true,
+                        documentationFormat:   ['markdown', 'plaintext'],
+                        deprecatedSupport:     true,
+                        commitCharactersSupport: true,
+                        resolveSupport:        { properties: ['documentation', 'detail', 'additionalTextEdits'] },
+                    },
                     contextSupport: true,
                 },
                 hover:          { dynamicRegistration: true, contentFormat: ['markdown', 'plaintext'] },
                 signatureHelp:  { dynamicRegistration: true, signatureInformation: { documentationFormat: ['markdown', 'plaintext'], parameterInformation: { labelOffsetSupport: true } } },
                 definition:     { dynamicRegistration: true },
+                references:     { dynamicRegistration: true },
+                documentSymbol: { dynamicRegistration: true },
+                formatting:     { dynamicRegistration: true },
+                rangeFormatting: { dynamicRegistration: true },
+                rename:         { dynamicRegistration: true, prepareSupport: true },
+                codeAction: {
+                    dynamicRegistration: true,
+                    codeActionLiteralSupport: {
+                        codeActionKind: {
+                            valueSet: ['quickfix', 'refactor', 'refactor.extract', 'refactor.inline',
+                                'refactor.rewrite', 'source', 'source.organizeImports'],
+                        },
+                    },
+                    isPreferredSupport: true,
+                    dataSupport:        true,
+                    resolveSupport:     { properties: ['edit'] },
+                },
                 publishDiagnostics: { relatedInformation: true },
             },
-            workspace: { configuration: true, didChangeConfiguration: { dynamicRegistration: true } },
+            workspace: {
+                applyEdit:              true,
+                configuration:          true,
+                executeCommand:         { dynamicRegistration: true },
+                didChangeConfiguration: { dynamicRegistration: true },
+                workspaceEdit:          { documentChanges: true, resourceOperations: ['create', 'rename', 'delete'] },
+            },
         },
     });
 
@@ -207,6 +263,10 @@ function isWorkspaceFile(uri: string): boolean {
 
 function registerProviders(): void {
 
+    monaco.editor.registerCommand(APPLY_ACTION_COMMAND, (_accessor: unknown, action: CodeAction | Command) => {
+        applyCodeAction(action);
+    });
+
     monaco.languages.registerCompletionItemProvider('java', {
         triggerCharacters: ['.', '@', '<'],
         provideCompletionItems: async (model, position) => {
@@ -221,6 +281,25 @@ function registerProviders(): void {
             return {
                 suggestions: items.map(item => lspCompletionToMonaco(item, model, position)),
             };
+        },
+        // Resolve documentation and, crucially, the auto-import additionalTextEdits which JDT.LS only
+        // attaches on resolve — selecting a type then inserts its import statement.
+        resolveCompletionItem: async (item) => {
+            const lsp = (item as MonacoCompletionItem)._lsp;
+            if (!_conn || !lsp) return item;
+            try {
+                const resolved: CompletionItem = await _conn.sendRequest('completionItem/resolve', lsp);
+                if (resolved.documentation) {
+                    item.documentation = { value: markupToString(resolved.documentation), isTrusted: false };
+                }
+                if (resolved.detail) item.detail = resolved.detail;
+                if (resolved.additionalTextEdits?.length) {
+                    item.additionalTextEdits = resolved.additionalTextEdits.map(textEditToMonaco);
+                }
+            } catch (e) {
+                console.debug('[java-lsp] completion resolve failed:', (e as Error)?.message);
+            }
+            return item;
         },
     });
 
@@ -288,6 +367,88 @@ function registerProviders(): void {
             }));
         },
     });
+
+    monaco.languages.registerReferenceProvider('java', {
+        provideReferences: async (model, position, context) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const result: Location[] | null = await _conn.sendRequest('textDocument/references', {
+                textDocument: { uri: model.uri.toString() },
+                position:     { line: position.lineNumber - 1, character: position.column - 1 },
+                context:      { includeDeclaration: context.includeDeclaration },
+            });
+            if (!result) return null;
+            return result.map(loc => ({ uri: monaco.Uri.parse(loc.uri), range: lspRangeToMonaco(loc.range) }));
+        },
+    });
+
+    monaco.languages.registerRenameProvider('java', {
+        provideRenameEdits: async (model, position, newName) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return { edits: [] };
+            const edit: WorkspaceEdit | null = await _conn.sendRequest('textDocument/rename', {
+                textDocument: { uri: model.uri.toString() },
+                position:     { line: position.lineNumber - 1, character: position.column - 1 },
+                newName,
+            });
+            return workspaceEditToMonaco(edit);
+        },
+        resolveRenameLocation: async (model, position) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            try {
+                const result: { range: LspRange; placeholder?: string } | LspRange | null =
+                    await _conn.sendRequest('textDocument/prepareRename', {
+                        textDocument: { uri: model.uri.toString() },
+                        position:     { line: position.lineNumber - 1, character: position.column - 1 },
+                    });
+                if (!result) return null;
+                const range = 'range' in result ? result.range : result;
+                const placeholder = 'placeholder' in result && result.placeholder
+                    ? result.placeholder
+                    : model.getWordAtPosition(position)?.word ?? '';
+                return { range: lspRangeToMonaco(range), text: placeholder };
+            } catch {
+                const word = model.getWordAtPosition(position);
+                return word ? {
+                    range: { startLineNumber: position.lineNumber, startColumn: word.startColumn, endLineNumber: position.lineNumber, endColumn: word.endColumn },
+                    text: word.word,
+                } : null;
+            }
+        },
+    });
+
+    // Registering this provider also enables editor.js's existing format-on-save path for Java: the
+    // shared Save action runs editor.action.formatDocument when auto-formatting is on (the same
+    // mechanism and global toggle used for TypeScript).
+    monaco.languages.registerDocumentFormattingEditProvider('java', {
+        provideDocumentFormattingEdits: async (model) => {
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return null;
+            const edits: TextEdit[] | null = await _conn.sendRequest('textDocument/formatting', {
+                textDocument: { uri: model.uri.toString() },
+                options:      { tabSize: model.getOptions().tabSize, insertSpaces: model.getOptions().insertSpaces },
+            });
+            return edits ? edits.map(textEditToMonaco) : null;
+        },
+    });
+
+    monaco.languages.registerCodeActionProvider('java', {
+        provideCodeActions: async (model, range, context) => {
+            const empty = { actions: [], dispose() { /* nothing to dispose */ } };
+            if (!_conn || !isWorkspaceFile(model.uri.toString())) return empty;
+            const diagnostics = (context.markers ?? []).map(markerToLspDiagnostic);
+            const result: Array<CodeAction | Command> | null = await _conn.sendRequest('textDocument/codeAction', {
+                textDocument: { uri: model.uri.toString() },
+                range:        monacoRangeToLsp(range),
+                context:      { diagnostics, only: context.only ? [context.only] : undefined },
+            });
+            if (!result?.length) return empty;
+            return {
+                actions: result.map(lspCodeActionToMonaco),
+                dispose() { /* nothing to dispose */ },
+            };
+        },
+    }, {
+        providedCodeActionKinds: ['quickfix', 'refactor', 'refactor.extract', 'refactor.inline',
+            'refactor.rewrite', 'source', 'source.organizeImports'],
+    });
 }
 
 // -------------------------------------------------------------------------
@@ -343,25 +504,250 @@ function lspCompletionToMonaco(
     item: CompletionItem,
     model: monaco.editor.ITextModel,
     position: monaco.Position,
-): monaco.languages.CompletionItem {
+): MonacoCompletionItem {
     const word = model.getWordUntilPosition(position);
-    const range: monaco.IRange = {
+    let range: monaco.IRange = {
         startLineNumber: position.lineNumber,
         startColumn:     word.startColumn,
         endLineNumber:   position.lineNumber,
         endColumn:       word.endColumn,
     };
-    return {
+    let insertText = item.insertText ?? item.label;
+    const textEdit = item.textEdit as { range?: LspRange; replace?: LspRange; insert?: LspRange; newText?: string } | undefined;
+    if (textEdit) {
+        const r = textEdit.range ?? textEdit.replace ?? textEdit.insert;
+        if (r) range = lspRangeToMonaco(r);
+        if (typeof textEdit.newText === 'string') insertText = textEdit.newText;
+    }
+    const result: MonacoCompletionItem = {
         label:           item.label,
         kind:            lspCompletionKind(item.kind),
         detail:          item.detail,
         documentation:   item.documentation ? { value: markupToString(item.documentation), isTrusted: false } : undefined,
-        insertText:      item.insertText ?? item.label,
+        insertText,
         insertTextRules: item.insertTextFormat === InsertTextFormat.Snippet
                              ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
                              : undefined,
         range,
+        sortText:            sdkPrioritisedSortText(item),
+        additionalTextEdits: item.additionalTextEdits?.map(textEditToMonaco),
     };
+    result._lsp = item;
+    return result;
+}
+
+/**
+ * Ranks Dirigible SDK suggestions ({@code org.eclipse.dirigible.sdk.*}) above everything else by
+ * prefixing the server sortText with a priority bucket, preserving the server order within each bucket.
+ */
+function sdkPrioritisedSortText(item: CompletionItem): string {
+    const base = item.sortText ?? (typeof item.label === 'string' ? item.label : '');
+    const description = (item.labelDetails && typeof item.labelDetails.description === 'string')
+        ? item.labelDetails.description : '';
+    const haystack = `${item.detail ?? ''} ${description}`;
+    return haystack.includes('org.eclipse.dirigible.sdk') ? `0_${base}` : `1_${base}`;
+}
+
+// -------------------------------------------------------------------------
+// Code actions, commands, refactor/generate, workspace edits
+// -------------------------------------------------------------------------
+
+/** Monaco command id used to apply a deferred LSP code action when the user selects it. */
+const APPLY_ACTION_COMMAND = 'dirigible.java.applyCodeAction';
+
+type LspRange = { start: { line: number; character: number }; end: { line: number; character: number } };
+
+/** Monaco completion item carrying the originating LSP item so resolve can fetch its import edits. */
+type MonacoCompletionItem = monaco.languages.CompletionItem & { _lsp?: CompletionItem };
+
+function textEditToMonaco(edit: TextEdit): monaco.languages.TextEdit {
+    return { range: lspRangeToMonaco(edit.range), text: edit.newText };
+}
+
+function monacoRangeToLsp(r: monaco.IRange): LspRange {
+    return {
+        start: { line: r.startLineNumber - 1, character: r.startColumn - 1 },
+        end:   { line: r.endLineNumber - 1, character: r.endColumn - 1 },
+    };
+}
+
+function monacoSeverityToLsp(severity: monaco.MarkerSeverity): DiagnosticSeverity {
+    switch (severity) {
+        case monaco.MarkerSeverity.Error:   return DiagnosticSeverity.Error;
+        case monaco.MarkerSeverity.Warning: return DiagnosticSeverity.Warning;
+        case monaco.MarkerSeverity.Info:    return DiagnosticSeverity.Information;
+        default:                            return DiagnosticSeverity.Hint;
+    }
+}
+
+function markerToLspDiagnostic(m: monaco.editor.IMarkerData): Diagnostic {
+    return {
+        range:    { start: { line: m.startLineNumber - 1, character: m.startColumn - 1 },
+                    end:   { line: m.endLineNumber - 1, character: m.endColumn - 1 } },
+        message:  m.message,
+        severity: monacoSeverityToLsp(m.severity),
+        source:   m.source,
+    } as Diagnostic;
+}
+
+function lspCodeActionToMonaco(action: CodeAction | Command): monaco.languages.CodeAction {
+    const isCommand = typeof (action as Command).command === 'string';
+    const title = action.title
+        ?? (isCommand ? (action as Command).command : (action as CodeAction).command?.title)
+        ?? 'Action';
+    const kind = isCommand ? 'quickfix' : ((action as CodeAction).kind ?? 'quickfix');
+    return {
+        title,
+        kind,
+        diagnostics: [],
+        isPreferred: (action as CodeAction).isPreferred,
+        // Apply lazily through our command so we can resolve, run server commands and apply edits uniformly.
+        command: { id: APPLY_ACTION_COMMAND, title, arguments: [action] },
+    };
+}
+
+async function applyCodeAction(action: CodeAction | Command): Promise<void> {
+    if (!_conn) return;
+    try {
+        if (typeof (action as Command).command === 'string') {
+            await runServerCommand(action as Command);
+            return;
+        }
+        let resolved = action as CodeAction;
+        if (!resolved.edit && (resolved as { data?: unknown }).data !== undefined) {
+            resolved = await _conn.sendRequest('codeAction/resolve', resolved);
+        }
+        if (resolved.edit) applyWorkspaceEdit(resolved.edit);
+        if (resolved.command) await runServerCommand(resolved.command);
+    } catch (e) {
+        console.warn('[java-lsp] code action failed:', (e as Error)?.message ?? e);
+    }
+}
+
+function isWorkspaceEdit(value: unknown): value is WorkspaceEdit {
+    return !!value && (!!(value as WorkspaceEdit).changes || !!(value as WorkspaceEdit).documentChanges);
+}
+
+async function runServerCommand(cmd: Command): Promise<void> {
+    if (!_conn || !cmd?.command) return;
+    if (GENERATE[cmd.command]) {
+        await runGenerate(cmd.command, cmd.arguments ?? []);
+        return;
+    }
+    const result = await _conn.sendRequest('workspace/executeCommand', { command: cmd.command, arguments: cmd.arguments ?? [] });
+    if (isWorkspaceEdit(result)) applyWorkspaceEdit(result);
+}
+
+interface GenerateSpec {
+    label: string;
+    status: string;
+    generate: string;
+    members: (status: any) => Array<{ label: string; ref: any }>;
+    buildArgs: (promptArgs: any[], status: any, selected: any[]) => any[];
+}
+
+/** Member-named fields → picker labels. */
+function fieldLabel(f: any): string {
+    const name = f?.name ?? f?.fieldName ?? '';
+    const type = f?.type ?? f?.typeName;
+    return type ? `${name}: ${type}` : `${name}`;
+}
+
+/**
+ * The JDT.LS source-generation commands (constructors, getters/setters, toString, hashCode/equals).
+ * Each maps the client "*Prompt" command to the server status + generate delegate commands; the status
+ * call yields the candidate fields shown in the member picker, the generate call returns the edit.
+ */
+const GENERATE: Record<string, GenerateSpec> = {
+    'java.action.generateConstructorsPrompt': {
+        label: 'Select fields and constructors',
+        status: 'java.action.checkConstructorsStatus',
+        generate: 'java.action.generateConstructors',
+        members: (s) => (s?.fields ?? []).map((f: any) => ({ label: fieldLabel(f), ref: f })),
+        buildArgs: (args, s, sel) => [args[0], { constructors: s?.constructors ?? [], fields: sel.map(m => m.ref) }],
+    },
+    'java.action.generateToStringPrompt': {
+        label: 'Select fields to include in toString()',
+        status: 'java.action.checkToStringStatus',
+        generate: 'java.action.generateToString',
+        members: (s) => (s?.fields ?? []).map((f: any) => ({ label: fieldLabel(f), ref: f })),
+        buildArgs: (args, _s, sel) => [args[0], sel.map(m => m.ref)],
+    },
+    'java.action.hashCodeEqualsPrompt': {
+        label: 'Select fields for hashCode() and equals()',
+        status: 'java.action.checkHashCodeEqualsStatus',
+        generate: 'java.action.generateHashCodeEquals',
+        members: (s) => (s?.fields ?? []).map((f: any) => ({ label: fieldLabel(f), ref: f })),
+        buildArgs: (args, _s, sel) => [args[0], sel.map(m => m.ref), false],
+    },
+    'java.action.generateAccessorsPrompt': {
+        label: 'Select fields to generate getters and setters',
+        status: 'java.action.checkAccessorsStatus',
+        generate: 'java.action.generateAccessors',
+        members: (s) => (s?.accessors ?? s ?? []).map((a: any) => ({ label: fieldLabel(a), ref: a })),
+        buildArgs: (args, _s, sel) => [args[0], sel.map(m => m.ref)],
+    },
+};
+
+async function runGenerate(promptId: string, args: any[]): Promise<void> {
+    if (!_conn) return;
+    const spec = GENERATE[promptId];
+    const status = await _conn.sendRequest('workspace/executeCommand', { command: spec.status, arguments: args });
+    if (!status) return;
+    const members = spec.members(status);
+    let selected = members;
+    const picker = (globalThis as any).javaLspMemberPicker;
+    if (members.length && typeof picker === 'function') {
+        const chosen: string[] | null = await picker(spec.label, members.map(m => m.label));
+        if (chosen === null) return; // user cancelled the dialog
+        selected = members.filter(m => chosen.includes(m.label));
+    }
+    const edit = await _conn.sendRequest('workspace/executeCommand', {
+        command: spec.generate,
+        arguments: spec.buildArgs(args, status, selected),
+    });
+    if (isWorkspaceEdit(edit)) applyWorkspaceEdit(edit);
+}
+
+/** Groups a workspace edit's text edits by document and applies them in place to open Monaco models. */
+function applyWorkspaceEdit(edit: WorkspaceEdit | null | undefined): void {
+    if (!edit) return;
+    const byUri: Record<string, TextEdit[]> = {};
+    if (edit.changes) {
+        for (const uri in edit.changes) byUri[uri] = (byUri[uri] ?? []).concat(edit.changes[uri]);
+    }
+    if (edit.documentChanges) {
+        for (const dc of edit.documentChanges as any[]) {
+            if (dc?.textDocument?.uri && Array.isArray(dc.edits)) {
+                byUri[dc.textDocument.uri] = (byUri[dc.textDocument.uri] ?? []).concat(dc.edits);
+            }
+        }
+    }
+    for (const uri in byUri) {
+        const model = monaco.editor.getModels().find(m => m.uri.toString() === uri);
+        if (!model) continue;
+        const ops = byUri[uri].map(e => ({ range: lspRangeToMonaco(e.range), text: e.newText, forceMoveMarkers: true }));
+        model.pushEditOperations([], ops, () => null);
+    }
+}
+
+/** Converts an LSP workspace edit into the Monaco shape returned by the rename provider. */
+function workspaceEditToMonaco(edit: WorkspaceEdit | null): monaco.languages.WorkspaceEdit {
+    const edits: any[] = [];
+    const push = (uri: string, list: TextEdit[]) => {
+        for (const e of list) {
+            edits.push({ resource: monaco.Uri.parse(uri), textEdit: { range: lspRangeToMonaco(e.range), text: e.newText }, versionId: undefined });
+        }
+    };
+    if (edit?.changes) {
+        for (const uri in edit.changes) push(uri, edit.changes[uri]);
+    }
+    if (edit?.documentChanges) {
+        for (const dc of edit.documentChanges as any[]) {
+            if (dc?.textDocument?.uri && Array.isArray(dc.edits)) push(dc.textDocument.uri, dc.edits);
+        }
+    }
+    return { edits };
 }
 
 function jdtlsSettings() {

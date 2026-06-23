@@ -54,6 +54,8 @@ public interface Browser {
 
     void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
+    void hoverOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
+
     void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
     void clickOnElementByAttributePatternAndText(String elementType, String attribute, String pattern, String text);

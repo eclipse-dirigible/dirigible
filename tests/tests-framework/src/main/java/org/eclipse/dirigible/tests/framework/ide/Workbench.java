@@ -77,6 +77,24 @@ public class Workbench {
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
     }
 
+    /**
+     * Creates a Java artefact through the project context menu (New -> Java -> {@code leafLabel}),
+     * entering {@code name} in the resulting dialog. Use for the base types (Class, Interface, ...) and
+     * the strong-interface skeletons (Controller, Job, Listener, WebSocket, Repository). For Package,
+     * {@code name} is the dotted package; for the others it is a simple or fully-qualified type name.
+     */
+    public void createJavaArtifact(String projectName, String leafLabel, String name) {
+        expandProject(projectName);
+        browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
+
+        browser.hoverOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "New");
+        browser.hoverOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Java");
+        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", leafLabel);
+
+        browser.enterTextInElementById("fdti1", name);
+        browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");
+    }
+
     public void expandProject(String projectName) {
         browser.doubleClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
     }

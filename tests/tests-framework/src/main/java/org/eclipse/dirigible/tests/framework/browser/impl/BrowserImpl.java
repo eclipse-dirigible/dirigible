@@ -489,6 +489,15 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void hoverOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
+        By by = constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), pattern);
+        SelenideElement element = findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text));
+        Selenide.actions()
+                .moveToElement(element)
+                .perform();
+    }
+
+    @Override
     public void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern,
             String text) {
         By by = constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), pattern);
