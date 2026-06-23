@@ -72,7 +72,7 @@ no `collection`, so `$models` = `model.entities`.
 | master-list + detail | `uiListMasterModels` / `uiListDetailsModels` | ⬜ stub |
 | master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ⬜ stub |
 | main-details | (within master) | ⬜ stub |
-| setting | `uiSettingModels` | ⬜ stub |
+| setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
 | report / report-chart / report-table | `uiReportChartModels` / `uiReportTableModels` | ⬜ stub |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |

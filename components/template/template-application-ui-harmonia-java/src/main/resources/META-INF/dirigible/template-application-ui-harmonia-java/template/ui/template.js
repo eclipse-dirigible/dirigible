@@ -12,6 +12,7 @@ import * as shellTemplate from "template-application-ui-harmonia-java/template/u
 // Per view-type generators (Velocity over the model's UI collections).
 import * as listTemplate from "template-application-ui-harmonia-java/template/ui/list";
 import * as manageTemplate from "template-application-ui-harmonia-java/template/ui/manage";
+import * as settingTemplate from "template-application-ui-harmonia-java/template/ui/setting";
 import * as navigation from "template-application-ui-harmonia-java/template/ui/navigation";
 
 // TODO (Phase 2 — full parity): wire the remaining view types, mirroring the Angular
@@ -33,6 +34,7 @@ export function getSources(parameters) {
         ...shellTemplate.getSources(parameters),
         ...listTemplate.getSources(parameters),
         ...manageTemplate.getSources(parameters),
+        ...settingTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
         // TODO (Phase 2): ...masterDetailsListTemplate.getSources(parameters),
         // TODO (Phase 2): ...masterDetailsManageTemplate.getSources(parameters),
