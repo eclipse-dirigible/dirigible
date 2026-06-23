@@ -1159,6 +1159,18 @@ async function applyRenameAcrossWorkspace(model: monaco.editor.ITextModel, edit:
         }
     }
 
+    // JDT.LS may key a file's text edits by its POST-rename URI (documentChanges are ordered, and the
+    // rename can precede the edit). Re-attribute every edit to the on-disk (old) URI so the content is
+    // edited correctly before the file is written/renamed — otherwise the new file keeps the old type
+    // name and triggers "The public type X must be defined in its own file".
+    const newToOld: Record<string, string> = {};
+    for (const oldUri in renameByUri) newToOld[renameByUri[oldUri]] = oldUri;
+    const editsByOld: Record<string, TextEdit[]> = {};
+    for (const uri in textByUri) {
+        const onDiskUri = newToOld[uri] ?? uri;
+        editsByOld[onDiskUri] = (editsByOld[onDiskUri] ?? []).concat(textByUri[uri]);
+    }
+
     const payload: {
         currentPath: string | null;
         currentContent: string | null;
@@ -1167,31 +1179,45 @@ async function applyRenameAcrossWorkspace(model: monaco.editor.ITextModel, edit:
         renames: Array<{ oldPath: string | null; newPath: string | null; content: string }>;
     } = { currentPath: uriToWorkspacePath(currentUri), currentContent: null, currentNewPath: null, writes: [], renames: [] };
 
-    const uris = new Set<string>([...Object.keys(textByUri), ...Object.keys(renameByUri)]);
-    for (const uri of uris) {
-        const edits = textByUri[uri] ?? [];
+    const watchedChanges: Array<{ uri: string; type: number }> = [];
+    const oldUris = new Set<string>([...Object.keys(editsByOld), ...Object.keys(renameByUri)]);
+    for (const oldUri of oldUris) {
+        const edits = editsByOld[oldUri] ?? [];
         let content: string;
-        if (uri === currentUri) {
+        if (oldUri === currentUri) {
             if (edits.length) {
                 model.pushEditOperations([], edits.map(e => ({ range: lspRangeToMonaco(e.range), text: e.newText, forceMoveMarkers: true })), () => null);
             }
             content = model.getValue();
         } else {
-            const source = await fetchWorkspaceFileText(uriToWorkspacePath(uri) ?? uri);
+            const source = await fetchWorkspaceFileText(uriToWorkspacePath(oldUri) ?? oldUri);
             content = edits.length ? applyEditsToText(source, edits) : source;
         }
-        const newUri = renameByUri[uri];
-        if (uri === currentUri) {
+        const newUri = renameByUri[oldUri];
+        if (oldUri === currentUri) {
             payload.currentContent = content;
             payload.currentNewPath = newUri ? uriToWorkspacePath(newUri) : null;
         } else if (newUri) {
-            payload.renames.push({ oldPath: uriToWorkspacePath(uri), newPath: uriToWorkspacePath(newUri), content });
+            payload.renames.push({ oldPath: uriToWorkspacePath(oldUri), newPath: uriToWorkspacePath(newUri), content });
         } else {
-            payload.writes.push({ path: uriToWorkspacePath(uri), content });
+            payload.writes.push({ path: uriToWorkspacePath(oldUri), content });
+        }
+        // File-change events for JDT.LS so it re-syncs without a page refresh.
+        if (newUri) {
+            watchedChanges.push({ uri: oldUri, type: 3 /* Deleted */ }, { uri: newUri, type: 1 /* Created */ });
+            _openFiles.delete(oldUri);
+            _conn?.sendNotification('textDocument/didClose', { textDocument: { uri: oldUri } });
+        } else {
+            watchedChanges.push({ uri: oldUri, type: 2 /* Changed */ });
         }
     }
 
     await (globalThis as any).javaLspPersistRename(payload);
+
+    // Inform JDT.LS of the on-disk changes so the renamed type's diagnostics clear immediately.
+    if (_conn && watchedChanges.length) {
+        _conn.sendNotification('workspace/didChangeWatchedFiles', { changes: watchedChanges });
+    }
 }
 
 function jdtlsSettings() {
