@@ -264,6 +264,9 @@ function openFile(fileUri: string): void {
             text:       model?.getValue() ?? '',
         },
     });
+    // Tell JDT.LS the file exists on disk so its project model includes it even before a build — this
+    // makes a just-created type (e.g. a new interface) resolvable/offered in sibling files immediately.
+    _conn.sendNotification('workspace/didChangeWatchedFiles', { changes: [{ uri: fileUri, type: 1 /* Created */ }] });
 
     if (model) {
         model.onDidChangeContent(() => {
@@ -1235,8 +1238,6 @@ function jdtlsSettings() {
             completion: {
                 overwrite:            true,
                 guessMethodArguments: false,
-                // Cap results so import/type completion over the large platform classpath stays snappy.
-                maxResults:           50,
                 filteredTypes: [
                     'com.sun.*', 'sun.*', 'jdk.*',
                     'org.eclipse.jdt.internal.*',

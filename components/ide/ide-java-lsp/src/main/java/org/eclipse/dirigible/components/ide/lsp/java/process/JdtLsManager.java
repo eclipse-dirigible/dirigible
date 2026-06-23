@@ -33,7 +33,9 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.security.MessageDigest;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -112,6 +114,15 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                       ensureInstalled();
                       available = true;
                       logger.info("[java-lsp] JDT.LS is ready at {}", jdtlsHome);
+                      // Materialise the platform classpath now (it is cached on disk), so the first Java
+                      // file the user opens does not pay the multi-second extraction on its critical path.
+                      try {
+                          int entries = classPathIndex.classPathEntries()
+                                                      .size();
+                          logger.info("[java-lsp] Pre-warmed compile classpath: {} entries", entries);
+                      } catch (Exception warmEx) {
+                          logger.warn("[java-lsp] Classpath pre-warm failed (will materialise lazily on first use)", warmEx);
+                      }
                   } catch (Exception e) {
                       logger.warn("[java-lsp] JDT.LS is not available: {}. Java language support will be disabled.", e.getMessage());
                   }
@@ -197,11 +208,25 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         Path dataDir = jdtlsHome.resolve("data")
                                 .resolve(username)
                                 .resolve(workspace);
-        // Wipe stale workspace index so JDT.LS re-imports projects with the current .classpath.
-        // Without this, a cached Eclipse workspace that references deleted JAR paths (e.g. from
-        // a previous temp-dir extraction) causes unresolved-import errors on every restart.
-        deleteDirectory(dataDir);
-        Files.createDirectories(dataDir);
+        // Reuse the JDT.LS index across restarts so the (expensive) re-index of the platform classpath
+        // is not paid every time. The cached index only goes stale when the classpath itself changes
+        // (ClassPathIndex extracts to a stable dir and re-extracts only on a new build), so wipe the
+        // index only when a classpath fingerprint marker is missing or no longer matches.
+        Path fingerprintMarker = dataDir.resolveSibling(dataDir.getFileName() + ".classpath-fp");
+        String fingerprint = classpathFingerprint();
+        boolean indexValid = !fingerprint.isEmpty() && Files.isDirectory(dataDir) && Files.exists(fingerprintMarker)
+                && fingerprint.equals(readFingerprint(fingerprintMarker));
+        if (indexValid) {
+            logger.info("[java-lsp] Reusing cached JDT.LS index for {}/{}", sanitize(username), sanitize(workspace));
+        } else {
+            logger.info("[java-lsp] Building JDT.LS index for {}/{} (first run or classpath changed)", sanitize(username),
+                    sanitize(workspace));
+            deleteDirectory(dataDir);
+            Files.createDirectories(dataDir);
+            if (!fingerprint.isEmpty()) {
+                Files.writeString(fingerprintMarker, fingerprint);
+            }
+        }
 
         String launcherJar = findLauncherJar();
         String configDir = resolveConfigDir();
@@ -355,6 +380,34 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         return Paths.get(repoRoot, "dirigible", "repository", "root", "users", username, workspace)
                     .toAbsolutePath()
                     .normalize();
+    }
+
+    /**
+     * SHA-256 over the sorted classpath entry paths; identifies whether a cached index is still valid.
+     */
+    private String classpathFingerprint() {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            classPathIndex.classPathEntries()
+                          .stream()
+                          .map(Path::toString)
+                          .sorted()
+                          .forEach(entry -> digest.update(entry.getBytes(StandardCharsets.UTF_8)));
+            return HexFormat.of()
+                            .formatHex(digest.digest());
+        } catch (Exception e) {
+            logger.warn("[java-lsp] Could not compute classpath fingerprint; index will be rebuilt", e);
+            return "";
+        }
+    }
+
+    private static String readFingerprint(Path marker) {
+        try {
+            return Files.readString(marker)
+                        .trim();
+        } catch (IOException e) {
+            return "";
+        }
     }
 
     private static void deleteDirectory(Path dir) throws IOException {
