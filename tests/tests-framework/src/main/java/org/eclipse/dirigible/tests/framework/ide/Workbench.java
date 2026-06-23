@@ -87,9 +87,7 @@ public class Workbench {
         expandProject(projectName);
         browser.rightClickOnElementContainingText(HtmlElementType.ANCHOR, projectName);
 
-        browser.hoverOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "New");
-        browser.hoverOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", "Java");
-        browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.CLASS, "fd-menu__title", leafLabel);
+        browser.clickCascadingMenuItem("New", "Java", leafLabel);
 
         browser.enterTextInElementById("fdti1", name);
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "Create");

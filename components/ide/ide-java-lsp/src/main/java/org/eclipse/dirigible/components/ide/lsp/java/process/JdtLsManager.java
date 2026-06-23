@@ -331,7 +331,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         cmd.add("-Dlog.protocol=true");
         cmd.add("-Dlog.level=ALL");
         cmd.add("-noverify");
-        cmd.add("-Xmx512m");
+        cmd.add("-Xmx" + DirigibleConfig.JAVA_LSP_MAX_HEAP.getStringValue());
         cmd.add("-jar");
         cmd.add(launcherJar);
         cmd.add("-configuration");

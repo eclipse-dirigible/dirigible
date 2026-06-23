@@ -488,13 +488,29 @@ class BrowserImpl implements Browser {
                .click();
     }
 
+    // Expands each parent submenu and clicks the leaf, scoped to the open context menu and driving the
+    // menu's own Angular mouseenter/click handlers. Run as one in-frame script because BlimpKit renders
+    // collapsed submenu titles with no visible text and a per-step frame switch would close the menu.
+    private static final String CASCADE_MENU_SCRIPT =
+            "var titles = arguments;" + "var roots = document.querySelectorAll('[aria-label*=\"contextmenu\"]');"
+                    + "if (!roots.length) return 'no-menu';" + "var root = roots[roots.length - 1];" + "function find(text) {"
+                    + "  var spans = root.querySelectorAll('span.fd-menu__title');"
+                    + "  for (var i = 0; i < spans.length; i++) { if (spans[i].textContent.trim() === text) return spans[i]; }"
+                    + "  return null;" + "}" + "for (var i = 0; i < titles.length - 1; i++) {" + "  var parent = find(titles[i]);"
+                    + "  if (!parent) return 'missing:' + titles[i];"
+                    + "  (parent.closest('li') || parent).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));" + "}"
+                    + "var leaf = find(titles[titles.length - 1]);" + "if (!leaf) return 'missing-leaf:' + titles[titles.length - 1];"
+                    + "leaf.click();" + "return 'ok';";
+
     @Override
-    public void hoverOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text) {
-        By by = constructCssSelectorByTypeAndAttribute(elementType.getType(), attribute.getAttribute(), pattern);
-        SelenideElement element = findElementInAllFrames(by, Condition.visible, Condition.enabled, Condition.exactText(text));
-        Selenide.actions()
-                .moveToElement(element)
-                .perform();
+    public void clickCascadingMenuItem(String... titlePath) {
+        // Land in the frame that hosts the open (visible) context menu, then drive it via its own
+        // handlers. The menu lives in the projects-view iframe; a single in-frame script keeps it open.
+        findElementInAllFrames(By.cssSelector("[aria-label*='contextmenu']"), Condition.exist, Condition.visible);
+        Object result = Selenide.executeJavaScript(CASCADE_MENU_SCRIPT, (Object[]) titlePath);
+        if (!"ok".equals(result)) {
+            failWithScreenshot("Could not navigate context menu path " + Arrays.toString(titlePath) + " (result: " + result + ")");
+        }
     }
 
     @Override
