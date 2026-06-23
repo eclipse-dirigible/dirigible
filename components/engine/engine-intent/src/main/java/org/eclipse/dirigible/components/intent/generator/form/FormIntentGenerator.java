@@ -60,14 +60,16 @@ import org.springframework.stereotype.Component;
  * carries a {@code callback} like {@code onApproveClicked()} wired in the {@code code} block to
  * complete the current BPM user task: the Inbox/Process perspective opens the form with
  * {@code ?taskId=&processInstanceId=}, and the handler POSTs {@code COMPLETE} to
- * {@code /services/bpm/bpm-processes/tasks/<taskId>} with the action name and the form model as
- * process variables (so a downstream gateway can branch on the action). On success the handler
- * closes its host via both {@code DialogHub.closeWindow()} and {@code window.close()} - the former
- * closes the dialog when the form is opened from an entity view, the latter a standalone
- * (script-opened) window; each is a harmless no-op where it does not apply, including the Inbox's
- * inline iframe (which clears its own pane on its refresh cycle). Forms opened outside a task
- * report the missing {@code taskId} instead of failing silently. Business logic beyond completing
- * the task belongs in a hand-written form override under {@code custom/}.
+ * {@code /services/inbox/tasks/<taskId>} (the per-task permission-checked Inbox endpoint, so a
+ * candidate-group user - not only ADMINISTRATOR/DEVELOPER/OPERATOR - can complete) with the action
+ * name and the form model as process variables (so a downstream gateway can branch on the action).
+ * On success the handler closes its host via both {@code DialogHub.closeWindow()} and
+ * {@code window.close()} - the former closes the dialog when the form is opened from an entity
+ * view, the latter a standalone (script-opened) window; each is a harmless no-op where it does not
+ * apply, including the Inbox's inline iframe (which clears its own pane on its refresh cycle).
+ * Forms opened outside a task report the missing {@code taskId} instead of failing silently.
+ * Business logic beyond completing the task belongs in a hand-written form override under
+ * {@code custom/}.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output.
@@ -157,7 +159,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                 __notifications.show({ type: 'negative', title: 'Cannot submit', description: 'This form was not opened from a task (no taskId).' });
                                 return;
                             }
-                            $http.post('/services/bpm/bpm-processes/tasks/' + __taskId, {
+                            $http.post('/services/inbox/tasks/' + __taskId, {
                                 action: 'COMPLETE',
                                 data: Object.assign({ action: action }, $scope.model || {})
                             }).then(() => {

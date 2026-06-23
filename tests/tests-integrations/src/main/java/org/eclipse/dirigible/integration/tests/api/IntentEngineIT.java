@@ -943,8 +943,12 @@ class IntentEngineIT extends IntegrationTest {
         // HTML-escaped by Gson - ' becomes \\u0027, = becomes \\u003d - so match escape-free substrings;
         // the form-builder un-escapes the code when it injects it into the controller.)
         assertTrue(body.contains("__completeTask("), "the action buttons should complete the task");
-        assertTrue(body.contains("/services/bpm/bpm-processes/tasks/") && body.contains("COMPLETE"),
-                "the form should complete the task via the platform BPM task API");
+        assertTrue(body.contains("/services/inbox/tasks/") && body.contains("COMPLETE"),
+                "the form should complete the task via the per-task permission-checked Inbox endpoint");
+        assertFalse(body.contains("/services/bpm/bpm-processes/tasks/"),
+                "the form must not use the role-guarded BPM endpoint, which would block candidate-group users");
+        assertTrue(body.contains("closeWindow(") && body.contains("window.close("),
+                "on completion the form should close its host (dialog via closeWindow, standalone via window.close)");
         assertFalse(body.contains("TODO: wire"), "the action handlers must no longer be TODO stubs");
     }
 
