@@ -9,11 +9,15 @@ See the design rationale and phasing in the repo-root `HARMONIA_RUNTIME_PLAN.md`
 ("Reference implementation: codbex-athena-app" and "Phasing"). The reusable shell
 assets here are adopted from `github.com/codbex/codbex-athena-app`.
 
-## Status: skeleton (Phase 2 start)
+## Status: functional
 
-This module **builds and registers** as a `platform-templates` extension and
-generates a runnable — but partial — Harmonia SPA: the shell + one view type
-(`list`). The remaining view types are stubbed as a parity checklist.
+Registers as a `platform-templates` extension and generates a complete runnable
+Harmonia SPA: the shell + all core view types (list, manage, setting, master-detail,
+reports), built-in Process Inbox + Documents sections, and inline process-task
+surfacing. Generation is verified against real models (`DependsOnIT`, `sales-order`,
+`sample-intent-model`) with live CRUD, relationship dropdowns, master→detail filtering
+and form date handling. Remaining items are refinements — see the checklist + the
+repo-root `HARMONIA_RUNTIME_PLAN.md` "Implementation status" + "Follow-ups".
 
 ## Architecture (how it differs from the Angular module)
 
@@ -76,7 +80,7 @@ no `collection`, so `$models` = `model.entities`.
 | report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ table page (data table + CSV export) + chart page (chart.js bar/line/pie/doughnut/polarArea/radar) against the Java report controller; Reports sidebar group |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
-| forms + BPM task forms | (Phase 3) | ⬜ |
+| forms + BPM task forms | (separate module) | ✅ `template-form-builder-harmonia` renders a `.form` as a Harmonia page via the neutral `formController(ctx)` contract; BPM task forms complete via `ctx.task.complete()` |
 | **Process Inbox** (built-in) | — | ✅ built-in /inbox view: the user's BPM tasks (assignee+groups) via the processTasks store, claim+open the task form |
 | **Documents** (built-in) | — | ✅ built-in /documents view: CMS folder browser (/services/js/documents/api) — navigate, download, create folder, upload, delete |
 | process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |

@@ -330,6 +330,89 @@ Consequences of this choice that reshape the phasing:
   is a UI-layer initiative only.
 - No new runtime features or behaviour — strict parity with the current generated/custom app experience.
 
+## Implementation status (built & verified)
+
+Delivered on branch `feat/harmonia-runtime-template` (PR #6078), path **(A) — the self-contained SPA**.
+Every increment was generation-verified against a real model and, where the backend was reachable,
+exercised with a live REST round-trip.
+
+### Modules
+
+- **`components/template/template-application-ui-harmonia-java`** — the SPA UI generator (mirrors
+  `template-application-ui-angular-java`). Registered on `platform-templates` as *"Application - UI
+  (Harmonia) - Java"*; composes the reused `template-application-rest-java` sources with the Harmonia
+  UI source set. Generates a single Alpine.js + Harmonia SPA per app, served at
+  `/services/web/<project>/gen/<model>/index.html`, client-routed by Pinecone (hash mode), talking to
+  the generated Java controllers over a `fetch` client.
+- **`components/template/template-form-builder-harmonia`** — the runtime form generator (mirrors
+  `template-form-builder-angularjs`). Registered as *"Harmonia Generator from Form Model"* (extension
+  `form`). Renders a `.form` artifact as a standalone Harmonia page + runs the **neutral
+  `formController(ctx)`** contract (see below). The intent recipe's `form` template can point here.
+- **`components/resources/application-core`** (existing) — bumped `harmonia.version` 1.4.2 → 1.24.1 and
+  now the home of the embedded stack.
+
+### View types & shell (all generated + verified)
+
+list · manage (CRUD + create/edit form on `baseFormPage` with 422→field mapping, relationship
+dropdowns, client validation) · setting (manage reused, grouped under Settings) · master-detail
+(`x-h-split`: master list + selected record's detail panels via a runtime registry; details reuse the
+manage form with FK + returnTo preset) · reports (table + chart.js bar/line/pie/doughnut/polarArea/radar)
+· process-task surfacing (inline inbox popovers gated on `hasProcess`) · **built-in shell sections**
+Process Inbox (`/inbox`) and Documents (`/documents`).
+
+### Embedding (Phase 1 — no CDN)
+
+Alpine `3.15.11`, Harmonia `1.24.1`, Lucide `1.8.0`, chart.js `4.4.3` are **webjars** (served
+version-less via webjars-locator at `/webjars/...`); Pinecone Router (no webjar) is **vendored** under
+`application-core/.../vendor/` (license-excluded). The generated `index.html` references only these
+local URLs.
+
+### Runtime contracts (the invariants future work must keep)
+
+- **REST path** — `restBase` = `/services/java/<project>/gen/<javaGenFolderName>/api`; each entity page
+  uses a **relative** `apiPath` = `/<javaPerspectiveName>/<Entity>Controller` and lets the fetch client
+  prepend `restBase` exactly once. Use the **Java-sanitised** `javaGenFolderName`/`javaPerspectiveName`
+  (e.g. `sales-order` → `sales_order`), not the raw names — the backend lives under the sanitised
+  package. Absolute URLs (relationship dropdowns) pass `{ baseUrl: '' }`, which the client honours
+  (`opts.baseUrl !== undefined`, *not* truthiness — `''` is a valid "prepend nothing").
+- **Neutral form contract** — a `.form`'s `code` is the body of `formController(ctx)` with
+  `ctx.{model, params, http, task:{id,processInstanceId,complete()}, notify, close}`. (AngularJS
+  `$scope`/`$http` `.form` code must be migrated; `FormIntentGenerator` should emit this — follow-up.)
+- **Master-detail registry** — each detail registers its metadata via `App.registerDetail(<master>, …)`
+  so masters render detail panels without enumerating details at generation time.
+- **Process tasks** — the `processTasks` Alpine store fetches `/services/inbox/tasks` (assignee+groups),
+  buckets by `processInstanceId`, claims + opens the task `formKey` in an app-wide dialog.
+- **Dates** — forms convert HTML date/datetime/time widget values to the backend `java.time` format on
+  submit (`toPayload`: empty→null, datetime→ISO instant, time→pass-through) and back for edit display
+  (`toDateInput`), matching the Angular stack's `new Date(value)` behaviour.
+
+### Fixes surfaced during live testing
+
+- `resolveBaseUrl` honoured `{ baseUrl: '' }` (was falsy → doubled URLs).
+- Sanitised gen-folder/perspective in `restBase`/`apiPath` (hyphenated model names).
+- Master-detail panel `apiPath` made relative (was absolute → doubled URL) + null-master fetch guard.
+- Date/time widget value conversion (Jackson `Instant` rejected the raw `datetime-local` string).
+- **Intent glue (`template-application-events-java`)**: rollup/notification/integration/job handlers
+  used class-level `@Listener`/`@Scheduled` (now `@Target(METHOD)` only) → `javac` "annotation
+  interface not applicable". Converted to the self-describing `@Component implements
+  MessageHandler/JobHandler` style (matching the Trigger template). *(This fix is unrelated to the UI
+  layer but ships on the same branch.)*
+
+### Follow-ups (not blocking)
+
+- **Next to exercise: intent glue runtime** — process triggers starting a process on a new `Loan`
+  (etc.), then the started `ProcessId` surfacing the user's tasks inline via the process-task popovers
+  and completing through the Harmonia task form. The handler-style `javac` fix above unblocked the glue
+  from compiling; the end-to-end trigger → process-start → task → complete flow is the next thing to
+  verify live.
+- `FormIntentGenerator` to emit the neutral `formController(ctx)` code; migrate existing AngularJS task
+  forms.
+- Feed-driven form widgets (combobox/select/radio), documents/table/stepIndicator.
+- Server-side paging/search for lists and relationship dropdowns (currently first-page).
+- Theming bridge (platform theme ↔ `Harmonia.setColorScheme`); icons fully to Harmonia built-ins.
+- Parity Selenide ITs against the hash-routed SPA (`x-h-*` DOM, no iframe/BlimpKit selectors).
+- Optional `harmonia-view` platform-links category to inject the asset tags instead of hard-coding them.
+
 ---
 
 Sources: code analysis of `platform-core` (hubs, locale, view/perspective, platform-links),
