@@ -105,13 +105,19 @@ public final class IntentSettings {
      */
     public static IntentSettings scaffold(IntentModel model) {
         IntentSettings settings = new IntentSettings();
-        // The full-stack UI template is named explicitly here (DAO + REST + UI). Default is the
-        // AngularJS + BlimpKit stack; to generate the Alpine.js + Harmonia SPA instead, set this to
-        // "template-application-ui-harmonia-java/template/template.js". One explicit default, no alias.
-        settings.generation.put("model", new Recipe("template-application-angular-java/template/template.js",
+        // The full-stack UI template is named explicitly here (DAO + REST + UI). Default is now the
+        // Alpine.js + Harmonia SPA stack (a self-describing client-Java backend whose @Entity classes
+        // create the tables, plus the Harmonia SPA UI); to generate the AngularJS + BlimpKit stack
+        // instead, set this to "template-application-angular-java/template/template.js". The glue
+        // template is framework-neutral (annotated client-Java), shared by both stacks.
+        settings.generation.put("model", new Recipe("template-application-ui-harmonia-java/template/template.js",
                 orderedMap("tablePrefix", "", "dataSource", "DefaultDB")));
         settings.generation.put("glue", new Recipe("template-application-events-java/template/template.js", new LinkedHashMap<>()));
-        settings.generation.put("form", new Recipe("template-form-builder-angularjs/template/template.js", new LinkedHashMap<>()));
+        settings.generation.put("form", new Recipe("template-form-builder-harmonia/template/template.js", new LinkedHashMap<>()));
+        // TODO(harmonia): the standalone report-file UI is still the AngularJS perspective — there is
+        // no Harmonia "template-report-file" template yet. Its Java backend (reportFileEntity
+        // Repository + Controller) is framework-neutral, so when the Harmonia report-file template
+        // lands, switch this to "template-application-ui-harmonia-java/template/template-report-file.js".
         settings.generation.put("report",
                 new Recipe("template-application-ui-angular-java/template/template-report-file.js", new LinkedHashMap<>()));
 
