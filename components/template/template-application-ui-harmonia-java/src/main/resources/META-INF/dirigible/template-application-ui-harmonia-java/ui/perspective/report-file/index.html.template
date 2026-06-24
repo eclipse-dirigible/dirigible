@@ -12,7 +12,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${name}</title>
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
-    <style>[x-cloak]{display:none!important}</style>
+    <style>
+      /* Theme `html` too (Harmonia only styles `body`) so the full page surface follows the theme. */
+      html, body { height: 100%; background-color: var(--background); color: var(--foreground); }
+      [x-cloak] { display: none !important; }
+    </style>
     <script>
       (function () {
         var theme = 'light';
