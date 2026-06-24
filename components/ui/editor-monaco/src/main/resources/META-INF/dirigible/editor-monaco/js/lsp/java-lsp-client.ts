@@ -232,7 +232,6 @@ export async function connect(resourcePath: string): Promise<void> {
                 executeCommand:         { dynamicRegistration: true },
                 didChangeConfiguration: { dynamicRegistration: true },
                 workspaceEdit:          { documentChanges: true, resourceOperations: ['create', 'rename', 'delete'] },
-                symbol:                 { dynamicRegistration: true },
             },
         },
     });

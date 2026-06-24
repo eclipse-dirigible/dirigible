@@ -140,10 +140,19 @@ app.controller('JavaHierarchyController', ($scope, $http, Layout) => {
         $scope.refresh();
     };
 
+    // The editor re-posts the show request a few times to beat this lazily-loaded view's startup
+    // race; ignore an identical request seen within a short window so the retries don't refetch.
+    let lastSig = null;
+    let lastSigAt = 0;
     const showListener = Layout.addMessageListener({
         topic: 'java.hierarchy.show',
         handler: (data) => {
             if (!data || !data.kind) return;
+            const sig = [data.kind, data.uri, data.line, data.character].join('|');
+            const now = Date.now();
+            if (sig === lastSig && now - lastSigAt < 3000) return;
+            lastSig = sig;
+            lastSigAt = now;
             $scope.$evalAsync(() => {
                 $scope.kind = data.kind;
                 $scope.workspace = data.workspace;

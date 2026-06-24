@@ -161,11 +161,10 @@ public class JdtLsInstance {
         // root matches what sendToProcess uses for virtual→real URI translation.
         String escapedUri = realRoot.replace("\\", "\\\\")
                                     .replace("\"", "\\\"");
-        // Advertise workspace/symbol and call/type hierarchy so JDT.LS serves them to the REST facade
-        // (JavaLspQueryEndpoint) even when no browser editor is open. The editor client advertises the
-        // same set, so the capabilities survive an editor-driven re-initialize of the shared process.
-        String capabilities = "{\"workspace\":{\"executeCommand\":{\"dynamicRegistration\":false},"
-                + "\"symbol\":{\"dynamicRegistration\":false}}," + "\"textDocument\":{"
+        // Advertise call/type hierarchy so JDT.LS serves them to the REST facade (JavaLspQueryEndpoint)
+        // even when no browser editor is open. The editor client advertises the same set, so the
+        // capabilities survive an editor-driven re-initialize of the shared process.
+        String capabilities = "{\"workspace\":{\"executeCommand\":{\"dynamicRegistration\":false}}," + "\"textDocument\":{"
                 + "\"callHierarchy\":{\"dynamicRegistration\":false}," + "\"typeHierarchy\":{\"dynamicRegistration\":false}}}";
         String initParams = "{\"processId\":" + pid + "," + "\"clientInfo\":{\"name\":\"dirigible-java-debug\"}," + "\"rootUri\":\""
                 + escapedUri + "\"," + "\"workspaceFolders\":[{\"uri\":\"" + escapedUri + "\",\"name\":\"workspace\"}],"

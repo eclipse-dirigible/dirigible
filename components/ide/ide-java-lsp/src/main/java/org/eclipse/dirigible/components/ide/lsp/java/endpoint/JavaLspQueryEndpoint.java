@@ -20,11 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -33,9 +31,8 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * HTTP facade over a workspace's JDT Language Server for IDE views that live outside the Monaco
- * editor iframe (Go to Symbol search, Call Hierarchy, Type Hierarchy). Those views cannot reuse the
- * editor's per-iframe LSP WebSocket, so each request here drives the shared {@link JdtLsInstance}
- * directly.
+ * editor iframe (Call Hierarchy, Type Hierarchy). Those views cannot reuse the editor's per-iframe
+ * LSP WebSocket, so each request here drives the shared {@link JdtLsInstance} directly.
  *
  * <p>
  * URIs travel as the browser's virtual form ({@code file:///workspace/<ws>/...}); the bridge
@@ -57,15 +54,6 @@ public class JavaLspQueryEndpoint {
 
     public JavaLspQueryEndpoint(JdtLsManager manager) {
         this.manager = manager;
-    }
-
-    /** Workspace-wide symbol search ({@code workspace/symbol}). */
-    @GetMapping("/symbol")
-    public ResponseEntity<JsonNode> symbol(@RequestParam String workspace, @RequestParam(defaultValue = "") String query,
-            Principal principal) {
-        ObjectNode params = mapper.createObjectNode();
-        params.put("query", query);
-        return ResponseEntity.ok(request(principal, workspace, "workspace/symbol", params));
     }
 
     /** Resolves the call-hierarchy item at a position ({@code textDocument/prepareCallHierarchy}). */

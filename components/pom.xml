@@ -156,7 +156,6 @@
         <module>ui/settings-locale</module>
         <module>ui/view-welcome</module>
         <module>ui/view-search</module>
-        <module>ui/view-java-symbols</module>
         <module>ui/view-projects</module>
         <module>ui/view-import</module>
         <module>ui/view-console</module>
@@ -916,11 +915,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-search</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-view-java-symbols</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

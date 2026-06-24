@@ -1,5 +1,0 @@
-{
-    "module": "view-java-symbols/configs/java-symbols-view.js",
-    "extensionPoint": "platform-views",
-    "description": "Java Symbols View"
-}

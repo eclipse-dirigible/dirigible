@@ -958,43 +958,28 @@ class DirigibleEditor {
                 contextMenuOrder: 2.7,
                 run: (ed) => ed.trigger('java-lsp', 'editor.action.refactor', {}),
             });
-            // Open the workspace-wide Java symbol search, seeded with the current selection / word.
-            editor.addAction({
-                id: 'java.goToSymbol',
-                label: 'Java: Go to Symbol in Workspace...',
-                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyT],
-                contextMenuGroupId: 'navigation',
-                contextMenuOrder: 1.6,
-                run: (ed) => {
-                    const model = ed.getModel();
-                    const sel = ed.getSelection();
-                    let query = sel && model ? model.getValueInRange(sel) : '';
-                    if ((!query || !query.trim()) && model && sel) {
-                        const word = model.getWordAtPosition(sel.getStartPosition());
-                        query = word ? word.word : '';
-                    }
-                    layoutHub.openView({ id: 'java-symbols' });
-                    layoutHub.postMessage({ topic: 'java.symbols.search', data: { query: (query || '').trim() } });
-                },
-            });
-            // Call / Type hierarchy: open the bottom panel for the symbol under the cursor.
+            // Call / Type hierarchy: open the bottom panel for the symbol under the cursor. The panel
+            // is lazy-loaded, so its message listener may not exist yet when we post; re-post a few
+            // times to beat the load race (the panel dedupes identical requests). Same pattern as
+            // javaLspOpenFile's reveal re-post.
             const showHierarchy = (ed, kind) => {
                 const path = editorParameters.resourcePath; // /<ws>/<project>/<file>
                 const workspace = path.replace(/^\//, '')
                     .split('/')[0];
                 const pos = ed.getPosition();
                 if (!path || !workspace || !pos) return;
+                const data = {
+                    kind,
+                    workspace,
+                    uri: 'file:///workspace' + path,
+                    line: pos.lineNumber - 1,
+                    character: pos.column - 1,
+                };
                 layoutHub.openView({ id: 'java-hierarchy' });
-                layoutHub.postMessage({
-                    topic: 'java.hierarchy.show',
-                    data: {
-                        kind,
-                        workspace,
-                        uri: 'file:///workspace' + path,
-                        line: pos.lineNumber - 1,
-                        character: pos.column - 1,
-                    },
-                });
+                const post = () => layoutHub.postMessage({ topic: 'java.hierarchy.show', data });
+                post();
+                setTimeout(post, 400);
+                setTimeout(post, 1200);
             };
             editor.addAction({
                 id: 'java.callHierarchy',
