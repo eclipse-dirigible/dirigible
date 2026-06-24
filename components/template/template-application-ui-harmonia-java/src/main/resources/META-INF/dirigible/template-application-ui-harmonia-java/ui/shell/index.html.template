@@ -24,6 +24,9 @@
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
 
+    <!-- PapaParse — CSV parsing for the Documents File Preview pane (served version-less by webjars). -->
+    <script src="/webjars/papaparse/papaparse.min.js"></script>
+
     <!-- Theme bootstrap — runs before first paint to avoid a flash. Harmonia is light by default
          (its :root tokens) and dark when a `dark` class is on the root. The default is HARDCODED to
          light for now; the Appearance switcher in the sidebar persists the user's choice to
