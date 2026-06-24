@@ -56,6 +56,12 @@ jobs:
           build-mode: ${{ matrix.build-mode }}
           config: |
             name: "Comprehensive Multi-language CodeQL Config"
+            # Exclude generated/bundled artifacts: java-lsp-client.js is the esbuild output of
+            # java-lsp-client.ts (the .ts source IS analysed) and embeds vendored
+            # vscode-languageserver protocol/types; scanning the bundle only yields noise from that
+            # third-party generated code.
+            paths-ignore:
+              - 'components/ui/editor-monaco/src/main/resources/META-INF/dirigible/editor-monaco/js/java-lsp-client.js'
             query-filters:
               - exclude:
                   id: java/path-injection
