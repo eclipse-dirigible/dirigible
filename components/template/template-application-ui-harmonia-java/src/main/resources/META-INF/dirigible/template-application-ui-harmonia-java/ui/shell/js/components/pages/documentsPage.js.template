@@ -1,7 +1,15 @@
 /**
- * documentsPage — the built-in Documents view (transferred from the dashboard shell). A CMS folder
- * browser over /services/js/documents/api/documents.js: list a folder, navigate into subfolders,
- * download files, create folders, upload files, delete. Folders vs files: type === 'cmis:folder'.
+ * documentsPage — the built-in Documents view: a CMS folder browser over
+ * /services/js/documents/api/documents.js (the same backend the dashboard documents view uses).
+ *
+ * API contract (mirrors the dashboard's js/documents.js):
+ *   - list root  : GET <base>            (NO ?path= — the root must be listed with no path param;
+ *                  GET <base>?path=/ returns 400 "null has no such function getName")
+ *   - list folder: GET <base>?path=<folder.path>   (each child carries an absolute .path)
+ *   - new folder : POST <base>/folder { parentFolder: <folder.path>, name }
+ *   - upload     : POST <base>?path=<folder.path>  (multipart/form-data)
+ *   - delete     : DELETE <base> with a JSON body of absolute paths  [ "<item.path>", ... ]
+ *   - download   : GET <base>/download?path=<item.path>
  */
 document.addEventListener('alpine:init', () => {
   Alpine.data('documentsPage', () => ({
@@ -17,13 +25,16 @@ document.addEventListener('alpine:init', () => {
     deleteTarget: null,
     busy: false,
 
-    async init() { await this.load('/'); },
+    async init() { await this.load(''); },
 
+    // path '' (or '/') lists the root with NO query param; a real subfolder is listed by its path.
     async load(path) {
       this.state = 'loading';
       this.error = null;
       try {
-        this.folder = await App.services.api.get(this.base + '?path=' + encodeURIComponent(path), { baseUrl: '' });
+        const isRoot = !path || path === '/';
+        const url = isRoot ? this.base : this.base + '?path=' + encodeURIComponent(path);
+        this.folder = await App.services.api.get(url, { baseUrl: '' });
         this.state = 'default';
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not list the folder.');
@@ -43,7 +54,7 @@ document.addEventListener('alpine:init', () => {
     get crumbs() {
       const parts = (this.folder.path || '/').split('/').filter(Boolean);
       let acc = '';
-      const list = [{ label: 'root', path: '/' }];
+      const list = [{ label: 'root', path: '' }];   // root crumb lists with no path param
       for (const p of parts) { acc += '/' + p; list.push({ label: p, path: acc }); }
       return list;
     },
@@ -66,7 +77,8 @@ document.addEventListener('alpine:init', () => {
       if (!this.deleteTarget) return;
       this.busy = true;
       try {
-        await App.services.api.delete(this.base + '?path=' + encodeURIComponent(this.deleteTarget.path), { baseUrl: '' });
+        // DELETE takes a JSON body: the array of absolute object paths to remove.
+        await App.services.api.request('DELETE', this.base, [this.deleteTarget.path], { baseUrl: '' });
         this.deleteOpen = false; this.deleteTarget = null;
         await this.load(this.folder.path);
       } catch (e) {

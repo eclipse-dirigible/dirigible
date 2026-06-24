@@ -22,6 +22,10 @@ document.addEventListener('alpine:init', () => {
 
     init() {
       this.load();
+      // A task form (opened in the app-wide dialog) asks its host to close when it completes.
+      window.addEventListener('message', (e) => {
+        if (e && e.data && e.data.type === 'harmonia.form.close' && this.formOpen) this.closeForm();
+      });
     },
 
     async load() {

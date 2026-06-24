@@ -81,8 +81,8 @@ no `collection`, so `$models` = `model.entities`.
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (separate module) | ✅ `template-form-builder-harmonia` renders a `.form` as a Harmonia page via the neutral `formController(ctx)` contract; BPM task forms complete via `ctx.task.complete()` |
-| **Process Inbox** (built-in) | — | ✅ built-in /inbox view: the user's BPM tasks (assignee+groups) via the processTasks store, claim+open the task form |
-| **Documents** (built-in) | — | ✅ built-in /documents view: CMS folder browser (/services/js/documents/api) — navigate, download, create folder, upload, delete |
+| **Process Inbox** (built-in) | — | ✅ built-in /inbox view: **Outlook-style master-detail** (resizable `x-h-split`) — task list (assignee+groups) on the left, the selected task's form inline (`<iframe>`) on the right, claim-before-open, auto-refresh toggle; mirrors the dashboard redesign #6064/#6068 |
+| **Documents** (built-in) | — | ✅ built-in /documents view: CMS folder browser (/services/js/documents/api) — navigate, download, create folder, upload, delete. Root is listed with **no `?path=`** (a `?path=/` 400s); delete sends a JSON body of absolute paths — matching the dashboard `js/documents.js` contract |
 | process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |
 
 Asset embedding (Phase 1 — DONE, verified end-to-end against a live app):
