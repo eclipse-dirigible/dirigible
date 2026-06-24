@@ -958,6 +958,25 @@ class DirigibleEditor {
                 contextMenuOrder: 2.7,
                 run: (ed) => ed.trigger('java-lsp', 'editor.action.refactor', {}),
             });
+            // Open the workspace-wide Java symbol search, seeded with the current selection / word.
+            editor.addAction({
+                id: 'java.goToSymbol',
+                label: 'Java: Go to Symbol in Workspace...',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyT],
+                contextMenuGroupId: 'navigation',
+                contextMenuOrder: 1.6,
+                run: (ed) => {
+                    const model = ed.getModel();
+                    const sel = ed.getSelection();
+                    let query = sel && model ? model.getValueInRange(sel) : '';
+                    if ((!query || !query.trim()) && model && sel) {
+                        const word = model.getWordAtPosition(sel.getStartPosition());
+                        query = word ? word.word : '';
+                    }
+                    layoutHub.openView({ id: 'java-symbols' });
+                    layoutHub.postMessage({ topic: 'java.symbols.search', data: { query: (query || '').trim() } });
+                },
+            });
         }
 
         DirigibleEditor.computeDiff.onmessage = function (event) {

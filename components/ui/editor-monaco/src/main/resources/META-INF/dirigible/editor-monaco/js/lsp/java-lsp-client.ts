@@ -185,6 +185,12 @@ export async function connect(resourcePath: string): Promise<void> {
                 references:     { dynamicRegistration: true },
                 implementation: { dynamicRegistration: true },
                 typeDefinition: { dynamicRegistration: true },
+                // Advertised so JDT.LS serves call/type hierarchy. The editor doesn't drive them
+                // directly; the server-side REST facade (JavaLspQueryEndpoint) does — but JDT.LS only
+                // exposes these providers when the *last* initialize advertised them, and a browser
+                // editor re-initializes the shared process, so the editor must advertise them too.
+                callHierarchy:  { dynamicRegistration: true },
+                typeHierarchy:  { dynamicRegistration: true },
                 documentHighlight: { dynamicRegistration: true },
                 documentSymbol: { dynamicRegistration: true, hierarchicalDocumentSymbolSupport: true },
                 foldingRange:   { dynamicRegistration: true, lineFoldingOnly: false },
@@ -226,6 +232,7 @@ export async function connect(resourcePath: string): Promise<void> {
                 executeCommand:         { dynamicRegistration: true },
                 didChangeConfiguration: { dynamicRegistration: true },
                 workspaceEdit:          { documentChanges: true, resourceOperations: ['create', 'rename', 'delete'] },
+                symbol:                 { dynamicRegistration: true },
             },
         },
     });
