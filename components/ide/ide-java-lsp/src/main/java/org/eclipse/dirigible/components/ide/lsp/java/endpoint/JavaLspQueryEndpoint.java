@@ -19,6 +19,8 @@ import org.eclipse.dirigible.components.ide.lsp.java.process.JdtLsManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -33,6 +35,13 @@ import java.util.concurrent.TimeUnit;
  * HTTP facade over a workspace's JDT Language Server for IDE views that live outside the Monaco
  * editor iframe (Call Hierarchy, Type Hierarchy). Those views cannot reuse the editor's per-iframe
  * LSP WebSocket, so each request here drives the shared {@link JdtLsInstance} directly.
+ *
+ * <p>
+ * Request and response bodies are handled as raw JSON strings, parsed/produced with this module's
+ * own Jackson 2 {@link ObjectMapper}. Spring Boot 4's default HTTP message converter is Jackson 3
+ * ({@code tools.jackson}), which cannot bind to Jackson 2 {@code JsonNode} types — so the
+ * controller boundary deliberately stays on {@code String} and never exposes a {@code JsonNode}
+ * parameter or return value.
  *
  * <p>
  * URIs travel as the browser's virtual form ({@code file:///workspace/<ws>/...}); the bridge
@@ -58,45 +67,65 @@ public class JavaLspQueryEndpoint {
 
     /** Resolves the call-hierarchy item at a position ({@code textDocument/prepareCallHierarchy}). */
     @PostMapping("/call-hierarchy/prepare")
-    public ResponseEntity<JsonNode> prepareCallHierarchy(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "textDocument/prepareCallHierarchy", positionParams(body)));
+    public ResponseEntity<String> prepareCallHierarchy(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "textDocument/prepareCallHierarchy", positionParams(b)));
     }
 
     /** Callers of the given call-hierarchy item ({@code callHierarchy/incomingCalls}). */
     @PostMapping("/call-hierarchy/incoming")
-    public ResponseEntity<JsonNode> incomingCalls(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "callHierarchy/incomingCalls", itemParams(body)));
+    public ResponseEntity<String> incomingCalls(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "callHierarchy/incomingCalls", itemParams(b)));
     }
 
     /** Callees of the given call-hierarchy item ({@code callHierarchy/outgoingCalls}). */
     @PostMapping("/call-hierarchy/outgoing")
-    public ResponseEntity<JsonNode> outgoingCalls(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "callHierarchy/outgoingCalls", itemParams(body)));
+    public ResponseEntity<String> outgoingCalls(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "callHierarchy/outgoingCalls", itemParams(b)));
     }
 
     /** Resolves the type-hierarchy item at a position ({@code textDocument/prepareTypeHierarchy}). */
     @PostMapping("/type-hierarchy/prepare")
-    public ResponseEntity<JsonNode> prepareTypeHierarchy(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "textDocument/prepareTypeHierarchy", positionParams(body)));
+    public ResponseEntity<String> prepareTypeHierarchy(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "textDocument/prepareTypeHierarchy", positionParams(b)));
     }
 
     /** Supertypes of the given type-hierarchy item ({@code typeHierarchy/supertypes}). */
     @PostMapping("/type-hierarchy/supertypes")
-    public ResponseEntity<JsonNode> supertypes(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "typeHierarchy/supertypes", itemParams(body)));
+    public ResponseEntity<String> supertypes(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "typeHierarchy/supertypes", itemParams(b)));
     }
 
     /** Subtypes of the given type-hierarchy item ({@code typeHierarchy/subtypes}). */
     @PostMapping("/type-hierarchy/subtypes")
-    public ResponseEntity<JsonNode> subtypes(@RequestBody JsonNode body, Principal principal) {
-        return ResponseEntity.ok(request(principal, workspaceOf(body), "typeHierarchy/subtypes", itemParams(body)));
+    public ResponseEntity<String> subtypes(@RequestBody String body, Principal principal) {
+        JsonNode b = parse(body);
+        return json(request(principal, workspaceOf(b), "typeHierarchy/subtypes", itemParams(b)));
     }
 
     // -------------------------------------------------------------------------
 
+    private JsonNode parse(String body) {
+        try {
+            return mapper.readTree(body);
+        } catch (Exception e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid JSON body", e);
+        }
+    }
+
+    private static ResponseEntity<String> json(JsonNode node) {
+        return ResponseEntity.ok()
+                             .contentType(MediaType.APPLICATION_JSON)
+                             .body(node.toString());
+    }
+
     private JsonNode request(Principal principal, String workspace, String method, JsonNode params) {
         if (workspace == null || workspace.isBlank()) {
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "Missing 'workspace'");
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing 'workspace'");
         }
         String username = principal != null ? principal.getName() : "anonymous";
         try {
@@ -108,14 +137,14 @@ public class JavaLspQueryEndpoint {
             return response.path("result");
         } catch (IllegalStateException notReady) {
             // JDT.LS still starting up or not bundled in this build.
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, notReady.getMessage(), notReady);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, notReady.getMessage(), notReady);
         } catch (InterruptedException ie) {
             Thread.currentThread()
                   .interrupt();
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE, "Interrupted", ie);
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Interrupted", ie);
         } catch (Exception e) {
             logger.warn("[java-lsp] {} failed for workspace {}", method, workspace, e);
-            throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_GATEWAY, "JDT.LS request failed", e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "JDT.LS request failed", e);
         }
     }
 
