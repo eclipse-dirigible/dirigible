@@ -115,7 +115,7 @@ function setTheme(theme, monaco) {
         headElement.appendChild(link);
     }
     if (theme.type === 'light') {
-        monacoTheme = 'vs-light';
+        monacoTheme = 'blimpkit-light';
         if (monaco) monaco.editor.setTheme(monacoTheme);
         autoThemeListener = false;
     } else if (theme.type === 'dark') {
@@ -127,7 +127,7 @@ function setTheme(theme, monaco) {
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
             else monacoTheme = 'blimpkit-dark';
-        } else monacoTheme = 'vs-light';
+        } else monacoTheme = 'blimpkit-light';
         if (monaco) monaco.editor.setTheme(monacoTheme);
         autoThemeListener = true;
     }
@@ -733,6 +733,7 @@ class DirigibleEditor {
                         minimap: {
                             autohide: DirigibleEditor.isMinimapAutohideEnabled(),
                         },
+                        'semanticHighlighting.enabled': true,
                     };
                     if (TypeScriptUtils.isTypeScriptFile(fileName)) {
                         // @ts-ignore
@@ -1053,10 +1054,54 @@ class DirigibleEditor {
             }
         });
 
+        // Semantic-token colours for Java (JDT.LS legend). Monaco only applies these when the
+        // theme carries `semanticHighlighting: true`; without explicit keyword/modifier rules the
+        // semantic layer leaves keywords uncoloured, so every legend type — including keyword and
+        // modifier — is mapped here. Palettes mirror VS Code's dark+/light+ defaults.
+        const javaSemanticDark = [
+            { token: 'namespace', foreground: '4ec9b0' },
+            { token: 'class', foreground: '4ec9b0' },
+            { token: 'interface', foreground: '4ec9b0' },
+            { token: 'enum', foreground: '4ec9b0' },
+            { token: 'type', foreground: '4ec9b0' },
+            { token: 'typeParameter', foreground: '4ec9b0' },
+            { token: 'annotation', foreground: 'dcdcaa' },
+            { token: 'annotationMember', foreground: 'dcdcaa' },
+            { token: 'enumMember', foreground: '4fc1ff' },
+            { token: 'method', foreground: 'dcdcaa' },
+            { token: 'function', foreground: 'dcdcaa' },
+            { token: 'property', foreground: '9cdcfe' },
+            { token: 'field', foreground: '9cdcfe' },
+            { token: 'variable', foreground: '9cdcfe' },
+            { token: 'parameter', foreground: '9cdcfe' },
+            { token: 'keyword', foreground: '569cd6' },
+            { token: 'modifier', foreground: '569cd6' },
+        ];
+        const javaSemanticLight = [
+            { token: 'namespace', foreground: '267f99' },
+            { token: 'class', foreground: '267f99' },
+            { token: 'interface', foreground: '267f99' },
+            { token: 'enum', foreground: '267f99' },
+            { token: 'type', foreground: '267f99' },
+            { token: 'typeParameter', foreground: '267f99' },
+            { token: 'annotation', foreground: '795e26' },
+            { token: 'annotationMember', foreground: '795e26' },
+            { token: 'enumMember', foreground: '0070c1' },
+            { token: 'method', foreground: '795e26' },
+            { token: 'function', foreground: '795e26' },
+            { token: 'property', foreground: '001080' },
+            { token: 'field', foreground: '001080' },
+            { token: 'variable', foreground: '001080' },
+            { token: 'parameter', foreground: '001080' },
+            { token: 'keyword', foreground: '0000ff' },
+            { token: 'modifier', foreground: '0000ff' },
+        ];
+
         this.monaco.editor.defineTheme('blimpkit-dark', {
             base: 'vs-dark',
             inherit: true,
-            rules: [{ background: '1d1d1d' }],
+            semanticHighlighting: true,
+            rules: [{ background: '1d1d1d' }, ...javaSemanticDark],
             colors: {
                 'editor.background': '#1d1d1d',
                 'breadcrumb.background': '#1d1d1d',
@@ -1075,7 +1120,8 @@ class DirigibleEditor {
         this.monaco.editor.defineTheme('classic-dark', {
             base: 'vs-dark',
             inherit: true,
-            rules: [{ background: '1c2228' }],
+            semanticHighlighting: true,
+            rules: [{ background: '1c2228' }, ...javaSemanticDark],
             colors: {
                 'editor.background': '#1c2228',
                 'breadcrumb.background': '#1c2228',
@@ -1091,13 +1137,21 @@ class DirigibleEditor {
             }
         });
 
+        this.monaco.editor.defineTheme('blimpkit-light', {
+            base: 'vs',
+            inherit: true,
+            semanticHighlighting: true,
+            rules: [...javaSemanticLight],
+            colors: {}
+        });
+
         this.monaco.editor.setTheme(monacoTheme);
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
             if (autoThemeListener) {
                 if (event.matches) {
                     if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
                     else monacoTheme = 'blimpkit-dark';
-                } else monacoTheme = 'vs-light';
+                } else monacoTheme = 'blimpkit-light';
                 this.monaco.editor.setTheme(monacoTheme);
             }
         });
