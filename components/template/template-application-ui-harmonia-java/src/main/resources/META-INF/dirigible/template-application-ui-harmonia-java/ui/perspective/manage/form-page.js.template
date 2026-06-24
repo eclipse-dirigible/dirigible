@@ -171,18 +171,23 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Build the request body, converting date/time widgets to what the backend (java.time.*
-    // via Jackson) expects: an HTML date/datetime-local value (local, no zone) becomes a full
-    // ISO instant (…Z) so an Instant/Timestamp field parses — matching the AngularJS stack's
-    // `new Date(value)` conversion. A value that isn't a valid Date (e.g. a bare TIME "16:04")
-    // is passed through unchanged so a LocalTime field still parses it.
+    // Build the request body.
+    //  1. Empty fields -> null (an untouched field is "not provided", matching the AngularJS stack
+    //     which omits untouched fields). Critically this keeps a system-managed back-reference such
+    //     as ProcessId null on create, so a process trigger's `ProcessId != null` guard fires (an
+    //     empty string would trip it and the process would never start); on edit a populated value
+    //     round-trips unchanged.
+    //  2. Date/time widgets -> the backend java.time format: an HTML date/datetime value (local, no
+    //     zone) becomes a full ISO instant (…Z) so an Instant/Timestamp binds; a bare TIME ("16:04",
+    //     not a valid Date) passes through so a LocalTime still parses.
     toPayload() {
       const payload = { ...this.form };
+      for (const _k of Object.keys(payload)) {
+        if (payload[_k] === '') payload[_k] = null;
+      }
 #foreach($property in $properties)
 #if($property.isDateType)
-      if (payload.${property.name} === '' || payload.${property.name} == null) {
-        payload.${property.name} = null;   // empty date -> null (Jackson can't parse '' as a temporal)
-      } else {
+      if (payload.${property.name} != null) {
         const _d${property.name} = new Date(payload.${property.name});
         if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
       }

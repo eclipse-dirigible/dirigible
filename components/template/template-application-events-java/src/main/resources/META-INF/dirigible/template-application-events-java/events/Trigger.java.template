@@ -45,7 +45,10 @@ public class ${process}Trigger implements MessageHandler {
             return;
         }
         ${entity}Entity entity = repository.findById(created.${keyProperty});
-        if (entity == null || entity.ProcessId != null) {
+        // Start at most once. Treat a blank ProcessId as "not started yet": some clients send an
+        // empty string for an untouched system field rather than null, and "" != null would
+        // otherwise trip this guard and the process would never start.
+        if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank())) {
             return;
         }
 #if(${guardExpression} != "true")
