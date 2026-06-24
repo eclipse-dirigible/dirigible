@@ -97,12 +97,9 @@
       </div>
     </form>
 
-    <!-- App namespace + fetch client, reused from the co-generated SPA shell (this form lives at
-         gen/<genFolder>/forms/<form>/, the shell js at gen/<genFolder>/js/ — i.e. ../../js). -->
-    <script src="../../js/app.js"></script>
-    <script src="../../js/config.js"></script>
-    <script src="../../js/services/api.js"></script>
-    <script src="../../js/services/apiError.js"></script>
+    <!-- Standalone form: form.js is self-contained (its own fetch client), so it does NOT depend on
+         the SPA shell's window.App. A BPM task form is opened directly (iframe/dialog), where the
+         shell assets are not present at a predictable relative path. -->
     <script src="./form.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>

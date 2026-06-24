@@ -82,7 +82,13 @@ App.services.api = {
     }
 
     if (r.ok) {
-      return r.status === 204 ? null : r.json();
+      // A success can carry an empty body (204, or a 200 from an action endpoint such as task
+      // claim/complete). Reading r.json() on an empty body throws "Unexpected end of JSON input",
+      // so read text first and only parse when there's something to parse.
+      if (r.status === 204) return null;
+      const text = await r.text();
+      if (!text) return null;
+      try { return JSON.parse(text); } catch (_) { return text; }
     }
 
     // Non-OK: read the body ONCE as text, then attempt to parse the structured error.

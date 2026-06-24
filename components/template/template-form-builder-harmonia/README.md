@@ -39,10 +39,22 @@ ctx.onApproveClicked = async () => {
 };
 ```
 
-> **Migration:** existing `.form` files with AngularJS `code` must have that code
-> rewritten to this contract to run under Harmonia. **Follow-up:** update
-> `FormIntentGenerator` (engine-intent) to emit neutral handlers instead of the current
-> `$scope` stubs, so intent-generated task forms render in Harmonia out of the box.
+### AngularJS `.form` compatibility (no rewrite required)
+
+`.form` artifacts authored against the AngularJS form-builder (e.g. the ones the intent's
+`FormIntentGenerator` emits) use `$scope` / `$http` / `NotificationHub` / `DialogHub`.
+Rather than force a rewrite, `form.js` defines **compatibility shims** inside
+`formController(ctx)` that map those onto `ctx`:
+
+| legacy global | shimmed to |
+|---|---|
+| `$scope` | `ctx` (so `$scope.model` and `$scope.onXClicked = fn` land on `ctx`) |
+| `$http.{get,post,put,delete}` | `ctx.http.*`, returning an AngularJS-style `{ data }` promise (rejects with `{ data: { message }, status }`) |
+| `NotificationHub().show({title,description})` | `ctx.notify(...)` |
+| `DialogHub().closeWindow()` | `ctx.close()` |
+
+So an intent-generated task form (`$scope.onApproveClicked = …; $http.post('/services/bpm/…')`)
+runs unchanged. New forms can still be authored directly against the neutral `ctx`.
 
 ## Status (v1)
 
@@ -51,12 +63,16 @@ ctx.onApproveClicked = async () => {
   input-time, input-color, button, and one level of `container-hbox` / `container-vbox`.
 - **Fallback:** any other `controlId` (image, input-documents, input-combobox/select/radio
   with feeds, table, stepIndicator, progress) renders as a labelled text input with a TODO.
-- **Assets:** reuses the co-generated SPA shell's `app.js` / `config.js` / `api.js` /
-  `apiError.js` (`../../js/...`) + the Harmonia/Alpine/Lucide webjars — so a form is
-  generated alongside `template-application-ui-harmonia-java` output.
+- **Assets (self-contained):** the page loads only `form.js` + the Harmonia/Alpine/Lucide
+  webjars. `form.js` carries its own minimal fetch client (`harmoniaHttp`), so the form does
+  **not** depend on the SPA shell's `window.App`. This matters because a BPM task form is
+  opened standalone (an iframe/dialog with `?taskId=&processInstanceId=`), where the shell
+  assets are not present at a predictable relative path (an earlier `../../js/...` reference
+  404'd and left `App` undefined).
 
 ## Follow-ups
 - Feed-driven widgets (combobox/select/radio with `feeds`), documents, table, stepIndicator.
-- `FormIntentGenerator` neutral-code emission + task-form migration.
+- Optionally have `FormIntentGenerator` emit neutral `ctx` handlers directly (the compat
+  shims make this optional rather than required).
 - A close/refresh handshake with the host dialog (`harmonia.form.close` postMessage is sent;
   the SPA shell could listen and close + refresh proactively).

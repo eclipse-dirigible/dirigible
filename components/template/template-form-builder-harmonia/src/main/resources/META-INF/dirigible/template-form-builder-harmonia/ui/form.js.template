@@ -9,16 +9,75 @@
  * The .form's `code` block is the BODY of this function and receives a single `ctx`:
  *   ctx.model    - the reactive form model (bound to the widgets' x-model)
  *   ctx.params   - parsed query params (e.g. taskId, processInstanceId, an entity id)
- *   ctx.http     - the platform fetch client (get/post/put/delete; pass { baseUrl: '' } for an
- *                  absolute URL such as a generated controller or an /services/... endpoint)
+ *   ctx.http     - a self-contained fetch client (get/post/put/delete); URLs are absolute
+ *                  (e.g. a generated controller or an /services/... endpoint)
  *   ctx.task     - { id, processInstanceId, complete(variables?) } for BPM task forms; complete()
  *                  posts to /services/inbox/tasks/{id} and the host dialog refreshes on close
  *   ctx.notify(message)  - surface a status message on the form
  *   ctx.close()          - ask a hosting SPA dialog to close (no-op standalone)
+ *
+ * This page is STANDALONE — a BPM task form is opened directly (an iframe/dialog with
+ * ?taskId=&processInstanceId=), not inside the SPA shell, so it must not depend on the shell's
+ * window.App. It carries its own minimal fetch client (harmoniaHttp) instead.
+ *
  * The code attaches its button handlers onto ctx (e.g. ctx.onApproveClicked = () => {...}); a
- * button's `callback` names the handler, invoked via run().
+ * button's `callback` names the handler, invoked via run(). For .form artifacts authored against
+ * the AngularJS form-builder ($scope / $http / NotificationHub / DialogHub), compatibility shims
+ * below map those onto ctx so the same code runs unchanged here.
  */
+
+// Self-contained fetch client (no window.App): every form URL is absolute (/services/...).
+const harmoniaHttp = {
+  async request(method, url, body) {
+    const r = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: body != null ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
+    });
+    if (!r.ok) {
+      const text = await r.text().catch(() => '');
+      let message = text;
+      try { const j = JSON.parse(text); message = j.errorMessage || j.message || text; } catch (_) { /* non-JSON */ }
+      const err = new Error(message || (r.status + ' ' + r.statusText));
+      err.httpStatus = r.status;
+      throw err;
+    }
+    // A success can carry an empty body (204, or a 200 from an action endpoint such as task
+    // complete) — don't call r.json() on it, that throws "Unexpected end of JSON input".
+    if (r.status === 204) return null;
+    const text = await r.text();
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (_) { return text; }
+  },
+  get(url)        { return this.request('GET', url, undefined); },
+  post(url, body) { return this.request('POST', url, body); },
+  put(url, body)  { return this.request('PUT', url, body); },
+  delete(url)     { return this.request('DELETE', url, undefined); },
+};
+
 function formController(ctx) {
+#[[
+  // --- AngularJS form-builder compatibility shims ---------------------------------------------
+  // Map the legacy $scope / $http / NotificationHub / DialogHub surface a .form's `code` may use
+  // onto the neutral ctx, so AngularJS-authored forms run unchanged in this standalone runtime.
+  const $scope = ctx;                 // $scope.model and $scope.onXClicked = fn land on ctx
+  $scope.model = ctx.model;
+  const wrap = (p) => p.then((d) => ({ data: d }))
+                       .catch((e) => { throw { data: { message: e && e.message }, status: e && e.httpStatus }; });
+  const $http = {
+    get:    (url)       => wrap(ctx.http.get(url)),
+    post:   (url, data) => wrap(ctx.http.post(url, data)),
+    put:    (url, data) => wrap(ctx.http.put(url, data)),
+    delete: (url)       => wrap(ctx.http.delete(url)),
+  };
+  function NotificationHub() {
+    return { show: (o) => ctx.notify(((o && o.title) ? o.title + ': ' : '') + ((o && o.description) || '')) };
+  }
+  function DialogHub() {
+    return { closeWindow: () => ctx.close(), close: () => ctx.close() };
+  }
+]]#
 ${code}
 }
 
@@ -36,13 +95,13 @@ document.addEventListener('alpine:init', () => {
       this._ctx = {
         model: this.model,
         params,
-        http: App.services.api,
+        http: harmoniaHttp,
         task: {
           id: params.taskId || null,
           processInstanceId: params.processInstanceId || null,
           complete(variables) {
-            return App.services.api.post('/services/inbox/tasks/' + params.taskId,
-              { action: 'COMPLETE', data: variables || self.model }, { baseUrl: '' });
+            return harmoniaHttp.post('/services/inbox/tasks/' + params.taskId,
+              { action: 'COMPLETE', data: variables || self.model });
           },
         },
         notify(message) { self.message = message; },
@@ -76,12 +135,12 @@ document.addEventListener('alpine:init', () => {
       if (!url) return;
       this.state = 'submitting';
       try {
-        await App.services.api.post(url, this.model, { baseUrl: '' });
+        await harmoniaHttp.post(url, this.model);
         this.state = 'success';
         this.message = 'Submitted.';
       } catch (e) {
         this.state = 'error';
-        this.message = App.services.apiErrors.messageFor(e, 'Submit failed.');
+        this.message = (e && e.message) || 'Submit failed.';
       }
     },
 
