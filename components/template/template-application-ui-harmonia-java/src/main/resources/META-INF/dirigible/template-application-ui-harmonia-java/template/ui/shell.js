@@ -93,6 +93,27 @@ export function getSources() {
             location: "/template-application-ui-harmonia-java/ui/shell/notfound.html.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/views/_notfound.html"
+        },
+        // Built-in shell sections (transferred from the dashboard): Process Inbox + Documents.
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/inboxPage.js.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/js/components/pages/inboxPage.js"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/inbox.html.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/views/_inbox.html"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/documentsPage.js.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/js/components/pages/documentsPage.js"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/documents.html.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/views/_documents.html"
         }
     ];
 };

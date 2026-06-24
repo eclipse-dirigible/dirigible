@@ -1,0 +1,97 @@
+/**
+ * documentsPage — the built-in Documents view (transferred from the dashboard shell). A CMS folder
+ * browser over /services/js/documents/api/documents.js: list a folder, navigate into subfolders,
+ * download files, create folders, upload files, delete. Folders vs files: type === 'cmis:folder'.
+ */
+document.addEventListener('alpine:init', () => {
+  Alpine.data('documentsPage', () => ({
+    ...basePage(),
+    base: '/services/js/documents/api/documents.js',
+    folder: { name: 'root', path: '/', children: [] },
+    state: 'loading',   // loading | error | default
+    error: null,
+
+    newFolderOpen: false,
+    newFolderName: '',
+    deleteOpen: false,
+    deleteTarget: null,
+    busy: false,
+
+    async init() { await this.load('/'); },
+
+    async load(path) {
+      this.state = 'loading';
+      this.error = null;
+      try {
+        this.folder = await App.services.api.get(this.base + '?path=' + encodeURIComponent(path), { baseUrl: '' });
+        this.state = 'default';
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not list the folder.');
+        this.state = 'error';
+      }
+      this.refreshIcons();
+    },
+
+    isFolder(item) { return item && item.type === 'cmis:folder'; },
+    downloadUrl(item) { return this.base + '/download?path=' + encodeURIComponent(item.path); },
+
+    open(item) {
+      if (this.isFolder(item)) this.load(item.path);
+      else window.open(this.downloadUrl(item), '_blank');
+    },
+
+    get crumbs() {
+      const parts = (this.folder.path || '/').split('/').filter(Boolean);
+      let acc = '';
+      const list = [{ label: 'root', path: '/' }];
+      for (const p of parts) { acc += '/' + p; list.push({ label: p, path: acc }); }
+      return list;
+    },
+
+    async createFolder() {
+      if (!this.newFolderName.trim()) return;
+      this.busy = true;
+      try {
+        await App.services.api.post(this.base + '/folder', { parentFolder: this.folder.path, name: this.newFolderName.trim() }, { baseUrl: '' });
+        this.newFolderOpen = false;
+        this.newFolderName = '';
+        await this.load(this.folder.path);
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not create the folder.');
+      } finally { this.busy = false; }
+    },
+
+    askDelete(item) { this.deleteTarget = item; this.deleteOpen = true; },
+    async confirmDelete() {
+      if (!this.deleteTarget) return;
+      this.busy = true;
+      try {
+        await App.services.api.delete(this.base + '?path=' + encodeURIComponent(this.deleteTarget.path), { baseUrl: '' });
+        this.deleteOpen = false; this.deleteTarget = null;
+        await this.load(this.folder.path);
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not delete.');
+      } finally { this.busy = false; }
+    },
+
+    // Upload is multipart, so it bypasses the JSON api client and uses fetch with FormData.
+    async upload(event) {
+      const files = event.target.files;
+      if (!files || !files.length) return;
+      this.busy = true;
+      try {
+        const fd = new FormData();
+        for (const f of files) fd.append('file', f, f.name);
+        const r = await fetch(this.base + '?path=' + encodeURIComponent(this.folder.path), {
+          method: 'POST', body: fd, credentials: 'same-origin',
+        });
+        if (!r.ok) throw new Error('upload failed: ' + r.status);
+        event.target.value = '';
+        await this.load(this.folder.path);
+      } catch (e) {
+        this.error = 'Upload failed.';
+        console.error(e);
+      } finally { this.busy = false; }
+    },
+  }));
+}, { once: true });

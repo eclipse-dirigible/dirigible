@@ -47,6 +47,18 @@
               <div x-h-sidebar-group-label>Application</div>
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/inbox')" @click="navigate('/inbox')">
+                      <i role="img" data-lucide="inbox"></i><span>Inbox</span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/documents')" @click="navigate('/documents')">
+                      <i role="img" data-lucide="folder"></i><span>Documents</span>
+                    </button>
+                  </li>
+                </ul>
+                <ul x-h-sidebar-menu>
                   <!-- TODO (Phase 2): drive from a generated nav (see appShell `nav`). Skeleton
                        enumerates top-level PRIMARY entities (list / manage / master) directly. -->
 #foreach($entity in $models)
@@ -162,6 +174,9 @@
     </div>
 
     <!-- Routes (Pinecone reads these from the document). -->
+    <!-- Built-in shell sections (always present): Process Inbox + Documents. -->
+    <template x-route="/inbox" x-template.target.app="./views/_inbox.html"></template>
+    <template x-route="/documents" x-template.target.app="./views/_documents.html"></template>
     <!-- LIST entities: one read-only list route each. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
@@ -221,6 +236,8 @@
     <script src="./js/components/pages/baseFormPage.js" defer></script>
     <script src="./js/components/detailPanel.js" defer></script>
     <script src="./js/stores/processTasks.js" defer></script>
+    <script src="./js/components/pages/inboxPage.js" defer></script>
+    <script src="./js/components/pages/documentsPage.js" defer></script>
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ListPage.js" defer></script>

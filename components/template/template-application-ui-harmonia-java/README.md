@@ -77,6 +77,8 @@ no `collection`, so `$models` = `model.entities`.
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (Phase 3) | ⬜ |
+| **Process Inbox** (built-in) | — | ✅ built-in /inbox view: the user's BPM tasks (assignee+groups) via the processTasks store, claim+open the task form |
+| **Documents** (built-in) | — | ✅ built-in /documents view: CMS folder browser (/services/js/documents/api) — navigate, download, create folder, upload, delete |
 | process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |
 
 Asset embedding (Phase 1 — DONE, verified end-to-end against a live app):

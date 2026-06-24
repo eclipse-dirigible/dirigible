@@ -1,0 +1,28 @@
+/**
+ * inboxPage — the built-in Process Inbox view (transferred from the dashboard shell). Lists the
+ * current user's BPM tasks (assignee + candidate groups) from the shared processTasks store and
+ * opens a task's form via the same store (claim-if-needed + app-wide form dialog).
+ */
+document.addEventListener('alpine:init', () => {
+  Alpine.data('inboxPage', () => ({
+    ...basePage(),
+    searchTerm: '',
+
+    init() {
+      // The store self-loads at startup; refresh on entry so the list is current.
+      Alpine.store('processTasks').refresh().then(() => this.refreshIcons());
+    },
+
+    get tasks() { return Alpine.store('processTasks').tasks; },
+
+    get filtered() {
+      const q = this.searchTerm.trim().toLowerCase();
+      if (!q) return this.tasks;
+      return this.tasks.filter(t => [t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
+        .some(v => v && String(v).toLowerCase().includes(q)));
+    },
+
+    open(task) { Alpine.store('processTasks').openTask(task); },
+    refresh() { Alpine.store('processTasks').refresh().then(() => this.refreshIcons()); },
+  }));
+}, { once: true });
