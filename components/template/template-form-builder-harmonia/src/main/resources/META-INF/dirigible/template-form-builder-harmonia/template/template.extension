@@ -1,0 +1,5 @@
+{
+    "module": "template-form-builder-harmonia/template/template.js",
+    "extensionPoint": "platform-templates",
+    "description": "The generator template from form to Harmonia (Alpine.js) format"
+}
