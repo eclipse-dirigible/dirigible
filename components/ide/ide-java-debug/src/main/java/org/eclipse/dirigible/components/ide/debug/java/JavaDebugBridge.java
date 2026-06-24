@@ -21,9 +21,15 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
 
 /**
  * Bridges browser WebSocket sessions to a single DAP (Debug Adapter Protocol) TCP socket.
@@ -54,12 +60,21 @@ public class JavaDebugBridge {
      * {@code /home/user/.../repository/root/users/admin/workspace/}.
      */
     private final String realPathPrefix;
+    /**
+     * The live workspace directory ({@link #realPathPrefix} as a {@link Path}). Its direct children are
+     * the projects; a git-backed project is a symlink into the repository's {@code .git} store, so the
+     * real (canonical) filesystem path the DAP server reports for a source goes through
+     * {@code .git/admin/workspace/<repo>/<project>/...} and never matches {@link #realPathPrefix} by a
+     * plain prefix replace. Inbound translation resolves each child's real path to invert that.
+     */
+    private final Path workspaceRoot;
 
     JavaDebugBridge(Socket dapSocket, String virtualPathPrefix, String realPathPrefix) throws IOException {
         this.dapSocket = dapSocket;
         this.dapOut = dapSocket.getOutputStream();
         this.virtualPathPrefix = virtualPathPrefix;
         this.realPathPrefix = realPathPrefix;
+        this.workspaceRoot = Paths.get(realPathPrefix);
         startDapReader();
     }
 
@@ -169,6 +184,120 @@ public class JavaDebugBridge {
         }
     }
 
+    /**
+     * Translates {@code source.path} fields in DAP responses/events (e.g. {@code stackTrace} frames)
+     * coming back from the DAP server from the real filesystem path to the virtual workspace path the
+     * browser opens (the inverse of {@link #translateSourcePaths}). Without this, a source under a
+     * git-backed project reaches the browser as the canonical
+     * {@code .../.git/admin/workspace/<repo>/<project>/...} path; the editor's naive
+     * {@code lastIndexOf('/<workspace>/')} mapping then yields a doubled path
+     * ({@code /<workspace>/<project>/<project>/...}) that 404s, so the editor tab opens and immediately
+     * closes. All non-source messages and paths outside the workspace (e.g. JDK sources) are unchanged.
+     */
+    private String translateSourcePathsToVirtual(String json) {
+        if (!json.contains("\"source\"") || !json.contains("\"path\"")) {
+            return json;
+        }
+        try {
+            Map<Path, String> entries = workspaceEntries();
+            if (entries.isEmpty()) {
+                return json;
+            }
+            JsonNode root = mapper.readTree(json);
+            boolean changed = rewriteSourceNodes(root, entries);
+            return changed ? mapper.writeValueAsString(root) : json;
+        } catch (Exception e) {
+            logger.warn("[java-debug] Could not translate inbound source path", e);
+            return json;
+        }
+    }
+
+    /**
+     * Maps each direct child of the live workspace directory to its canonical (symlink-resolved) real
+     * path, so a real source path reported by the DAP server can be matched back to a workspace project
+     * regardless of whether that project is a plain directory or a git symlink into the {@code .git}
+     * store.
+     */
+    private Map<Path, String> workspaceEntries() {
+        Map<Path, String> map = new LinkedHashMap<>();
+        if (!Files.isDirectory(workspaceRoot)) {
+            return map;
+        }
+        try (Stream<Path> children = Files.list(workspaceRoot)) {
+            children.forEach(child -> {
+                try {
+                    map.put(child.toRealPath(), child.getFileName()
+                                                     .toString());
+                } catch (IOException ignored) {
+                    // Unreadable/broken entry — skip it.
+                }
+            });
+        } catch (IOException e) {
+            logger.warn("[java-debug] Could not list workspace {}", workspaceRoot, e);
+        }
+        return map;
+    }
+
+    private String toVirtualPath(String realPath, Map<Path, String> entries) {
+        if (realPath == null || realPath.isBlank()) {
+            return null;
+        }
+        String raw = realPath;
+        try {
+            if (raw.startsWith("file:")) {
+                raw = Paths.get(URI.create(raw))
+                           .toString();
+            }
+        } catch (Exception ignored) {
+            // Not a URI — treat as a plain path.
+        }
+        Path target;
+        try {
+            target = Paths.get(raw)
+                          .toRealPath();
+        } catch (IOException e) {
+            target = Paths.get(raw)
+                          .toAbsolutePath()
+                          .normalize();
+        }
+        for (Map.Entry<Path, String> entry : entries.entrySet()) {
+            Path childReal = entry.getKey();
+            if (target.startsWith(childReal)) {
+                String relative = childReal.relativize(target)
+                                           .toString()
+                                           .replace('\\', '/');
+                return virtualPathPrefix + entry.getValue() + (relative.isEmpty() ? "" : "/" + relative);
+            }
+        }
+        return null;
+    }
+
+    private boolean rewriteSourceNodes(JsonNode node, Map<Path, String> entries) {
+        boolean changed = false;
+        if (node.isObject()) {
+            ObjectNode obj = (ObjectNode) node;
+            JsonNode source = obj.get("source");
+            if (source != null && source.isObject()) {
+                JsonNode pathNode = source.get("path");
+                if (pathNode != null && pathNode.isTextual()) {
+                    String virtual = toVirtualPath(pathNode.asText(), entries);
+                    if (virtual != null) {
+                        ((ObjectNode) source).put("path", virtual);
+                        changed = true;
+                    }
+                }
+            }
+            for (JsonNode child : obj) {
+                changed |= rewriteSourceNodes(child, entries);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                changed |= rewriteSourceNodes(child, entries);
+            }
+        }
+        return changed;
+    }
+
     private void startDapReader() {
         Thread t = new Thread(() -> {
             try {
@@ -182,7 +311,7 @@ public class JavaDebugBridge {
                     if (body.length == 0) {
                         break;
                     }
-                    broadcast(new String(body, StandardCharsets.UTF_8));
+                    broadcast(translateSourcePathsToVirtual(new String(body, StandardCharsets.UTF_8)));
                 }
             } catch (IOException e) {
                 if (isAlive()) {
