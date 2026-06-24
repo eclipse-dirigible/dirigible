@@ -68,6 +68,12 @@ document.addEventListener('alpine:init', () => {
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined) this.form[key] = record[key];
           }
+          // Date/time widgets need the HTML input format, not the backend's full ISO value.
+#foreach($property in $properties)
+#if($property.isDateType)
+          if (this.form.${property.name}) this.form.${property.name} = this.toDateInput(this.form.${property.name}, '${property.widgetType}');
+#end
+#end
           this.state = 'ready';
         } catch (e) {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
@@ -137,10 +143,11 @@ document.addEventListener('alpine:init', () => {
       }
       this.state = 'saving';
       try {
+        const payload = this.toPayload();
         if (this.isEdit) {
-          await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), this.form);
+          await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
         } else {
-          await App.services.api.post(this.apiPath, this.form);
+          await App.services.api.post(this.apiPath, payload);
         }
         this.navigateBack('/${name}');
       } catch (e) {
@@ -149,6 +156,39 @@ document.addEventListener('alpine:init', () => {
                                        : 'Could not create the ${name} record.'
         });
       }
+    },
+
+    // Backend ISO temporal -> the value an HTML date/time input expects (by widget), so an
+    // edited record's dates populate the fields. e.g. "2026-06-09T16:04:00Z" -> "2026-06-09T16:04".
+    toDateInput(value, widget) {
+      const s = String(value);
+      switch (widget) {
+        case 'DATE': return s.slice(0, 10);
+        case 'DATETIME-LOCAL': return s.slice(0, 16);
+        case 'TIME': return s.slice(0, 5);
+        case 'MONTH': return s.slice(0, 7);
+        default: return s;
+      }
+    },
+
+    // Build the request body, converting date/time widgets to what the backend (java.time.*
+    // via Jackson) expects: an HTML date/datetime-local value (local, no zone) becomes a full
+    // ISO instant (…Z) so an Instant/Timestamp field parses — matching the AngularJS stack's
+    // `new Date(value)` conversion. A value that isn't a valid Date (e.g. a bare TIME "16:04")
+    // is passed through unchanged so a LocalTime field still parses it.
+    toPayload() {
+      const payload = { ...this.form };
+#foreach($property in $properties)
+#if($property.isDateType)
+      if (payload.${property.name} === '' || payload.${property.name} == null) {
+        payload.${property.name} = null;   // empty date -> null (Jackson can't parse '' as a temporal)
+      } else {
+        const _d${property.name} = new Date(payload.${property.name});
+        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
+      }
+#end
+#end
+      return payload;
     },
 
     cancel() {
