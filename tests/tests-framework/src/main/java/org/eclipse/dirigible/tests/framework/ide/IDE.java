@@ -42,19 +42,22 @@ public class IDE {
     private final WorkbenchFactory workbenchFactory;
     private final DatabasePerspectiveFactory databasePerspectiveFactory;
     private final GitPerspectiveFactory gitPerspectiveFactory;
+    private final SecurityPerspectiveFactory securityPerspectiveFactory;
 
     @Autowired
     IDE(Browser browser, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            SecurityPerspectiveFactory securityPerspectiveFactory) {
         this(browser, DirigibleTestTenant.createDefaultTenant()
                                          .getUsername(),
                 DirigibleTestTenant.createDefaultTenant()
                                    .getPassword(),
-                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory);
+                restAssuredExecutor, workbenchFactory, databasePerspectiveFactory, gitPerspectiveFactory, securityPerspectiveFactory);
     }
 
     IDE(Browser browser, String username, String password, RestAssuredExecutor restAssuredExecutor, WorkbenchFactory workbenchFactory,
-            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory) {
+            DatabasePerspectiveFactory databasePerspectiveFactory, GitPerspectiveFactory gitPerspectiveFactory,
+            SecurityPerspectiveFactory securityPerspectiveFactory) {
         this.browser = browser;
         this.restAssuredExecutor = restAssuredExecutor;
         this.username = username;
@@ -62,6 +65,7 @@ public class IDE {
         this.workbenchFactory = workbenchFactory;
         this.databasePerspectiveFactory = databasePerspectiveFactory;
         this.gitPerspectiveFactory = gitPerspectiveFactory;
+        this.securityPerspectiveFactory = securityPerspectiveFactory;
     }
 
     public Browser getBrowser() {
@@ -86,6 +90,14 @@ public class IDE {
 
     public void assertStatusBarMessage(String expectedMessage) {
         browser.assertElementExistsByTypeAndText(HtmlElementType.SPAN, expectedMessage);
+    }
+
+    public SecurityPerspective openSecurityPerspective() {
+        openHomePage();
+
+        browser.clickOnElementById("perspective-security");
+
+        return securityPerspectiveFactory.create(browser);
     }
 
     public DatabasePerspective openDatabasePerspective() {
