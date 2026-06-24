@@ -1,0 +1,87 @@
+/**
+ * processTasks — surfaces a record's BPM user tasks as in-context actions, the Harmonia/Alpine
+ * counterpart of the dashboard's ProcessTasks module. A process-aware entity carries a
+ * system-managed ProcessId (the started process-instance id, written back by the intent process
+ * trigger); the current user's actionable inbox tasks are fetched once and bucketed by
+ * processInstanceId, so any view — list, manage, or a master-detail pane — surfaces the tasks for a
+ * given record by matching entity.ProcessId === task.processInstanceId.
+ *
+ * It is a global Alpine store so every generated view reads it the same way:
+ *   $store.processTasks.getTasks(row)        -> the record's actionable tasks
+ *   $store.processTasks.openTask(task)       -> claim if needed, then open the task form
+ * The task form is opened in the app-wide dialog wired in index.html; on close the store re-fetches.
+ */
+document.addEventListener('alpine:init', () => {
+  Alpine.store('processTasks', {
+    byProcessId: {},
+    loaded: false,
+    formOpen: false,
+    formUrl: '',
+    formTitle: '',
+
+    init() {
+      this.load();
+    },
+
+    async load() {
+      try {
+        const [mine, groups] = await Promise.all([
+          App.services.api.get('/services/inbox/tasks?type=assignee&limit=100', { baseUrl: '' }),
+          App.services.api.get('/services/inbox/tasks?type=groups&limit=100', { baseUrl: '' }),
+        ]);
+        const map = {};
+        const seen = new Set();
+        const collect = (tasks, isMine) => (tasks || []).forEach((t) => {
+          if (!t.processInstanceId || seen.has(t.id)) return;
+          seen.add(t.id);
+          t.mine = isMine;
+          (map[t.processInstanceId] = map[t.processInstanceId] || []).push(t);
+        });
+        collect(mine, true);
+        collect(groups, false);
+        this.byProcessId = map;
+        this.loaded = true;
+      } catch (e) {
+        this.byProcessId = {};
+        console.error('processTasks: unable to load inbox tasks', e);
+      }
+    },
+
+    refresh() { return this.load(); },
+
+    getTasks(entity) {
+      return (entity && entity.ProcessId && this.byProcessId[entity.ProcessId]) || [];
+    },
+
+    async openTask(task) {
+      // A candidate (group) task must be claimed for the user before its form opens.
+      if (!task.mine) {
+        try {
+          await App.services.api.post('/services/inbox/tasks/' + task.id, { action: 'CLAIM' }, { baseUrl: '' });
+          task.mine = true;
+          this.load();
+        } catch (e) {
+          console.error('processTasks: unable to claim task', e);
+          return;
+        }
+      }
+      if (!task.formKey) {
+        console.warn('processTasks: task has no formKey', task);
+        return;
+      }
+      const sep = task.formKey.indexOf('?') >= 0 ? '&' : '?';
+      this.formUrl = task.formKey + sep + 'taskId=' + encodeURIComponent(task.id)
+                   + '&processInstanceId=' + encodeURIComponent(task.processInstanceId);
+      this.formTitle = task.name || 'Task';
+      this.formOpen = true;
+    },
+
+    // Called when the task-form dialog closes; the generated task form completes the task itself,
+    // so a re-fetch drops the finished task from the originating view's badge.
+    closeForm() {
+      this.formOpen = false;
+      this.formUrl = '';
+      this.refresh();
+    },
+  });
+}, { once: true });

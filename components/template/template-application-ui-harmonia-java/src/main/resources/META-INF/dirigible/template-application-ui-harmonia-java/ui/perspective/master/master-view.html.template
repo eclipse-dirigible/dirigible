@@ -47,6 +47,18 @@
 #end
 #end
                 <td x-h-table-cell data-row-actions>
+#if($hasProcess)
+                  <button x-show="$store.processTasks.getTasks(row).length" x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Pending tasks">
+                    <i role="img" data-lucide="inbox"></i><span x-text="$store.processTasks.getTasks(row).length"></span>
+                  </button>
+                  <div x-show="$store.processTasks.getTasks(row).length" x-h-popover data-innerclicks="true">
+                    <ul x-h-menu>
+                      <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
+                        <li x-h-menu-item @click="$store.processTasks.openTask(task)" x-text="task.name"></li>
+                      </template>
+                    </ul>
+                  </div>
+#end
                   <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
                   <ul x-h-menu data-align="bottom-end">
                     <li x-h-menu-item @click="editMaster(row)">Edit</li>

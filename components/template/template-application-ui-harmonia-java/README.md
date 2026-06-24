@@ -77,7 +77,7 @@ no `collection`, so `$models` = `model.entities`.
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (Phase 3) | ⬜ |
-| process tasks (`entity-process-tasks`) | gated on `hasProcess` | ⬜ |
+| process tasks | gated on `hasProcess` / `ProcessId` | ✅ processTasks Alpine store (inbox fetch + claim + bucket by processInstanceId) + inline popover in list/manage/master rows + app-wide task-form dialog |
 
 Asset embedding (Phase 1 — DONE, verified end-to-end against a live app):
 - Alpine `3.15.11` + Harmonia `1.24.1` + Lucide `1.8.0` are **webjars** bundled via
