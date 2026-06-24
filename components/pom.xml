@@ -162,6 +162,7 @@
         <module>ui/view-preview</module>
         <module>ui/view-problems</module>
         <module>ui/view-java-hierarchy</module>
+        <module>ui/view-java-problems</module>
         <module>ui/view-properties</module>
         <module>ui/view-git</module>
         <module>ui/view-terminal</module>
@@ -945,6 +946,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-view-java-hierarchy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-ui-view-java-problems</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
