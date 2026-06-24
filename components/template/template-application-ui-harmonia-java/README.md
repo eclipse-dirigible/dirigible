@@ -69,8 +69,8 @@ no `collection`, so `$models` = `model.entities`.
 |---|---|---|
 | list | `uiListModels` | ✅ skeleton (read-only list page + view) |
 | manage | `uiManageModels` | ✅ CRUD list + shared create/edit form (/create, /:id/edit) on baseFormPage — relationship dropdowns, client validation, 422 field mapping, delete-confirm |
-| master-list + detail | `uiListMasterModels` / `uiListDetailsModels` | ⬜ stub |
-| master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ⬜ stub |
+| master-list + detail | `uiListMasterModels` / `uiListDetailsModels` | ✅ master page (x-h-split: list + detail panels) + registry-driven detail panels |
+| master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ✅ same master page; masters reuse the manage form for create/edit, details get a routed form (FK preset) |
 | main-details | (within master) | ⬜ stub |
 | setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
 | report / report-chart / report-table | `uiReportChartModels` / `uiReportTableModels` | ⬜ stub |

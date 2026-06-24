@@ -48,9 +48,9 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <!-- TODO (Phase 2): drive from a generated nav (see appShell `nav`). Skeleton
-                       enumerates LIST + MANAGE PRIMARY entities directly. -->
+                       enumerates top-level PRIMARY entities (list / manage / master) directly. -->
 #foreach($entity in $models)
-#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE") && $entity.type == "PRIMARY")
+#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <i role="img" data-lucide="list"></i>
@@ -148,6 +148,21 @@
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
 #end
 #end
+    <!-- MASTER entities: master-detail page (list + selected record's detail panels) + own form. -->
+#foreach($entity in $models)
+#if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
+    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
+    <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+#end
+#end
+    <!-- DETAIL entities: only a routed create/edit form (listed inside their master's panels). -->
+#foreach($entity in $models)
+#if(($entity.layoutType == "MANAGE_DETAILS" || $entity.layoutType == "LIST_DETAILS") && $entity.type == "DEPENDENT")
+    <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+#end
+#end
     <template x-route="notfound" x-template.target.app="./views/_notfound.html"></template>
 
     <!-- 1. Plugins (vendored, no CDN) -->
@@ -162,12 +177,21 @@
     <script src="./js/components/layout/appShell.js" defer></script>
     <script src="./js/components/pages/basePage.js" defer></script>
     <script src="./js/components/pages/baseFormPage.js" defer></script>
+    <script src="./js/components/detailPanel.js" defer></script>
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ListPage.js" defer></script>
 #end
 #if(($entity.layoutType == "MANAGE" && $entity.type == "PRIMARY") || $entity.type == "SETTING")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ManageListPage.js" defer></script>
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
+#end
+#if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}MasterPage.js" defer></script>
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
+#end
+#if(($entity.layoutType == "MANAGE_DETAILS" || $entity.layoutType == "LIST_DETAILS") && $entity.type == "DEPENDENT")
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}.detail.js" defer></script>
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
 #end
 #end

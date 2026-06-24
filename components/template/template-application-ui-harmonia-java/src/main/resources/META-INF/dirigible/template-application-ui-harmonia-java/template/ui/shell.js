@@ -70,6 +70,11 @@ export function getSources() {
             rename: "gen/{{genFolderName}}/js/components/pages/basePage.js"
         },
         {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/components/detailPanel.js.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/js/components/detailPanel.js"
+        },
+        {
             location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/baseFormPage.js.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/js/components/pages/baseFormPage.js"

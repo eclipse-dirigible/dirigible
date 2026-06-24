@@ -13,17 +13,12 @@ import * as shellTemplate from "template-application-ui-harmonia-java/template/u
 import * as listTemplate from "template-application-ui-harmonia-java/template/ui/list";
 import * as manageTemplate from "template-application-ui-harmonia-java/template/ui/manage";
 import * as settingTemplate from "template-application-ui-harmonia-java/template/ui/setting";
+import * as masterDetailTemplate from "template-application-ui-harmonia-java/template/ui/masterDetail";
 import * as navigation from "template-application-ui-harmonia-java/template/ui/navigation";
 
-// TODO (Phase 2 — full parity): wire the remaining view types, mirroring the Angular
-// module's collections. Each is a thin source-collector that emits Harmonia view
-// fragments + Alpine.data page components + <template x-route> declarations.
-// import * as masterDetailsListTemplate from "template-application-ui-harmonia-java/template/ui/masterDetailsList";
-// import * as masterDetailsManageTemplate from "template-application-ui-harmonia-java/template/ui/masterDetailsManage";
-// import * as settingTemplate from "template-application-ui-harmonia-java/template/ui/setting";
-// import * as reportTemplate from "template-application-ui-harmonia-java/template/ui/report";
-// import * as reportChartTemplate from "template-application-ui-harmonia-java/template/ui/reportChart";
-// import * as reportTableTemplate from "template-application-ui-harmonia-java/template/ui/reportTable";
+// TODO (Phase 3 — reports & forms): report / report-chart / report-table view types, plus the
+// Harmonia form runtime (.form artifacts incl. BPM task forms). Each is a thin source-collector
+// emitting Harmonia view fragments + Alpine.data page components + <template x-route> declarations.
 
 export function getSources(parameters) {
     return [
@@ -35,12 +30,8 @@ export function getSources(parameters) {
         ...listTemplate.getSources(parameters),
         ...manageTemplate.getSources(parameters),
         ...settingTemplate.getSources(parameters),
+        ...masterDetailTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
-        // TODO (Phase 2): ...masterDetailsListTemplate.getSources(parameters),
-        // TODO (Phase 2): ...masterDetailsManageTemplate.getSources(parameters),
-        // TODO (Phase 2): ...settingTemplate.getSources(parameters),
-        // TODO (Phase 3): ...reportTemplate.getSources(parameters),
-        // TODO (Phase 3): ...reportChartTemplate.getSources(parameters),
-        // TODO (Phase 3): ...reportTableTemplate.getSources(parameters),
+        // TODO (Phase 3 — reports): report / report-chart / report-table view types.
     ];
 };

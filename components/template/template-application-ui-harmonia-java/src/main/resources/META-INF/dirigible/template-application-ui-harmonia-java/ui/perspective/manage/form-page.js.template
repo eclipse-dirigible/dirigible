@@ -48,7 +48,7 @@ document.addEventListener('alpine:init', () => {
 
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
-    apiPath: '/${perspectiveName.toLowerCase()}/${name}Controller',
+    apiPath: '/${javaPerspectiveName}/${name}Controller',
 
     async init() {
       // The edit route is /${name}/{id}/edit — Pinecone exposes the param as `id`.
@@ -73,6 +73,12 @@ document.addEventListener('alpine:init', () => {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
         }
       } else {
+        // Prefill any form field whose name is supplied as a query param — used by
+        // master-detail "Add" to preset the FK to the master (e.g. ?Customer=3).
+        for (const key of Object.keys(this.form)) {
+          const v = this.queryParam(key);
+          if (v !== null) this.form[key] = v;
+        }
         this.state = 'empty-form';
       }
       this.refreshIcons();

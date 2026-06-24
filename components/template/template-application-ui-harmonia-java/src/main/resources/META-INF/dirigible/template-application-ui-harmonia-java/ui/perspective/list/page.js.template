@@ -23,7 +23,7 @@ document.addEventListener('alpine:init', () => {
 
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
-    apiPath: '/${perspectiveName.toLowerCase()}/${name}Controller',
+    apiPath: '/${javaPerspectiveName}/${name}Controller',
 
     async init() {
       await this.load();

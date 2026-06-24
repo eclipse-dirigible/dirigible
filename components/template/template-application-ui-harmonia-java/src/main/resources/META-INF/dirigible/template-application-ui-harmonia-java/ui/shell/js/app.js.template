@@ -2,5 +2,17 @@ window.App = {
   services: {},
   routes: {},
   utils: {},
-  config: {}
+  config: {},
+
+  // Master-detail registry. Each generated detail entity registers its metadata here
+  // under its master entity's name; a master page renders one detail panel per entry,
+  // so masters and details stay decoupled (no cross-entity generation). See
+  // js/components/detailPanel.js and the master view.
+  details: {},
+  registerDetail(masterEntity, def) {
+    (this.details[masterEntity] = this.details[masterEntity] || []).push(def);
+  },
+  detailsFor(masterEntity) {
+    return this.details[masterEntity] || [];
+  },
 };

@@ -1,0 +1,71 @@
+/**
+ * detailPanel — generic master-detail child panel (metadata-driven, no per-detail code).
+ *
+ * A master page renders one of these per registered detail (App.detailsFor(master)),
+ * passing the panel definition and the selected master id. The panel lists that detail's
+ * rows filtered to the master via the controller's `?<masterEntityId>=<id>` query (which
+ * the generated REST controller supports for MANAGE_DETAILS/LIST_DETAILS), supports delete,
+ * and routes create/edit to the detail's own generated form page (FK + returnTo preset).
+ *
+ * `def` shape (from App.registerDetail): { entity, apiPath, masterEntityId, label,
+ *   columns: [{ name }], returnTo }.
+ */
+function detailPanel(def, masterId) {
+  return {
+    ...basePage(),
+    def,
+    masterId,
+    rows: [],
+    state: 'loading',     // loading | error | empty | default
+    error: null,
+    deleteOpen: false,
+    deleteTarget: null,
+    deleteBusy: false,
+
+    async init() {
+      await this.load();
+    },
+
+    async load() {
+      this.state = 'loading';
+      this.error = null;
+      try {
+        // The detail controller filters by the master FK query param.
+        const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
+        this.rows = await App.services.api.get(this.def.apiPath + q);
+        this.state = this.rows.length === 0 ? 'empty' : 'default';
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');
+        this.state = 'error';
+      }
+      this.refreshIcons();
+    },
+
+    // Create/edit route to the detail's own form page, carrying the FK + a returnTo back here.
+    addRow() {
+      const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
+              + '&returnTo=' + encodeURIComponent(this.def.returnTo);
+      window.PineconeRouter.navigate('/' + this.def.entity + '/create' + q);
+    },
+    editRow(row) {
+      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
+      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/edit' + q);
+    },
+
+    askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },
+    async confirmDelete() {
+      if (!this.deleteTarget) return;
+      this.deleteBusy = true;
+      try {
+        await App.services.api.delete(this.def.apiPath + '/' + encodeURIComponent(this.deleteTarget[this.def.primaryKey]));
+        this.deleteOpen = false;
+        this.deleteTarget = null;
+        await this.load();
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not delete.');
+      } finally {
+        this.deleteBusy = false;
+      }
+    },
+  };
+}

@@ -18,8 +18,10 @@ App.config = {
 
   // Base URL for the generated Java REST controllers this SPA talks to. Verified
   // in Phase 0 against template-application-rest-java output: each entity's
-  // controller lives at <restBase>/<perspective-lowercased>/<Entity>Controller
+  // controller lives at <restBase>/<javaPerspectiveName>/<Entity>Controller
   // (e.g. /services/java/orders-app/gen/edm/api/orders/OrdersController), exposing
   // GET (list, $limit/$offset), GET /{id}, POST, PUT /{id}, DELETE /{id}.
-  restBase: '/services/java/${projectName}/gen/${genFolderName}/api'
+  // NB: uses javaGenFolderName (the Java-sanitised gen folder, e.g. sales-order -> sales_order),
+  // matching the package the DAO/REST templates emit — NOT the raw genFolderName.
+  restBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api'
 };
