@@ -114,12 +114,11 @@ public final class IntentSettings {
                 orderedMap("tablePrefix", "", "dataSource", "DefaultDB")));
         settings.generation.put("glue", new Recipe("template-application-events-java/template/template.js", new LinkedHashMap<>()));
         settings.generation.put("form", new Recipe("template-form-builder-harmonia/template/template.js", new LinkedHashMap<>()));
-        // TODO(harmonia): the standalone report-file UI is still the AngularJS perspective — there is
-        // no Harmonia "template-report-file" template yet. Its Java backend (reportFileEntity
-        // Repository + Controller) is framework-neutral, so when the Harmonia report-file template
-        // lands, switch this to "template-application-ui-harmonia-java/template/template-report-file.js".
+        // Standalone report-file UI: the Harmonia page (self-contained Alpine page over the same
+        // framework-neutral Java report backend). The AngularJS equivalent is
+        // "template-application-ui-angular-java/template/template-report-file.js".
         settings.generation.put("report",
-                new Recipe("template-application-ui-angular-java/template/template-report-file.js", new LinkedHashMap<>()));
+                new Recipe("template-application-ui-harmonia-java/template/template-report-file.js", new LinkedHashMap<>()));
 
         Map<String, ArtefactOverride> triggers = new LinkedHashMap<>();
         for (ProcessIntent process : model.getProcesses()) {

@@ -77,7 +77,8 @@ no `collection`, so `$models` = `model.entities`.
 | master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ✅ same master page; masters reuse the manage form for create/edit, details get a routed form (FK preset) |
 | main-details | (within master) | ⬜ stub |
 | setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
-| report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ table page (data table + CSV export) + chart page (chart.js bar/line/pie/doughnut/polarArea/radar) against the Java report controller; Reports sidebar group |
+| report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ in-SPA table page (data table + CSV export) + chart page (chart.js bar/line/pie/doughnut/polarArea/radar) against the Java report controller |
+| **standalone report** (a `.report` file) | `reportModels` / `generateReportModels` | ✅ `template/template-report-file.js` ("Application Report - Table - Harmonia"): reuses the framework-neutral Java backend (reportFileEntity Repository + Controller) and generates a self-contained Harmonia page (`gen/<genFolder>/reports/<name>/`: index.html + report.js — list with `$limit`/`$offset`, count, pagination, CSV export). This is the intent recipe's `report` default |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (separate module) | ✅ `template-form-builder-harmonia` renders a `.form` as a Harmonia page via the neutral `formController(ctx)` contract; BPM task forms complete via `ctx.task.complete()` |
