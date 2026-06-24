@@ -64,6 +64,8 @@ public class ${process}Trigger implements MessageHandler {
         String businessKey = String.valueOf(entity.${businessKeyProperty});
         String processId = Process.start("${process}", businessKey, message);
         entity.ProcessId = processId;
-        repository.update(entity);
+        // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
+        // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
+        repository.updateWithoutEvent(entity);
     }
 }

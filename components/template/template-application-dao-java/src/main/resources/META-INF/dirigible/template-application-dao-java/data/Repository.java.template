@@ -50,6 +50,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         return updated;
     }
 
+    /**
+     * Persists changes WITHOUT publishing the "-updated" event. Intended for system-managed
+     * back-references — e.g. an intent process trigger writing ProcessId back onto the entity that
+     * started it. Going through {@link #update} would re-publish "${name}-updated" and spuriously
+     * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
+     */
+    public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+        return super.update(entity);
+    }
+
     @Override
     public void delete(${name}Entity entity) {
         super.delete(entity);

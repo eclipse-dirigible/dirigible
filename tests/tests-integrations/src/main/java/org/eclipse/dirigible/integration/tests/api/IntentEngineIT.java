@@ -606,7 +606,8 @@ class IntentEngineIT extends IntegrationTest {
                 "a timestamp strategy should mint a yyyyMMddHHmmss value into the flagged field when blank");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.Number);"),
                 "the business key must be the minted number field");
-        assertTrue(trigger.contains("repository.update(entity)"), "the minted number must be persisted via the existing update");
+        assertTrue(trigger.contains("repository.updateWithoutEvent(entity)"),
+                "the minted number and ProcessId must be persisted via the silent update (no spurious -updated event)");
     }
 
     @Test
