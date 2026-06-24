@@ -59,13 +59,13 @@ app.controller('JavaSymbolsController', ($scope, $http, WorkspaceService, Status
         $scope.selectedIndex = -1;
     };
 
-    // Strips the virtual workspace prefix off a symbol's file URI so the path matches what the editor
-    // and the workspace API expect: file:///workspace/<ws>/proj/Foo.java -> /proj/Foo.java
+    // Strips the virtual file prefix off a symbol's URI to yield the IDE workspace path, which keeps
+    // the workspace segment: file:///workspace/<ws>/proj/Foo.java -> /<ws>/proj/Foo.java
+    const VIRTUAL_FILE_PREFIX = 'file:///workspace';
     const toWorkspacePath = (uri) => {
-        const prefix = 'file:///workspace/' + $scope.selectedWorkspace;
-        let path = uri && uri.startsWith(prefix) ? uri.substring(prefix.length) : uri;
-        try { path = decodeURIComponent(path); } catch (e) { /* leave as-is */ }
-        return path;
+        if (!uri || !uri.startsWith(VIRTUAL_FILE_PREFIX)) return uri;
+        try { return decodeURIComponent(uri.substring(VIRTUAL_FILE_PREFIX.length)); }
+        catch (e) { return uri.substring(VIRTUAL_FILE_PREFIX.length); }
     };
 
     $scope.open = (index) => {

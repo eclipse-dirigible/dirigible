@@ -977,6 +977,41 @@ class DirigibleEditor {
                     layoutHub.postMessage({ topic: 'java.symbols.search', data: { query: (query || '').trim() } });
                 },
             });
+            // Call / Type hierarchy: open the bottom panel for the symbol under the cursor.
+            const showHierarchy = (ed, kind) => {
+                const path = editorParameters.resourcePath; // /<ws>/<project>/<file>
+                const workspace = path.replace(/^\//, '')
+                    .split('/')[0];
+                const pos = ed.getPosition();
+                if (!path || !workspace || !pos) return;
+                layoutHub.openView({ id: 'java-hierarchy' });
+                layoutHub.postMessage({
+                    topic: 'java.hierarchy.show',
+                    data: {
+                        kind,
+                        workspace,
+                        uri: 'file:///workspace' + path,
+                        line: pos.lineNumber - 1,
+                        character: pos.column - 1,
+                    },
+                });
+            };
+            editor.addAction({
+                id: 'java.callHierarchy',
+                label: 'Java: Show Call Hierarchy',
+                keybindings: [monaco.KeyMod.WinCtrl | monaco.KeyMod.Alt | monaco.KeyCode.KeyH],
+                contextMenuGroupId: 'navigation',
+                contextMenuOrder: 1.7,
+                run: (ed) => showHierarchy(ed, 'call'),
+            });
+            editor.addAction({
+                id: 'java.typeHierarchy',
+                label: 'Java: Show Type Hierarchy',
+                keybindings: [monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyH],
+                contextMenuGroupId: 'navigation',
+                contextMenuOrder: 1.8,
+                run: (ed) => showHierarchy(ed, 'type'),
+            });
         }
 
         DirigibleEditor.computeDiff.onmessage = function (event) {
