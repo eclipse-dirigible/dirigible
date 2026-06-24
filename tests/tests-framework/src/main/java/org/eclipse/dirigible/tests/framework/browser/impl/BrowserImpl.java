@@ -280,6 +280,12 @@ class BrowserImpl implements Browser {
     }
 
     @Override
+    public void doubleClickOnElementById(String id) {
+        By by = Selectors.byId(id);
+        handleElementInAllFrames(by, this::doubleClickElement, Condition.visible, Condition.enabled);
+    }
+
+    @Override
     public void close() {
         Selenide.closeWebDriver();
     }
@@ -486,6 +492,11 @@ class BrowserImpl implements Browser {
     private void clickElement(SelenideElement element) {
         element.scrollIntoView(false)
                .click();
+    }
+
+    private void doubleClickElement(SelenideElement element) {
+        element.scrollIntoView(true)
+               .doubleClick();
     }
 
     @Override
