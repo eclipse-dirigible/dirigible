@@ -488,28 +488,29 @@ class BrowserImpl implements Browser {
                .click();
     }
 
-    // Expands each parent submenu and clicks the leaf, scoped to the open context menu and driving the
-    // menu's own Angular mouseenter/click handlers. Run as one in-frame script because BlimpKit renders
-    // collapsed submenu titles with no visible text and a per-step frame switch would close the menu.
-    private static final String CASCADE_MENU_SCRIPT =
-            "var titles = arguments;" + "var roots = document.querySelectorAll('[aria-label*=\"contextmenu\"]');"
-                    + "if (!roots.length) return 'no-menu';" + "var root = roots[roots.length - 1];" + "function find(text) {"
-                    + "  var spans = root.querySelectorAll('span.fd-menu__title');"
-                    + "  for (var i = 0; i < spans.length; i++) { if (spans[i].textContent.trim() === text) return spans[i]; }"
-                    + "  return null;" + "}" + "for (var i = 0; i < titles.length - 1; i++) {" + "  var parent = find(titles[i]);"
-                    + "  if (!parent) return 'missing:' + titles[i];"
-                    + "  (parent.closest('li') || parent).dispatchEvent(new MouseEvent('mouseenter', { bubbles: true }));" + "}"
-                    + "var leaf = find(titles[titles.length - 1]);" + "if (!leaf) return 'missing-leaf:' + titles[titles.length - 1];"
-                    + "leaf.click();" + "return 'ok';";
+    private static final By MENU_TITLE_SELECTOR = By.cssSelector("span.fd-menu__title");
 
     @Override
     public void clickCascadingMenuItem(String... titlePath) {
-        // Land in the frame that hosts the open (visible) context menu, then drive it via its own
-        // handlers. The menu lives in the projects-view iframe; a single in-frame script keeps it open.
-        findElementInAllFrames(By.cssSelector("[aria-label*='contextmenu']"), Condition.exist, Condition.visible);
-        Object result = Selenide.executeJavaScript(CASCADE_MENU_SCRIPT, (Object[]) titlePath);
-        if (!"ok".equals(result)) {
-            failWithScreenshot("Could not navigate context menu path " + Arrays.toString(titlePath) + " (result: " + result + ")");
+        // Find the open context menu once; on success the driver is left in the iframe that hosts it
+        // (findElementInAllFrames restarts from defaultContent() each call, so re-searching per step
+        // would switch frames and close the menu). All remaining steps drive the returned handle.
+        SelenideElement menu = findElementInAllFrames(By.cssSelector("[aria-label*='contextmenu']"), Condition.visible);
+        try {
+            // Hover each intermediate title to expand its flyout (BlimpKit expands on mouseenter and
+            // keeps it open while the pointer moves into the flyout to reach the leaf).
+            for (int i = 0; i < titlePath.length - 1; i++) {
+                menu.$$(MENU_TITLE_SELECTOR)
+                    .findBy(Condition.exactText(titlePath[i]))
+                    .shouldBe(Condition.visible)
+                    .hover();
+            }
+            menu.$$(MENU_TITLE_SELECTOR)
+                .findBy(Condition.exactText(titlePath[titlePath.length - 1]))
+                .shouldBe(Condition.visible)
+                .click();
+        } catch (RuntimeException ex) {
+            failWithScreenshot("Could not navigate context menu path " + Arrays.toString(titlePath) + ": " + ex.getMessage());
         }
     }
 
