@@ -83,6 +83,27 @@
               </div>
             </div>
 #end
+#set($hasReports = false)
+#foreach($entity in $models)#if($entity.type == "REPORT")#set($hasReports = true)#end#end
+#if($hasReports)
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label>Reports</div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+#foreach($entity in $models)
+#if($entity.type == "REPORT")
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
+                      <i role="img" data-lucide="bar-chart-3"></i>
+                      <span>${entity.name}</span>
+                    </button>
+                  </li>
+#end
+#end
+                </ul>
+              </div>
+            </div>
+#end
           </div>
         </div>
       </div>
@@ -178,6 +199,12 @@
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
 #end
 #end
+    <!-- REPORT entities: a table or chart page. -->
+#foreach($entity in $models)
+#if($entity.type == "REPORT")
+    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-report.html"></template>
+#end
+#end
     <template x-route="notfound" x-template.target.app="./views/_notfound.html"></template>
 
     <!-- 1. Plugins (vendored, no CDN) -->
@@ -210,6 +237,9 @@
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}.detail.js" defer></script>
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
 #end
+#if($entity.type == "REPORT")
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ReportPage.js" defer></script>
+#end
 #end
 
     <!-- 3. Alpine LAST (Harmonia bundle auto-starts Alpine — do NOT call Alpine.start()) -->
@@ -218,6 +248,8 @@
 
     <!-- 4. Lucide icons (webjar) -->
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <!-- 5. Chart.js (webjar) — used by REPORT_BAR/LINE/PIE/... chart pages -->
+    <script src="/webjars/chart.js/dist/chart.umd.js"></script>
     <script>
       document.addEventListener('alpine:initialized', () => {
         if (window.lucide) window.lucide.createIcons();

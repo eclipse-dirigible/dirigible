@@ -73,7 +73,7 @@ no `collection`, so `$models` = `model.entities`.
 | master-manage + detail | `uiManageMasterModels` / `uiManageDetailsModels` | ✅ same master page; masters reuse the manage form for create/edit, details get a routed form (FK preset) |
 | main-details | (within master) | ⬜ stub |
 | setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
-| report / report-chart / report-table | `uiReportChartModels` / `uiReportTableModels` | ⬜ stub |
+| report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ table page (data table + CSV export) + chart page (chart.js bar/line/pie/doughnut/polarArea/radar) against the Java report controller; Reports sidebar group |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |
 | forms + BPM task forms | (Phase 3) | ⬜ |

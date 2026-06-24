@@ -14,11 +14,11 @@ import * as listTemplate from "template-application-ui-harmonia-java/template/ui
 import * as manageTemplate from "template-application-ui-harmonia-java/template/ui/manage";
 import * as settingTemplate from "template-application-ui-harmonia-java/template/ui/setting";
 import * as masterDetailTemplate from "template-application-ui-harmonia-java/template/ui/masterDetail";
+import * as reportTemplate from "template-application-ui-harmonia-java/template/ui/report";
 import * as navigation from "template-application-ui-harmonia-java/template/ui/navigation";
 
-// TODO (Phase 3 — reports & forms): report / report-chart / report-table view types, plus the
-// Harmonia form runtime (.form artifacts incl. BPM task forms). Each is a thin source-collector
-// emitting Harmonia view fragments + Alpine.data page components + <template x-route> declarations.
+// The Harmonia form runtime (.form artifacts incl. BPM task forms) is its own module:
+// template-form-builder-harmonia (the intent recipe's `form` template).
 
 export function getSources(parameters) {
     return [
@@ -31,7 +31,7 @@ export function getSources(parameters) {
         ...manageTemplate.getSources(parameters),
         ...settingTemplate.getSources(parameters),
         ...masterDetailTemplate.getSources(parameters),
+        ...reportTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
-        // TODO (Phase 3 — reports): report / report-chart / report-table view types.
     ];
 };
