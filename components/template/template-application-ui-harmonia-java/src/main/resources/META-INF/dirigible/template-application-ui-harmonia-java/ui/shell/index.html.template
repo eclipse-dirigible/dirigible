@@ -23,6 +23,18 @@
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
+
+    <!-- Theme bootstrap — runs before first paint to avoid a flash. Harmonia is light by default
+         (its :root tokens) and dark when a `dark` class is on the root. The default is HARDCODED to
+         light for now; the Appearance switcher in the sidebar persists the user's choice to
+         localStorage, and this restores it on load. (TODO: make the default configurable.) -->
+    <script>
+      (function () {
+        var theme = 'light'; // hardcoded default for now
+        try { theme = localStorage.getItem('dirigible.harmonia.theme') || theme; } catch (e) { /* no storage */ }
+        document.documentElement.classList.toggle('dark', theme === 'dark');
+      })();
+    </script>
   </head>
 
   <body class="vbox size-full" x-data="app">
@@ -72,50 +84,49 @@
 #end
 #end
                 </ul>
-              </div>
-            </div>
 #set($hasSettings = false)
 #foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
-#if($hasSettings)
-            <div x-h-sidebar-group>
-              <div x-h-sidebar-group-label>Settings</div>
-              <div x-h-sidebar-group-content>
-                <ul x-h-sidebar-menu>
-#foreach($entity in $models)
-#if($entity.type == "SETTING")
-                  <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
-                      <i role="img" data-lucide="settings"></i>
-                      <span>${entity.name}</span>
-                    </button>
-                  </li>
-#end
-#end
-                </ul>
-              </div>
-            </div>
-#end
 #set($hasReports = false)
 #foreach($entity in $models)#if($entity.type == "REPORT")#set($hasReports = true)#end#end
-#if($hasReports)
-            <div x-h-sidebar-group>
-              <div x-h-sidebar-group-label>Reports</div>
-              <div x-h-sidebar-group-content>
+#if($hasSettings || $hasReports)
+                <!-- Settings and Reports are SINGLE entries (not one item per setting/report) — each
+                     opens a landing page listing its items. There can be tens of them, so they must
+                     not flood the sidebar; only the most-used (primary) entities are listed above. -->
                 <ul x-h-sidebar-menu>
-#foreach($entity in $models)
-#if($entity.type == "REPORT")
+#if($hasSettings)
                   <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
-                      <i role="img" data-lucide="bar-chart-3"></i>
-                      <span>${entity.name}</span>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/settings')" @click="navigate('/settings')">
+                      <i role="img" data-lucide="settings"></i><span>Settings</span>
                     </button>
                   </li>
 #end
+#if($hasReports)
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/reports')" @click="navigate('/reports')">
+                      <i role="img" data-lucide="bar-chart-3"></i><span>Reports</span>
+                    </button>
+                  </li>
 #end
+                </ul>
+#end
+              </div>
+            </div>
+            <!-- Appearance: light/dark theme switcher (Harmonia counterpart of the dashboard's
+                 BlimpKit theme menu). Persists to localStorage; default is light (see head bootstrap). -->
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label>Appearance</div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button @click="toggleTheme()"
+                            :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
+                      <i role="img" data-lucide="palette"></i>
+                      <span x-text="theme === 'dark' ? 'Light theme' : 'Dark theme'"></span>
+                    </button>
+                  </li>
                 </ul>
               </div>
             </div>
-#end
           </div>
         </div>
       </div>
@@ -177,6 +188,14 @@
     <!-- Built-in shell sections (always present): Process Inbox + Documents. -->
     <template x-route="/inbox" x-template.target.app="./views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="./views/_documents.html"></template>
+#if($hasSettings)
+    <!-- Settings landing: lists the setting entities (each still has its own CRUD route below). -->
+    <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
+#end
+#if($hasReports)
+    <!-- Reports landing: lists the report entities (each still has its own report route below). -->
+    <template x-route="/reports" x-template.target.app="./views/_reports.html"></template>
+#end
     <!-- LIST entities: one read-only list route each. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")

@@ -38,6 +38,20 @@ export function getSources() {
             engine: "velocity",
             rename: "gen/{{genFolderName}}/js/config.js"
         },
+        // Settings + Reports landing pages — generated once over the full model (no collection) so
+        // each lists its entities; reached via the single Settings / Reports sidebar entries.
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/settings.html.template",
+            action: "generate",
+            engine: "velocity",
+            rename: "gen/{{genFolderName}}/views/_settings.html"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/reports.html.template",
+            action: "generate",
+            engine: "velocity",
+            rename: "gen/{{genFolderName}}/views/_reports.html"
+        },
         // Static, model-independent shell assets — copied verbatim.
         {
             location: "/template-application-ui-harmonia-java/ui/shell/js/app.js.template",
