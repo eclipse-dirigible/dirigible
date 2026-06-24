@@ -8,7 +8,8 @@
  * and routes create/edit to the detail's own generated form page (FK + returnTo preset).
  *
  * `def` shape (from App.registerDetail): { entity, apiPath, masterEntityId, label,
- *   columns: [{ name }], returnTo }.
+ *   columns: [{ name }], returnTo }. apiPath is relative to App.config.restBase (the api client
+ *   prepends it), so detail calls pass no baseUrl override.
  */
 function detailPanel(def, masterId) {
   return {
@@ -27,10 +28,12 @@ function detailPanel(def, masterId) {
     },
 
     async load() {
+      // No master selected yet — don't fetch (avoids a ?<fk>=null call).
+      if (this.masterId == null) { this.rows = []; this.state = 'empty'; return; }
       this.state = 'loading';
       this.error = null;
       try {
-        // The detail controller filters by the master FK query param.
+        // The detail controller filters by the master FK query param (apiPath is relative to restBase).
         const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
         this.rows = await App.services.api.get(this.def.apiPath + q);
         this.state = this.rows.length === 0 ? 'empty' : 'default';

@@ -12,7 +12,7 @@
 App.registerDetail('${masterEntity}', {
   entity: '${name}',
   label: '${name}',
-  apiPath: App.config.restBase + '/${javaPerspectiveName}/${name}Controller',
+  apiPath: '/${javaPerspectiveName}/${name}Controller',
   masterEntityId: '${masterEntityId}',
   primaryKey: '${primaryKeysString}',
   returnTo: '/${masterEntity}',
