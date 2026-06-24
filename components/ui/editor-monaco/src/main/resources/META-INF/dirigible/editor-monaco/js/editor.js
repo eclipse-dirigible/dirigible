@@ -17,6 +17,74 @@ const themingHub = new ThemingHub();
 const statusBarHub = new StatusBarHub();
 const layoutHub = new LayoutHub();
 const workspaceHub = new WorkspaceHub();
+const dialogHub = new DialogHub();
+
+// Member picker used by the Java LSP client for "Generate getters/setters/constructor/toString".
+// Returns the labels the user kept, or null when the dialog is cancelled.
+window.javaLspMemberPicker = (title, labels) => {
+    if (!Array.isArray(labels) || labels.length === 0) return Promise.resolve([]);
+    const form = {};
+    labels.forEach((label, i) => {
+        form[`m${i}`] = { label: label, controlType: 'checkbox', value: true };
+    });
+    return dialogHub.showFormDialog({
+        title: title,
+        form: form,
+        submitLabel: 'Generate',
+        cancelLabel: 'Cancel',
+    }).then((result) => {
+        if (!result) return null;
+        return labels.filter((_label, i) => result[`m${i}`]);
+    });
+};
+
+// Cross-file navigation target for the Java LSP client (Go to Definition / Find References to a file
+// that isn't open). Opens the file in the IDE and reveals the line via the shared reveal topic; the
+// re-post covers the case where the target editor iframe is still mounting.
+window.javaLspOpenFile = (path, line, column) => {
+    layoutHub.openEditor({ path: path });
+    if (line && line > 0) {
+        const data = { filePath: path, line: line, column: column || 1 };
+        themingHub.postMessage({ topic: 'editor.reveal.line', data: data });
+        setTimeout(() => themingHub.postMessage({ topic: 'editor.reveal.line', data: data }), 1200);
+    }
+};
+
+// Persists a Java cross-file rename computed by the LSP client: writes the edited files (CSRF-guarded),
+// performs any file rename the refactor implies (a public type renames its own .java file), switches the
+// current tab when the file being edited is the one renamed, and asks other open editors to reload.
+window.javaLspPersistRename = async ({ currentPath, currentContent, currentNewPath, writes, renames }) => {
+    const writeFile = (path, content, method) => fetch(`${WORKSPACE_API}${path}`, {
+        method: method,
+        body: content,
+        headers: { 'X-Requested-With': 'Fetch', 'X-CSRF-Token': csrfToken, 'Dirigible-Editor': 'Monaco', 'Content-Type': 'text/plain' },
+    });
+    const removeFile = (path) => fetch(`${WORKSPACE_API}${path}`, {
+        method: 'DELETE',
+        headers: { 'X-Requested-With': 'Fetch', 'X-CSRF-Token': csrfToken, 'Dirigible-Editor': 'Monaco' },
+    });
+
+    for (const write of (writes || [])) {
+        if (!write.path) continue;
+        await writeFile(write.path, write.content, 'PUT');
+        themingHub.postMessage({ topic: 'monaco.file.reload', data: { path: write.path } });
+    }
+    for (const rename of (renames || [])) {
+        if (!rename.oldPath || !rename.newPath) continue;
+        await writeFile(rename.newPath, rename.content, 'POST');
+        await removeFile(rename.oldPath);
+        workspaceHub.announceFileRenamed({ oldPath: rename.oldPath, newPath: rename.newPath });
+    }
+    if (currentNewPath && currentPath) {
+        await writeFile(currentNewPath, currentContent, 'POST');
+        await removeFile(currentPath);
+        workspaceHub.announceFileRenamed({ oldPath: currentPath, newPath: currentNewPath });
+        layoutHub.openEditor({ path: currentNewPath });
+        layoutHub.closeEditor({ path: currentPath });
+    } else if (currentContent != null && currentPath) {
+        await DirigibleEditor.fileIO.saveText(currentContent, currentPath);
+    }
+};
 
 const brandingInfo = getBrandingInfo();
 
@@ -47,7 +115,7 @@ function setTheme(theme, monaco) {
         headElement.appendChild(link);
     }
     if (theme.type === 'light') {
-        monacoTheme = 'vs-light';
+        monacoTheme = 'blimpkit-light';
         if (monaco) monaco.editor.setTheme(monacoTheme);
         autoThemeListener = false;
     } else if (theme.type === 'dark') {
@@ -59,7 +127,7 @@ function setTheme(theme, monaco) {
         if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
             if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
             else monacoTheme = 'blimpkit-dark';
-        } else monacoTheme = 'vs-light';
+        } else monacoTheme = 'blimpkit-light';
         if (monaco) monaco.editor.setTheme(monacoTheme);
         autoThemeListener = true;
     }
@@ -466,9 +534,17 @@ class EditorActionsProvider {
                     DirigibleEditor.loadingOverview.classList.remove("bk-hidden");
                 }
                 if (formatEnabled && EditorActionsProvider.isAutoFormattingEnabled() && EditorActionsProvider.#isAutoFormattingEnabledForCurrentFile()) {
-                    editor.getAction('editor.action.formatDocument').run().then(() => {
-                        DirigibleEditor.saveFileContent(editor);
-                    });
+                    const save = () => DirigibleEditor.saveFileContent(editor);
+                    const format = () => editor.getAction('editor.action.formatDocument').run().then(save, save);
+                    // For Java, organize imports first (then format, then save). organize/format failures
+                    // still fall through to save so a problem never blocks saving.
+                    const isJava = editor.getModel() && editor.getModel().getLanguageId() === 'java';
+                    const organize = isJava ? editor.getAction('editor.action.organizeImports') : null;
+                    if (organize) {
+                        organize.run().then(format, format);
+                    } else {
+                        format();
+                    }
                 } else {
                     DirigibleEditor.saveFileContent(editor);
                 }
@@ -656,7 +732,8 @@ class DirigibleEditor {
                         wordWrap: DirigibleEditor.getWordWrap(),
                         minimap: {
                             autohide: DirigibleEditor.isMinimapAutohideEnabled(),
-                        }
+                        },
+                        'semanticHighlighting.enabled': true,
                     };
                     if (TypeScriptUtils.isTypeScriptFile(fileName)) {
                         // @ts-ignore
@@ -799,6 +876,26 @@ class DirigibleEditor {
             },
         });
 
+        // Reload this editor's content from disk when another file was changed by a cross-file Java
+        // rename. Skip dirty editors so unsaved work is never clobbered.
+        themingHub.addMessageListener({
+            topic: 'monaco.file.reload',
+            handler: async (msg) => {
+                const { path } = msg || {};
+                if (!path || path !== editorParameters.resourcePath || DirigibleEditor.dirty) return;
+                try {
+                    const reloaded = await new FileIO().loadText(editorParameters.resourcePath, true);
+                    DirigibleEditor.sourceBeingChangedProgramatically = true;
+                    editor.getModel().setValue(reloaded.modified);
+                    DirigibleEditor.lastSavedVersionId = editor.getModel().getAlternativeVersionId();
+                    DirigibleEditor.dirty = false;
+                    DirigibleEditor.sourceBeingChangedProgramatically = false;
+                } catch (e) {
+                    console.error('[java-lsp] could not reload after rename', e);
+                }
+            },
+        });
+
         // Restore breakpoint glyphs from the debug view's persisted state
         themingHub.addMessageListener({
             topic: 'java.debug.breakpoints',
@@ -830,6 +927,76 @@ class DirigibleEditor {
         editor.addAction(EditorActionsProvider.createSearchAction());
         if (!this.isTemplate && EditorActionsProvider.isAutoFormattingEnabled()) {
             EditorActionsProvider._toggleAutoFormattingActionRegistration = editor.addAction(EditorActionsProvider.createToggleAutoFormattingAction());
+        }
+
+        if (this.fileType === 'java' && !this.readOnly) {
+            // Surface the JDT.LS source actions explicitly; rename (F2), references (Shift+F12),
+            // format, and quick-fix (Ctrl+.) are already in Monaco's context menu via the registered
+            // language providers.
+            editor.addAction({
+                id: 'java.organizeImports',
+                label: 'Java: Organize Imports',
+                keybindings: [monaco.KeyMod.Shift | monaco.KeyMod.Alt | monaco.KeyCode.KeyO],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.5,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.codeAction', { kind: 'source.organizeImports', apply: 'first' }),
+            });
+            editor.addAction({
+                id: 'java.sourceAction',
+                label: 'Java: Generate / Source Action...',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyS],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.6,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.codeAction', { kind: 'source', apply: 'never' }),
+            });
+            // Surround With / refactor assists (extract, surround try-catch/if, ...) on the selection.
+            editor.addAction({
+                id: 'java.surroundWith',
+                label: 'Java: Surround With / Refactor...',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.7,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.refactor', {}),
+            });
+            // Call / Type hierarchy: open the bottom panel for the symbol under the cursor. The panel
+            // is lazy-loaded, so its message listener may not exist yet when we post; re-post a few
+            // times to beat the load race (the panel dedupes identical requests). Same pattern as
+            // javaLspOpenFile's reveal re-post.
+            const showHierarchy = (ed, kind) => {
+                const path = editorParameters.resourcePath; // /<ws>/<project>/<file>
+                const workspace = path.replace(/^\//, '')
+                    .split('/')[0];
+                const pos = ed.getPosition();
+                if (!path || !workspace || !pos) return;
+                const data = {
+                    kind,
+                    workspace,
+                    uri: 'file:///workspace' + path,
+                    line: pos.lineNumber - 1,
+                    character: pos.column - 1,
+                };
+                layoutHub.openView({ id: 'java-hierarchy' });
+                const post = () => layoutHub.postMessage({ topic: 'java.hierarchy.show', data });
+                post();
+                setTimeout(post, 400);
+                setTimeout(post, 1200);
+            };
+            editor.addAction({
+                id: 'java.callHierarchy',
+                label: 'Java: Show Call Hierarchy',
+                keybindings: [monaco.KeyMod.WinCtrl | monaco.KeyMod.Alt | monaco.KeyCode.KeyH],
+                contextMenuGroupId: 'navigation',
+                contextMenuOrder: 1.7,
+                run: (ed) => showHierarchy(ed, 'call'),
+            });
+            editor.addAction({
+                id: 'java.typeHierarchy',
+                label: 'Java: Show Type Hierarchy',
+                keybindings: [monaco.KeyMod.WinCtrl | monaco.KeyCode.KeyH],
+                contextMenuGroupId: 'navigation',
+                contextMenuOrder: 1.8,
+                run: (ed) => showHierarchy(ed, 'type'),
+            });
         }
 
         DirigibleEditor.computeDiff.onmessage = function (event) {
@@ -926,10 +1093,54 @@ class DirigibleEditor {
             }
         });
 
+        // Semantic-token colours for Java (JDT.LS legend). Monaco only applies these when the
+        // theme carries `semanticHighlighting: true`; without explicit keyword/modifier rules the
+        // semantic layer leaves keywords uncoloured, so every legend type — including keyword and
+        // modifier — is mapped here. Palettes mirror VS Code's dark+/light+ defaults.
+        const javaSemanticDark = [
+            { token: 'namespace', foreground: '4ec9b0' },
+            { token: 'class', foreground: '4ec9b0' },
+            { token: 'interface', foreground: '4ec9b0' },
+            { token: 'enum', foreground: '4ec9b0' },
+            { token: 'type', foreground: '4ec9b0' },
+            { token: 'typeParameter', foreground: '4ec9b0' },
+            { token: 'annotation', foreground: 'dcdcaa' },
+            { token: 'annotationMember', foreground: 'dcdcaa' },
+            { token: 'enumMember', foreground: '4fc1ff' },
+            { token: 'method', foreground: 'dcdcaa' },
+            { token: 'function', foreground: 'dcdcaa' },
+            { token: 'property', foreground: '9cdcfe' },
+            { token: 'field', foreground: '9cdcfe' },
+            { token: 'variable', foreground: '9cdcfe' },
+            { token: 'parameter', foreground: '9cdcfe' },
+            { token: 'keyword', foreground: '569cd6' },
+            { token: 'modifier', foreground: '569cd6' },
+        ];
+        const javaSemanticLight = [
+            { token: 'namespace', foreground: '267f99' },
+            { token: 'class', foreground: '267f99' },
+            { token: 'interface', foreground: '267f99' },
+            { token: 'enum', foreground: '267f99' },
+            { token: 'type', foreground: '267f99' },
+            { token: 'typeParameter', foreground: '267f99' },
+            { token: 'annotation', foreground: '795e26' },
+            { token: 'annotationMember', foreground: '795e26' },
+            { token: 'enumMember', foreground: '0070c1' },
+            { token: 'method', foreground: '795e26' },
+            { token: 'function', foreground: '795e26' },
+            { token: 'property', foreground: '001080' },
+            { token: 'field', foreground: '001080' },
+            { token: 'variable', foreground: '001080' },
+            { token: 'parameter', foreground: '001080' },
+            { token: 'keyword', foreground: '0000ff' },
+            { token: 'modifier', foreground: '0000ff' },
+        ];
+
         this.monaco.editor.defineTheme('blimpkit-dark', {
             base: 'vs-dark',
             inherit: true,
-            rules: [{ background: '1d1d1d' }],
+            semanticHighlighting: true,
+            rules: [{ background: '1d1d1d' }, ...javaSemanticDark],
             colors: {
                 'editor.background': '#1d1d1d',
                 'breadcrumb.background': '#1d1d1d',
@@ -948,7 +1159,8 @@ class DirigibleEditor {
         this.monaco.editor.defineTheme('classic-dark', {
             base: 'vs-dark',
             inherit: true,
-            rules: [{ background: '1c2228' }],
+            semanticHighlighting: true,
+            rules: [{ background: '1c2228' }, ...javaSemanticDark],
             colors: {
                 'editor.background': '#1c2228',
                 'breadcrumb.background': '#1c2228',
@@ -964,13 +1176,21 @@ class DirigibleEditor {
             }
         });
 
+        this.monaco.editor.defineTheme('blimpkit-light', {
+            base: 'vs',
+            inherit: true,
+            semanticHighlighting: true,
+            rules: [...javaSemanticLight],
+            colors: {}
+        });
+
         this.monaco.editor.setTheme(monacoTheme);
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
             if (autoThemeListener) {
                 if (event.matches) {
                     if (themeId.startsWith('classic')) monacoTheme = 'classic-dark';
                     else monacoTheme = 'blimpkit-dark';
-                } else monacoTheme = 'vs-light';
+                } else monacoTheme = 'blimpkit-light';
                 this.monaco.editor.setTheme(monacoTheme);
             }
         });

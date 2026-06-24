@@ -488,6 +488,32 @@ class BrowserImpl implements Browser {
                .click();
     }
 
+    private static final By MENU_TITLE_SELECTOR = By.cssSelector("span.fd-menu__title");
+
+    @Override
+    public void clickCascadingMenuItem(String... titlePath) {
+        // Find the open context menu once; on success the driver is left in the iframe that hosts it
+        // (findElementInAllFrames restarts from defaultContent() each call, so re-searching per step
+        // would switch frames and close the menu). All remaining steps drive the returned handle.
+        SelenideElement menu = findElementInAllFrames(By.cssSelector("[aria-label*='contextmenu']"), Condition.visible);
+        try {
+            // Hover each intermediate title to expand its flyout (BlimpKit expands on mouseenter and
+            // keeps it open while the pointer moves into the flyout to reach the leaf).
+            for (int i = 0; i < titlePath.length - 1; i++) {
+                menu.$$(MENU_TITLE_SELECTOR)
+                    .findBy(Condition.exactText(titlePath[i]))
+                    .shouldBe(Condition.visible)
+                    .hover();
+            }
+            menu.$$(MENU_TITLE_SELECTOR)
+                .findBy(Condition.exactText(titlePath[titlePath.length - 1]))
+                .shouldBe(Condition.visible)
+                .click();
+        } catch (RuntimeException ex) {
+            failWithScreenshot("Could not navigate context menu path " + Arrays.toString(titlePath) + ": " + ex.getMessage());
+        }
+    }
+
     @Override
     public void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern,
             String text) {
