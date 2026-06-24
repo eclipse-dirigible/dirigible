@@ -3,6 +3,7 @@
  *
  * Do not modify the content as it may be re-generated again.
  */
+import * as schemaTemplateManager from "template-application-schema/template/template";
 import * as restTemplateManager from "template-application-rest-java/template/template";
 import * as uiTemplate from "template-application-ui-harmonia-java/template/ui/template";
 import * as generateUtils from "service-generate/template/generateUtils";
@@ -17,15 +18,30 @@ export function generate(model, parameters) {
 };
 
 export function getTemplate(parameters) {
+    // The database schema (.table/.schema artefacts) is REQUIRED: it is what actually creates the
+    // physical tables (TableCreateProcessor). The client-Java layer only maps an @Entity to an
+    // existing table (JavaEntityManager registers, it does not CREATE), so without the schema a
+    // freshly-generated app has no tables and CRUD / CSVIM seeds fail. The AngularJS full-stack
+    // template includes the schema for the same reason.
+    let schemaTemplate = schemaTemplateManager.getTemplate(parameters);
     let restTemplate = restTemplateManager.getTemplate(parameters);
 
     let templateSources = [
+        ...schemaTemplate.sources,
         ...restTemplate.sources,
         ...uiTemplate.getSources(parameters)
     ];
 
-    let templateParameters = getTemplateParameters();
-    templateParameters = templateParameters.concat(restTemplate.parameters);
+    let templateParameters = getTemplateParameters()
+        .concat(schemaTemplate.parameters)
+        .concat(restTemplate.parameters);
+    // Dedupe shared parameters (tablePrefix, dataSource, …) by name so the Generate dialog shows each once.
+    const seenParameterNames = new Set();
+    templateParameters = templateParameters.filter(p => {
+        if (!p || seenParameterNames.has(p.name)) return false;
+        seenParameterNames.add(p.name);
+        return true;
+    });
 
     return {
         name: "Application - UI (Harmonia) - Java",
