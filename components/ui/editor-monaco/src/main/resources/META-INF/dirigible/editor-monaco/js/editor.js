@@ -534,9 +534,17 @@ class EditorActionsProvider {
                     DirigibleEditor.loadingOverview.classList.remove("bk-hidden");
                 }
                 if (formatEnabled && EditorActionsProvider.isAutoFormattingEnabled() && EditorActionsProvider.#isAutoFormattingEnabledForCurrentFile()) {
-                    editor.getAction('editor.action.formatDocument').run().then(() => {
-                        DirigibleEditor.saveFileContent(editor);
-                    });
+                    const save = () => DirigibleEditor.saveFileContent(editor);
+                    const format = () => editor.getAction('editor.action.formatDocument').run().then(save, save);
+                    // For Java, organize imports first (then format, then save). organize/format failures
+                    // still fall through to save so a problem never blocks saving.
+                    const isJava = editor.getModel() && editor.getModel().getLanguageId() === 'java';
+                    const organize = isJava ? editor.getAction('editor.action.organizeImports') : null;
+                    if (organize) {
+                        organize.run().then(format, format);
+                    } else {
+                        format();
+                    }
                 } else {
                     DirigibleEditor.saveFileContent(editor);
                 }
@@ -939,6 +947,15 @@ class DirigibleEditor {
                 contextMenuGroupId: '1_modification',
                 contextMenuOrder: 2.6,
                 run: (ed) => ed.trigger('java-lsp', 'editor.action.codeAction', { kind: 'source', apply: 'never' }),
+            });
+            // Surround With / refactor assists (extract, surround try-catch/if, ...) on the selection.
+            editor.addAction({
+                id: 'java.surroundWith',
+                label: 'Java: Surround With / Refactor...',
+                keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.KeyT],
+                contextMenuGroupId: '1_modification',
+                contextMenuOrder: 2.7,
+                run: (ed) => ed.trigger('java-lsp', 'editor.action.refactor', {}),
             });
         }
 

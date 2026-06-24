@@ -1238,6 +1238,7 @@ function jdtlsSettings() {
             completion: {
                 overwrite:            true,
                 guessMethodArguments: false,
+                postfix:              { enabled: true },
                 filteredTypes: [
                     'com.sun.*', 'sun.*', 'jdk.*',
                     'org.eclipse.jdt.internal.*',
