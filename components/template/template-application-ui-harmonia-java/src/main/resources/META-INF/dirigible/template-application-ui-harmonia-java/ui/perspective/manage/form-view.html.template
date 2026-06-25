@@ -64,7 +64,6 @@
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
                  :aria-invalid="!!errors.${property.name}"
                  placeholder="Select ${property.name}..." />
-          <button x-h-select-clear></button>
           <div x-h-select-content>
             <div x-h-select-search></div>
             <template x-for="opt in options${property.name}" :key="opt.value">
