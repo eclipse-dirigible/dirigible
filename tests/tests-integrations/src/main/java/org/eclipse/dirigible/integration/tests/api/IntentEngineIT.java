@@ -327,12 +327,12 @@ class IntentEngineIT extends IntegrationTest {
                                                          hasItems("orders.model", "orders.glue", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.templateId",
-                                                         equalTo("template-application-angular-java/template/template.js"))
+                                                         equalTo("template-application-ui-harmonia-java/template/template.js"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.parameters.dataSource",
                                                          equalTo("DefaultDB"))
-                                                 // The report is generated server-side as Java (DAO + REST controller).
-                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId",
-                                                         equalTo("template-application-ui-angular-java/template/template-report-file.js")));
+                                                 // The report is generated server-side as Java (DAO + REST controller) with a Harmonia UI.
+                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId", equalTo(
+                                                         "template-application-ui-harmonia-java/template/template-report-file.js")));
 
         assertEdmAndModel();
         assertBpmn();
@@ -833,7 +833,7 @@ class IntentEngineIT extends IntegrationTest {
     private void assertSettings() {
         assertTrue(resource("orders.settings").exists(), "the .settings file should be scaffolded");
         String settings = contentOf("orders.settings");
-        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-angular-java"),
+        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-ui-harmonia-java"),
                 "settings should carry the model generation recipe");
         assertTrue(settings.contains("\"glue\"") && settings.contains("template-application-events-java"),
                 "settings should carry the glue generation recipe");
