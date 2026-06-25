@@ -17,7 +17,7 @@
     </div>
     <template x-for="r in $store.reports.items" :key="r.url">
       <button x-h-button data-variant="outline" class="justify-start" @click="window.open(r.url, '_blank')">
-        <i role="img" data-lucide="bar-chart-3"></i><span x-text="r.name"></span>
+        <i role="img" data-lucide="bar-chart-3"></i><span x-text="r.label"></span>
       </button>
     </template>
   </div>

@@ -14,6 +14,10 @@ export function generate(model, parameters) {
     let templateSources = getTemplate(parameters).sources;
     parameters.javaRuntime = true;
     parameterUtils.process(model, parameters)
+    // App caption for the shell (title + sidebar header): prefer the model-level title/description
+    // (the intent's humanised name + description) over the bare project name.
+    parameters.appTitle = (model.title && String(model.title).trim()) ? model.title : parameters.projectName;
+    parameters.appDescription = model.description || '';
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 

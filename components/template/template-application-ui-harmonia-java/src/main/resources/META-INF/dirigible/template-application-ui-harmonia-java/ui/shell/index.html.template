@@ -19,7 +19,7 @@
     <meta charset="UTF-8" />
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>${projectName}</title>
+    <title>${appTitle}</title>
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="./css/app.css" rel="stylesheet" />
@@ -51,8 +51,11 @@
            data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
         <div x-h-sidebar x-ref="sidebar">
           <div x-h-sidebar-header>
-            <div class="hbox items-center gap-2 p-1">
-              <span class="font-bold">${projectName}</span>
+            <div class="vbox gap-0 p-1">
+              <span class="font-bold">${appTitle}</span>
+#if($appDescription && $appDescription != '')
+              <span x-h-text.muted class="text-xs">${appDescription}</span>
+#end
             </div>
           </div>
           <div x-h-sidebar-content>
@@ -78,7 +81,7 @@
 #if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
-                      <i role="img" data-lucide="list"></i>
+                      <i role="img" data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></i>
                       <span>${entity.name}</span>
                     </button>
                   </li>

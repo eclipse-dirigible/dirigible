@@ -23,7 +23,7 @@
   <body class="vbox size-full" x-data="reportPage" x-cloak>
     <div class="vbox size-full">
       <div x-h-toolbar data-variant="transparent">
-        <span x-h-toolbar-title>${name}</span>
+        <span x-h-toolbar-title x-text="displayName"></span>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
         <div x-h-toolbar-spacer></div>
         <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>

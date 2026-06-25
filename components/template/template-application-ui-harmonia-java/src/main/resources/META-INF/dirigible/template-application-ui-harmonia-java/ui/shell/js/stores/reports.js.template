@@ -11,9 +11,19 @@
  * (Pragmatic discovery via the core repository API. A cleaner long-term option is for the intent to
  * surface its reports in the model the shell is generated from.)
  */
+// "MembersWithLoansDue" -> "Members With Loans Due" (PascalCase/camelCase -> spaced Title Case).
+function humanizeReportName(s) {
+  return String(s || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, c => c.toUpperCase());
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.store('reports', {
-    items: [],      // [{ name, url }]
+    items: [],      // [{ name, label, url }]
     loaded: false,
 
     init() { this.load(); },
@@ -47,7 +57,7 @@ document.addEventListener('alpine:init', () => {
         const path = res && res.path;
         if (res && res.name === 'index.html' && path && path.indexOf('/reports/') >= 0) {
           const m = path.match(/\/reports\/([^/]+)\/index\.html$/);
-          if (m) out.push({ name: m[1], url: path.replace('/registry/public/', '/services/web/') });
+          if (m) out.push({ name: m[1], label: humanizeReportName(m[1]), url: path.replace('/registry/public/', '/services/web/') });
         }
       });
       (node.collections || []).forEach(c => this._walk(c, out));

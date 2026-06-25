@@ -62,6 +62,7 @@ everything; most other blocks reference an entity.
 entities:
   - name: Member
     description: Library member
+    icon: user            # optional: a Lucide icon name for the nav entry (e.g. user, book, file)
     fields:
       - { name: id,        type: integer, primaryKey: true, generated: true }
       - { name: name,      type: string,  required: true, length: 200 }

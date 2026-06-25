@@ -33,6 +33,7 @@ const reportHttp = {
 document.addEventListener('alpine:init', () => {
   Alpine.data('reportPage', () => ({
     apiBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller',
+    displayName: '${name}',   // humanised in init() — "MembersWithLoansDue" -> "Members With Loans Due"
     rows: [],
     columns: [],        // derived from the data — the controller returns rows keyed by column alias
     state: 'loading',   // loading | error | empty | default
@@ -41,7 +42,13 @@ document.addEventListener('alpine:init', () => {
     limit: 20,
     count: 0,
 
-    async init() { await this.load(); },
+    init() {
+      this.displayName = String(this.displayName || '')
+        .replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim()
+        .replace(/^./, c => c.toUpperCase());
+      try { document.title = this.displayName; } catch (e) { /* no document */ }
+      this.load();
+    },
 
     async load() {
       this.state = 'loading';
