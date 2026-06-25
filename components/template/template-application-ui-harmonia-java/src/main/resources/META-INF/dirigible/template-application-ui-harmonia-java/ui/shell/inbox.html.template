@@ -17,7 +17,7 @@
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the task list -->
-    <div x-h-split-panel data-default-size="32" data-min="280">
+    <div x-h-split-panel data-size="20%" data-min="280">
       <div class="vbox size-full">
         <div class="p-2">
           <div x-h-input-group data-size="sm">
@@ -58,7 +58,7 @@
     </div>
 
     <!-- Detail: the selected task, its claim action, and the form inline -->
-    <div x-h-split-panel>
+    <div x-h-split-panel data-size="80%">
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>

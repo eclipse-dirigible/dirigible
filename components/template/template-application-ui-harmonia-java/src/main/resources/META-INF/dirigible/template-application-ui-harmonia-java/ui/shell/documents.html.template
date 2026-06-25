@@ -45,7 +45,7 @@
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: file/folder list (with drag-and-drop upload) -->
-    <div x-h-split-panel data-default-size="50" data-min="340">
+    <div x-h-split-panel data-size="20%" data-min="340">
       <div class="vbox size-full" style="position: relative;" @dragover="onDragOver($event)" @dragleave="onDragLeave()" @drop="onDrop($event)">
         <div x-show="showDropZone" x-h-info-page class="size-full" style="position:absolute; inset:0; z-index:5; background:var(--background); opacity:0.96;">
           <div x-h-info-page-header>
@@ -100,7 +100,7 @@
     </div>
 
     <!-- Detail: File Preview -->
-    <div x-h-split-panel data-default-size="50">
+    <div x-h-split-panel data-size="80%">
       <div class="vbox size-full">
         <!-- CSV → table -->
         <div x-show="selectedFile && canPreview && !previewLoading && previewType === 'csv'" x-h-table-container.scroll class="flex-1">

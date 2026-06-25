@@ -6,7 +6,7 @@
 <div x-data="${name}ManageListPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title>${name}</span>
+    <span x-h-toolbar-title class="shrink-0">${name}</span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
       <input x-h-input.group type="text" placeholder="Search ${name}..."

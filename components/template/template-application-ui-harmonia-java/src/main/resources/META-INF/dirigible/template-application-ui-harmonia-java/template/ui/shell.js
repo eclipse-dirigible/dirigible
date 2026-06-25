@@ -133,6 +133,11 @@ export function getSources() {
             location: "/template-application-ui-harmonia-java/ui/shell/documents.html.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/views/_documents.html"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/settingsPage.js.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/js/components/pages/settingsPage.js"
         }
     ];
 };

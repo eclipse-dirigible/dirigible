@@ -102,11 +102,13 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
             { value: 'URL', label: 'URL' },
             { value: 'WEEK', label: 'Week' }
         ];
+        // Widget size = the number of grid columns the field spans (out of 12). Templates map it to
+        // their grid: Harmonia `grid-column: span N`, AngularJS Fundamental `fd-col-md--N`.
         $scope.widgetSizes = [
-            { value: 'fd-col-md--2 fd-col--3', label: 'Small' },
-            { value: 'fd-col-md--4 fd-col--6', label: 'Medium' },
-            { value: 'fd-col-md--6 fd-col--9', label: 'Large' },
-            { value: 'fd-col-md--8 fd-col--12', label: 'XLarge' }
+            { value: '3', label: 'Small' },
+            { value: '4', label: 'Medium' },
+            { value: '6', label: 'Large' },
+            { value: '12', label: 'XLarge' }
         ];
         $scope.majorTypes = [
             { value: 'true', label: 'Show in table header' },

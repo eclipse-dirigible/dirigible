@@ -252,6 +252,7 @@
     <script src="./js/stores/reports.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>
+    <script src="./js/components/pages/settingsPage.js" defer></script>
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ListPage.js" defer></script>
