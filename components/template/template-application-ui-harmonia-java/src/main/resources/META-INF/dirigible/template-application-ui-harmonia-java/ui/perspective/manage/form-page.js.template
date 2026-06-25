@@ -68,10 +68,18 @@ document.addEventListener('alpine:init', () => {
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined) this.form[key] = record[key];
           }
-          // Date/time widgets need the HTML input format, not the backend's full ISO value.
+          // Date/time widgets need the HTML input format, not the backend's serialized value.
 #foreach($property in $properties)
 #if($property.isDateType)
-          if (this.form.${property.name}) this.form.${property.name} = this.toDateInput(this.form.${property.name}, '${property.widgetType}');
+          if (this.form.${property.name} != null) this.form.${property.name} = this.toDateInput(this.form.${property.name}, '${property.widgetType}');
+#end
+#end
+          // Relationship (dropdown) values must be STRINGS to match the option's data-value (an HTML
+          // attribute is always a string); a numeric FK from the record would otherwise match no
+          // option and the combobox would render empty on edit.
+#foreach($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+          if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
 #end
 #end
           this.state = 'ready';
@@ -158,16 +166,37 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Backend ISO temporal -> the value an HTML date/time input expects (by widget), so an
-    // edited record's dates populate the fields. e.g. "2026-06-09T16:04:00Z" -> "2026-06-09T16:04".
+    // Backend temporal -> the value an HTML date/time input expects (by widget), so an edited
+    // record's dates populate the fields. The Java REST controller serializes java.time via Jackson
+    // as an ARRAY ([y,m,d] or [y,m,d,h,mi,s,ns]) and java.time.Instant as a numeric epoch — NOT an
+    // ISO string — so handle arrays/numbers as well as ISO-ish strings (the original assumption).
     toDateInput(value, widget) {
-      const s = String(value);
+      if (value === null || value === undefined || value === '') return '';
+      const pad = (n) => String(n).padStart(2, '0');
+      let y, mo = 1, da = 1, h = 0, mi = 0;
+      if (Array.isArray(value)) {
+        y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
+      } else if (typeof value === 'number') {
+        const d = new Date(value * 1000); // Instant epoch seconds
+        if (isNaN(d.getTime())) return '';
+        y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
+      } else {
+        const s = String(value); // already an ISO-ish string — slice to the widget's input format
+        switch (widget) {
+          case 'DATE': return s.slice(0, 10);
+          case 'DATETIME-LOCAL': return s.slice(0, 16);
+          case 'TIME': return s.slice(0, 5);
+          case 'MONTH': return s.slice(0, 7);
+          default: return s;
+        }
+      }
+      const date = y + '-' + pad(mo) + '-' + pad(da);
       switch (widget) {
-        case 'DATE': return s.slice(0, 10);
-        case 'DATETIME-LOCAL': return s.slice(0, 16);
-        case 'TIME': return s.slice(0, 5);
-        case 'MONTH': return s.slice(0, 7);
-        default: return s;
+        case 'DATE': return date;
+        case 'DATETIME-LOCAL': return date + 'T' + pad(h) + ':' + pad(mi);
+        case 'TIME': return pad(h) + ':' + pad(mi);
+        case 'MONTH': return y + '-' + pad(mo);
+        default: return date;
       }
     },
 

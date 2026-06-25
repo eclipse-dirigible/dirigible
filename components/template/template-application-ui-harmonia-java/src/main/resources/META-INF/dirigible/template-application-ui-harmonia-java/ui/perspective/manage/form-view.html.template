@@ -56,14 +56,19 @@
 #else
         <label x-h-label for="f_${property.name}">${property.name}#if($property.isRequiredProperty == "true") *#end</label>
 #if($property.widgetType == "DROPDOWN")
-        <div x-h-select#if($readonly) data-disabled="true"#end>
+        <!-- Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
+             x-h-select-input holds the VALUE (the option data-value), a string; the input shows the
+             matched option's label. data-filter enables type-to-search; x-h-select-search adds the
+             in-dropdown search box for longer option lists. -->
+        <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#end>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
                  :aria-invalid="!!errors.${property.name}"
                  placeholder="Select ${property.name}..." />
           <button x-h-select-clear></button>
           <div x-h-select-content>
+            <div x-h-select-search></div>
             <template x-for="opt in options${property.name}" :key="opt.value">
-              <div x-h-select-option="opt.text" :data-value="opt.value"></div>
+              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
             </template>
           </div>
         </div>
