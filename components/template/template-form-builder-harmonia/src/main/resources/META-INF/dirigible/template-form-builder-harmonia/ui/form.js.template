@@ -7,7 +7,8 @@
 /*
  * Neutral form controller contract (the Harmonia replacement for the AngularJS $scope/$http code).
  * The .form's `code` block is the BODY of this function and receives a single `ctx`:
- *   ctx.model    - the reactive form model (bound to the widgets' x-model)
+ *   ctx.model    - the reactive form model (bound to the widgets' x-model); for a BPM task form it is
+ *                  preloaded with the task's process variables, so fields show their current values
  *   ctx.params   - parsed query params (e.g. taskId, processInstanceId, an entity id)
  *   ctx.http     - a self-contained fetch client (get/post/put/delete); URLs are absolute
  *                  (e.g. a generated controller or an /services/... endpoint)
@@ -117,6 +118,19 @@ document.addEventListener('alpine:init', () => {
         if (typeof formController === 'function') formController(this._ctx);
       } catch (e) {
         console.error('[form] controller error', e);
+      }
+      // BPM task form: preload the task's process variables into the model so the bound fields show
+      // the CURRENT values (e.g. a loan's LoanedOn / DueOn) instead of being empty. The variables are
+      // the process context (the entity the process started on); GET …/tasks/{id}/variables returns
+      // them keyed by property name. Runs after formController so the live values win over any defaults.
+      if (params.taskId) {
+        harmoniaHttp.get('/services/inbox/tasks/' + encodeURIComponent(params.taskId) + '/variables')
+          .then((res) => {
+            const vars = (res && res.variables) || {};
+            Object.keys(vars).forEach((k) => { self.model[k] = vars[k]; });
+            self.refreshIcons();
+          })
+          .catch((e) => console.warn('[form] could not load task variables', e));
       }
       this.refreshIcons();
     },

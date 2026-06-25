@@ -19,7 +19,7 @@ uses `ctx` instead of Angular globals:
 
 | ctx member | purpose |
 |---|---|
-| `ctx.model` | the reactive form model (bound to each widget's `x-model="model.<key>"`) |
+| `ctx.model` | the reactive form model (bound to each widget's `x-model="model.<key>"`); for a **BPM task form** it is preloaded from `GET /services/inbox/tasks/{id}/variables` so fields show the task's current values |
 | `ctx.params` | parsed query params (`taskId`, `processInstanceId`, an entity id, …) |
 | `ctx.http` | the platform fetch client (`get/post/put/delete`; pass `{ baseUrl: '' }` for an absolute URL such as a generated controller or `/services/...`) |
 | `ctx.task` | `{ id, processInstanceId, complete(variables?) }` — `complete()` POSTs to `/services/inbox/tasks/{id}` |
