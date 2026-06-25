@@ -34,6 +34,7 @@ document.addEventListener('alpine:init', () => {
   Alpine.data('reportPage', () => ({
     apiBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller',
     rows: [],
+    columns: [],        // derived from the data — the controller returns rows keyed by column alias
     state: 'loading',   // loading | error | empty | default
     error: null,
     page: 1,
@@ -49,6 +50,8 @@ document.addEventListener('alpine:init', () => {
         const offset = (this.page - 1) * this.limit;
         const rows = await reportHttp.get(this.apiBase + '?${dollar}limit=' + this.limit + '&${dollar}offset=' + offset);
         this.rows = rows || [];
+        // Columns come from the row keys (the report's result-set aliases, e.g. "Member Name").
+        if (this.rows.length) this.columns = Object.keys(this.rows[0]);
         try {
           const c = await reportHttp.get(this.apiBase + '/count');
           this.count = (c && c.count != null) ? c.count : this.rows.length;
