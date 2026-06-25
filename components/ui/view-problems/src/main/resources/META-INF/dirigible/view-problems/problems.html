@@ -12,7 +12,7 @@
 
 -->
 <!DOCTYPE HTML>
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="problems" ng-controller="ProblemsController">
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="problems">
 
     <head>
         <meta charset="utf-8" />
@@ -20,74 +20,130 @@
         <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
         <title config-title></title>
         <script type="text/javascript" src="/services/web/view-problems/configs/problems-view.js"></script>
-        <meta name="platform-links" category="ng-view">
+        <meta name="platform-links" category="ng-view,ng-editor">
         <script type="text/javascript" src="js/problems.js"></script>
+        <style>
+            .jp-row { display: flex; align-items: center; cursor: pointer; height: 1.75rem; white-space: nowrap; padding: 0 .5rem; }
+            .jp-row:hover { background: var(--sapList_Hover_Background, rgba(0,0,0,0.06)); }
+            .jp-row.selected { background: var(--sapList_SelectionBackgroundColor, rgba(0,90,200,0.12)); }
+            .jp-sev { width: 1.25rem; flex: 0 0 auto; text-align: center; }
+            .jp-error { color: var(--sapNegativeColor, #bb0000); }
+            .jp-warning { color: var(--sapCriticalColor, #e76500); }
+            .jp-info { color: var(--sapInformativeColor, #0070f2); }
+            .jp-msg { margin: 0 .5rem; overflow: hidden; text-overflow: ellipsis; }
+            .jp-loc { color: var(--sapContent_LabelColor, #6a6d70); font-size: .75rem; margin-left: auto; padding-left: 1rem; flex: 0 0 auto; }
+            .jp-chip { cursor: pointer; user-select: none; }
+            .jp-chip.off { opacity: .4; }
+        </style>
     </head>
 
-    <body class="bk-vbox">
-        <bk-toolbar type="solid">
-            <bk-input-group compact="true">
-                <bk-input-group-addon>
-                    <span class="sap-icon--search" role="presentation"></span>
-                </bk-input-group-addon>
-                <bk-input type="search" ng-model="models.search" ng-keyup="inputSearchKeyUp($event)" placeholder="Search..."></bk-input>
-                <bk-input-group-addon ng-show="models.search !== ''">
-                    <bk-button glyph="sap-icon--decline" state="transparent" ng-click="clearSearch()" title="Clear filter" aria-label="Clear filter">
-                    </bk-button>
-                </bk-input-group-addon>
-            </bk-input-group>
-            <bk-toolbar-spacer></bk-toolbar-spacer>
-            <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button glyph="sap-icon--refresh" aria-label="Refresh" state="transparent" ng-click="refresh()">
-            </bk-button>
-            <bk-button glyph="sap-icon--delete" aria-label="Delete" title="Delete selected" state="transparent" ng-click="deleteSelected()" ng-disabled="!hasSelected()">
-            </bk-button>
-        </bk-toolbar>
-        <bk-scrollbar class="bk-full-height">
-            <table bk-table display-mode="compact" outer-borders="bottom">
-                <thead bk-table-header sticky="true" interactive="false">
-                    <tr bk-table-row>
-                        <th bk-table-header-cell content-type="checkbox">
-                            <bk-checkbox compact="true" id="cb-all" ng-model="models.selectAll" ng-change="selectAllChanged()"></bk-checkbox>
-                            <bk-checkbox-label empty="true" compact="true" for="cb-all"></bk-checkbox-label>
-                        </th>
-                        <th bk-table-header-cell>Location</th>
-                        <th bk-table-header-cell>Type</th>
-                        <th bk-table-header-cell>Cause</th>
-                        <th bk-table-header-cell>Category</th>
-                        <th bk-table-header-cell>Line</th>
-                        <th bk-table-header-cell>Column</th>
-                        <th bk-table-header-cell>Expected</th>
-                        <th bk-table-header-cell></th>
-                    </tr>
-                </thead>
-                <tbody bk-table-body>
-                    <tr bk-table-row ng-repeat="problem in problemsList track by problem.id" hoverable="true" activable="false" selected="problem.selected" ng-dblclick="openProblem(problem)" title="Double-click to open the file at this line">
-                        <td bk-table-cell content-type="checkbox">
-                            <bk-checkbox compact="true" id="cb-{{problem.id}}" ng-model="problem.selected" ng-change="selectionChanged()"></bk-checkbox>
-                            <bk-checkbox-label empty="true" compact="true" for="cb-{{problem.id}}">
-                            </bk-checkbox-label>
-                        </td>
-                        <td bk-table-cell>{{problem.location}}</td>
-                        <td bk-table-cell>{{problem.type}}</td>
-                        <td bk-table-cell>{{problem.cause}}</td>
-                        <td bk-table-cell>{{problem.category}}</td>
-                        <td bk-table-cell>{{problem.line}}</td>
-                        <td bk-table-cell>{{problem.column}}</td>
-                        <td bk-table-cell>{{problem.expected}}</td>
-                        <td bk-table-cell fit-content="true" activable="true">
-                            <bk-button glyph="sap-icon--expand" compact="true" state="transparent" ng-click="showInfo(problem)" aria-label="expand"></bk-button>
-                        </td>
-                    </tr>
-                    <tr ng-if="problemsList.length === 0" bk-table-row>
-                        <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>
-                    </tr>
-                </tbody>
-            </table>
-        </bk-scrollbar>
-        <bk-pagination ng-if="totalRows > 0" current-page="currentPage" total-items="totalRows" items-per-page="pageSize" items-per-page-options="[10, 20, 50, 100]" items-per-page-placement="top-start" display-total-items="true"
-            compact="true" page-change="onPageChange(pageNumber)" items-per-page-change="onItemsPerPageChange(itemsPerPage)" total-items-label="{{'Result(s) (' + getSelectedCount() + ' selected)'}}">
-        </bk-pagination>
+    <body class="bk-vbox" ng-controller="ProblemsTabsController">
+        <bk-icon-tab-bar class="bk-fill-parent" side-padding="sm" selected-tab-id="tabs.selected">
+            <bk-icon-tab-bar-tablist>
+                <bk-icon-tab-bar-tab label="Java" tab-id="java" ng-click="switchTab('java')"></bk-icon-tab-bar-tab>
+                <bk-icon-tab-bar-tab label="Synchronization" tab-id="sync" ng-click="switchTab('sync')"></bk-icon-tab-bar-tab>
+            </bk-icon-tab-bar-tablist>
+
+            <bk-icon-tab-bar-panel class="bk-fill-parent" tab-id="java" ng-show="tabs.selected === 'java'">
+                <div class="bk-vbox bk-fill-parent" ng-controller="JavaProblemsController">
+                    <bk-toolbar no-bottom-border="true" compact="true">
+                        <bk-button compact="true" label="All projects" state="{{ scope === 'all' ? 'emphasized' : 'transparent' }}" ng-click="setScope('all')"></bk-button>
+                        <bk-button compact="true" label="Current file" state="{{ scope === 'current' ? 'emphasized' : 'transparent' }}" ng-click="setScope('current')"></bk-button>
+                        <bk-toolbar-separator></bk-toolbar-separator>
+                        <span class="jp-chip jp-error" ng-class="{ off: !filter[1] }" ng-click="toggleSeverity(1)" title="Errors"><i class="sap-icon--error"></i> {{ counts[1] }}</span>&nbsp;&nbsp;
+                        <span class="jp-chip jp-warning" ng-class="{ off: !filter[2] }" ng-click="toggleSeverity(2)" title="Warnings"><i class="sap-icon--alert"></i> {{ counts[2] }}</span>&nbsp;&nbsp;
+                        <span class="jp-chip jp-info" ng-class="{ off: !filter[3] }" ng-click="toggleSeverity(3)" title="Information / Hints"><i class="sap-icon--information"></i> {{ counts[3] + counts[4] }}</span>
+                        <bk-toolbar-spacer></bk-toolbar-spacer>
+                        <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="refresh()"></bk-button>
+                    </bk-toolbar>
+                    <div bk-scrollbar class="bk-fill-parent">
+                        <bk-message-page glyph="sap-icon--message-success" ng-show="!loading && !error && rows.length === 0">
+                            <bk-message-page-title>{{ scope === 'current' ? 'No problems in the current file' : 'No Java problems' }}</bk-message-page-title>
+                            <bk-message-page-subtitle>Compile errors, warnings and hints across the workspace appear here.</bk-message-page-subtitle>
+                        </bk-message-page>
+                        <bk-message-page glyph="sap-icon--error" ng-show="error && !loading">
+                            <bk-message-page-title>{{ error }}</bk-message-page-title>
+                        </bk-message-page>
+                        <bk-busy-indicator-extended class="bk-fill-parent" ng-show="loading && rows.length === 0" size="l">Resolving problems...</bk-busy-indicator-extended>
+                        <div ng-hide="error">
+                            <div class="jp-row" ng-repeat="row in rows track by row.uid" ng-class="{ selected: selectedUid === row.uid }" ng-click="select(row)" ng-dblclick="open(row)" title="{{ row.message }}">
+                                <span class="jp-sev {{ row.cssClass }}"><i class="{{ row.icon }}"></i></span>
+                                <span class="jp-msg">{{ row.message }}</span>
+                                <span class="jp-loc">{{ row.path }}:{{ row.line }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </bk-icon-tab-bar-panel>
+
+            <bk-icon-tab-bar-panel class="bk-fill-parent" tab-id="sync" ng-show="tabs.selected === 'sync'">
+                <div class="bk-vbox bk-fill-parent" ng-controller="ProblemsController">
+                    <bk-toolbar type="solid">
+                        <bk-input-group compact="true">
+                            <bk-input-group-addon>
+                                <span class="sap-icon--search" role="presentation"></span>
+                            </bk-input-group-addon>
+                            <bk-input type="search" ng-model="models.search" ng-keyup="inputSearchKeyUp($event)" placeholder="Search..."></bk-input>
+                            <bk-input-group-addon ng-show="models.search !== ''">
+                                <bk-button glyph="sap-icon--decline" state="transparent" ng-click="clearSearch()" title="Clear filter" aria-label="Clear filter">
+                                </bk-button>
+                            </bk-input-group-addon>
+                        </bk-input-group>
+                        <bk-toolbar-spacer></bk-toolbar-spacer>
+                        <bk-toolbar-separator></bk-toolbar-separator>
+                        <bk-button glyph="sap-icon--refresh" aria-label="Refresh" state="transparent" ng-click="refresh()">
+                        </bk-button>
+                        <bk-button glyph="sap-icon--delete" aria-label="Delete" title="Delete selected" state="transparent" ng-click="deleteSelected()" ng-disabled="!hasSelected()">
+                        </bk-button>
+                    </bk-toolbar>
+                    <bk-scrollbar class="bk-full-height">
+                        <table bk-table display-mode="compact" outer-borders="bottom">
+                            <thead bk-table-header sticky="true" interactive="false">
+                                <tr bk-table-row>
+                                    <th bk-table-header-cell content-type="checkbox">
+                                        <bk-checkbox compact="true" id="cb-all" ng-model="models.selectAll" ng-change="selectAllChanged()"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" compact="true" for="cb-all"></bk-checkbox-label>
+                                    </th>
+                                    <th bk-table-header-cell>Location</th>
+                                    <th bk-table-header-cell>Type</th>
+                                    <th bk-table-header-cell>Cause</th>
+                                    <th bk-table-header-cell>Category</th>
+                                    <th bk-table-header-cell>Line</th>
+                                    <th bk-table-header-cell>Column</th>
+                                    <th bk-table-header-cell>Expected</th>
+                                    <th bk-table-header-cell></th>
+                                </tr>
+                            </thead>
+                            <tbody bk-table-body>
+                                <tr bk-table-row ng-repeat="problem in problemsList track by problem.id" hoverable="true" activable="false" selected="problem.selected" ng-dblclick="openProblem(problem)" title="Double-click to open the file at this line">
+                                    <td bk-table-cell content-type="checkbox">
+                                        <bk-checkbox compact="true" id="cb-{{problem.id}}" ng-model="problem.selected" ng-change="selectionChanged()"></bk-checkbox>
+                                        <bk-checkbox-label empty="true" compact="true" for="cb-{{problem.id}}">
+                                        </bk-checkbox-label>
+                                    </td>
+                                    <td bk-table-cell>{{problem.location}}</td>
+                                    <td bk-table-cell>{{problem.type}}</td>
+                                    <td bk-table-cell>{{problem.cause}}</td>
+                                    <td bk-table-cell>{{problem.category}}</td>
+                                    <td bk-table-cell>{{problem.line}}</td>
+                                    <td bk-table-cell>{{problem.column}}</td>
+                                    <td bk-table-cell>{{problem.expected}}</td>
+                                    <td bk-table-cell fit-content="true" activable="true">
+                                        <bk-button glyph="sap-icon--expand" compact="true" state="transparent" ng-click="showInfo(problem)" aria-label="expand"></bk-button>
+                                    </td>
+                                </tr>
+                                <tr ng-if="problemsList.length === 0" bk-table-row>
+                                    <td bk-table-cell no-data="true">{{getNoDataMessage()}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </bk-scrollbar>
+                    <bk-pagination ng-if="totalRows > 0" current-page="currentPage" total-items="totalRows" items-per-page="pageSize" items-per-page-options="[10, 20, 50, 100]" items-per-page-placement="top-start" display-total-items="true"
+                        compact="true" page-change="onPageChange(pageNumber)" items-per-page-change="onItemsPerPageChange(itemsPerPage)" total-items-label="{{'Result(s) (' + getSelectedCount() + ' selected)'}}">
+                    </bk-pagination>
+                </div>
+            </bk-icon-tab-bar-panel>
+        </bk-icon-tab-bar>
         <theme></theme>
     </body>
 

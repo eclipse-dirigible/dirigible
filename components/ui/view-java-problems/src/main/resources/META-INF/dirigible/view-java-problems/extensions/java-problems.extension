@@ -1,5 +1,0 @@
-{
-    "module": "view-java-problems/configs/java-problems-view.js",
-    "extensionPoint": "platform-views",
-    "description": "Java Problems View"
-}
