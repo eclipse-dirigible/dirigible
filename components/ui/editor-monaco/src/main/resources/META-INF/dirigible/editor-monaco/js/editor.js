@@ -984,7 +984,7 @@ class DirigibleEditor {
                     line: pos.lineNumber - 1,
                     character: pos.column - 1,
                 };
-                layoutHub.openView({ id: 'java-hierarchy' });
+                layoutHub.openView({ id: 'java' });
                 const post = () => layoutHub.postMessage({ topic: 'java.hierarchy.show', data });
                 post();
                 setTimeout(post, 400);

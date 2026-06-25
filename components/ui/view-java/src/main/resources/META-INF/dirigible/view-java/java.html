@@ -1,0 +1,84 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE HTML>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="java">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="configs/java-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+        <script src="js/java.js"></script>
+        <style>
+            .hier-row { display: flex; align-items: center; cursor: pointer; height: 1.75rem; white-space: nowrap; }
+            .hier-row:hover { background: var(--sapList_Hover_Background, rgba(0,0,0,0.06)); }
+            .hier-row.selected { background: var(--sapList_SelectionBackgroundColor, rgba(0,90,200,0.12)); }
+            .hier-caret { width: 1.25rem; flex: 0 0 auto; text-align: center; color: var(--sapContent_IconColor, #6a6d70); }
+            .hier-name { font-weight: 600; margin: 0 .25rem; }
+            .hier-detail { color: var(--sapContent_LabelColor, #6a6d70); font-size: .75rem; overflow: hidden; text-overflow: ellipsis; }
+        </style>
+    </head>
+
+    <body class="bk-vbox" ng-controller="JavaViewController">
+        <bk-icon-tab-bar class="bk-fill-parent" side-padding="sm" selected-tab-id="tabs.selected">
+            <bk-icon-tab-bar-tablist>
+                <bk-icon-tab-bar-tab label="Hierarchy" tab-id="hierarchy" ng-click="switchTab('hierarchy')"></bk-icon-tab-bar-tab>
+            </bk-icon-tab-bar-tablist>
+
+            <bk-icon-tab-bar-panel class="bk-fill-parent" tab-id="hierarchy" ng-show="tabs.selected === 'hierarchy'">
+                <div class="bk-vbox bk-fill-parent" ng-controller="JavaHierarchyController">
+                    <bk-toolbar no-bottom-border="true" compact="true">
+                        <bk-toolbar-title>{{ title }}</bk-toolbar-title>
+                        <bk-toolbar-spacer></bk-toolbar-spacer>
+                        <span ng-show="kind === 'call'">
+                            <bk-button compact="true" label="Callers" state="{{ direction === 'incoming' ? 'emphasized' : 'transparent' }}" ng-click="setDirection('incoming')"></bk-button>
+                            <bk-button compact="true" label="Callees" state="{{ direction === 'outgoing' ? 'emphasized' : 'transparent' }}" ng-click="setDirection('outgoing')"></bk-button>
+                        </span>
+                        <span ng-show="kind === 'type'">
+                            <bk-button compact="true" label="Supertypes" state="{{ direction === 'supertypes' ? 'emphasized' : 'transparent' }}" ng-click="setDirection('supertypes')"></bk-button>
+                            <bk-button compact="true" label="Subtypes" state="{{ direction === 'subtypes' ? 'emphasized' : 'transparent' }}" ng-click="setDirection('subtypes')"></bk-button>
+                        </span>
+                        <bk-toolbar-separator ng-show="kind"></bk-toolbar-separator>
+                        <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-disabled="!kind" ng-click="refresh()"></bk-button>
+                    </bk-toolbar>
+                    <div bk-scrollbar class="bk-fill-parent">
+                        <bk-message-page glyph="sap-icon--org-chart" ng-show="!kind && !error">
+                            <bk-message-page-title>Call &amp; Type Hierarchy</bk-message-page-title>
+                            <bk-message-page-subtitle>Place the cursor on a Java symbol and run Show Call Hierarchy (Ctrl+Alt+H) or Show Type Hierarchy (Ctrl+H)</bk-message-page-subtitle>
+                        </bk-message-page>
+                        <bk-message-page glyph="sap-icon--error" ng-show="error && !loading">
+                            <bk-message-page-title>{{ error }}</bk-message-page-title>
+                        </bk-message-page>
+                        <bk-busy-indicator-extended class="bk-fill-parent" ng-show="loading" size="l">Resolving hierarchy...</bk-busy-indicator-extended>
+                        <div ng-hide="loading || error || !kind">
+                            <div class="hier-row" ng-repeat="row in rows track by row.uid" ng-class="{ selected: selectedUid === row.uid }" ng-style="{ 'padding-left': (row.depth * 1.25 + 0.25) + 'rem' }" ng-click="select(row)" ng-dblclick="open(row)">
+                                <span class="hier-caret" ng-click="toggle(row, $event)">
+                                    <i ng-if="row.loading" class="sap-icon--refresh"></i>
+                                    <i ng-if="!row.loading && !row.isLeaf" class="{{ row.expanded ? 'sap-icon--navigation-down-arrow' : 'sap-icon--navigation-right-arrow' }}"></i>
+                                </span>
+                                <i class="{{ row.icon }}"></i>
+                                <span class="hier-name">{{ row.name }}</span>
+                                <span class="hier-detail">{{ row.detail }}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </bk-icon-tab-bar-panel>
+        </bk-icon-tab-bar>
+        <theme></theme>
+    </body>
+
+</html>

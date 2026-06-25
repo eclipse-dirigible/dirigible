@@ -10,12 +10,12 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const viewData = {
-	id: 'java-hierarchy',
-	label: 'Java Hierarchy',
+	id: 'java',
+	label: 'Java',
 	lazyLoad: true,
 	autoFocusTab: false,
 	region: 'bottom',
-	path: '/services/web/view-java-hierarchy/java-hierarchy.html'
+	path: '/services/web/view-java/java.html'
 };
 if (typeof exports !== 'undefined') {
 	exports.getView = () => viewData;

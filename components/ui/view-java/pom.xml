@@ -8,8 +8,8 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - UI - Java Hierarchy - View</name>
-	<artifactId>dirigible-components-ui-view-java-hierarchy</artifactId>
+	<name>Components - UI - Java - View</name>
+	<artifactId>dirigible-components-ui-view-java</artifactId>
 	<packaging>jar</packaging>
 
 	<properties>
