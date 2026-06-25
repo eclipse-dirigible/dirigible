@@ -25,7 +25,7 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
     const Layout = new LayoutHub();
 
     const VIRTUAL_FILE_PREFIX = 'file:///workspace';
-    const POLL_INTERVAL_MS = 4000;
+    const POLL_INTERVAL_MS = 15000;
 
     // LSP DiagnosticSeverity: 1 Error, 2 Warning, 3 Information, 4 Hint.
     const SEVERITY = {
@@ -48,6 +48,7 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
     let allRows = [];                            // every diagnostic, unfiltered
     let activeFilePath = null;                   // /<ws>/<proj>/File.java of the focused editor
     let uidSeq = 0;
+    let loadedOnce = false;                      // show the busy indicator only on the first load
 
     const toWorkspacePath = (uri) => {
         if (!uri || !uri.startsWith(VIRTUAL_FILE_PREFIX)) return uri;
@@ -66,8 +67,11 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
 
     $scope.refresh = () => {
         const workspace = WorkspaceService.getCurrentWorkspace();
-        $scope.loading = true;
+        // Show the busy indicator only on the very first load; background refreshes (the poll and the
+        // push signal) update silently so the spinner doesn't flash periodically while idle.
+        if (!loadedOnce) $scope.loading = true;
         $http.post('/services/ide/java-lsp/diagnostics', { workspace }).then((response) => {
+            loadedOnce = true;
             $scope.loading = false;
             $scope.error = '';
             const files = Array.isArray(response.data) ? response.data : [];
@@ -95,6 +99,7 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
             allRows = rows;
             applyView();
         }, (response) => {
+            loadedOnce = true;
             $scope.loading = false;
             if (response.status === 503) {
                 $scope.error = 'Java language server is still starting — try again in a moment';
