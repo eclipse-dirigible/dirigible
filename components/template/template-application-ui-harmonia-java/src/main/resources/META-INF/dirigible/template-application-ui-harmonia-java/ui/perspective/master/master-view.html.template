@@ -43,22 +43,16 @@
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <td x-h-table-cell x-text="row.${property.name}"></td>
+#if($property.widgetType == "DROPDOWN")
+                <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
+#elseif($property.isDateType)
+                <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+#else
+                <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
 #end
 #end
-                <td x-h-table-cell data-row-actions>
-#if($hasProcess)
-                  <button x-show="$store.processTasks.getTasks(row).length" x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Pending tasks">
-                    <i role="img" data-lucide="inbox"></i><span x-text="$store.processTasks.getTasks(row).length"></span>
-                  </button>
-                  <div x-show="$store.processTasks.getTasks(row).length" x-h-popover data-innerclicks="true">
-                    <ul x-h-menu>
-                      <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
-                        <li x-h-menu-item @click="$store.processTasks.openTask(task)" x-text="task.name"></li>
-                      </template>
-                    </ul>
-                  </div>
 #end
+                <td x-h-table-cell data-row-actions @click.stop>
                   <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
                   <ul x-h-menu data-align="bottom-end">
                     <li x-h-menu-item @click="editMaster(row)">Edit</li>
@@ -90,6 +84,40 @@
           <button x-h-button data-variant="outline" data-size="sm" @click="editMaster(selected)">Edit ${name}</button>
         </div>
 
+#if($hasProcess)
+        <!-- Actionable user tasks for the selected ${name}, one button each (claimed on open). -->
+        <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap">
+          <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
+            <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+              <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+            </button>
+          </template>
+        </div>
+#end
+
+        <!-- The selected ${name}'s own fields — all properties (the table shows only the major ones). -->
+        <div x-h-card>
+          <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+          <div x-h-card-content>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement)
+#if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
+#if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
+              <div class="vbox gap-0">
+                <span x-h-text.muted class="text-xs">${plabel}</span>
+#if($property.widgetType == "DROPDOWN")
+                <span x-text="lookupText('${property.name}', selected.${property.name})"></span>
+#else
+                <span x-text="displayValue(selected.${property.name}, $isDate)"></span>
+#end
+              </div>
+#end
+#end
+            </div>
+          </div>
+        </div>
+
         <div x-show="detailDefs.length === 0" x-h-text.muted>This ${name} has no detail collections.</div>
 
         <!-- One detail panel per registered detail; re-keyed on selection so it reloads. -->
@@ -119,9 +147,15 @@
                     <template x-for="row in rows" :key="row[def.primaryKey]">
                       <tr x-h-table-row data-hoverable="true">
                         <template x-for="col in def.columns" :key="col.name">
-                          <td x-h-table-cell x-text="row[col.name]"></td>
+                          <td x-h-table-cell x-text="cellValue(col, row)"></td>
                         </template>
                         <td x-h-table-cell data-row-actions>
+                          <!-- This detail record's actionable user tasks (e.g. a triggered review), one button each. -->
+                          <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
+                            <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+                              <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+                            </button>
+                          </template>
                           <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
                           <ul x-h-menu data-align="bottom-end">
                             <li x-h-menu-item @click="editRow(row)">Edit</li>

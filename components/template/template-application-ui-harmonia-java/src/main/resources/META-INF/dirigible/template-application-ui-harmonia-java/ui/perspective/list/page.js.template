@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
     sortDirection: null,
     currentPage: 1,
     pageSize: 10,
+    selected: null,   // the row shown in the right-hand details pane
 
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
@@ -27,6 +28,7 @@ document.addEventListener('alpine:init', () => {
 
     async init() {
       await this.load();
+      this.loadLookups();
     },
 
     async load() {
@@ -37,11 +39,65 @@ document.addEventListener('alpine:init', () => {
         // TODO (Phase 2): use the controller's $limit/$offset + /count for server-side paging.
         this.items = await App.services.api.get(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
+        // Keep the current selection if it still exists, else clear it.
+        if (this.selected) {
+          this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
+        }
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ${name}.');
         this.state = 'error';
       }
       this.refreshIcons();
+    },
+
+    // Right-pane selection (the table shows only the major columns; the pane shows every property).
+    get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
+    isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
+    selectRow(row)   { this.selected = row; this.refreshIcons(); },
+    // Render a property value for the details pane. Jackson serializes java.time as arrays
+    // (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
+    displayValue(v, isDate) {
+      if (v === null || v === undefined || v === '') return '—';
+      const p = (n) => String(n).padStart(2, '0');
+      if (Array.isArray(v)) {
+        if (v.length === 3) return v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        if (v.length >= 5) return v[0] + '-' + p(v[1]) + '-' + p(v[2]) + ' ' + p(v[3]) + ':' + p(v[4]);
+        return v.join(', ');
+      }
+      // A date/time-typed numeric is an epoch Instant/Timestamp (seconds or millis).
+      if (isDate && typeof v === 'number') {
+        const d = new Date(v < 1e11 ? v * 1000 : v);
+        if (!isNaN(d.getTime())) {
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        }
+      }
+      return v;
+    },
+
+    lookups: {},   // relationship property name -> { fkValue: label }
+    // Fetch the referenced rows for each relationship (DROPDOWN) property once, mapping FK -> label.
+    async loadLookups() {
+      const all = {};
+#foreach($property in $properties)
+#if($property.widgetType == "DROPDOWN")
+      try {
+        const opt${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const map${property.name} = {};
+        (opt${property.name} || []).forEach(e => { map${property.name}[e.${property.widgetDropDownKey}] = e.${property.widgetDropDownValue}; });
+        all['${property.name}'] = map${property.name};
+      } catch (e) {
+        console.error('[${name}ListPage] failed to load lookup for ${property.name}', e);
+      }
+#end
+#end
+      this.lookups = all;
+      this.refreshIcons();
+    },
+    // A relationship FK shows its referenced label; otherwise fall back to the formatted value.
+    lookupText(prop, v) {
+      const m = this.lookups[prop];
+      const t = m ? m[v] : undefined;
+      return (t !== undefined && t !== null && t !== '') ? t : this.displayValue(v);
     },
 
     get displayState() {

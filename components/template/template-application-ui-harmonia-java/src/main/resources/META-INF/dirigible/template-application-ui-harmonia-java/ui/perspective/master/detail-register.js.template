@@ -19,7 +19,13 @@ App.registerDetail('${masterEntity}', {
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)
+#if($property.widgetType == "DROPDOWN")
+    { name: '${property.name}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' } },
+#elseif($property.isDateType)
+    { name: '${property.name}', date: true },
+#else
     { name: '${property.name}' },
+#end
 #end
 #end
   ],

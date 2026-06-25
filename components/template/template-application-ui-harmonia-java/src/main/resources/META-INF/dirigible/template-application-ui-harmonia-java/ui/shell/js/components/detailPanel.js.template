@@ -23,8 +23,60 @@ function detailPanel(def, masterId) {
     deleteTarget: null,
     deleteBusy: false,
 
+    lookups: {},   // relationship column name -> { fkValue: label }
+
     async init() {
       await this.load();
+      this.loadLookups();
+    },
+
+    // Fetch the referenced rows for each relationship column once, mapping FK -> display label.
+    async loadLookups() {
+      const all = {};
+      for (const col of (this.def.columns || [])) {
+        if (!col.lookup) continue;
+        try {
+          const rows = await App.services.api.get(col.lookup.url, { baseUrl: '' });
+          const m = {};
+          (rows || []).forEach(e => { m[e[col.lookup.key]] = e[col.lookup.text]; });
+          all[col.name] = m;
+        } catch (e) {
+          console.error('detailPanel: failed to load lookup for ' + col.name, e);
+        }
+      }
+      this.lookups = all;
+      this.refreshIcons();
+    },
+
+    // Resolve a cell: a relationship column shows its referenced label; a date column is formatted.
+    cellValue(col, row) {
+      const v = row[col.name];
+      if (col.lookup) {
+        const m = this.lookups[col.name];
+        const t = m ? m[v] : undefined;
+        if (t !== undefined && t !== null && t !== '') return t;
+      }
+      return this.displayValue(v, col.date);
+    },
+
+    // Render a cell value. Jackson serializes java.time as arrays (LocalDate [y,m,d],
+    // LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
+    displayValue(v, isDate) {
+      if (v === null || v === undefined || v === '') return '—';
+      const p = (n) => String(n).padStart(2, '0');
+      if (Array.isArray(v)) {
+        if (v.length === 3) return v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        if (v.length >= 5) return v[0] + '-' + p(v[1]) + '-' + p(v[2]) + ' ' + p(v[3]) + ':' + p(v[4]);
+        return v.join(', ');
+      }
+      // A date/time-typed numeric is an epoch Instant/Timestamp (seconds or millis).
+      if (isDate && typeof v === 'number') {
+        const d = new Date(v < 1e11 ? v * 1000 : v);
+        if (!isNaN(d.getTime())) {
+          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
+        }
+      }
+      return v;
     },
 
     async load() {

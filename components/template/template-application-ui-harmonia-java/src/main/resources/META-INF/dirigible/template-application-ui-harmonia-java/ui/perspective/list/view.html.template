@@ -45,65 +45,108 @@
     </div>
   </div>
 
-  <!-- Data -->
-  <div x-show="displayState === 'default' || displayState === 'no-results'" class="p-4 vbox gap-3">
-    <div x-h-table-container.scroll data-border="true" style="max-height: 70vh">
-      <table x-h-table data-borders="rows">
-        <thead x-h-table-header>
-          <tr x-h-table-row>
+  <!-- Data: master-detail — the table shows only the major columns; selecting a row reveals the
+       record's full property list (and its actionable process tasks) in the right-hand pane. -->
+  <div x-show="displayState === 'default' || displayState === 'no-results'"
+       x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+
+    <!-- Master: the records table -->
+    <div x-h-split-panel data-size="60%" data-min="320">
+      <div class="vbox size-full">
+        <div x-h-table-container.scroll class="flex-1" data-border="true">
+          <table x-h-table data-borders="rows">
+            <thead x-h-table-header>
+              <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-            <th x-h-table-head scope="col" data-hoverable="true" data-activable="true" @click="cycleSort('${property.name}')">
-              <div class="hbox items-center justify-between">
-                ${property.name}
-                <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
-                <i role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></i>
-                <i role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></i>
-              </div>
-            </th>
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true" @click="cycleSort('${property.name}')">
+                  <div class="hbox items-center justify-between">
+                    ${property.name}
+                    <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
+                    <i role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></i>
+                    <i role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></i>
+                  </div>
+                </th>
 #end
 #end
-#if($hasProcess)
-            <th x-h-table-head scope="col"></th>
-#end
-          </tr>
-        </thead>
-        <tbody x-h-table-body>
-          <tr x-show="displayState === 'no-results'" x-h-table-row>
-            <td x-h-table-cell>No matching ${name}.</td>
-          </tr>
-          <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
-            <tr x-h-table-row data-hoverable="true">
+              </tr>
+            </thead>
+            <tbody x-h-table-body>
+              <tr x-show="displayState === 'no-results'" x-h-table-row>
+                <td x-h-table-cell>No matching ${name}.</td>
+              </tr>
+              <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
+                <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-              <td x-h-table-cell x-text="row.${property.name}"></td>
+#if($property.widgetType == "DROPDOWN")
+                  <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
+#elseif($property.isDateType)
+                  <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+#else
+                  <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
 #end
 #end
-#if($hasProcess)
-              <td x-h-table-cell data-row-actions>
-                <button x-show="$store.processTasks.getTasks(row).length" x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Pending tasks">
-                  <i role="img" data-lucide="inbox"></i><span x-text="$store.processTasks.getTasks(row).length"></span>
-                </button>
-                <div x-show="$store.processTasks.getTasks(row).length" x-h-popover data-innerclicks="true">
-                  <ul x-h-menu>
-                    <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
-                      <li x-h-menu-item @click="$store.processTasks.openTask(task)" x-text="task.name"></li>
-                    </template>
-                  </ul>
-                </div>
-              </td>
 #end
-            </tr>
-          </template>
-        </tbody>
-      </table>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <nav x-h-pagination class="p-2" x-show="totalPages > 1">
+          <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1">Previous</button>
+          <span x-h-pagination-item x-text="currentPage + ' / ' + totalPages"></span>
+          <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages">Next</button>
+        </nav>
+      </div>
     </div>
 
-    <nav x-h-pagination x-show="totalPages > 1">
-      <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1">Previous</button>
-      <span x-h-pagination-item x-text="currentPage + ' / ' + totalPages"></span>
-      <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages">Next</button>
-    </nav>
+    <!-- Detail: the selected record's full property list + its actionable process tasks -->
+    <div x-h-split-panel data-size="40%">
+      <div x-show="!selected" x-h-info-page class="p-4">
+        <div x-h-info-page-header>
+          <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+          <div x-h-info-page-title>Select a ${name}</div>
+          <div x-h-info-page-description>Choose a row to see all its details#if($hasProcess) and pending tasks#end.</div>
+        </div>
+      </div>
+
+      <div x-show="selected" class="vbox size-full overflow-auto">
+        <div x-h-toolbar data-variant="transparent" data-size="sm">
+          <span x-h-toolbar-title class="shrink-0" x-text="'${name} #' + selectedId"></span>
+        </div>
+
+#if($hasProcess)
+        <!-- Actionable user tasks for this record, one button each (claimed on open). -->
+        <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pb-2">
+          <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
+            <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+              <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+            </button>
+          </template>
+        </div>
+#end
+
+        <!-- Every property of the selected record (the table above shows only the major ones). -->
+        <div class="vbox gap-3 p-4">
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement)
+#if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
+#if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
+          <div class="vbox gap-0">
+            <span x-h-text.muted class="text-xs">${plabel}</span>
+#if($property.widgetType == "DROPDOWN")
+            <span x-text="lookupText('${property.name}', selected.${property.name})"></span>
+#else
+            <span x-text="displayValue(selected.${property.name}, $isDate)"></span>
+#end
+          </div>
+#end
+#end
+        </div>
+      </div>
+    </div>
   </div>
 
 </div>
