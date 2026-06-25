@@ -144,9 +144,22 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
     const reload = () => $scope.$evalAsync($scope.refresh);
     const workspaceChangedListener = Workspace.onWorkspaceChanged(reload);
 
+    // Near-instant updates: the editor posts 'java.problems.changed' (debounced) whenever JDT.LS
+    // publishes diagnostics, so we refresh right away instead of waiting for the poll. Coalesce signals
+    // within a short window, and only refresh while the Java sub-tab is selected.
+    let changedTimer = null;
+    const changedListener = Layout.addMessageListener({
+        topic: 'java.problems.changed',
+        handler: () => {
+            if (!$scope.tabs || $scope.tabs.selected !== 'java') return;
+            if (changedTimer) return;
+            changedTimer = setTimeout(() => { changedTimer = null; $scope.$evalAsync($scope.refresh); }, 250);
+        },
+    });
+
     // Poll only while the Java sub-tab is selected (the endpoint is a cheap in-memory read, but a poll
-    // also starts JDT.LS — no need to do that while the user is on the Synchronization tab). The watch
-    // fires immediately with the initial selection.
+    // also starts JDT.LS — no need to do that while the user is on the Synchronization tab). With the
+    // push signal above this is just a fallback. The watch fires immediately with the initial selection.
     let poll = null;
     const startPolling = () => {
         if (poll) return;
@@ -162,7 +175,9 @@ problemsView.controller('JavaProblemsController', ($scope, $http, $interval, Wor
 
     $scope.$on('$destroy', () => {
         stopPolling();
+        if (changedTimer) clearTimeout(changedTimer);
         Layout.removeMessageListener(focusListener);
+        Layout.removeMessageListener(changedListener);
         Workspace.removeMessageListener(workspaceChangedListener);
     });
 });

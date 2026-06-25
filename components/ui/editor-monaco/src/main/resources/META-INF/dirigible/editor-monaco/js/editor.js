@@ -50,6 +50,15 @@ window.javaLspOpenFile = (path, line, column) => {
     }
 };
 
+// The Java LSP client calls this on every textDocument/publishDiagnostics so the Java Problems view can
+// refresh immediately instead of waiting for its poll. JDT.LS emits a burst (one notification per file)
+// per build, so debounce to collapse the burst into a single signal.
+let javaProblemsChangedTimer;
+window.javaLspDiagnosticsChanged = () => {
+    clearTimeout(javaProblemsChangedTimer);
+    javaProblemsChangedTimer = setTimeout(() => layoutHub.triggerEvent('java.problems.changed'), 300);
+};
+
 // Persists a Java cross-file rename computed by the LSP client: writes the edited files (CSRF-guarded),
 // performs any file rename the refactor implies (a public type renames its own .java file), switches the
 // current tab when the file being edited is the one renamed, and asks other open editors to reload.

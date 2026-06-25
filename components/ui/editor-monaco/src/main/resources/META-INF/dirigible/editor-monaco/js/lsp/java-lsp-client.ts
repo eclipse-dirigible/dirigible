@@ -114,6 +114,9 @@ export async function connect(resourcePath: string): Promise<void> {
     // Diagnostics notification → Monaco markers (applies to any workspace file)
     _conn.onNotification('textDocument/publishDiagnostics', (params: { uri: string; diagnostics: Diagnostic[] }) => {
         _diagnostics.set(params.uri, params.diagnostics ?? []);
+        // Nudge the Java Problems view to refresh now (covers files that aren't open in an editor too,
+        // hence before the open-model check below). Debounced on the editor side.
+        (window as any).javaLspDiagnosticsChanged?.();
         const model = monaco.editor.getModels().find(m => m.uri.toString() === params.uri);
         if (!model) return;
         monaco.editor.setModelMarkers(model, 'java-lsp', params.diagnostics.map(d => ({
