@@ -27,15 +27,13 @@
     <!-- PapaParse — CSV parsing for the Documents File Preview pane (served version-less by webjars). -->
     <script src="/webjars/papaparse/papaparse.min.js"></script>
 
-    <!-- Theme bootstrap — runs before first paint to avoid a flash. Harmonia is light by default
-         (its :root tokens) and dark when a `dark` class is on the root. The default is HARDCODED to
-         light for now; the Appearance switcher in the sidebar persists the user's choice to
-         localStorage, and this restores it on load. (TODO: make the default configurable.) -->
+    <!-- Default Harmonia's colour scheme to light on first run (its own default is "auto" = follow
+         the OS). Harmonia (loaded below) reads this key on every page and manages the `.dark` class
+         itself, so the shell and the standalone form/report iframes stay in sync. The toolbar switch
+         changes it via Harmonia.setColorScheme(). -->
     <script>
       (function () {
-        var theme = 'light'; // hardcoded default for now
-        try { theme = localStorage.getItem('dirigible.harmonia.theme') || theme; } catch (e) { /* no storage */ }
-        document.documentElement.classList.toggle('dark', theme === 'dark');
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
       })();
     </script>
   </head>
@@ -87,50 +85,34 @@
 #end
 #end
                 </ul>
-#set($hasSettings = false)
-#foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
-#set($hasReports = false)
-#foreach($entity in $models)#if($entity.type == "REPORT")#set($hasReports = true)#end#end
-#if($hasSettings || $hasReports)
-                <!-- Settings and Reports are SINGLE entries (not one item per setting/report) — each
-                     opens a landing page listing its items. There can be tens of them, so they must
-                     not flood the sidebar; only the most-used (primary) entities are listed above. -->
-                <ul x-h-sidebar-menu>
-#if($hasSettings)
-                  <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isActive('/settings')" @click="navigate('/settings')">
-                      <i role="img" data-lucide="settings"></i><span>Settings</span>
-                    </button>
-                  </li>
-#end
-#if($hasReports)
+                <!-- Reports — a single entry, shown when the project has reports. Reports are
+                     discovered at RUNTIME (the reports store walks the project's registry tree),
+                     because intent reports are standalone pages in a different gen folder than the
+                     shell and so are invisible at generation time. Opens a landing page listing them. -->
+                <ul x-h-sidebar-menu x-show="$store.reports.items.length > 0">
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/reports')" @click="navigate('/reports')">
                       <i role="img" data-lucide="bar-chart-3"></i><span>Reports</span>
-                    </button>
-                  </li>
-#end
-                </ul>
-#end
-              </div>
-            </div>
-            <!-- Appearance: light/dark theme switcher (Harmonia counterpart of the dashboard's
-                 BlimpKit theme menu). Persists to localStorage; default is light (see head bootstrap). -->
-            <div x-h-sidebar-group>
-              <div x-h-sidebar-group-label>Appearance</div>
-              <div x-h-sidebar-group-content>
-                <ul x-h-sidebar-menu>
-                  <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button @click="toggleTheme()"
-                            :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'">
-                      <i role="img" data-lucide="palette"></i>
-                      <span x-text="theme === 'dark' ? 'Light theme' : 'Dark theme'"></span>
                     </button>
                   </li>
                 </ul>
               </div>
             </div>
           </div>
+#set($hasSettings = false)
+#foreach($entity in $models)#if($entity.type == "SETTING")#set($hasSettings = true)#end#end
+#if($hasSettings)
+          <!-- Settings pinned to the sidebar footer (bottom-left), like codbex-athena-app. -->
+          <div x-h-sidebar-footer>
+            <ul x-h-sidebar-menu>
+              <li x-h-sidebar-menu-item>
+                <button x-h-sidebar-menu-button :data-active="isActive('/settings')" @click="navigate('/settings')">
+                  <i role="img" data-lucide="settings"></i><span>Settings</span>
+                </button>
+              </li>
+            </ul>
+          </div>
+#end
         </div>
       </div>
 
@@ -162,6 +144,14 @@
               </ol>
             </nav>
             <div x-h-toolbar-spacer></div>
+            <!-- Light/dark theme switch, top-right (VitePress-style). Backed by Harmonia's own
+                 colour-scheme API, so every page — including the standalone form/report iframes that
+                 load harmonia.min.js — honours the same choice. -->
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
+                    :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <svg x-show="theme !== 'dark'" x-h-icon.moon class="size-4" role="img" aria-label="Dark"></svg>
+              <svg x-show="theme === 'dark'" x-h-icon.sun class="size-4" role="img" aria-label="Light"></svg>
+            </button>
           </div>
 
           <div id="app" class="size-full overflow-auto flex-1">
@@ -195,10 +185,8 @@
     <!-- Settings landing: lists the setting entities (each still has its own CRUD route below). -->
     <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
 #end
-#if($hasReports)
-    <!-- Reports landing: lists the report entities (each still has its own report route below). -->
+    <!-- Reports landing: always routed; the page lists reports discovered at runtime (reports store). -->
     <template x-route="/reports" x-template.target.app="./views/_reports.html"></template>
-#end
     <!-- LIST entities: one read-only list route each. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
@@ -258,6 +246,7 @@
     <script src="./js/components/pages/baseFormPage.js" defer></script>
     <script src="./js/components/detailPanel.js" defer></script>
     <script src="./js/stores/processTasks.js" defer></script>
+    <script src="./js/stores/reports.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>
 #foreach($entity in $models)

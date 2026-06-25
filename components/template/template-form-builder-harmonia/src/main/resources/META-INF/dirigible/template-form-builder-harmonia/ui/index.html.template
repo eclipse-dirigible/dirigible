@@ -70,22 +70,14 @@
     <title>$!metadata.title</title>
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <style>
-      /* Harmonia styles `body` (not `html`) with the themed background; this form's body is only as
-         tall as its content, so without theming `html` too the page showed the browser default —
-         dark on a dark-mode OS — even on the light shell. */
+      /* Harmonia styles `body` (not `html`); this form's body is only as tall as its content, so
+         theme `html` too or the uncovered area shows the browser default. The theme itself is
+         applied by harmonia.min.js (below), which reads the shared `codbex.harmonia.colorMode` the
+         shell set — so this iframe'd form matches the shell (light/dark) automatically. */
       html { background-color: var(--background); color: var(--foreground); }
       body { min-height: 100vh; }
       [x-cloak] { display: none !important; }
     </style>
-    <!-- Follow the shell's theme (light by default; Harmonia is light at :root, dark via a `dark`
-         class). The form is opened standalone in an iframe, so it must apply the theme itself. -->
-    <script>
-      (function () {
-        var theme = 'light';
-        try { theme = localStorage.getItem('dirigible.harmonia.theme') || theme; } catch (e) { /* no storage */ }
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      })();
-    </script>
   </head>
   <body class="p-4" x-data="harmoniaForm" x-cloak>
     <form class="vbox gap-4" style="max-width: 720px;" @submit.prevent="submit()">

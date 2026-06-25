@@ -13,17 +13,12 @@
     <title>${name}</title>
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <style>
-      /* Theme `html` too (Harmonia only styles `body`) so the full page surface follows the theme. */
+      /* Theme `html` too (Harmonia only styles `body`) so the full page surface follows the theme.
+         harmonia.min.js (below) applies the shared `codbex.harmonia.colorMode` the shell set, so this
+         standalone report matches the shell's light/dark choice. */
       html, body { height: 100%; background-color: var(--background); color: var(--foreground); }
       [x-cloak] { display: none !important; }
     </style>
-    <script>
-      (function () {
-        var theme = 'light';
-        try { theme = localStorage.getItem('dirigible.harmonia.theme') || theme; } catch (e) { /* no storage */ }
-        document.documentElement.classList.toggle('dark', theme === 'dark');
-      })();
-    </script>
   </head>
   <body class="vbox size-full" x-data="reportPage" x-cloak>
     <div class="vbox size-full">

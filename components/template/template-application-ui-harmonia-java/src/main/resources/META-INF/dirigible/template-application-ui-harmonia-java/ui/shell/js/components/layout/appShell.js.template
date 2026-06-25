@@ -15,13 +15,11 @@ document.addEventListener('alpine:init', () => {
     hash: true
   });
 
-  const THEME_KEY = 'dirigible.harmonia.theme';
-
   Alpine.data('app', () => ({
     hiddenPanels: { left: true },
     isOpen: false,
     currentPath: '',
-    theme: 'light',   // hardcoded default for now (see the head bootstrap in index.html)
+    theme: 'light',   // 'light' | 'dark'; backed by Harmonia's own colour-scheme (see toggleTheme)
 
     // TODO (Phase 2): generate from the model.
     nav: [],
@@ -29,8 +27,7 @@ document.addEventListener('alpine:init', () => {
     sections: {},
 
     init() {
-      this.theme = this._readTheme();
-      this.applyTheme();
+      this.theme = this._currentScheme();
       const getPath = () => {
         const p = window.PineconeRouter.context?.path || '/';
         return p === '/' ? '/dashboard' : p;
@@ -86,20 +83,17 @@ document.addEventListener('alpine:init', () => {
       return crumbs;
     },
 
-    // --- Theme (light default; dark = a `dark` class on the document root, Harmonia's convention) ---
-    _readTheme() {
-      try { return localStorage.getItem(THEME_KEY) || 'light'; } catch (e) { return 'light'; }
+    // --- Theme — delegated to Harmonia's colour-scheme API so EVERY page (shell + the standalone
+    // form/report iframes that each load harmonia.min.js) honours the same choice. Harmonia persists
+    // it to localStorage (`codbex.harmonia.colorMode`) and manages the `.dark` class itself. ---
+    _currentScheme() {
+      try { return (window.Harmonia && Harmonia.getColorScheme() === 'dark') ? 'dark' : 'light'; }
+      catch (e) { return 'light'; }
     },
-    applyTheme() {
-      document.documentElement.classList.toggle('dark', this.theme === 'dark');
-      this.refreshIcons();
+    toggleTheme() {
+      this.theme = this.theme === 'dark' ? 'light' : 'dark';
+      if (window.Harmonia) Harmonia.setColorScheme(this.theme);
     },
-    setTheme(theme) {
-      this.theme = theme;
-      try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* no storage */ }
-      this.applyTheme();
-    },
-    toggleTheme() { this.setTheme(this.theme === 'dark' ? 'light' : 'dark'); },
 
     isActive(route) { return this.currentPath === route; },
 
