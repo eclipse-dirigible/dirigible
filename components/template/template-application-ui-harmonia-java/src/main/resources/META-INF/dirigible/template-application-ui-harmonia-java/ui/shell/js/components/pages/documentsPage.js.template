@@ -63,10 +63,17 @@ document.addEventListener('alpine:init', () => {
     // ----- data access -----
     async getFolder(path) {
       // Treat '' and '/' as the root, which MUST be listed with no path param.
+      // Pass the path RAW (no encodeURIComponent): the CMS query layer does not decode an encoded
+      // slash (%2F), so an encoded path 400s ("null has no such function getName") — the dashboard
+      // sends raw paths too. See pathParam().
       const isRoot = !path || path === '/';
-      const url = isRoot ? this.base : this.base + '?path=' + encodeURIComponent(path);
+      const url = isRoot ? this.base : this.base + '?path=' + this.pathParam(path);
       return App.services.api.get(url, { baseUrl: '' });
     },
+
+    // Build a ?path= value. Slashes must stay literal (the backend rejects %2F); other characters in
+    // each segment are percent-encoded so names with spaces/specials still resolve.
+    pathParam(p) { return String(p).split('/').map(encodeURIComponent).join('/'); },
 
     async loadFolder(path) {
       this.state = 'loading';
@@ -141,8 +148,8 @@ document.addEventListener('alpine:init', () => {
       const hit = Object.entries(FILE_ICONS).find(([, exts]) => exts.indexOf(e) >= 0);
       return hit ? hit[0] : UNKNOWN_ICON;
     },
-    downloadUrl(item) { return this.base + '/download?path=' + encodeURIComponent(this.fullPath(item.name)); },
-    zipUrl() { return this.base + '/zip?path=' + encodeURIComponent(this.folder.path); },
+    downloadUrl(item) { return this.base + '/download?path=' + this.pathParam(this.fullPath(item.name)); },
+    zipUrl() { return this.base + '/zip?path=' + this.pathParam(this.folder.path); },
 
     // ----- list / selection -----
     get filteredChildren() {
@@ -195,14 +202,14 @@ document.addEventListener('alpine:init', () => {
         });
       } else {
         this.previewType = 'web';
-        this.previewUrl = this.base + '/preview?path=' + encodeURIComponent(this.fullPath(this.selectedFile.name));
+        this.previewUrl = this.base + '/preview?path=' + this.pathParam(this.fullPath(this.selectedFile.name));
         // previewLoading is cleared by the iframe's @load.
       }
     },
     onPreviewLoaded() { this.previewLoading = false; },
 
     async copyLink(item) {
-      const url = window.location.origin + this.base + '/preview?path=' + encodeURIComponent(this.fullPath(item.name));
+      const url = window.location.origin + this.base + '/preview?path=' + this.pathParam(this.fullPath(item.name));
       try { await navigator.clipboard.writeText(url); } catch (e) { console.error('documents: copy link failed', e); }
     },
 
@@ -258,8 +265,8 @@ document.addEventListener('alpine:init', () => {
           const fd = new FormData();
           fd.append('file', f, f.name);
           const url = (this.unpackZips && f.name.toLowerCase().endsWith('.zip'))
-            ? this.base + '/zip?path=' + encodeURIComponent(this.folder.path)
-            : this.base + '?path=' + encodeURIComponent(this.folder.path);
+            ? this.base + '/zip?path=' + this.pathParam(this.folder.path)
+            : this.base + '?path=' + this.pathParam(this.folder.path);
           const r = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'Fetch' } });
           if (!r.ok) throw new Error('upload failed: ' + r.status);
         }
