@@ -1,5 +1,0 @@
-{
-    "module": "view-java-hierarchy/configs/java-hierarchy-view.js",
-    "extensionPoint": "platform-views",
-    "description": "Java Hierarchy View"
-}

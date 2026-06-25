@@ -50,6 +50,15 @@ window.javaLspOpenFile = (path, line, column) => {
     }
 };
 
+// The Java LSP client calls this on every textDocument/publishDiagnostics so the Java Problems view can
+// refresh immediately instead of waiting for its poll. JDT.LS emits a burst (one notification per file)
+// per build, so debounce to collapse the burst into a single signal.
+let javaProblemsChangedTimer;
+window.javaLspDiagnosticsChanged = () => {
+    clearTimeout(javaProblemsChangedTimer);
+    javaProblemsChangedTimer = setTimeout(() => layoutHub.triggerEvent('java.problems.changed'), 300);
+};
+
 // Persists a Java cross-file rename computed by the LSP client: writes the edited files (CSRF-guarded),
 // performs any file rename the refactor implies (a public type renames its own .java file), switches the
 // current tab when the file being edited is the one renamed, and asks other open editors to reload.
@@ -534,16 +543,24 @@ class EditorActionsProvider {
                     DirigibleEditor.loadingOverview.classList.remove("bk-hidden");
                 }
                 if (formatEnabled && EditorActionsProvider.isAutoFormattingEnabled() && EditorActionsProvider.#isAutoFormattingEnabledForCurrentFile()) {
-                    const save = () => DirigibleEditor.saveFileContent(editor);
-                    const format = () => editor.getAction('editor.action.formatDocument').run().then(save, save);
-                    // For Java, organize imports first (then format, then save). organize/format failures
-                    // still fall through to save so a problem never blocks saving.
-                    const isJava = editor.getModel() && editor.getModel().getLanguageId() === 'java';
-                    const organize = isJava ? editor.getAction('editor.action.organizeImports') : null;
-                    if (organize) {
-                        organize.run().then(format, format);
+                    // Format on save, then save. The save must never be blocked by the formatter: a
+                    // language formatter backed by an LSP (e.g. the Java LSP still importing a brand-new
+                    // project) can hang, so guard with a one-shot flag and a timeout fallback so the file
+                    // always gets saved. (Organize-imports is intentionally NOT run here — it pops a
+                    // "No organize imports action available" toast when there is nothing to organize;
+                    // use the explicit Java: Organize Imports action / Shift+Alt+O on demand.)
+                    let saved = false;
+                    const save = () => {
+                        if (saved) return;
+                        saved = true;
+                        DirigibleEditor.saveFileContent(editor);
+                    };
+                    const formatAction = editor.getAction('editor.action.formatDocument');
+                    if (formatAction) {
+                        formatAction.run().then(save, save);
+                        setTimeout(save, 2000);
                     } else {
-                        format();
+                        save();
                     }
                 } else {
                     DirigibleEditor.saveFileContent(editor);
@@ -975,7 +992,7 @@ class DirigibleEditor {
                     line: pos.lineNumber - 1,
                     character: pos.column - 1,
                 };
-                layoutHub.openView({ id: 'java-hierarchy' });
+                layoutHub.openView({ id: 'java' });
                 const post = () => layoutHub.postMessage({ topic: 'java.hierarchy.show', data });
                 post();
                 setTimeout(post, 400);

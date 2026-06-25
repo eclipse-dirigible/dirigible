@@ -9,8 +9,16 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const app = angular.module('javaHierarchy', ['blimpKit', 'platformView']);
+const app = angular.module('java', ['blimpKit', 'platformView']);
 app.constant('Layout', new LayoutHub());
+
+// Hosts the sub-tabs of the "Java" window. Currently just "Hierarchy"; tab state is an object so child
+// panes read it through prototypal inheritance without the primitive-shadowing pitfall.
+app.controller('JavaViewController', ($scope) => {
+    $scope.tabs = { selected: 'hierarchy' };
+    $scope.switchTab = (id) => $scope.tabs.selected = id;
+});
+
 app.controller('JavaHierarchyController', ($scope, $http, Layout) => {
 
     const BASE = '/services/ide/java-lsp';

@@ -107,6 +107,36 @@ public class JavaLspQueryEndpoint {
         return json(request(principal, workspaceOf(b), "typeHierarchy/subtypes", itemParams(b)));
     }
 
+    /**
+     * Workspace-wide Java diagnostics snapshot for the live Java Problems view. Returns the latest
+     * {@code textDocument/publishDiagnostics} JDT.LS has emitted (it builds the whole workspace), as a
+     * JSON array of {@code { uri, diagnostics[] }}. Starting/initializing the instance triggers the
+     * build that fills the snapshot — the first call may be partial until that build completes.
+     */
+    @PostMapping("/diagnostics")
+    public ResponseEntity<String> diagnostics(@RequestBody String body, Principal principal) {
+        String workspace = workspaceOf(parse(body));
+        if (workspace == null || workspace.isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Missing 'workspace'");
+        }
+        String username = principal != null ? principal.getName() : "anonymous";
+        try {
+            JdtLsInstance instance = manager.getOrStart(username, workspace);
+            instance.ensureInitialized()
+                    .get(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+            return json(instance.diagnosticsSnapshot());
+        } catch (IllegalStateException notReady) {
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, notReady.getMessage(), notReady);
+        } catch (InterruptedException ie) {
+            Thread.currentThread()
+                  .interrupt();
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "Interrupted", ie);
+        } catch (Exception e) {
+            logger.warn("[java-lsp] diagnostics snapshot failed for workspace {}", workspace, e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY, "JDT.LS request failed", e);
+        }
+    }
+
     // -------------------------------------------------------------------------
 
     private JsonNode parse(String body) {

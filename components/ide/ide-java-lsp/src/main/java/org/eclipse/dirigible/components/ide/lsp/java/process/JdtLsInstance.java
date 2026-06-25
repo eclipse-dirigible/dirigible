@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.ide.lsp.java.process;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.web.socket.TextMessage;
@@ -53,6 +55,14 @@ public class JdtLsInstance {
     private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
     private final AtomicInteger serverRequestCounter = new AtomicInteger(-1);
     private final ObjectMapper jsonMapper = new ObjectMapper();
+
+    /**
+     * Latest diagnostics per (virtual) file URI, accumulated from
+     * {@code textDocument/publishDiagnostics} notifications as they pass through to the browser. Feeds
+     * the workspace-wide Java Problems view via {@link #diagnosticsSnapshot()} without any extra
+     * compilation — JDT.LS already publishes these.
+     */
+    private final Map<String, JsonNode> diagnosticsByUri = new ConcurrentHashMap<>();
 
     /**
      * Set to {@code true} once JDT.LS has completed the LSP initialize handshake (either via a browser
@@ -262,6 +272,51 @@ public class JdtLsInstance {
         }
     }
 
+    /**
+     * Accumulates {@code textDocument/publishDiagnostics} notifications into {@link #diagnosticsByUri}.
+     * An empty diagnostics array means the file became clean, so the entry is dropped. URIs are already
+     * in virtual form here (the stdout reader translated real→virtual before this call).
+     */
+    private void captureDiagnostics(String json) {
+        try {
+            JsonNode node = jsonMapper.readTree(json);
+            if (!"textDocument/publishDiagnostics".equals(node.path("method")
+                                                              .asText())) {
+                return;
+            }
+            JsonNode params = node.path("params");
+            String uri = params.path("uri")
+                               .asText(null);
+            if (uri == null) {
+                return;
+            }
+            JsonNode diagnostics = params.path("diagnostics");
+            if (diagnostics == null || !diagnostics.isArray() || diagnostics.isEmpty()) {
+                diagnosticsByUri.remove(uri);
+            } else {
+                diagnosticsByUri.put(uri, diagnostics);
+            }
+        } catch (Exception e) {
+            logger.debug("[java-lsp] Could not capture diagnostics", e);
+        }
+    }
+
+    /**
+     * Returns the latest published diagnostics for the whole workspace as a JSON array of {@code {
+     * "uri": <virtual uri>, "diagnostics": [ … ] }} entries. Reflects whatever JDT.LS has published so
+     * far (it builds the whole workspace and publishes per file with markers).
+     */
+    public JsonNode diagnosticsSnapshot() {
+        ArrayNode files = jsonMapper.createArrayNode();
+        diagnosticsByUri.forEach((uri, diagnostics) -> {
+            ObjectNode entry = jsonMapper.createObjectNode();
+            entry.put("uri", uri);
+            entry.set("diagnostics", diagnostics);
+            files.add(entry);
+        });
+        return files;
+    }
+
     private void startStdoutReader() {
         Thread t = new Thread(() -> {
             try {
@@ -276,6 +331,7 @@ public class JdtLsInstance {
                     String json = new String(body, StandardCharsets.UTF_8);
                     String translated = json.replace(realRoot, virtualRoot);
                     if (!routeToServerRequest(translated)) {
+                        captureDiagnostics(translated);
                         broadcast(translated);
                     }
                 }
