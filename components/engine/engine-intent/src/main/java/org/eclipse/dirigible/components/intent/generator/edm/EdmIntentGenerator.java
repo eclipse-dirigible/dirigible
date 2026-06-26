@@ -309,7 +309,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Raw icon name for the Harmonia sidebar (Lucide). Defaults to "list" when unset.
         entity.put("iconName", iconName(icon));
         entity.put("menuKey", name.toLowerCase(Locale.ROOT));
-        entity.put("menuLabel", name);
+        // Navigation label: humanized + pluralized so the menu reads naturally
+        // (SalesInvoice -> "Sales Invoices", Book -> "Books").
+        entity.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(name)));
         entity.put("menuIndex", "100");
         entity.put("layoutType", dependent ? "MANAGE_DETAILS" : "MANAGE_MASTER");
         entity.put("perspectiveName", perspective);

@@ -52,13 +52,11 @@
         <div x-h-sidebar x-ref="sidebar">
           <div x-h-sidebar-header>
             <div class="vbox gap-0 p-1">
-              <span class="font-bold">${appTitle}</span>
-#if($appDescription && $appDescription != '')
-              <span x-h-text.muted class="text-xs">${appDescription}</span>
-#end
+              <span class="font-bold"#if($appDescription && $appDescription != '') title="${appDescription}"#end>${appTitle}</span>
             </div>
           </div>
           <div x-h-sidebar-content>
+            <!-- Application: the built-in shell sections. -->
             <div x-h-sidebar-group>
               <div x-h-sidebar-group-label>Application</div>
               <div x-h-sidebar-group-content>
@@ -74,30 +72,45 @@
                     </button>
                   </li>
                 </ul>
+              </div>
+            </div>
+#set($hasEntities = false)
+#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
+#if($hasEntities)
+            <!-- Entities: the top-level model entities (list / manage / master). -->
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label>Entities</div>
+              <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
-                  <!-- TODO (Phase 2): drive from a generated nav (see appShell `nav`). Skeleton
-                       enumerates top-level PRIMARY entities (list / manage / master) directly. -->
 #foreach($entity in $models)
 #if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <i role="img" data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></i>
-                      <span>${entity.name}</span>
+                      <span x-text="navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end')"></span>
                     </button>
                   </li>
 #end
 #end
                 </ul>
-                <!-- Reports — a single entry, shown when the project has reports. Reports are
-                     discovered at RUNTIME (the reports store walks the project's registry tree),
-                     because intent reports are standalone pages in a different gen folder than the
-                     shell and so are invisible at generation time. Opens a landing page listing them. -->
-                <ul x-h-sidebar-menu x-show="$store.reports.items.length > 0">
-                  <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isActive('/reports')" @click="navigate('/reports')">
-                      <i role="img" data-lucide="bar-chart-3"></i><span>Reports</span>
-                    </button>
-                  </li>
+              </div>
+            </div>
+#end
+            <!-- Reports: one entry per report, discovered at RUNTIME (the reports store walks the
+                 project's registry tree) because intent reports are standalone pages in a different
+                 gen folder than the shell, invisible at generation time. Selecting one shows it
+                 embedded on /reports. -->
+            <div x-h-sidebar-group x-show="$store.reports.items.length > 0" x-cloak>
+              <div x-h-sidebar-group-label>Reports</div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <template x-for="r in $store.reports.items" :key="r.url">
+                    <li x-h-sidebar-menu-item>
+                      <button x-h-sidebar-menu-button :data-active="isActive('/reports') && $store.reports.selected && $store.reports.selected.url === r.url" @click="$store.reports.selected = r; navigate('/reports')">
+                        <i role="img" data-lucide="bar-chart-3"></i><span x-text="r.label"></span>
+                      </button>
+                    </li>
+                  </template>
                 </ul>
               </div>
             </div>

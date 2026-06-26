@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import java.util.Locale;
+
 /**
  * Naming conventions shared by every intent generator. The physical table name in particular is
  * referenced from three artefacts (the {@code .edm} entity {@code dataName}, the {@code .report}
@@ -131,5 +133,36 @@ public final class IntentNaming {
             out.append(i == 0 ? Character.toUpperCase(c) : c);
         }
         return out.toString();
+    }
+
+    /**
+     * Pluralizes the last word of a (already humanized) label using simple English rules - used for
+     * navigation / menu labels so the sidebar reads naturally (e.g. {@code "Sales Invoice"} ->
+     * {@code "Sales Invoices"}, {@code "Category"} -> {@code "Categories"}, {@code "Book"} ->
+     * {@code "Books"}).
+     *
+     * @param label the label whose last word to pluralize (may be null)
+     * @return the label with its last word pluralized, empty for null/empty input
+     */
+    public static String pluralize(String label) {
+        if (label == null || label.isEmpty()) {
+            return "";
+        }
+        int sp = label.lastIndexOf(' ');
+        String head = sp >= 0 ? label.substring(0, sp + 1) : "";
+        String last = sp >= 0 ? label.substring(sp + 1) : label;
+        if (last.isEmpty()) {
+            return label;
+        }
+        String lower = last.toLowerCase(Locale.ROOT);
+        String plural;
+        if (lower.length() > 1 && lower.endsWith("y") && "aeiou".indexOf(lower.charAt(lower.length() - 2)) < 0) {
+            plural = last.substring(0, last.length() - 1) + "ies";
+        } else if (lower.endsWith("s") || lower.endsWith("x") || lower.endsWith("z") || lower.endsWith("ch") || lower.endsWith("sh")) {
+            plural = last + "es";
+        } else {
+            plural = last + "s";
+        }
+        return head + plural;
     }
 }

@@ -24,6 +24,7 @@ function humanizeReportName(s) {
 document.addEventListener('alpine:init', () => {
   Alpine.store('reports', {
     items: [],      // [{ name, label, url }]
+    selected: null, // the report shown embedded on the /reports page (chosen from the sidebar)
     loaded: false,
 
     init() { this.load(); },
