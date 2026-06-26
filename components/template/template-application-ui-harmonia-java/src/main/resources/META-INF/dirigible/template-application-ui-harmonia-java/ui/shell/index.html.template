@@ -173,14 +173,60 @@
               </ol>
             </nav>
             <div x-h-toolbar-spacer></div>
-            <!-- Light/dark theme switch, top-right (VitePress-style). Backed by Harmonia's own
+
+            <!-- Light/dark theme switch (a visible Lucide sun/moon). Backed by Harmonia's own
                  colour-scheme API, so every page — including the standalone form/report iframes that
                  load harmonia.min.js — honours the same choice. -->
             <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
                     :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <svg x-show="theme !== 'dark'" x-h-icon.moon class="size-4" role="img" aria-label="Dark"></svg>
-              <svg x-show="theme === 'dark'" x-h-icon.sun class="size-4" role="img" aria-label="Light"></svg>
+              <i x-show="theme !== 'dark'" role="img" data-lucide="moon"></i>
+              <i x-show="theme === 'dark'" role="img" data-lucide="sun"></i>
             </button>
+
+            <!-- Notifications: the bell shows the unread count; the popover lists them (from the
+                 notifications store; app code/glue pushes via Alpine.store('notifications').add(...)). -->
+            <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications">
+              <i role="img" data-lucide="bell"></i>
+              <span x-show="$store.notifications.unreadCount > 0" x-h-badge data-variant="negative" data-size="sm" x-text="$store.notifications.unreadCount"></span>
+            </button>
+            <div class="w-80" x-h-popover data-innerclicks="true">
+              <div x-h-toolbar data-size="sm">
+                <span x-h-toolbar-title class="shrink-0" x-text="'Notifications (' + $store.notifications.unreadCount + ')'"></span>
+                <div x-h-toolbar-spacer></div>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
+                        title="Mark all as read" aria-label="Mark all as read"><i role="img" data-lucide="check-check"></i></button>
+              </div>
+              <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm">You're all caught up.</div>
+              <ol x-show="$store.notifications.items.length" x-h-notification-list>
+                <template x-for="n in $store.notifications.items" :key="n.id">
+                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'">
+                    <div x-h-notification-media><svg x-h-icon.circle-info class="size-5" role="img" aria-label="info"></svg></div>
+                    <div class="vbox flex-1">
+                      <h1 x-h-notification-title x-text="n.title"></h1>
+                      <p x-h-notification-description x-text="n.description"></p>
+                    </div>
+                  </li>
+                </template>
+              </ol>
+            </div>
+
+            <!-- Logged-in user: a Lucide avatar; the dropdown shows the user name and Log out. -->
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="$store.currentUser.name || 'Account'">
+              <i role="img" data-lucide="circle-user"></i>
+            </button>
+            <ul x-h-menu aria-label="User menu" data-align="bottom-end">
+              <div x-h-tile class="mb-1">
+                <div x-h-tile-media><i role="img" data-lucide="circle-user" class="size-6"></i></div>
+                <div x-h-tile-content>
+                  <div x-h-tile-title x-text="$store.currentUser.name || 'User'"></div>
+                </div>
+              </div>
+              <div x-h-menu-separator></div>
+              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
+                <i role="img" data-lucide="log-out"></i> Log out
+              </li>
+            </ul>
           </div>
 
           <div id="app" class="size-full overflow-auto flex-1">
@@ -289,6 +335,8 @@
     <script src="./js/components/detailPanel.js" defer></script>
     <script src="./js/stores/processTasks.js" defer></script>
     <script src="./js/stores/reports.js" defer></script>
+    <script src="./js/stores/currentUser.js" defer></script>
+    <script src="./js/stores/notifications.js" defer></script>
     <script src="./js/components/pages/dashboardPage.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>
