@@ -62,6 +62,11 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isDashboard" @click="navigate('/dashboard')">
+                      <i role="img" data-lucide="layout-dashboard"></i><span>Dashboard</span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/inbox')" @click="navigate('/inbox')">
                       <i role="img" data-lucide="inbox"></i><span>Inbox</span>
                     </button>
