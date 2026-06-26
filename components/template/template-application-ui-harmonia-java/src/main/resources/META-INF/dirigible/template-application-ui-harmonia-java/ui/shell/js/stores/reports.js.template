@@ -1,0 +1,90 @@
+/**
+ * reports store — discovers the project's standalone reports at runtime.
+ *
+ * Intent-generated reports are standalone `.report` files rendered (by the Harmonia report-file
+ * template) as self-contained pages under gen/<reportGenFolder>/reports/<Name>/index.html — a
+ * DIFFERENT gen folder than the SPA shell (gen/<modelGenFolder>/), so the shell cannot enumerate
+ * them at generation time. Instead we walk the project's registry tree once and collect every
+ * `.../reports/<Name>/index.html` page, exposing them as { name, url } for the sidebar Reports
+ * entry (shown only when non-empty) and the Reports landing page.
+ *
+ * (Pragmatic discovery via the core repository API. A cleaner long-term option is for the intent to
+ * surface its reports in the model the shell is generated from.)
+ */
+// "MembersWithLoansDue" -> "Members With Loans Due" (PascalCase/camelCase -> spaced Title Case).
+function humanizeReportName(s) {
+  return String(s || '')
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^./, c => c.toUpperCase());
+}
+
+document.addEventListener('alpine:init', () => {
+  Alpine.store('reports', {
+    items: [],      // [{ name, label, url }]
+    selected: null, // the report shown embedded on the /reports page (chosen from the sidebar)
+    loaded: false,
+
+    init() { this.load(); },
+
+    async load() {
+      try {
+        const project = (App.config && App.config.projectName) || '';
+        if (!project) { this.loaded = true; return; }
+        const r = await fetch('/services/core/repository/registry/public/' + project + '/gen', {
+          headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+        });
+        if (!r.ok) { this.loaded = true; return; }
+        const tree = await r.json();
+        const found = [];
+        this._walk(tree, found);
+        const seen = new Set();
+        this.items = found
+          .filter(x => { if (seen.has(x.url)) return false; seen.add(x.url); return true; })
+          .sort((a, b) => a.name.localeCompare(b.name));
+        this.loaded = true;
+        this._enrich(project);
+      } catch (e) {
+        console.error('reports: discovery failed', e);
+        this.loaded = true;
+      }
+    },
+
+    // Enrich each discovered report from its .report model file (project root): the human label, the
+    // description (shown on the dashboard tile), and the dashboard exclude flag. Best-effort — a
+    // missing/unreadable .report just leaves the defaults (label = humanized name, shown on dashboard).
+    async _enrich(project) {
+      await Promise.all(this.items.map(async (it) => {
+        if (it.dashboard === undefined) it.dashboard = true;
+        try {
+          const r = await fetch('/services/core/repository/registry/public/' + project + '/' + it.name + '.report', {
+            headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+          });
+          if (!r.ok) return;
+          const def = await r.json();
+          if (!def) return;
+          if (def.label) it.label = def.label;
+          if (def.description) it.description = def.description;
+          if (def.dashboard === false) it.dashboard = false;
+        } catch (e) { /* keep defaults */ }
+      }));
+      // Reassign so Alpine re-renders the sidebar / dashboard with the enriched items.
+      this.items = [...this.items];
+    },
+
+    // Walk the registry tree (collections + resources); a report page is a `reports/<Name>/index.html`.
+    _walk(node, out) {
+      if (!node) return;
+      (node.resources || []).forEach(res => {
+        const path = res && res.path;
+        if (res && res.name === 'index.html' && path && path.indexOf('/reports/') >= 0) {
+          const m = path.match(/\/reports\/([^/]+)\/index\.html$/);
+          if (m) out.push({ name: m[1], label: humanizeReportName(m[1]), url: path.replace('/registry/public/', '/services/web/') });
+        }
+      });
+      (node.collections || []).forEach(c => this._walk(c, out));
+    },
+  });
+}, { once: true });

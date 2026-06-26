@@ -274,6 +274,7 @@
         <module>template/template-application-ui-angular</module>
         <module>template/template-application-ui-angular-java</module>
         <module>template/template-application-ui-angular-v2</module>
+        <module>template/template-application-ui-harmonia-java</module>
         <module>template/template-bpm</module>
         <module>template/template-camel</module>
         <module>template/template-camel-cron-route</module>
@@ -283,6 +284,7 @@
         <module>template/template-database-view</module>
         <module>template/template-form</module>
         <module>template/template-form-builder-angularjs</module>
+        <module>template/template-form-builder-harmonia</module>
         <module>template/template-hello-world</module>
         <module>template/template-react</module>
         <module>template/template-html</module>
@@ -1561,6 +1563,11 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-application-ui-harmonia-java</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-database-access</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1602,6 +1609,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-form-builder-angularjs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-form-builder-harmonia</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

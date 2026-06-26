@@ -327,12 +327,12 @@ class IntentEngineIT extends IntegrationTest {
                                                          hasItems("orders.model", "orders.glue", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.templateId",
-                                                         equalTo("template-application-angular-java/template/template.js"))
+                                                         equalTo("template-application-ui-harmonia-java/template/template.js"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.parameters.dataSource",
                                                          equalTo("DefaultDB"))
-                                                 // The report is generated server-side as Java (DAO + REST controller).
-                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId",
-                                                         equalTo("template-application-ui-angular-java/template/template-report-file.js")));
+                                                 // The report is generated server-side as Java (DAO + REST controller) with a Harmonia UI.
+                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId", equalTo(
+                                                         "template-application-ui-harmonia-java/template/template-report-file.js")));
 
         assertEdmAndModel();
         assertBpmn();
@@ -382,13 +382,14 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
 
-        // The notification (onUpdate: Order) is an @Listener that sends mail when an Order is updated -
+        // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
+        // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
         String notification = contentOf("gen/events/OrderUpdatedNotification.java");
         assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
                 "the notification should be a message-handling listener (PascalCased class name)");
-        assertTrue(notification.contains("@Listener(name = \"intent-test-Order-Order-updated\""),
-                "an onUpdate notification should bind to the entity's -updated topic");
+        assertTrue(notification.contains("@Component") && notification.contains("return \"intent-test-Order-Order-updated\""),
+                "an onUpdate notification (self-describing @Component MessageHandler) should bind the entity's -updated topic via destination()");
         assertTrue(notification.contains("Mail.send("), "the notification should send via the SDK Mail API");
         assertTrue(notification.contains("String to = \"ops@example.com\""), "a literal recipient should be emitted as a literal");
         assertTrue(notification.contains("import gen.orders.data.order.OrderEntity"),
@@ -407,10 +408,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
                 "the subject should interpolate the relation.field against the loaded related entity");
 
-        // The schedule is a @Scheduled JobHandler that queries via a typed Criteria and notifies per row.
+        // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
+        // Criteria and notifies per row.
         String job = contentOf("gen/events/StaleOrdersJob.java");
-        assertTrue(job.contains("@Scheduled(expression = \"0 0 9 * * ?\")") && job.contains("class StaleOrdersJob implements JobHandler"),
-                "the schedule should generate a @Scheduled JobHandler");
+        assertTrue(
+                job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
+                        && job.contains("return \"0 0 9 * * ?\""),
+                "the schedule should generate a self-describing @Component JobHandler whose cron() returns the expression");
         assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
                 "the job should query the entity with a typed Criteria built from the where clause");
         assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
@@ -420,12 +424,13 @@ class IntentEngineIT extends IntegrationTest {
                 "the per-row notify should load the one-hop related entity");
         assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
 
-        // The integration is an @Listener that forwards the entity JSON to an external endpoint.
+        // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
+        // an external endpoint.
         String integration = contentOf("gen/events/PushOrderToWarehouseIntegration.java");
         assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
                 "the integration should be a message-handling listener");
-        assertTrue(integration.contains("@Listener(name = \"intent-test-Order-Order\""),
-                "an onCreate integration should bind to the entity's base (create) topic");
+        assertTrue(integration.contains("@Component") && integration.contains("return \"intent-test-Order-Order\""),
+                "an onCreate integration (self-describing @Component MessageHandler) should bind the entity's base topic via destination()");
         assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
                 "an @config: URL should resolve through the configuration at run time");
         assertTrue(
@@ -443,13 +448,14 @@ class IntentEngineIT extends IntegrationTest {
                         && webhook.contains("new OrderRepository().save(entity)"),
                 "the webhook should deserialize the payload and save it through the repository");
 
-        // Rollups: two @Listeners (child create/delete) that recompute the parent counter via Criteria.
+        // Rollups: two self-describing @Component MessageHandlers (child create/delete) that recompute the
+        // parent counter via Criteria.
         // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
         // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
         // from a single app.intent.
         String rollupCreate = contentOf("gen/events/CustomerOrderCountRollupOnCreate.java");
         assertTrue(
-                rollupCreate.contains("@Listener(name = \"intent-test-Order-Order\"")
+                rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
                         && rollupCreate.contains(
                                 "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
                         && rollupCreate.contains("parent.OrderCount = count"),
@@ -519,7 +525,8 @@ class IntentEngineIT extends IntegrationTest {
         String onCreate = contentOf("gen/events/MemberLoanCountRollupOnCreate.java");
         assertTrue(onCreate.contains("class MemberLoanCountRollupOnCreate implements MessageHandler"),
                 "the create-side rollup listener should be generated");
-        assertTrue(onCreate.contains("@Listener(name = \"intent-test-Loan-Loan\""), "the create listener binds the child's base topic");
+        assertTrue(onCreate.contains("@Component") && onCreate.contains("return \"intent-test-Loan-Loan\""),
+                "the create listener (self-describing @Component) binds the child's base topic via destination()");
         assertTrue(onCreate.contains("MemberEntity parent = parents.findById(entity.Member)"),
                 "it should load the parent via the child's FK");
         assertTrue(
@@ -528,8 +535,8 @@ class IntentEngineIT extends IntegrationTest {
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
         String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
-        assertTrue(onDelete.contains("@Listener(name = \"intent-test-Loan-Loan-deleted\""),
-                "the delete listener binds the child's -deleted topic");
+        assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
+                "the delete listener binds the child's -deleted topic via destination()");
     }
 
     @Test
@@ -599,7 +606,8 @@ class IntentEngineIT extends IntegrationTest {
                 "a timestamp strategy should mint a yyyyMMddHHmmss value into the flagged field when blank");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.Number);"),
                 "the business key must be the minted number field");
-        assertTrue(trigger.contains("repository.update(entity)"), "the minted number must be persisted via the existing update");
+        assertTrue(trigger.contains("repository.updateWithoutEvent(entity)"),
+                "the minted number and ProcessId must be persisted via the silent update (no spurious -updated event)");
     }
 
     @Test
@@ -825,7 +833,7 @@ class IntentEngineIT extends IntegrationTest {
     private void assertSettings() {
         assertTrue(resource("orders.settings").exists(), "the .settings file should be scaffolded");
         String settings = contentOf("orders.settings");
-        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-angular-java"),
+        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-ui-harmonia-java"),
                 "settings should carry the model generation recipe");
         assertTrue(settings.contains("\"glue\"") && settings.contains("template-application-events-java"),
                 "settings should carry the glue generation recipe");

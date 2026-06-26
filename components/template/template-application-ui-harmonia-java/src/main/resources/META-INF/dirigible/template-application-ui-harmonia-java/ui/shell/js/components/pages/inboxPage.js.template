@@ -1,0 +1,98 @@
+/**
+ * inboxPage — the built-in Process Inbox, an Outlook-style master-detail (the Harmonia counterpart
+ * of the dashboard Process Inbox, #6064/#6068). The current user's BPM tasks (assignee + candidate
+ * groups) come from the shared processTasks store; selecting a task shows it on the right, where a
+ * candidate task is claimed first and a claimed task's form is rendered inline in an <iframe>. When
+ * the form completes it posts `harmonia.form.close`; we drop the selection and re-fetch.
+ */
+document.addEventListener('alpine:init', () => {
+  Alpine.data('inboxPage', () => ({
+    ...basePage(),
+    searchTerm: '',
+    selectedId: null,
+    autoRefresh: false,
+    lastUpdated: null,
+    busy: false,
+    _timer: null,
+    _onMessage: null,
+
+    init() {
+      // The store self-loads at startup; refresh on entry so the list is current.
+      this.refresh();
+      this._onMessage = (e) => {
+        if (e && e.data && e.data.type === 'harmonia.form.close') {
+          this.selectedId = null;
+          this.refresh();
+        }
+      };
+      window.addEventListener('message', this._onMessage);
+    },
+
+    destroy() {
+      if (this._onMessage) window.removeEventListener('message', this._onMessage);
+      this.stopAuto();
+    },
+
+    get tasks() { return Alpine.store('processTasks').tasks; },
+
+    get filtered() {
+      const q = this.searchTerm.trim().toLowerCase();
+      if (!q) return this.tasks;
+      return this.tasks.filter(t => [t.name, t.processDefinitionName, t.processInstanceBusinessKey, t.assignee]
+        .some(v => v && String(v).toLowerCase().includes(q)));
+    },
+
+    get selected() { return this.tasks.find(t => t.id === this.selectedId) || null; },
+    isSelected(task) { return task.id === this.selectedId; },
+    select(task) { this.selectedId = task.id; this.refreshIcons(); },
+
+    // The standalone form URL (task.formKey) + the task context it needs to complete itself.
+    formSrc(task) {
+      if (!task || !task.formKey) return '';
+      const sep = task.formKey.indexOf('?') >= 0 ? '&' : '?';
+      return task.formKey + sep + 'taskId=' + encodeURIComponent(task.id)
+           + '&processInstanceId=' + encodeURIComponent(task.processInstanceId || '');
+    },
+
+    async claim(task) {
+      this.busy = true;
+      try {
+        await App.services.api.post('/services/inbox/tasks/' + task.id, { action: 'CLAIM' }, { baseUrl: '' });
+        await this.refresh();
+        this.selectedId = task.id; // keep the selection after the list re-fetches
+      } catch (e) {
+        console.error('inbox: unable to claim task', e);
+      } finally {
+        this.busy = false;
+      }
+    },
+
+    async refresh() {
+      await Alpine.store('processTasks').refresh();
+      this.lastUpdated = new Date();
+      // A completed task drops out of the list — clear a stale selection.
+      if (this.selectedId && !this.tasks.some(t => t.id === this.selectedId)) this.selectedId = null;
+      this.refreshIcons();
+    },
+
+    toggleAuto() {
+      this.autoRefresh = !this.autoRefresh;
+      if (this.autoRefresh) {
+        this._timer = setInterval(() => {
+          // Self-clean if the view was swapped out (no Alpine destroy hook for intervals).
+          if (!this.$root || !this.$root.isConnected) return this.stopAuto();
+          this.refresh();
+        }, 15000);
+      } else {
+        this.stopAuto();
+      }
+    },
+
+    stopAuto() { if (this._timer) { clearInterval(this._timer); this._timer = null; } },
+
+    fmtTime(t) {
+      if (!t) return '';
+      try { return new Date(t).toLocaleString(); } catch (_) { return String(t); }
+    },
+  }));
+}, { once: true });

@@ -85,9 +85,35 @@ public final class IntentSettings {
         private List<String> candidateGroupsExtra = new ArrayList<>();
     }
 
+    /**
+     * Per-deployment branding for the generated app's shell header (title, description tooltip, and a
+     * brand icon). Lives in {@code .settings} - which is developer-owned and preserved across
+     * regenerations - so one model (e.g. "Library") can be regenerated with different branding per
+     * deployment (e.g. each library) without editing the intent itself. The icon is a Lucide icon name
+     * (e.g. {@code book}) or an image URL (custom SVG/PNG).
+     */
+    public static final class Branding {
+        private String title;
+        private String description;
+        private String icon;
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getIcon() {
+            return icon;
+        }
+    }
+
     private Map<String, Recipe> generation = new LinkedHashMap<>();
     private Map<String, Map<String, ArtefactOverride>> overrides = new LinkedHashMap<>();
     private UserTasks userTasks = new UserTasks();
+    private Branding branding = new Branding();
 
     /** Parse a settings document; tolerant of missing sections. */
     public static IntentSettings parse(String json) {
@@ -105,12 +131,20 @@ public final class IntentSettings {
      */
     public static IntentSettings scaffold(IntentModel model) {
         IntentSettings settings = new IntentSettings();
-        settings.generation.put("model", new Recipe("template-application-angular-java/template/template.js",
+        // The full-stack UI template is named explicitly here (DAO + REST + UI). Default is now the
+        // Alpine.js + Harmonia SPA stack (a self-describing client-Java backend whose @Entity classes
+        // create the tables, plus the Harmonia SPA UI); to generate the AngularJS + BlimpKit stack
+        // instead, set this to "template-application-angular-java/template/template.js". The glue
+        // template is framework-neutral (annotated client-Java), shared by both stacks.
+        settings.generation.put("model", new Recipe("template-application-ui-harmonia-java/template/template.js",
                 orderedMap("tablePrefix", "", "dataSource", "DefaultDB")));
         settings.generation.put("glue", new Recipe("template-application-events-java/template/template.js", new LinkedHashMap<>()));
-        settings.generation.put("form", new Recipe("template-form-builder-angularjs/template/template.js", new LinkedHashMap<>()));
+        settings.generation.put("form", new Recipe("template-form-builder-harmonia/template/template.js", new LinkedHashMap<>()));
+        // Standalone report-file UI: the Harmonia page (self-contained Alpine page over the same
+        // framework-neutral Java report backend). The AngularJS equivalent is
+        // "template-application-ui-angular-java/template/template-report-file.js".
         settings.generation.put("report",
-                new Recipe("template-application-ui-angular-java/template/template-report-file.js", new LinkedHashMap<>()));
+                new Recipe("template-application-ui-harmonia-java/template/template-report-file.js", new LinkedHashMap<>()));
 
         Map<String, ArtefactOverride> triggers = new LinkedHashMap<>();
         for (ProcessIntent process : model.getProcesses()) {
@@ -138,7 +172,17 @@ public final class IntentSettings {
             settings.overrides.put("forms", forms);
         }
         settings.userTasks.candidateGroupsExtra.add("ADMINISTRATOR");
+        // Seed branding from the model so it is visible/editable in .settings; a developer rebrands
+        // per deployment by editing these (they win over the intent's own name/description/icon).
+        settings.branding.title = IntentNaming.humanize(model.getName());
+        settings.branding.description = model.getDescription();
+        settings.branding.icon = model.getIcon();
         return settings;
+    }
+
+    /** Per-deployment branding (title / description / icon) for the shell header. Never null. */
+    public Branding getBranding() {
+        return branding == null ? new Branding() : branding;
     }
 
     /** Whether the generator should emit the named artefact in the given category (default true). */

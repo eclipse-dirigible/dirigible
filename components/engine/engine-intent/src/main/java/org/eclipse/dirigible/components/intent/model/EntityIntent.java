@@ -27,6 +27,17 @@ public class EntityIntent {
      * default) means a regular managed entity.
      */
     private String kind;
+    /**
+     * Optional icon for the entity's navigation entry. A short icon name (e.g. {@code book},
+     * {@code user}); the Harmonia UI renders it as a Lucide icon and the EDM generator also maps it to
+     * a unicons SVG URL for the AngularJS perspective. Absent → a default list icon.
+     */
+    private String icon;
+    /**
+     * Whether this entity gets a tile on the home dashboard. Absent (the default) → shown;
+     * {@code dashboard: false} excludes it. (Setting entities are excluded regardless.)
+     */
+    private Boolean dashboard;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -60,6 +71,27 @@ public class EntityIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    /** Whether this entity is excluded from the home dashboard ({@code dashboard: false}). */
+    public boolean isDashboardExcluded() {
+        return Boolean.FALSE.equals(dashboard);
+    }
+
+    public Boolean getDashboard() {
+        return dashboard;
+    }
+
+    public void setDashboard(Boolean dashboard) {
+        this.dashboard = dashboard;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
     }
 
     public List<FieldIntent> getFields() {

@@ -25,6 +25,11 @@ public class IntentModel {
     /** Optional one-line description shown in the IDE preview pane. */
     private String description;
 
+    /**
+     * Optional brand icon (a Lucide icon name, e.g. {@code book}) for the generated app's shell header.
+     */
+    private String icon;
+
     /** Schema version of the intent format. {@code 1} for the current draft. */
     private int version = 1;
 
@@ -54,6 +59,14 @@ public class IntentModel {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
     }
 
     public int getVersion() {

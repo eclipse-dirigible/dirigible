@@ -167,6 +167,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                                                       .isBlank()) {
             document.put("description", report.getDescription());
         }
+        // dashboard: false excludes the report's tile from the home dashboard (it still shows in the
+        // sidebar). Carried on the .report; the Harmonia reports store reads it.
+        document.put("dashboard", report.isDashboardExcluded() ? Boolean.FALSE : Boolean.TRUE);
         document.put("columns", columns);
         document.put("query", query);
         document.put("conditions", conditions(context, model, source, baseAlias, report.getFilter()));

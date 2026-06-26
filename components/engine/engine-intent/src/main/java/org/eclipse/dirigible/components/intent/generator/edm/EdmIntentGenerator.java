@@ -21,6 +21,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -93,7 +94,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             return;
         }
         String baseName = IntentNaming.baseName(context);
-        EdmDocument document = buildDocument(model, baseName);
+        IntentSettings.Branding branding = context.getSettings() != null ? context.getSettings()
+                                                                                  .getBranding()
+                : new IntentSettings.Branding();
+        EdmDocument document = buildDocument(model, baseName, branding);
         context.writeModelFile(baseName + ".model", JsonHelper.toJson(document.modelJson));
         context.writeModelFile(baseName + ".edm", renderEdmXml(document));
     }
@@ -106,7 +110,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         final Map<String, List<Map<String, Object>>> relationsByEntity = new LinkedHashMap<>();
     }
 
-    private static EdmDocument buildDocument(IntentModel model, String intentName) {
+    private static EdmDocument buildDocument(IntentModel model, String intentName, IntentSettings.Branding branding) {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
@@ -130,10 +134,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
-            Map<String, Object> entityMap =
-                    entityDefaults(name, entity.getDescription(), dependent, setting, perspective, tablePrefix, perspectiveOrder);
+            Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
+                    tablePrefix, perspectiveOrder);
+            // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
+            // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
+            if (entity.isDashboardExcluded()) {
+                entityMap.put("dashboardWidget", "false");
+            }
             if (!dependent && !setting) {
-                perspectiveList.add(perspectiveEntry(name, perspectiveOrder));
+                perspectiveList.add(perspectiveEntry(name, perspectiveOrder, iconUrl(entity.getIcon())));
                 perspectiveOrder++;
             }
 
@@ -174,6 +183,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
 
         Map<String, Object> body = new LinkedHashMap<>();
+        // Model-level caption for the generated app (the Harmonia shell title / sidebar header). The
+        // intent's `name` (humanised) is more meaningful than the raw project name; the `description`
+        // rides along as a subtitle/tooltip. Both are ignored by tooling that only reads entities.
+        // Branding precedence: .settings branding (developer-owned, per-deployment) wins over the
+        // intent's own name/description/icon, which win over the defaults. So one model can be
+        // rebranded per deployment by editing .settings, without touching the intent.
+        String title = notBlank(branding.getTitle()) ? branding.getTitle() : IntentNaming.humanize(model.getName());
+        body.put("title", title);
+        String description = notBlank(branding.getDescription()) ? branding.getDescription() : model.getDescription();
+        if (notBlank(description)) {
+            body.put("description", description);
+        }
+        // Optional brand icon (Lucide name or image URL) for the shell header; the UI template
+        // defaults it when absent.
+        String icon = notBlank(branding.getIcon()) ? branding.getIcon() : model.getIcon();
+        if (notBlank(icon)) {
+            body.put("icon", icon);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -256,16 +283,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return current;
     }
 
-    private static Map<String, Object> perspectiveEntry(String name, int order) {
+    private static final String UNICONS_BASE = "/services/web/resources/unicons/";
+
+    /**
+     * Resolve an intent icon name to a unicons SVG URL (for the AngularJS perspective); blank →
+     * default.
+     */
+    private static String iconUrl(String icon) {
+        if (icon == null || icon.isBlank()) {
+            return DEFAULT_ICON;
+        }
+        String n = icon.trim();
+        return (n.startsWith("/") || n.startsWith("http")) ? n : UNICONS_BASE + n + ".svg";
+    }
+
+    /** The raw icon name (a Lucide icon name for the Harmonia sidebar); blank → a neutral default. */
+    private static String iconName(String icon) {
+        return (icon == null || icon.isBlank()) ? "list" : icon.trim();
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static Map<String, Object> perspectiveEntry(String name, int order, String icon) {
         Map<String, Object> perspective = new LinkedHashMap<>();
         perspective.put("name", name);
         perspective.put("label", name);
-        perspective.put("icon", DEFAULT_ICON);
+        perspective.put("icon", icon);
         perspective.put("order", Integer.toString(order));
         return perspective;
     }
 
-    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, boolean setting,
+    private static Map<String, Object> entityDefaults(String name, String description, String icon, boolean dependent, boolean setting,
             String perspective, String tablePrefix, int order) {
         String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
@@ -278,15 +328,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("caption", "Manage entity " + name);
         entity.put("description", description != null && !description.isBlank() ? description : "Manage entity " + name);
         entity.put("tooltip", name);
-        entity.put("icon", DEFAULT_ICON);
+        entity.put("icon", iconUrl(icon));
+        // Raw icon name for the Harmonia sidebar (Lucide). Defaults to "list" when unset.
+        entity.put("iconName", iconName(icon));
         entity.put("menuKey", name.toLowerCase(Locale.ROOT));
-        entity.put("menuLabel", name);
+        // Navigation label: humanized + pluralized so the menu reads naturally
+        // (SalesInvoice -> "Sales Invoices", Book -> "Books").
+        entity.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(name)));
         entity.put("menuIndex", "100");
         entity.put("layoutType", dependent ? "MANAGE_DETAILS" : "MANAGE_MASTER");
         entity.put("perspectiveName", perspective);
         entity.put("perspectiveLabel", perspective);
         entity.put("perspectiveHeader", "");
-        entity.put("perspectiveIcon", DEFAULT_ICON);
+        entity.put("perspectiveIcon", iconUrl(icon));
         entity.put("perspectiveOrder", Integer.toString(order));
         entity.put("perspectiveNavId", "");
         entity.put("perspectiveRole", "");

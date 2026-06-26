@@ -1,0 +1,22 @@
+/**
+ * Adopted from codbex-athena-app (js/components/pages/basePage.js).
+ *
+ * basePage — mixin for every page component.
+ *
+ * Usage:
+ *   Alpine.data('myPage', () => ({
+ *     ...basePage(),
+ *     // page-specific members
+ *   }));
+ */
+function basePage() {
+  return {
+    refreshIcons() {
+      this.$nextTick(() => {
+        if (window.lucide && typeof window.lucide.createIcons === 'function') {
+          window.lucide.createIcons();
+        }
+      });
+    },
+  };
+}

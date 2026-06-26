@@ -1,0 +1,59 @@
+/**
+ * Adopted from codbex-athena-app (js/services/apiError.js).
+ *
+ * apiErrors — localized, user-safe message catalog for API errors.
+ *
+ * The server's `errorMessage` is developer-facing and MUST NOT be shown to the
+ * end-user (it is logged to the console by api.js). The UI selects what to
+ * display based on `errorType` via the resolvers below.
+ *
+ * Designed for later i18n: swap the flat maps for a locale lookup in one place.
+ */
+(function (root) {
+  const App = root.App = root.App || {};
+  App.services = App.services || {};
+
+  App.services.apiErrors = {
+    // Top-level errorType -> user-facing message.
+    messages: {
+      BadRequest:             'The request could not be completed. Please review your input.',
+      ValidationError:        'Please correct the highlighted fields.',
+      Unauthorized:           'Your session has ended. Please sign in again.',
+      InsufficientPermission: 'You do not have permission to perform this action.',
+      TokenExpired:           'Your session has expired. Please sign in again.',
+      NotFound:               'The requested item could not be found.',
+      UpstreamError:          'A dependent service is unavailable. Please try again shortly.',
+      InternalServerError:    'Something went wrong on our end. Please try again.',
+      NetworkError:           'Unable to reach the server. Check your connection and try again.',
+    },
+
+    // 422 cause errorType -> per-field message. Extend as backend cause types appear.
+    fieldMessages: {
+      NotNull:   'This field is required.',
+      Required:  'This field is required.',
+      NotEmpty:  'This field is required.',
+      Future:    'Date must be in the future.',
+      Past:      'Date must be in the past.',
+      Pattern:   'This value has an invalid format.',
+      Email:     'Enter a valid email address.',
+      Size:      'This value has an invalid length.',
+      Min:       'This value is too small.',
+      Max:       'This value is too large.',
+      Duplicate: 'This value already exists.',
+    },
+
+    default: 'Something went wrong. Please try again.',
+
+    /** Top-level, user-safe message for an error. `fallback` overrides the catalog default. */
+    messageFor(err, fallback) {
+      const type = err && err.errorType;
+      return (type && this.messages[type]) || fallback || this.default;
+    },
+
+    /** Per-field message for a single 422 errorCauses[] entry. */
+    fieldMessageFor(cause) {
+      const type = cause && cause.errorType;
+      return (type && this.fieldMessages[type]) || this.default;
+    },
+  };
+})(window);
