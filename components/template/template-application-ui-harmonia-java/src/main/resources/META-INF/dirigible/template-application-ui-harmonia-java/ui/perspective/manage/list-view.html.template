@@ -155,9 +155,9 @@
           <div class="vbox gap-0">
             <span x-h-text.muted class="text-xs">${plabel}</span>
 #if($property.widgetType == "DROPDOWN")
-            <span x-text="lookupText('${property.name}', selected.${property.name})"></span>
+            <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
 #else
-            <span x-text="displayValue(selected.${property.name}, $isDate)"></span>
+            <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end
           </div>
 #end
