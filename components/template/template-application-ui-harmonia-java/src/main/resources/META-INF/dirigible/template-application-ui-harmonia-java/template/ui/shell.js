@@ -138,6 +138,19 @@ export function getSources() {
             location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/settingsPage.js.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/js/components/pages/settingsPage.js"
+        },
+        // Home dashboard: the page component bakes one KPI tile per entity from the model (velocity);
+        // the view is generic (iterates the component's data).
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/dashboardPage.js.template",
+            action: "generate",
+            engine: "velocity",
+            rename: "gen/{{genFolderName}}/js/components/pages/dashboardPage.js"
+        },
+        {
+            location: "/template-application-ui-harmonia-java/ui/shell/dashboard.html.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/views/_dashboard.html"
         }
     ];
 };

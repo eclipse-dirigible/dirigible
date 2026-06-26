@@ -194,6 +194,9 @@
     </div>
 
     <!-- Routes (Pinecone reads these from the document). -->
+    <!-- Home dashboard: model-generated KPI tiles (reached via the Home icon). -->
+    <template x-route="/" x-template.target.app="./views/_dashboard.html"></template>
+    <template x-route="/dashboard" x-template.target.app="./views/_dashboard.html"></template>
     <!-- Built-in shell sections (always present): Process Inbox + Documents. -->
     <template x-route="/inbox" x-template.target.app="./views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="./views/_documents.html"></template>
@@ -273,6 +276,7 @@
     <script src="./js/components/detailPanel.js" defer></script>
     <script src="./js/stores/processTasks.js" defer></script>
     <script src="./js/stores/reports.js" defer></script>
+    <script src="./js/components/pages/dashboardPage.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>
     <script src="./js/components/pages/settingsPage.js" defer></script>
