@@ -328,6 +328,34 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "setters":
+                    // Field setters (intent layer): one JavaDelegate per serviceTask that declares a
+                    // setField, setting a field of the process's trigger entity to a literal value. Like
+                    // resolvers, not entity-shaped, so it gets its own loop; the Java package segment of
+                    // the entity is its lowercased perspective.
+                    if (model.setters) {
+                        for (let s = 0; s < model.setters.length; s++) {
+                            const setterParameters = {
+                                ...parameters,
+                                process: model.setters[s].process,
+                                className: model.setters[s].className,
+                                entity: model.setters[s].entity,
+                                perspective: model.setters[s].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.setters[s].perspective),
+                                keyProperty: model.setters[s].keyProperty,
+                                keyAccessor: model.setters[s].keyAccessor,
+                                field: model.setters[s].field,
+                                value: model.setters[s].value
+                            };
+                            const cleanSetterParameters = cleanData(setterParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSetterParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSetterParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "notifications":
                     // Notifications (intent layer): one @Listener per declarative notification, binding
                     // to the entity's event topic and sending via the SDK. Not entity-shaped, so it gets

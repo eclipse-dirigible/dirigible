@@ -156,6 +156,10 @@ public final class IntentSettings {
         for (Resolver resolver : ProcessResolverSupport.resolvers(model)) {
             resolvers.put(resolver.handler(), new ArtefactOverride(true));
         }
+        Map<String, ArtefactOverride> setters = new LinkedHashMap<>();
+        for (SetFieldSupport.Setter setter : SetFieldSupport.setters(model)) {
+            setters.put(setter.className(), new ArtefactOverride(true));
+        }
         Map<String, ArtefactOverride> forms = new LinkedHashMap<>();
         for (FormIntent form : model.getForms()) {
             if (form.getName() != null) {
@@ -167,6 +171,9 @@ public final class IntentSettings {
         }
         if (!resolvers.isEmpty()) {
             settings.overrides.put("resolvers", resolvers);
+        }
+        if (!setters.isEmpty()) {
+            settings.overrides.put("setters", setters);
         }
         if (!forms.isEmpty()) {
             settings.overrides.put("forms", forms);

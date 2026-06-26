@@ -38,6 +38,13 @@ export function getTemplate(parameters) {
                 collection: "resolvers"
             },
             {
+                location: "/template-application-events-java/events/SetField.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}.java",
+                engine: "velocity",
+                collection: "setters"
+            },
+            {
                 location: "/template-application-events-java/events/Notification.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}Notification.java",

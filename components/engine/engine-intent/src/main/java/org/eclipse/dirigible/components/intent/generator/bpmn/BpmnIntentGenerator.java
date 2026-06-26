@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -242,7 +243,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, candidateGroupsExtra);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
@@ -373,7 +374,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra) {
+            String processName, String candidateGroupsExtra) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
@@ -381,7 +382,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName);
+                appendServiceTask(sb, step, projectName, processName);
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -421,20 +422,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("></userTask>\n");
     }
 
-    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName) {
-        // Three service-task shapes:
+    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName) {
+        // Four service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
+        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the gen.events.<Handler>
+        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
         // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
         // with the project name (the JSTask delegate resolves relative to the registry root);
-        // - an author-declared serviceTask with NO call -> JavaTask bound to a custom.<Step> Java handler
-        // that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer to implement.
+        // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
+        // handler that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer.
         String javaHandler = stringArg(step, "javaHandler");
+        String setField = stringArg(step, "setField");
         String call = stringArg(step, "call");
         boolean java;
         String handlerValue;
         if (javaHandler != null && !javaHandler.isBlank()) {
             java = true;
             handlerValue = javaHandler;
+        } else if (setField != null && !setField.isBlank()) {
+            java = true;
+            handlerValue = "gen.events." + SetFieldSupport.className(processName, step.getName());
         } else if (call != null && !call.isBlank()) {
             java = false;
             handlerValue = qualifyHandlerPath(projectName, call);
@@ -495,7 +502,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * Build the sequence flows. The default is a linear chain through {@link #buildEffectiveStepIds}.
      * Decision steps emit a conditioned flow to {@code args.then} and route their gateway-default flow
      * to {@code args.else} when declared (so the conditioned branch can actually be skipped); without
-     * an {@code else} the default falls through to the next step in the chain.
+     * an {@code else} the default falls through to the next step in the chain. A non-decision step with
+     * an explicit {@code args.next} routes its outgoing flow to that step (or {@code end}) instead of
+     * the next in the chain - this is how two branch steps of a decision converge on a common successor
+     * (e.g. {@code activate} and {@code reject} both flowing to {@code done}) without the first
+     * silently falling through into the second.
      */
     private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds) {
         List<SequenceFlow> flows = new ArrayList<>();
@@ -511,6 +522,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     target = effectiveTarget(elseTarget, steps);
                 }
             } else {
+                StepIntent sourceStep = stepByName(source, steps);
+                String next = sourceStep == null ? null : stringArg(sourceStep, "next");
+                if (next != null && !next.isBlank()) {
+                    target = effectiveTarget(next, steps);
+                }
                 flowId = "flow_" + source + "_" + target;
             }
             flows.add(new SequenceFlow(flowId, source, target, null));
