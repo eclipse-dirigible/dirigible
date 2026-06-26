@@ -534,6 +534,56 @@ public final class IntentParser {
                 }
             }
             validateDecisionTargets(process, issues);
+            validateSetFieldSteps(process, triggerEntity, byName, issues);
+        }
+    }
+
+    /**
+     * A {@code serviceTask} declaring {@code setField} must name a {@code string}/{@code text} field of
+     * the process's trigger entity and carry a {@code value} (the literal to assign). Any step may
+     * carry a {@code next} that routes its outgoing flow to a declared step or {@code end} (used to
+     * make two decision branches converge). Without these checks a typo would surface only at runtime.
+     */
+    private static void validateSetFieldSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null) {
+                continue;
+            }
+            String setField = stepArg(step, "setField");
+            if (setField != null && !setField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses setField but is not a serviceTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setField but the process has no trigger entity to set it on");
+                } else {
+                    FieldIntent field = fieldByName(trigger, setField);
+                    if (field == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] is not a field of [" + triggerEntity + "]");
+                    } else if (field.getType() != null && !"string".equals(field.getType()) && !"text".equals(field.getType())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must be a string/text field (only literal string values are supported)");
+                    }
+                    if (stepArg(step, "value") == null || stepArg(step, "value").isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must declare a value");
+                    }
+                }
+            }
+            String next = stepArg(step, "next");
+            if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
+                issues.add(
+                        "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            }
         }
     }
 

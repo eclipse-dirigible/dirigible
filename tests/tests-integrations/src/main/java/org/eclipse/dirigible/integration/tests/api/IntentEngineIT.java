@@ -476,6 +476,83 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void set_field_glue_sets_entity_status_on_approve_reject_branches() {
+        // A MemberApproval process whose approve/reject decision routes to two setField service tasks:
+        // approve -> status ACTIVE, reject -> status REJECTED. `next: done` on the activate branch makes
+        // both branches converge on `done` instead of activate falling through into reject. The form
+        // completes the task with the chosen action as a process variable the decision tests.
+        String yaml = """
+                name: members
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string,  required: true, length: 100 }
+                      - { name: status, type: string,  length: 20, defaultValue: "PENDING" }
+                processes:
+                  - name: MemberApproval
+                    trigger: { onCreate: Member }
+                    steps:
+                      - { name: librarianReview, kind: userTask, args: { assignee: librarian, form: ApproveMember } }
+                      - name: approved
+                        kind: decision
+                        args: { if: "action == 'approve'", then: activate, else: reject }
+                      - { name: activate, kind: serviceTask, args: { setField: status, value: ACTIVE,   next: done } }
+                      - { name: reject,   kind: serviceTask, args: { setField: status, value: REJECTED } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ApproveMember, forEntity: Member, fields: [name, status], actions: [approve, reject] }
+                permissions:
+                  - { role: Librarian, can: [Member:approve] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: each setField serviceTask binds the generated JavaDelegate (NOT a custom/ stub), the
+        // decision routes to both branches, and `next: done` makes activate skip past reject to the end.
+        String bpmn = contentOf("MemberApproval.bpmn");
+        assertTrue(bpmn.contains("<serviceTask id=\"activate\"") && bpmn.contains("gen.events.MemberApprovalActivate"),
+                "the activate setField step should bind the generated JavaDelegate handler");
+        assertTrue(bpmn.contains("<serviceTask id=\"reject\"") && bpmn.contains("gen.events.MemberApprovalReject"),
+                "the reject setField step should bind its own generated handler");
+        assertFalse(bpmn.contains("custom.Activate") || bpmn.contains("custom.Reject"),
+                "a setField service task must not scaffold a custom/ stub");
+        assertTrue(bpmn.contains("id=\"flow_approved_then\" sourceRef=\"approved\" targetRef=\"activate\""),
+                "approve branch should route to the activate setter");
+        assertTrue(bpmn.contains("id=\"flow_approved_default\" sourceRef=\"approved\" targetRef=\"reject\""),
+                "reject branch should be the gateway default");
+        assertTrue(bpmn.contains("sourceRef=\"activate\" targetRef=\"end\"") && bpmn.contains("sourceRef=\"reject\" targetRef=\"end\""),
+                "both branches should converge on the end via `next` (activate must not fall through into reject)");
+        assertTrue(bpmn.contains("${action == 'approve'}"), "the decision should test the form action variable");
+
+        // Glue: a `setters` collection, one entry per setField step, carrying the field + literal value.
+        String glue = contentOf("members.glue");
+        assertTrue(glue.contains("\"setters\""), "the glue should carry a setters collection");
+        assertTrue(
+                glue.contains("\"className\": \"MemberApprovalActivate\"") && glue.contains("\"field\": \"Status\"")
+                        && glue.contains("\"value\": \"ACTIVE\"") && glue.contains("\"keyProperty\": \"Id\""),
+                "the activate setter should set the PascalCase field to its literal, loading by the PK property");
+        assertTrue(glue.contains("\"className\": \"MemberApprovalReject\"") && glue.contains("\"value\": \"REJECTED\""),
+                "the reject setter should carry its own value");
+
+        // Run the glue-code template: each setter becomes a JavaDelegate that loads the entity by id,
+        // assigns the field, and persists WITHOUT re-publishing an update event.
+        generateFromModel("template-application-events-java/template/template.js", "members.glue");
+        String activate = contentOf("gen/events/MemberApprovalActivate.java");
+        assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
+                "the setter should be generated as a Flowable JavaDelegate");
+        assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
+                "the setter should import the entity from its real Java package and load it by the PK process variable");
+        assertTrue(activate.contains("entity.Status = \"ACTIVE\"") && activate.contains("repository.updateWithoutEvent(entity)"),
+                "the setter should assign the field and persist without re-firing an update event");
+        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("entity.Status = \"REJECTED\""),
+                "the reject setter should assign the rejected status");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping
