@@ -116,8 +116,9 @@
       </div>
     </div>
 
-    <!-- Detail: the selected record's full property list + its actionable process tasks -->
-    <div x-h-split-panel data-size="40%">
+    <!-- Detail: the selected record's full property list + its actionable process tasks.
+         Hidden (0%) until a row is selected, then ~40%. -->
+    <div x-h-split-panel data-size="40%" :data-hidden="!selected">
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>

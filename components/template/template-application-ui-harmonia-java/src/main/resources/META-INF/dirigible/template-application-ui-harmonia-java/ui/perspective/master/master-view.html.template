@@ -23,8 +23,8 @@
 
   <div x-show="state === 'default' || state === 'empty'" x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
 
-    <!-- Master list -->
-    <div x-h-split-panel data-default-size="35" data-min="280">
+    <!-- Master list (fills the whole width until a record is selected) -->
+    <div x-h-split-panel data-size="60%" data-min="280">
       <div x-h-table-container.scroll class="size-full">
         <table x-h-table data-borders="rows">
           <thead x-h-table-header>
@@ -67,8 +67,8 @@
       </div>
     </div>
 
-    <!-- Detail area for the selected master -->
-    <div x-h-split-panel>
+    <!-- Detail area — hidden (0%) until a master record is selected, then ~40%. -->
+    <div x-h-split-panel data-size="40%" :data-hidden="!selectedId">
       <div x-show="!selectedId" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
