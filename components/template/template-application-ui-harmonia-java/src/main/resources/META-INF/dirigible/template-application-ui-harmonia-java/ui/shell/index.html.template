@@ -248,6 +248,16 @@
 #end
     <template x-route="notfound" x-template.target.app="./views/_notfound.html"></template>
 
+    <!-- Route segment -> nav label, from the model — read by appShell for the breadcrumb so the
+         entity crumb reads the same as the sidebar (e.g. "Book" -> "Books"). -->
+    <script>
+      window.__harmoniaNav = {
+#foreach($entity in $models)
+        "${entity.name}": "#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end",
+#end
+      };
+    </script>
+
     <!-- 1. Plugins (vendored, no CDN) -->
     <script src="/services/web/application-core/vendor/pinecone-router.min.js"></script>
 
