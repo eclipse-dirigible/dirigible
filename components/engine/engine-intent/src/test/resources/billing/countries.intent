@@ -1,0 +1,13 @@
+name: countries
+description: Country nomenclature (ISO 3166)
+icon: globe
+entities:
+  - name: Country
+    kind: setting
+    icon: globe
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+      - { name: code2, type: string, length: 2 }
+      - { name: code3, type: string, length: 3 }
+      - { name: numeric, type: integer }

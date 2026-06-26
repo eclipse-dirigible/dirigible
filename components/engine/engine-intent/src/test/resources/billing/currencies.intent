@@ -1,0 +1,27 @@
+name: currencies
+description: Currency nomenclature and exchange rates
+icon: banknote
+entities:
+  - name: Currency
+    kind: setting
+    icon: banknote
+    audit: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: code, type: string, required: true, length: 3 }
+      - { name: name, type: string, required: true, length: 100 }
+      - { name: symbol, type: string, length: 8 }
+      - { name: isPrefix, type: boolean }
+      - { name: numeric, type: integer }
+      - { name: rounding, type: integer }
+      - { name: base, type: boolean }
+      - { name: rate, type: decimal, precision: 18, scale: 6 }
+  - name: CurrencyRate
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, length: 100 }
+      - { name: date, type: date, required: true }
+      - { name: rate, type: decimal, precision: 18, scale: 6, required: true }
+    relations:
+      - { name: Currency, kind: manyToOne, to: Currency, required: true }

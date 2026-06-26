@@ -1,0 +1,24 @@
+name: uoms
+description: Units of measure and their dimensions
+icon: ruler
+entities:
+  - name: Dimension
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+      - { name: sap, type: string, length: 20 }
+  - name: UoM
+    kind: setting
+    icon: ruler
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+      - { name: iso, type: string, length: 10 }
+      - { name: sap, type: string, length: 20 }
+      - { name: numerator, type: decimal, precision: 18, scale: 6 }
+      - { name: denominator, type: decimal, precision: 18, scale: 6 }
+      - { name: rounding, type: integer }
+      - { name: base, type: boolean }
+    relations:
+      - { name: Dimension, kind: manyToOne, to: Dimension }

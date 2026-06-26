@@ -1,0 +1,24 @@
+name: customer-payments
+description: Customer payments
+icon: wallet
+uses:
+  - { model: customers }
+  - { model: currencies }
+entities:
+  - name: CustomerPayment
+    icon: wallet
+    audit: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+      - { name: date, type: date, required: true }
+      - { name: valor, type: date }
+      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+      - { name: counterpartyIBAN, type: string, length: 34 }
+      - { name: counterpartyName, type: string, length: 200 }
+      - { name: uuid, type: uuid, unique: true }
+      - { name: reason, type: string, length: 200 }
+      - { name: description, type: text }
+    relations:
+      - { name: Customer, kind: manyToOne, to: Customer, model: customers, required: true }
+      - { name: Currency, kind: manyToOne, to: Currency, model: currencies }

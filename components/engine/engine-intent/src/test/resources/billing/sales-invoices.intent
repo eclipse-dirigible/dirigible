@@ -1,0 +1,79 @@
+name: sales-invoices
+description: Sales invoices with line items and payment allocations
+icon: receipt
+uses:
+  - { model: customers }
+  - { model: currencies }
+  - { model: uoms }
+  - { model: customer-payments }
+entities:
+  # Document number-series configuration. codbex populates SalesInvoice.number via
+  # NumberGeneratorService; this stand-alone example uses a calculated UUID expression below so it
+  # compiles without that external service. Swap the expression to call your generator when present.
+  - name: Number
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, length: 100 }
+      - { name: type, type: string, required: true, unique: true, length: 100 }
+      - { name: prefix, type: string, length: 20 }
+      - { name: length, type: integer }
+      - { name: value, type: long }
+  - name: SalesInvoiceStatus
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+  - name: PaymentMethod
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+  - name: SentMethod
+    kind: setting
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+  - name: SalesInvoice
+    icon: receipt
+    audit: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: number, type: string, length: 100, calculatedOnCreate: "java.util.UUID.randomUUID().toString()" }
+      - { name: date, type: date, required: true }
+      - { name: due, type: date }
+      - { name: net, type: decimal, precision: 18, scale: 2 }
+      - { name: vat, type: decimal, precision: 18, scale: 2 }
+      - { name: gross, type: decimal, precision: 18, scale: 2 }
+      - { name: discount, type: decimal, precision: 18, scale: 2 }
+      - { name: total, type: decimal, precision: 18, scale: 2 }
+      - { name: paid, type: decimal, precision: 18, scale: 2 }
+      - { name: uuid, type: uuid, unique: true }
+    relations:
+      - { name: Customer, kind: manyToOne, to: Customer, model: customers, required: true }
+      - { name: Currency, kind: manyToOne, to: Currency, model: currencies }
+      - { name: Status, kind: manyToOne, to: SalesInvoiceStatus }
+      - { name: PaymentMethod, kind: manyToOne, to: PaymentMethod }
+      - { name: SentMethod, kind: manyToOne, to: SentMethod }
+  - name: SalesInvoiceItem
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, length: 200 }
+      - { name: quantity, type: decimal, precision: 18, scale: 3, required: true }
+      - { name: price, type: decimal, precision: 18, scale: 2, required: true }
+      - { name: net, type: decimal, precision: 18, scale: 2 }
+      - { name: vat, type: decimal, precision: 18, scale: 2 }
+      - { name: gross, type: decimal, precision: 18, scale: 2 }
+    relations:
+      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+      - { name: UoM, kind: manyToOne, to: UoM, model: uoms }
+  # n:m allocation: one invoice settled by many payments, one payment across many invoices; Amount
+  # records the partial allocation. SalesInvoice is the local composition owner; CustomerPayment is a
+  # cross-model reference.
+  - name: SalesInvoiceCustomerPayment
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+    relations:
+      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+      - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }

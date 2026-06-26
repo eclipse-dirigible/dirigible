@@ -1,0 +1,20 @@
+name: customers
+description: Customer master data
+icon: users
+uses:
+  - { model: countries }
+  - { model: currencies }
+entities:
+  - name: Customer
+    icon: users
+    audit: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 200 }
+      - { name: email, type: string, length: 200 }
+      - { name: phone, type: string, length: 50 }
+      - { name: address, type: string, length: 400 }
+      - { name: uuid, type: uuid, unique: true }
+    relations:
+      - { name: Country, kind: manyToOne, to: Country, model: countries }
+      - { name: Currency, kind: manyToOne, to: Currency, model: currencies }

@@ -21,9 +21,26 @@ public class FieldIntent {
     private boolean required;
     private boolean primaryKey;
     private boolean generated;
+    private boolean unique;
     private Integer length;
+    /** Override for the default DECIMAL precision (16) - the total number of digits. */
+    private Integer precision;
+    /** Override for the default DECIMAL scale (2) - the digits after the decimal point. */
+    private Integer scale;
     private String defaultValue;
     private String description;
+    /**
+     * Optional expression evaluated to populate this property on create. When set, the property is
+     * marked calculated and the generated repository assigns it on insert. The expression is emitted
+     * verbatim into the chosen runtime (it must be valid in that language - e.g. a Java expression for
+     * the Java DAO).
+     */
+    private String calculatedOnCreate;
+    /**
+     * Optional expression evaluated to populate this property on update (see
+     * {@link #calculatedOnCreate}).
+     */
+    private String calculatedOnUpdate;
 
     public String getName() {
         return name;
@@ -65,12 +82,58 @@ public class FieldIntent {
         this.generated = generated;
     }
 
+    public boolean isUnique() {
+        return unique;
+    }
+
+    public void setUnique(boolean unique) {
+        this.unique = unique;
+    }
+
     public Integer getLength() {
         return length;
     }
 
     public void setLength(Integer length) {
         this.length = length;
+    }
+
+    public Integer getPrecision() {
+        return precision;
+    }
+
+    public void setPrecision(Integer precision) {
+        this.precision = precision;
+    }
+
+    public Integer getScale() {
+        return scale;
+    }
+
+    public void setScale(Integer scale) {
+        this.scale = scale;
+    }
+
+    public String getCalculatedOnCreate() {
+        return calculatedOnCreate;
+    }
+
+    public void setCalculatedOnCreate(String calculatedOnCreate) {
+        this.calculatedOnCreate = calculatedOnCreate;
+    }
+
+    public String getCalculatedOnUpdate() {
+        return calculatedOnUpdate;
+    }
+
+    public void setCalculatedOnUpdate(String calculatedOnUpdate) {
+        this.calculatedOnUpdate = calculatedOnUpdate;
+    }
+
+    /** Whether this property is computed (has a create or update expression). */
+    public boolean isCalculated() {
+        return (calculatedOnCreate != null && !calculatedOnCreate.isBlank())
+                || (calculatedOnUpdate != null && !calculatedOnUpdate.isBlank());
     }
 
     public String getDefaultValue() {

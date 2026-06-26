@@ -38,6 +38,12 @@ public class EntityIntent {
      * {@code dashboard: false} excludes it. (Setting entities are excluded regardless.)
      */
     private Boolean dashboard;
+    /**
+     * Whether the generator adds the four standard audit columns ({@code CreatedAt}, {@code CreatedBy},
+     * {@code UpdatedAt}, {@code UpdatedBy}) the platform's {@code org.eclipse.dirigible.sdk.db} audit
+     * annotations populate. Absent (the default) → no audit columns.
+     */
+    private Boolean audit;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -92,6 +98,19 @@ public class EntityIntent {
 
     public void setIcon(String icon) {
         this.icon = icon;
+    }
+
+    /** Whether this entity gets the four standard audit columns ({@code audit: true}). */
+    public boolean isAudited() {
+        return Boolean.TRUE.equals(audit);
+    }
+
+    public Boolean getAudit() {
+        return audit;
+    }
+
+    public void setAudit(Boolean audit) {
+        this.audit = audit;
     }
 
     public List<FieldIntent> getFields() {
