@@ -18,6 +18,10 @@ export function generate(model, parameters) {
     // (the intent's humanised name + description) over the bare project name.
     parameters.appTitle = (model.title && String(model.title).trim()) ? model.title : parameters.projectName;
     parameters.appDescription = model.description || '';
+    // Brand icon (a Lucide icon name) for the shell header: an explicit generate-time parameter wins,
+    // else the model-level icon (the intent's `icon`), else a neutral default.
+    parameters.appIcon = (parameters.appIcon && String(parameters.appIcon).trim()) ? String(parameters.appIcon).trim()
+        : ((model.icon && String(model.icon).trim()) ? String(model.icon).trim() : 'blocks');
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 
@@ -72,6 +76,11 @@ function getTemplateParameters() {
             name: "title",
             label: "Title",
             placeholder: "Enter Title"
+        },
+        {
+            name: "appIcon",
+            label: "Brand Icon",
+            placeholder: "Lucide icon name (e.g. book); defaults to the intent icon or 'blocks'"
         },
         {
             name: "description",

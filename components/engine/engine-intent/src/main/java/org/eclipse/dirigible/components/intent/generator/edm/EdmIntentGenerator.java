@@ -21,6 +21,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -93,7 +94,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             return;
         }
         String baseName = IntentNaming.baseName(context);
-        EdmDocument document = buildDocument(model, baseName);
+        IntentSettings.Branding branding = context.getSettings() != null ? context.getSettings()
+                                                                                  .getBranding()
+                : new IntentSettings.Branding();
+        EdmDocument document = buildDocument(model, baseName, branding);
         context.writeModelFile(baseName + ".model", JsonHelper.toJson(document.modelJson));
         context.writeModelFile(baseName + ".edm", renderEdmXml(document));
     }
@@ -106,7 +110,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         final Map<String, List<Map<String, Object>>> relationsByEntity = new LinkedHashMap<>();
     }
 
-    private static EdmDocument buildDocument(IntentModel model, String intentName) {
+    private static EdmDocument buildDocument(IntentModel model, String intentName, IntentSettings.Branding branding) {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
@@ -182,10 +186,20 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Model-level caption for the generated app (the Harmonia shell title / sidebar header). The
         // intent's `name` (humanised) is more meaningful than the raw project name; the `description`
         // rides along as a subtitle/tooltip. Both are ignored by tooling that only reads entities.
-        body.put("title", IntentNaming.humanize(model.getName()));
-        if (model.getDescription() != null && !model.getDescription()
-                                                    .isBlank()) {
-            body.put("description", model.getDescription());
+        // Branding precedence: .settings branding (developer-owned, per-deployment) wins over the
+        // intent's own name/description/icon, which win over the defaults. So one model can be
+        // rebranded per deployment by editing .settings, without touching the intent.
+        String title = notBlank(branding.getTitle()) ? branding.getTitle() : IntentNaming.humanize(model.getName());
+        body.put("title", title);
+        String description = notBlank(branding.getDescription()) ? branding.getDescription() : model.getDescription();
+        if (notBlank(description)) {
+            body.put("description", description);
+        }
+        // Optional brand icon (Lucide name or image URL) for the shell header; the UI template
+        // defaults it when absent.
+        String icon = notBlank(branding.getIcon()) ? branding.getIcon() : model.getIcon();
+        if (notBlank(icon)) {
+            body.put("icon", icon);
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
@@ -286,6 +300,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /** The raw icon name (a Lucide icon name for the Harmonia sidebar); blank → a neutral default. */
     private static String iconName(String icon) {
         return (icon == null || icon.isBlank()) ? "list" : icon.trim();
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
     }
 
     private static Map<String, Object> perspectiveEntry(String name, int order, String icon) {

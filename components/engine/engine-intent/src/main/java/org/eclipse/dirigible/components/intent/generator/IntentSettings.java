@@ -85,9 +85,35 @@ public final class IntentSettings {
         private List<String> candidateGroupsExtra = new ArrayList<>();
     }
 
+    /**
+     * Per-deployment branding for the generated app's shell header (title, description tooltip, and a
+     * brand icon). Lives in {@code .settings} - which is developer-owned and preserved across
+     * regenerations - so one model (e.g. "Library") can be regenerated with different branding per
+     * deployment (e.g. each library) without editing the intent itself. The icon is a Lucide icon name
+     * (e.g. {@code book}) or an image URL (custom SVG/PNG).
+     */
+    public static final class Branding {
+        private String title;
+        private String description;
+        private String icon;
+
+        public String getTitle() {
+            return title;
+        }
+
+        public String getDescription() {
+            return description;
+        }
+
+        public String getIcon() {
+            return icon;
+        }
+    }
+
     private Map<String, Recipe> generation = new LinkedHashMap<>();
     private Map<String, Map<String, ArtefactOverride>> overrides = new LinkedHashMap<>();
     private UserTasks userTasks = new UserTasks();
+    private Branding branding = new Branding();
 
     /** Parse a settings document; tolerant of missing sections. */
     public static IntentSettings parse(String json) {
@@ -146,7 +172,17 @@ public final class IntentSettings {
             settings.overrides.put("forms", forms);
         }
         settings.userTasks.candidateGroupsExtra.add("ADMINISTRATOR");
+        // Seed branding from the model so it is visible/editable in .settings; a developer rebrands
+        // per deployment by editing these (they win over the intent's own name/description/icon).
+        settings.branding.title = IntentNaming.humanize(model.getName());
+        settings.branding.description = model.getDescription();
+        settings.branding.icon = model.getIcon();
         return settings;
+    }
+
+    /** Per-deployment branding (title / description / icon) for the shell header. Never null. */
+    public Branding getBranding() {
+        return branding == null ? new Branding() : branding;
     }
 
     /** Whether the generator should emit the named artefact in the given category (default true). */

@@ -51,7 +51,15 @@
            data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
         <div x-h-sidebar x-ref="sidebar">
           <div x-h-sidebar-header>
-            <div class="vbox gap-0 p-1">
+            <div class="hbox items-center gap-2 p-1">
+              <!-- Brand icon (template appIcon param / intent icon / default). A value containing '/' or
+                   '.' is treated as an image URL (custom SVG/PNG, e.g. /services/web/<project>/logo.svg
+                   or a data: URI); otherwise it is a Lucide icon name. -->
+#if($appIcon.contains("/") || $appIcon.contains("."))
+              <img src="${appIcon}" alt="${appTitle}" class="size-5" />
+#else
+              <i role="img" data-lucide="${appIcon}" class="size-5 text-primary"></i>
+#end
               <span class="font-bold"#if($appDescription && $appDescription != '') title="${appDescription}"#end>${appTitle}</span>
             </div>
           </div>
