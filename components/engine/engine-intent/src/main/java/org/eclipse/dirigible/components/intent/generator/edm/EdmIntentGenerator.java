@@ -132,6 +132,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder);
+            // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
+            // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
+            if (entity.isDashboardExcluded()) {
+                entityMap.put("dashboardWidget", "false");
+            }
             if (!dependent && !setting) {
                 perspectiveList.add(perspectiveEntry(name, perspectiveOrder, iconUrl(entity.getIcon())));
                 perspectiveOrder++;

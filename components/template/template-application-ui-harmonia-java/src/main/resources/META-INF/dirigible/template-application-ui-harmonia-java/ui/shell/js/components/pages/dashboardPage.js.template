@@ -15,7 +15,7 @@ document.addEventListener('alpine:init', () => {
     // One widget per top-level entity, generated from the model.
     entities: [
 #foreach($entity in $models)
-#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")
+#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY" && $entity.dashboardWidget != "false")
       {
         name: '${entity.name}',
         label: '#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end',
@@ -49,8 +49,9 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
-    // Reports are discovered at runtime by the reports store (see the sidebar Reports section).
-    get reports() { return this.$store.reports.items; },
+    // Reports are discovered at runtime by the reports store (see the sidebar Reports section);
+    // a report with dashboard:false in its .report is kept out of the dashboard (still in the sidebar).
+    get reports() { return this.$store.reports.items.filter(r => r.dashboard !== false); },
 
     openEntity(route) { window.PineconeRouter.navigate(route); },
     openReport(r) { this.$store.reports.selected = r; window.PineconeRouter.navigate('/reports'); },

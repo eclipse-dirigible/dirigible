@@ -49,10 +49,12 @@
               </div>
             </div>
             <!-- A simplified preview of the report (first rows, no toolbar/pagination); the full
-                 report opens via the header / open button. -->
-            <div x-h-card-content>
+                 report opens via the header / open button. The description (from the .report) tells
+                 the user what the report is about. -->
+            <div x-h-card-content class="vbox gap-2">
+              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="r.description"></p>
               <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
-                      style="width:100%; height:240px; border:0;"></iframe>
+                      style="width:100%; height:220px; border:0;"></iframe>
             </div>
           </div>
         </template>

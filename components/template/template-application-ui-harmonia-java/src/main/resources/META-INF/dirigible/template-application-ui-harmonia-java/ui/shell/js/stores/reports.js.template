@@ -45,10 +45,33 @@ document.addEventListener('alpine:init', () => {
           .filter(x => { if (seen.has(x.url)) return false; seen.add(x.url); return true; })
           .sort((a, b) => a.name.localeCompare(b.name));
         this.loaded = true;
+        this._enrich(project);
       } catch (e) {
         console.error('reports: discovery failed', e);
         this.loaded = true;
       }
+    },
+
+    // Enrich each discovered report from its .report model file (project root): the human label, the
+    // description (shown on the dashboard tile), and the dashboard exclude flag. Best-effort — a
+    // missing/unreadable .report just leaves the defaults (label = humanized name, shown on dashboard).
+    async _enrich(project) {
+      await Promise.all(this.items.map(async (it) => {
+        if (it.dashboard === undefined) it.dashboard = true;
+        try {
+          const r = await fetch('/services/core/repository/registry/public/' + project + '/' + it.name + '.report', {
+            headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
+          });
+          if (!r.ok) return;
+          const def = await r.json();
+          if (!def) return;
+          if (def.label) it.label = def.label;
+          if (def.description) it.description = def.description;
+          if (def.dashboard === false) it.dashboard = false;
+        } catch (e) { /* keep defaults */ }
+      }));
+      // Reassign so Alpine re-renders the sidebar / dashboard with the enriched items.
+      this.items = [...this.items];
     },
 
     // Walk the registry tree (collections + resources); a report page is a `reports/<Name>/index.html`.
