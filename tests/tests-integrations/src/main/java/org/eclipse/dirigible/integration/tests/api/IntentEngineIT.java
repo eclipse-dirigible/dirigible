@@ -113,7 +113,9 @@ class IntentEngineIT extends IntegrationTest {
               - name: ApproveOrder
                 forEntity: Order
                 description: Approve or reject an order
-                fields: [orderDate, total]
+                # customer.creditLimit is also used by the bigOrder decision (so its resolver moves
+                # earlier, before this form); customer.name is referenced only here (form-only resolver).
+                fields: [orderDate, total, customer.creditLimit, customer.name]
                 actions: [approve, reject]
 
             reports:
@@ -382,6 +384,15 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
 
+        // The form-only relation.field (customer.name on the ApproveOrder form) produces its own resolver
+        // even though no decision references it - the user-task form is a resolver trigger in its own
+        // right.
+        String formResolver = contentOf("gen/events/ResolveCustomerName.java");
+        assertTrue(formResolver.contains("class ResolveCustomerName implements JavaDelegate"),
+                "a relation.field referenced only by a user-task form should still generate a resolver");
+        assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
+                "the form resolver should publish the related field as the customer_name variable the form control binds to");
+
         // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
         // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
@@ -462,6 +473,83 @@ class IntentEngineIT extends IntegrationTest {
                 "the rollup create-listener should recompute the parent count via Criteria");
         assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
+    }
+
+    @Test
+    void set_field_glue_sets_entity_status_on_approve_reject_branches() {
+        // A MemberApproval process whose approve/reject decision routes to two setField service tasks:
+        // approve -> status ACTIVE, reject -> status REJECTED. `next: done` on the activate branch makes
+        // both branches converge on `done` instead of activate falling through into reject. The form
+        // completes the task with the chosen action as a process variable the decision tests.
+        String yaml = """
+                name: members
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string,  required: true, length: 100 }
+                      - { name: status, type: string,  length: 20, defaultValue: "PENDING" }
+                processes:
+                  - name: MemberApproval
+                    trigger: { onCreate: Member }
+                    steps:
+                      - { name: librarianReview, kind: userTask, args: { assignee: librarian, form: ApproveMember } }
+                      - name: approved
+                        kind: decision
+                        args: { if: "action == 'approve'", then: activate, else: reject }
+                      - { name: activate, kind: serviceTask, args: { setField: status, value: ACTIVE,   next: done } }
+                      - { name: reject,   kind: serviceTask, args: { setField: status, value: REJECTED } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ApproveMember, forEntity: Member, fields: [name, status], actions: [approve, reject] }
+                permissions:
+                  - { role: Librarian, can: [Member:approve] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: each setField serviceTask binds the generated JavaDelegate (NOT a custom/ stub), the
+        // decision routes to both branches, and `next: done` makes activate skip past reject to the end.
+        String bpmn = contentOf("MemberApproval.bpmn");
+        assertTrue(bpmn.contains("<serviceTask id=\"activate\"") && bpmn.contains("gen.events.MemberApprovalActivate"),
+                "the activate setField step should bind the generated JavaDelegate handler");
+        assertTrue(bpmn.contains("<serviceTask id=\"reject\"") && bpmn.contains("gen.events.MemberApprovalReject"),
+                "the reject setField step should bind its own generated handler");
+        assertFalse(bpmn.contains("custom.Activate") || bpmn.contains("custom.Reject"),
+                "a setField service task must not scaffold a custom/ stub");
+        assertTrue(bpmn.contains("id=\"flow_approved_then\" sourceRef=\"approved\" targetRef=\"activate\""),
+                "approve branch should route to the activate setter");
+        assertTrue(bpmn.contains("id=\"flow_approved_default\" sourceRef=\"approved\" targetRef=\"reject\""),
+                "reject branch should be the gateway default");
+        assertTrue(bpmn.contains("sourceRef=\"activate\" targetRef=\"end\"") && bpmn.contains("sourceRef=\"reject\" targetRef=\"end\""),
+                "both branches should converge on the end via `next` (activate must not fall through into reject)");
+        assertTrue(bpmn.contains("${action == 'approve'}"), "the decision should test the form action variable");
+
+        // Glue: a `setters` collection, one entry per setField step, carrying the field + literal value.
+        String glue = contentOf("members.glue");
+        assertTrue(glue.contains("\"setters\""), "the glue should carry a setters collection");
+        assertTrue(
+                glue.contains("\"className\": \"MemberApprovalActivate\"") && glue.contains("\"field\": \"Status\"")
+                        && glue.contains("\"value\": \"ACTIVE\"") && glue.contains("\"keyProperty\": \"Id\""),
+                "the activate setter should set the PascalCase field to its literal, loading by the PK property");
+        assertTrue(glue.contains("\"className\": \"MemberApprovalReject\"") && glue.contains("\"value\": \"REJECTED\""),
+                "the reject setter should carry its own value");
+
+        // Run the glue-code template: each setter becomes a JavaDelegate that loads the entity by id,
+        // assigns the field, and persists WITHOUT re-publishing an update event.
+        generateFromModel("template-application-events-java/template/template.js", "members.glue");
+        String activate = contentOf("gen/events/MemberApprovalActivate.java");
+        assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
+                "the setter should be generated as a Flowable JavaDelegate");
+        assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
+                "the setter should import the entity from its real Java package and load it by the PK process variable");
+        assertTrue(activate.contains("entity.Status = \"ACTIVE\"") && activate.contains("repository.updateWithoutEvent(entity)"),
+                "the setter should assign the field and persist without re-firing an update event");
+        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("entity.Status = \"REJECTED\""),
+                "the reject setter should assign the rejected status");
     }
 
     @Test
@@ -797,9 +885,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(
                 glue.contains("\"triggers\"") && glue.contains("\"process\": \"OrderApproval\"") && glue.contains("\"entity\": \"Order\""),
                 "glue should carry the trigger for the OrderApproval process on Order");
-        // Resolvers: one per relation.field referenced in a decision.
+        // Resolvers: one per relation.field referenced in a decision OR a user-task form.
         assertTrue(glue.contains("\"resolvers\"") && glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""),
-                "glue should carry the customer.creditLimit decision resolver");
+                "glue should carry the customer.creditLimit resolver (used by both the form and the decision)");
+        assertTrue(glue.contains("\"handler\": \"ResolveCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
+                "glue should carry the form-only customer.name resolver");
         assertTrue(
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
@@ -912,20 +1002,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the conditioned flow should target the `then` step");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
-        // The decision references customer.creditLimit, so a JavaTask resolver is inserted before the
-        // gateway and the condition is rewritten to test the resolved variable.
+        // customer.creditLimit is referenced by BOTH the managerReview user-task form and the bigOrder
+        // decision; customer.name only by the form. Each relation.field gets a JavaTask resolver inserted
+        // before the EARLIEST step that needs it - here the managerReview form - so the form fields are
+        // populated and the later decision still tests the (process-global, already-resolved) variable.
         // The resolver task id is the lower-camel form of the handler (unified with the authored step
         // ids), with a humanized name; the delegate still resolves the PascalCase handler class.
         assertTrue(
                 body.contains("<serviceTask id=\"resolveCustomerCreditLimit\" name=\"Resolve Customer Credit Limit\"")
                         && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
-                "a JavaTask resolver service task should precede the decision with a unified id and humanized name");
-        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit"),
-                "the resolver task should point at the generated PascalCase handler FQN");
+                "a JavaTask resolver service task should be generated for the shared relation.field");
+        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit") && body.contains("gen.events.ResolveCustomerName"),
+                "both the shared and the form-only relation.field should produce a resolver task pointing at its handler FQN");
         assertTrue(
-                body.contains("sourceRef=\"managerReview\" targetRef=\"resolveCustomerCreditLimit\"")
-                        && body.contains("sourceRef=\"resolveCustomerCreditLimit\" targetRef=\"bigOrder\""),
-                "the resolver should sit on the linear flow right before the decision");
+                body.contains("sourceRef=\"start\" targetRef=\"resolveCustomerCreditLimit\"")
+                        && body.contains("sourceRef=\"resolveCustomerName\" targetRef=\"managerReview\""),
+                "the resolvers should sit at the head of the flow, right before the user-task form that needs them");
+        assertTrue(body.contains("sourceRef=\"managerReview\" targetRef=\"bigOrder\""),
+                "the decision should follow the form directly - its resolver already ran before the form, not just before the gateway");
         assertTrue(body.contains("${customer_creditLimit > 10000}"),
                 "the decision condition should be rewritten to test the resolved variable");
         assertFalse(body.contains("customer.creditLimit"), "the raw relation.field path must not leak into the BPMN condition");
@@ -945,6 +1039,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"controlId\": \"input-number\""), "form should pick input-number for the total decimal field");
         assertTrue(body.contains("\"model\": \"OrderDate\""),
                 "form field model should bind to the PascalCase entity property (orderDate -> OrderDate)");
+        // A relation.field form field (customer.creditLimit / customer.name) binds to the resolver-set
+        // process variable (<relation>_<field>, NOT a PascalCase property), is typed from the TARGET
+        // entity's field (creditLimit is decimal -> input-number), is read-only, and is labelled by the
+        // humanized path. The matching resolver step is asserted in assertBpmn / the glue test.
+        assertTrue(body.contains("\"model\": \"customer_creditLimit\""),
+                "a relation.field control should bind to the resolver-set process variable, not a PascalCase property");
+        assertTrue(body.contains("\"model\": \"customer_name\""), "a form-only relation.field should also bind to its resolver variable");
+        assertTrue(body.contains("\"label\": \"Customer Credit Limit\""), "a relation.field label should be the humanized path");
+        assertTrue(body.contains("\"readonly\": true"),
+                "a relation.field control should be read-only (resolved related data, not editable)");
         assertTrue(body.contains("\"type\": \"positive\""), "form should mark the approve button as positive");
         assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler");
         // The action handler must complete the BPM task, not be a no-op stub. (The .form code is
