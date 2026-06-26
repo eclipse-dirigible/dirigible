@@ -73,14 +73,16 @@
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
     <script>
       document.addEventListener('alpine:initialized', () => { if (window.lucide) window.lucide.createIcons(); }, { once: true });
-      // Re-apply the colour scheme when the shell (parent window) switches theme. Harmonia reads the
+      // Re-apply the colour scheme when the shell (parent window) switches theme. Harmonia applies the
       // shared localStorage key only at load; the `storage` event fires in this iframe when the parent
       // changes it, so without this the embedded report (e.g. a dashboard tile) stays on the old theme
-      // until a full refresh. Guarded to avoid a set/echo loop.
+      // until a full refresh. (Can't gate on Harmonia.getColorScheme() — it reads the same key, which
+      // already holds the new value — so track the last applied scheme to re-apply once and avoid loops.)
+      var __harmoniaScheme = null;
       window.addEventListener('storage', (e) => {
         if (e.key === 'codbex.harmonia.colorMode' && window.Harmonia) {
           const scheme = e.newValue || 'light';
-          if (Harmonia.getColorScheme() !== scheme) Harmonia.setColorScheme(scheme);
+          if (scheme !== __harmoniaScheme) { __harmoniaScheme = scheme; Harmonia.setColorScheme(scheme); }
         }
       });
     </script>

@@ -177,17 +177,19 @@
             <!-- Light/dark theme switch (a visible Lucide sun/moon). Backed by Harmonia's own
                  colour-scheme API, so every page — including the standalone form/report iframes that
                  load harmonia.min.js — honours the same choice. -->
-            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
-                    :aria-label="theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <i x-show="theme !== 'dark'" role="img" data-lucide="moon"></i>
-              <i x-show="theme === 'dark'" role="img" data-lucide="sun"></i>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <i x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></i>
+              <i x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></i>
             </button>
 
-            <!-- Notifications: the bell shows the unread count; the popover lists them (from the
-                 notifications store; app code/glue pushes via Alpine.store('notifications').add(...)). -->
-            <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications">
+            <!-- Notifications: the bell shows the unread count (absolutely positioned so the count
+                 pill never widens the button into its neighbours); the popover lists them. -->
+            <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications" class="relative">
               <i role="img" data-lucide="bell"></i>
-              <span x-show="$store.notifications.unreadCount > 0" x-h-badge data-variant="negative" data-size="sm" x-text="$store.notifications.unreadCount"></span>
+              <!-- Small count badge tucked into the bell's bottom-right corner (doesn't cover the icon). -->
+              <span x-show="$store.notifications.unreadCount > 0" class="absolute" x-text="$store.notifications.unreadCount"
+                    style="right:-2px; bottom:-2px; min-width:15px; height:15px; padding:0 3px; border-radius:9999px; background:#e01b24; color:#fff; font-size:9px; line-height:15px; text-align:center; font-weight:700;"></span>
             </button>
             <div class="w-80" x-h-popover data-innerclicks="true">
               <div x-h-toolbar data-size="sm">
@@ -360,6 +362,7 @@
     <script src="./js/stores/reports.js" defer></script>
     <script src="./js/stores/currentUser.js" defer></script>
     <script src="./js/stores/notifications.js" defer></script>
+    <script src="./js/stores/theme.js" defer></script>
     <script src="./js/components/pages/dashboardPage.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>

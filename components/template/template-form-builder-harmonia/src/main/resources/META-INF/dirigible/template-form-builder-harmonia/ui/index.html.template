@@ -116,11 +116,13 @@
       document.addEventListener('alpine:initialized', () => { if (window.lucide) window.lucide.createIcons(); }, { once: true });
       // Re-apply the colour scheme when the shell (parent window) switches theme — the `storage` event
       // fires in this iframe when the parent changes the shared key; without it the embedded form stays
-      // on the old theme until a full refresh. Guarded to avoid a set/echo loop.
+      // on the old theme until a full refresh. (Can't gate on Harmonia.getColorScheme() — it reads the
+      // same key, already holding the new value — so track the last applied scheme to re-apply once.)
+      var __harmoniaScheme = null;
       window.addEventListener('storage', (e) => {
         if (e.key === 'codbex.harmonia.colorMode' && window.Harmonia) {
           const scheme = e.newValue || 'light';
-          if (Harmonia.getColorScheme() !== scheme) Harmonia.setColorScheme(scheme);
+          if (scheme !== __harmoniaScheme) { __harmoniaScheme = scheme; Harmonia.setColorScheme(scheme); }
         }
       });
     </script>

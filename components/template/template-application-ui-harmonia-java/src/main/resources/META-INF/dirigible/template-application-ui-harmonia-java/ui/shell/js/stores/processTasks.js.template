@@ -26,6 +26,12 @@ document.addEventListener('alpine:init', () => {
       window.addEventListener('message', (e) => {
         if (e && e.data && e.data.type === 'harmonia.form.close' && this.formOpen) this.closeForm();
       });
+      // Keep every consumer fresh without a manual page refresh — the bell notifications AND the
+      // in-record task buttons (which read this store) — by re-checking the inbox on navigation and
+      // on a periodic poll. So a task raised by a just-created record (e.g. a new Loan starting a
+      // process) shows up on its own, not only after a full refresh or visiting the Inbox.
+      document.addEventListener('pinecone:end', () => { if (this.loaded) this.load(); });
+      setInterval(() => this.load(), 30000);
     },
 
     async load() {
