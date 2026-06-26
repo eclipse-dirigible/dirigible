@@ -35,17 +35,24 @@
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
         <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span>Reports</span>
       </div>
-      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in reports" :key="r.url">
-          <div x-h-card role="button" tabindex="0" class="cursor-pointer"
-               @click="openReport(r)" @keydown.enter.prevent="openReport(r)">
+          <div x-h-card>
             <div x-h-card-header>
-              <h3 x-h-card-title class="hbox items-center gap-2">
+              <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer" @click="openReport(r)">
                 <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="r.label"></span>
               </h3>
+              <div x-h-card-action>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="openReport(r)" aria-label="Open report">
+                  <i role="img" data-lucide="arrow-up-right"></i>
+                </button>
+              </div>
             </div>
+            <!-- A simplified preview of the report (first rows, no toolbar/pagination); the full
+                 report opens via the header / open button. -->
             <div x-h-card-content>
-              <p x-h-text.muted class="text-sm">Open report</p>
+              <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+                      style="width:100%; height:240px; border:0;"></iframe>
             </div>
           </div>
         </template>

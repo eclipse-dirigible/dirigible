@@ -41,11 +41,18 @@ document.addEventListener('alpine:init', () => {
     page: 1,
     limit: 20,
     count: 0,
+    // Preview mode (dashboard tile): only the first few rows, no toolbar / pagination. Driven by
+    // the ?preview=1 query param the dashboard tile passes when it embeds this page in an iframe.
+    preview: false,
 
     init() {
       this.displayName = String(this.displayName || '')
         .replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim()
         .replace(/^./, c => c.toUpperCase());
+      try {
+        this.preview = new URLSearchParams(location.search).get('preview') === '1';
+      } catch (e) { /* no location */ }
+      if (this.preview) this.limit = 5;
       try { document.title = this.displayName; } catch (e) { /* no document */ }
       this.load();
     },

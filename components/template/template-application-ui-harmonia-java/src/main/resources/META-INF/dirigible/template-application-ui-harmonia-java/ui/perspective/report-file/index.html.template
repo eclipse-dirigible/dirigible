@@ -22,7 +22,8 @@
   </head>
   <body class="vbox size-full" x-data="reportPage" x-cloak>
     <div class="vbox size-full">
-      <div x-h-toolbar data-variant="transparent">
+      <!-- Hidden in preview mode (the dashboard tile): no title/badge/toolbar, just the data. -->
+      <div x-show="!preview" x-h-toolbar data-variant="transparent">
         <span x-h-toolbar-title class="shrink-0" x-text="displayName"></span>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
         <div x-h-toolbar-spacer></div>
@@ -58,7 +59,7 @@
           </table>
         </div>
 
-        <div class="hbox items-center gap-2">
+        <div x-show="!preview" class="hbox items-center gap-2">
           <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="prev()"><i role="img" data-lucide="chevron-left"></i><span>Prev</span></button>
           <span x-h-text.muted x-text="'Page ' + page + ' / ' + totalPages"></span>
           <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span>Next</span><i role="img" data-lucide="chevron-right"></i></button>
