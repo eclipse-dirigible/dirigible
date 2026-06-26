@@ -109,6 +109,14 @@ document.addEventListener('alpine:init', () => {
 
     isActive(route) { return this.currentPath === route; },
 
+    // Open the task behind a (task-derived) notification, and mark it read.
+    openNotification(n) {
+      if (n && n.task) {
+        this.$store.processTasks.openTask(n.task);
+        n.unread = false;
+      }
+    },
+
     // Sidebar nav label safety net: humanize a PascalCase/camelCase label so multi-word names read
     // as words (e.g. "SalesInvoice" -> "Sales Invoice"). Idempotent on already-spaced labels, so it
     // is safe over the model's menuLabel. Pluralization is the model's job (the intent generator

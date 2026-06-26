@@ -6,8 +6,9 @@
  * bell shows the unread count and the dropdown lists them. (Transient toasts are a separate concern,
  * via Harmonia's $notifications overlay declared in index.html.)
  *
- * Starts empty — a generated skeleton has no notifications until the app raises them (e.g. from BPM
- * events or business rules). TODO (follow-up): subscribe to a server-side notification source.
+ * A first source is wired in: the user's actionable BPM tasks (from the processTasks store) are
+ * surfaced as notifications via syncTasks() — a new task shows up here, a completed one drops off.
+ * TODO (follow-up): a persistent, server-side per-user notification inbox.
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('notifications', {
@@ -30,5 +31,31 @@ document.addEventListener('alpine:init', () => {
     markAllRead() { this.items.forEach(n => { n.unread = false; }); },
     remove(id) { this.items = this.items.filter(n => n.id !== id); },
     clear() { this.items = []; },
+
+    // Reconcile task-derived notifications against the current BPM tasks (called by processTasks):
+    // keep app-pushed items and still-pending task items (preserving their read state), drop tasks
+    // that are gone, and add new tasks at the top.
+    syncTasks(tasks) {
+      tasks = tasks || [];
+      const taskIds = new Set(tasks.map(t => 'task:' + t.id));
+      const kept = this.items.filter(n => n.source !== 'task' || taskIds.has(n.id));
+      const existing = new Set(kept.map(n => n.id));
+      const added = [];
+      tasks.forEach(t => {
+        const id = 'task:' + t.id;
+        if (!existing.has(id)) {
+          added.push({
+            id,
+            source: 'task',
+            task: t,
+            title: 'New task: ' + (t.name || 'Task'),
+            description: t.processDefinitionName || '',
+            variant: 'information',
+            unread: true,
+          });
+        }
+      });
+      this.items = added.concat(kept);
+    },
   });
 }, { once: true });

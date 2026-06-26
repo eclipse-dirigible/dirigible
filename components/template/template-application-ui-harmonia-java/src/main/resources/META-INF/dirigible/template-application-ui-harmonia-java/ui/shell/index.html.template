@@ -199,7 +199,8 @@
               <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm">You're all caught up.</div>
               <ol x-show="$store.notifications.items.length" x-h-notification-list>
                 <template x-for="n in $store.notifications.items" :key="n.id">
-                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'">
+                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'"
+                      :class="n.task ? 'cursor-pointer' : ''" @click="openNotification(n)">
                     <div x-h-notification-media><svg x-h-icon.circle-info class="size-5" role="img" aria-label="info"></svg></div>
                     <div class="vbox flex-1">
                       <h1 x-h-notification-title x-text="n.title"></h1>
@@ -251,6 +252,28 @@
         </div>
       </div>
     </div>
+
+    <!-- App-wide transient toasts. Any component/form/glue raises one through Harmonia's
+         notifications magic with the 'toast' template below (data: message + variant). -->
+    <section x-h-notification-overlay>
+      <template id="toast">
+        <li x-h-notification.floating data-variant="toast" class="hbox items-center gap-3 min-w-3xs max-w-md">
+          <div x-h-notification-media>
+            <span x-h-avatar class="rounded-full" :data-variant="variant">
+              <template x-if="variant === 'positive'"><svg x-h-icon.circle-success role="img" aria-label="success"></svg></template>
+              <template x-if="variant === 'negative'"><svg x-h-icon.circle-error role="img" aria-label="error"></svg></template>
+              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon.circle-info role="img" aria-label="info"></svg></template>
+            </span>
+          </div>
+          <span x-h-notification-title class="flex-1" x-text="message"></span>
+          <div x-h-notification-actions data-orientation="vertical">
+            <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
+              <svg x-h-icon.close role="img" aria-label="close"></svg>
+            </button>
+          </div>
+        </li>
+      </template>
+    </section>
 
     <!-- Routes (Pinecone reads these from the document). -->
     <!-- Home dashboard: model-generated KPI tiles (reached via the Home icon). -->

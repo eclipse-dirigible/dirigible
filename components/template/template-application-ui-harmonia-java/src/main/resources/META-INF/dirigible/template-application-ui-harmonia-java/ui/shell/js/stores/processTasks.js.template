@@ -50,6 +50,9 @@ document.addEventListener('alpine:init', () => {
         this.byProcessId = map;
         this.tasks = flat;
         this.loaded = true;
+        // Surface the user's actionable tasks in the shell's notification bell.
+        const notifications = Alpine.store('notifications');
+        if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
       } catch (e) {
         this.byProcessId = {};
         this.tasks = [];
