@@ -1,0 +1,24 @@
+/**
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+/*
+ * App-level overrides on top of Harmonia's compiled CSS.
+ * Theme via CSS variables (see HARMONIA_RUNTIME_PLAN.md "Theming via CSS Variables").
+ * Adopted from codbex-athena-app (css/app.css).
+ */
+html, body { height: 100%; margin: 0; }
+
+[x-cloak] { display: none !important; }
+
+/* TODO (Phase 4): brand tokens + light/dark parity bridged from the platform theme. */
+:root {
+  /* --primary: oklch(0.55 0.22 260); */
+}

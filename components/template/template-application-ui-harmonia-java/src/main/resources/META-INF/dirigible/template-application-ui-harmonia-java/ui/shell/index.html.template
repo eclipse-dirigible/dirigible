@@ -22,7 +22,7 @@
     <title>${appTitle}</title>
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
-    <link href="./css/app.css" rel="stylesheet" />
+    <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
 
     <!-- PapaParse — CSV parsing for the Documents File Preview pane (served version-less by webjars). -->
     <script src="/webjars/papaparse/papaparse.min.js"></script>
@@ -284,14 +284,14 @@
     <template x-route="/" x-template.target.app="./views/_dashboard.html"></template>
     <template x-route="/dashboard" x-template.target.app="./views/_dashboard.html"></template>
     <!-- Built-in shell sections (always present): Process Inbox + Documents. -->
-    <template x-route="/inbox" x-template.target.app="./views/_inbox.html"></template>
-    <template x-route="/documents" x-template.target.app="./views/_documents.html"></template>
+    <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
+    <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
 #if($hasSettings)
     <!-- Settings landing: lists the setting entities (each still has its own CRUD route below). -->
     <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
 #end
     <!-- Reports landing: always routed; the page lists reports discovered at runtime (reports store). -->
-    <template x-route="/reports" x-template.target.app="./views/_reports.html"></template>
+    <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
     <!-- LIST entities: one read-only list route each. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
@@ -343,7 +343,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-report.html"></template>
 #end
 #end
-    <template x-route="notfound" x-template.target.app="./views/_notfound.html"></template>
+    <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
 
     <!-- Route segment -> nav label, from the model — read by appShell for the breadcrumb so the
          entity crumb reads the same as the sidebar (e.g. "Book" -> "Books"). -->
@@ -358,26 +358,29 @@
     <!-- 1. Plugins (vendored, no CDN) -->
     <script src="/services/web/application-core/vendor/pinecone-router.min.js"></script>
 
-    <!-- 2. App code (defer keeps document order) -->
-    <script src="./js/app.js" defer></script>
+    <!-- 2. App code (defer keeps document order). The model-independent shell runtime is loaded ONCE
+         from the shared location (/services/web/application-core/shell) - the same runtime the Harmonia
+         application shell uses - so it is not copied per project. Only config.js, dashboardPage.js and
+         the per-entity pages below are generated locally. -->
+    <script src="/services/web/application-core/shell/js/app.js" defer></script>
     <script src="./js/config.js" defer></script>
-    <script src="./js/services/api.js" defer></script>
-    <script src="./js/services/apiError.js" defer></script>
-    <script src="./js/services/formValidation.js" defer></script>
-    <script src="./js/components/layout/appShell.js" defer></script>
-    <script src="./js/components/pages/basePage.js" defer></script>
-    <script src="./js/components/pages/baseFormPage.js" defer></script>
-    <script src="./js/components/detailPanel.js" defer></script>
-    <script src="./js/stores/processTasks.js" defer></script>
-    <script src="./js/stores/reports.js" defer></script>
-    <script src="./js/stores/currentUser.js" defer></script>
-    <script src="./js/stores/notifications.js" defer></script>
-    <script src="./js/stores/theme.js" defer></script>
-    <script src="./js/stores/related.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/formValidation.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/layout/appShell.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/detailPanel.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/related.js" defer></script>
     <script src="./js/components/pages/dashboardPage.js" defer></script>
-    <script src="./js/components/pages/inboxPage.js" defer></script>
-    <script src="./js/components/pages/documentsPage.js" defer></script>
-    <script src="./js/components/pages/settingsPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/settingsPage.js" defer></script>
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ListPage.js" defer></script>

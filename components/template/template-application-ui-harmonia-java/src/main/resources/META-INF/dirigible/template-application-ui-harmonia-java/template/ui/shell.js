@@ -5,20 +5,20 @@
  */
 
 /*
- * Shell sources — the reusable Alpine.js + Harmonia runtime dashboard.
+ * Shell sources.
  *
- * These files are the directly-adopted dashboard from codbex-athena-app (see
- * HARMONIA_RUNTIME_PLAN.md, "Reference implementation"). They are app-wide and
- * model-independent, so they are emitted ONCE per generated app with action "copy"
- * (verbatim content; only the destination path is Mustache-processed).
+ * The model-independent Harmonia runtime (app.js, services, stores, base/page components, appShell,
+ * css, and the Inbox/Documents/Reports/notfound views) is NO LONGER copied per project: it is served
+ * once from the shared location /services/web/application-core/shell (see
+ * components/resources/application-core/.../application-core/shell), which the generated index.html
+ * references directly. The same shared runtime backs the Harmonia application shell
+ * (components/resources/resources-application), so there is a single source of truth.
  *
- * The single exception is index.html, which is the aggregate SPA entry: it must
- * enumerate every entity's <template x-route> and sidebar nav entry, so it is
- * generated ONCE over the whole model (no `collection` => generateUtils exposes
- * `parameters.models = model.entities` to Velocity).
- *
- * TODO (Phase 1): vendor Alpine 3.15 + @codbex/harmonia + Pinecone 7.5 + Lucide as
- * webjars and reference them from index.html instead of unpkg CDN (CSP/offline).
+ * Only the project-specific files are still generated here:
+ *   - index.html        : the aggregate SPA entry (enumerates entity routes + sidebar nav)
+ *   - js/config.js      : the runtime config (REST base, SPA basePath, project name)
+ *   - views/_settings.html : lists THIS project's setting entities
+ *   - js/.../dashboardPage.js + views/_dashboard.html : the home KPI tiles, baked from the model
  */
 export function getSources() {
     return [
@@ -29,135 +29,20 @@ export function getSources() {
             engine: "velocity",
             rename: "gen/{{genFolderName}}/index.html"
         },
-        // The one project-specific shell file: the runtime config (REST base, SPA
-        // basePath, project name). Generated so the verbatim assets below can stay
-        // model-independent and read their wiring from `window.App.config`.
+        // The one project-specific runtime config (REST base, SPA basePath, project name). The shared
+        // runtime reads its wiring from window.App.config.
         {
             location: "/template-application-ui-harmonia-java/ui/shell/js/config.js.template",
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/js/config.js"
         },
-        // Settings + Reports landing pages — generated once over the full model (no collection) so
-        // each lists its entities; reached via the single Settings / Reports sidebar entries.
+        // Settings landing — generated once over the full model so it lists this project's settings.
         {
             location: "/template-application-ui-harmonia-java/ui/shell/settings.html.template",
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/views/_settings.html"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/reports.html.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/views/_reports.html"
-        },
-        // Static, model-independent shell assets — copied verbatim.
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/app.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/app.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/services/api.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/services/api.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/services/apiError.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/services/apiError.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/services/formValidation.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/services/formValidation.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/layout/appShell.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/layout/appShell.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/basePage.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/pages/basePage.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/detailPanel.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/detailPanel.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/processTasks.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/processTasks.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/reports.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/reports.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/currentUser.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/currentUser.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/notifications.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/notifications.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/theme.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/theme.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/related.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/stores/related.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/baseFormPage.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/pages/baseFormPage.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/css/app.css.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/css/app.css"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/notfound.html.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/views/_notfound.html"
-        },
-        // Built-in shell sections (transferred from the dashboard): Process Inbox + Documents.
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/inboxPage.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/pages/inboxPage.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/inbox.html.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/views/_inbox.html"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/documentsPage.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/pages/documentsPage.js"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/documents.html.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/views/_documents.html"
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/settingsPage.js.template",
-            action: "copy",
-            rename: "gen/{{genFolderName}}/js/components/pages/settingsPage.js"
         },
         // Home dashboard: the page component bakes one KPI tile per entity from the model (velocity);
         // the view is generic (iterates the component's data).
