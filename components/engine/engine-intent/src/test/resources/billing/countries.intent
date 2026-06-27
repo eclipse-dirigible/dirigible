@@ -5,6 +5,7 @@ entities:
   - name: Country
     kind: setting
     icon: globe
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }

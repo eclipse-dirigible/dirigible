@@ -157,6 +157,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder);
+            // A navigation-group id makes the generated perspective nest under that group in the shared
+            // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
+            if (notBlank(entity.getGroup())) {
+                entityMap.put("perspectiveNavId", entity.getGroup());
+            }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
             if (entity.isDashboardExcluded()) {

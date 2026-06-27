@@ -20,12 +20,19 @@ document.addEventListener('alpine:init', () => {
     isOpen: false,
     currentPath: '',
 
+    // Embedded mode: when this SPA is hosted inside the shared application shell (the platform
+    // dashboard loads each perspective with ?embedded), hide our own sidebar/chrome so the shared
+    // shell provides the single navigation. Standalone (no ?embedded) is unaffected.
+    embedded: false,
+
     // Route segment -> nav label, generated from the model (window.__harmoniaNav in index.html);
     // used to label the breadcrumb's entity crumb the same way the sidebar labels it.
     navLabels: {},
 
     init() {
       this.navLabels = window.__harmoniaNav || {};
+      try { this.embedded = new URLSearchParams(window.location.search).has('embedded'); } catch (e) { /* no URL */ }
+      if (this.embedded) this.hiddenPanels.left = true;
       const getPath = () => {
         const p = window.PineconeRouter.context?.path || '/';
         return p === '/' ? '/dashboard' : p;
@@ -41,7 +48,8 @@ document.addEventListener('alpine:init', () => {
       });
 
       this._bp = Harmonia.getBreakpointListener((isNarrow) => {
-        this.hiddenPanels.left = isNarrow;
+        // Embedded mode keeps the sidebar hidden regardless of width (the shared shell owns nav).
+        this.hiddenPanels.left = this.embedded ? true : isNarrow;
         if (isNarrow) {
           this.$refs.overlay.appendChild(this.$refs.sidebar);
         } else {

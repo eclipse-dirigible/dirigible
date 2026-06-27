@@ -5,15 +5,41 @@
  */
 
 /*
- * Navigation — in the Angular module this emits a perspective-group .extension per
- * navigation node (consumed by the IDE/dashboard shell). In the Harmonia SPA there
- * is no extension-point registry: the sidebar nav is data inside appShell's
- * `nav` array, assembled in index.html from the model.
+ * Navigation - contributes each top-level entity to the shared application shell (the platform
+ * dashboard) as a perspective registered to the `application-perspectives` extension point, grouped
+ * by the entity's navigation group (`groupId`, from the intent `group:`). This is ADDITIVE: the
+ * project's own standalone Harmonia SPA (assembled in ui/shell/index.html) is unchanged; these
+ * extensions only make the same entities ALSO appear, grouped, in the one shared shell so the user
+ * does not jump between per-project apps.
  *
- * TODO (Phase 1/2): emit a generated `js/nav.js` (or a JSON include) holding the
- * { route, label, icon } entries per navigation node, which appShell.js reads
- * instead of its hard-coded demo array. For now the skeleton folds nav into the
- * aggregate index.html (see ui/shell/index.html.template), so this collector is a
- * no-op placeholder that keeps the aggregator wiring honest.
+ * The navigation GROUPS themselves are defined once elsewhere (a dedicated navigation-groups project
+ * that exports getPerspectiveGroup() for each group id), so a group shared by several projects is not
+ * declared multiple times (the shell drops duplicate ids).
+ *
+ * One perspective per top-level entity across every primary layout plus settings, so reference data
+ * (settings) can sit as first-class grouped entries (e.g. UoM/Country/Currency under "Master Data").
  */
-export const getSources = () => ([]);
+const PERSPECTIVE_COLLECTIONS = [
+    "uiListModels",
+    "uiManageModels",
+    "uiManageMasterModels",
+    "uiListMasterModels",
+    "uiSettingModels"
+];
+
+export const getSources = () => PERSPECTIVE_COLLECTIONS.flatMap(collection => ([
+    {
+        location: "/template-application-ui-harmonia-java/ui/perspective/perspective.js.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/perspectives/{{name}}/perspective.js",
+        collection
+    },
+    {
+        location: "/template-application-ui-harmonia-java/ui/perspective/perspective.extension.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/perspectives/{{name}}/perspective.extension",
+        collection
+    }
+]));
