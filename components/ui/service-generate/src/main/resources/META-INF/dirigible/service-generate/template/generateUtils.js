@@ -183,6 +183,12 @@ export function generateFiles(model, parameters, templateSources) {
     const uiManageDetailsModels = model.entities.filter(e => e.layoutType === "MANAGE_DETAILS" && e.type === "DEPENDENT");
     const uiListDetailsModels = model.entities.filter(e => e.layoutType === "LIST_DETAILS" && e.type === "DEPENDENT");
 
+    // UI Document (header-items): a master owning a composition child whose name ends in "Item"
+    // (set by EdmIntentGenerator as layoutType MANAGE_DOCUMENT) — header form + inline items table +
+    // totals footer. The items child stays a DEPENDENT detail (its inline columns + controller come
+    // from its registration); other composition children render as ordinary detail panels.
+    const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -243,6 +249,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "uiListDetailsModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiListDetailsModels, parameters));
+                    break;
+                case "uiDocumentModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiDocumentModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));

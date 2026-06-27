@@ -75,7 +75,12 @@ public final class IntentNaming {
     }
 
     /**
-     * Camel-/Pascal-case to upper snake. Handles {@code IDValue} -> {@code ID_VALUE}.
+     * Camel-/Pascal-case to upper snake. Handles {@code IDValue} -> {@code ID_VALUE}, and collapses any
+     * run of non-alphanumeric separators ({@code -}, space, {@code .}, {@code /}) to a single
+     * underscore so a kebab-case intent/project name produces a <b>valid SQL identifier</b>:
+     * {@code sales-invoices} -> {@code SALES_INVOICES}, not the invalid {@code SALES-INVOICES} (an
+     * unquoted {@code -} is parsed as minus and breaks table creation). Leading/trailing separators do
+     * not leave a dangling underscore. Pure-identifier input (entity / field names) is unaffected.
      *
      * @param name the identifier to convert (may be null)
      * @return the upper-snake form, empty for null/empty input
@@ -87,10 +92,22 @@ public final class IntentNaming {
         StringBuilder out = new StringBuilder(name.length() + 8);
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
+            if (!Character.isLetterOrDigit(c)) {
+                // Separator (-, space, ., /, ...): emit a single underscore, never doubled or leading.
+                if (out.length() > 0 && out.charAt(out.length() - 1) != '_') {
+                    out.append('_');
+                }
+                continue;
+            }
+            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1)) && out.length() > 0
+                    && out.charAt(out.length() - 1) != '_') {
                 out.append('_');
             }
             out.append(Character.toUpperCase(c));
+        }
+        // A trailing separator would leave a dangling underscore.
+        if (out.length() > 0 && out.charAt(out.length() - 1) == '_') {
+            out.setLength(out.length() - 1);
         }
         return out.toString();
     }
