@@ -67,6 +67,9 @@ class EdmIntentGeneratorTest {
         assertEquals("true", propertyByName(customer, "Uuid").get("dataUnique"));
         assertEquals("CREATED_AT", propertyByName(customer, "CreatedAt").get("auditType"));
         assertEquals("UPDATED_BY", propertyByName(customer, "UpdatedBy").get("auditType"));
+
+        // The entity's navigation group flows to perspectiveNavId (the shared-shell groupId).
+        assertEquals("master-data", customer.get("perspectiveNavId"));
     }
 
     @Test

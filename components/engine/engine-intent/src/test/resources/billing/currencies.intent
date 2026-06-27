@@ -6,6 +6,7 @@ entities:
     kind: setting
     icon: banknote
     audit: true
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: code, type: string, required: true, length: 3 }
@@ -18,6 +19,7 @@ entities:
       - { name: rate, type: decimal, precision: 18, scale: 6 }
   - name: CurrencyRate
     kind: setting
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, length: 100 }

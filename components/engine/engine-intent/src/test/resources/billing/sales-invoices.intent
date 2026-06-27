@@ -12,6 +12,7 @@ entities:
   # compiles without that external service. Swap the expression to call your generator when present.
   - name: Number
     kind: setting
+    group: settings
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, length: 100 }
@@ -21,22 +22,26 @@ entities:
       - { name: value, type: long }
   - name: SalesInvoiceStatus
     kind: setting
+    group: settings
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }
   - name: PaymentMethod
     kind: setting
+    group: settings
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }
   - name: SentMethod
     kind: setting
+    group: settings
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }
   - name: SalesInvoice
     icon: receipt
     audit: true
+    group: sales
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: number, type: string, length: 100, calculatedOnCreate: "java.util.UUID.randomUUID().toString()" }

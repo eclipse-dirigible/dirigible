@@ -149,7 +149,7 @@
       <div x-h-split-panel>
         <div class="vbox size-full">
           <div x-h-toolbar data-variant="transparent" x-cloak>
-            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+            <button x-show="hiddenPanels.left && !embedded" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <i role="img" data-lucide="menu"></i>
             </button>

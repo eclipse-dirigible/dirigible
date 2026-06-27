@@ -4,6 +4,7 @@ icon: ruler
 entities:
   - name: Dimension
     kind: setting
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }
@@ -11,6 +12,7 @@ entities:
   - name: UoM
     kind: setting
     icon: ruler
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }

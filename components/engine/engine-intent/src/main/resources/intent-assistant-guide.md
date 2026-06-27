@@ -95,6 +95,13 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Shared-shell grouping:** `group: <id>` on an entity makes its generated perspective appear under
+that navigation group in the **shared** application shell (the platform dashboard that aggregates
+`application-perspectives`), so several projects show up as one grouped app instead of separate
+shells. The project's own standalone shell is unaffected. The group ids are defined once (e.g. in a
+dedicated navigation-groups project that exports `getPerspectiveGroup()` for each id) - the entity
+only references the id (e.g. `group: master-data`).
+
 ### Cross-model references (uses) - reuse entities owned by another intent model
 
 **Use when:** an entity should reference master/reference data owned by a *different* project's
