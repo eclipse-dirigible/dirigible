@@ -241,6 +241,12 @@ document.addEventListener('alpine:init', () => {
     },
 
     cancel() {
+      // Opened as an FK "Add" iframe dialog: ask the parent to close the dialog instead of navigating
+      // this iframe to a list.
+      if (this.isEmbedded) {
+        this.emitClose();
+        return;
+      }
       this.navigateBack('/${name}');
     },
   }));

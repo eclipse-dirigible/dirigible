@@ -43,9 +43,12 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.aggregate != "true")
 #set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
+## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
+#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
+#if($lookup)#set($span = "12")#end
       <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
@@ -55,6 +58,23 @@
 #else
         <label x-h-label for="f_${property.name}">${label}#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
+#if($lookup)
+        <!-- Non-setting association: combobox + Add new (opens the target's own create page in an iframe
+             dialog) + Refresh, all on one full-width row. -->
+        <div class="hbox gap-1 items-center">
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
+            <div x-h-select-content>
+              <div x-h-select-search></div>
+              <template x-for="opt in options${property.name}" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
+          </div>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
+        </div>
+#else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#end>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
           <div x-h-select-content>
@@ -63,12 +83,6 @@
               <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
             </template>
           </div>
-        </div>
-#if(!$readonly && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")
-        <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
-        <div class="hbox gap-1 mt-1">
-          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Add ${property.relationshipEntityName}" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i></button>
-          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #end
 #elseif($property.widgetType == "NUMBER")
@@ -188,8 +202,8 @@
                   </div>
                   <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
                   <div class="hbox gap-1 mt-1" x-show="col.lookup && col.lookup.creatable && !col.readonly">
-                    <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="addRelatedItem(col)"><i data-lucide="plus" class="size-4"></i></button>
-                    <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="refreshItemOptions(col)"><i data-lucide="refresh-cw" class="size-4"></i></button>
+                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i data-lucide="plus" class="size-4"></i> <span x-text="'New ' + (col.lookup && col.lookup.entity)"></span></button>
+                    <button type="button" x-h-button data-variant="transparent" aria-label="Refresh" @click="refreshItemOptions(col)"><i data-lucide="refresh-cw" class="size-4"></i></button>
                   </div>
                 </div>
               </template>
