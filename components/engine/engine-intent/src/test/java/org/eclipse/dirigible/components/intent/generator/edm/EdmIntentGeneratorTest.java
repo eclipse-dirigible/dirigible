@@ -99,6 +99,17 @@ class EdmIntentGeneratorTest {
         assertEquals("PRIMARY", invoice.get("type"));
         // Settings owned by this model are NOT projections (they generate their own tables here).
         assertNull(entityByName(entities, "PaymentMethod").get("projectionReferencedModel"));
+
+        // SalesInvoice owns a composition child whose name ends in "Item" -> it renders with the document
+        // (header-items) layout and names its line-items entity; the totals fields carry the aggregate
+        // render hint (shown in the footer, not the header form).
+        assertEquals("MANAGE_DOCUMENT", invoice.get("layoutType"), "a master with an *Item composition child uses the document layout");
+        assertEquals("SalesInvoiceItem", invoice.get("documentItemsEntity"), "the document names its line-items entity");
+        assertEquals("true", propertyByName(invoice, "Total").get("aggregate"), "a field marked aggregate carries the footer render hint");
+        assertEquals("true", propertyByName(invoice, "Net").get("aggregate"));
+        assertNull(propertyByName(invoice, "Date").get("aggregate"), "a non-aggregate field must not carry the hint");
+        // The items child itself stays a normal detail (its inline table + controller come from there).
+        assertEquals("MANAGE_DETAILS", entityByName(entities, "SalesInvoiceItem").get("layoutType"));
     }
 
     private static Map<String, Object> buildFromResource(String resource, String intentName) {

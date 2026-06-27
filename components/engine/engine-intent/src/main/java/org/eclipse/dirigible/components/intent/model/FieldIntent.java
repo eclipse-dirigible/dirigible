@@ -41,6 +41,13 @@ public class FieldIntent {
      * {@link #calculatedOnCreate}).
      */
     private String calculatedOnUpdate;
+    /**
+     * Render hint: a document (header-items) layout shows this property in the right-aligned totals
+     * footer under the items table, not in the header form. Typically a calculated numeric total
+     * ({@code net} / {@code vat} / {@code total}). Purely presentational - the value is produced by the
+     * calculated-field expressions ({@link #calculatedOnCreate} / {@link #calculatedOnUpdate}).
+     */
+    private boolean aggregate;
 
     public String getName() {
         return name;
@@ -134,6 +141,14 @@ public class FieldIntent {
     public boolean isCalculated() {
         return (calculatedOnCreate != null && !calculatedOnCreate.isBlank())
                 || (calculatedOnUpdate != null && !calculatedOnUpdate.isBlank());
+    }
+
+    public boolean isAggregate() {
+        return aggregate;
+    }
+
+    public void setAggregate(boolean aggregate) {
+        this.aggregate = aggregate;
     }
 
     public String getDefaultValue() {

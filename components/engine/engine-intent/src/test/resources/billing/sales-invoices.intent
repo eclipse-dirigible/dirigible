@@ -42,12 +42,12 @@ entities:
       - { name: number, type: string, length: 100, calculatedOnCreate: "java.util.UUID.randomUUID().toString()" }
       - { name: date, type: date, required: true }
       - { name: due, type: date }
-      - { name: net, type: decimal, precision: 18, scale: 2 }
-      - { name: vat, type: decimal, precision: 18, scale: 2 }
-      - { name: gross, type: decimal, precision: 18, scale: 2 }
-      - { name: discount, type: decimal, precision: 18, scale: 2 }
-      - { name: total, type: decimal, precision: 18, scale: 2 }
-      - { name: paid, type: decimal, precision: 18, scale: 2 }
+      - { name: net,      type: decimal, precision: 18, scale: 2, aggregate: true }
+      - { name: vat,      type: decimal, precision: 18, scale: 2, aggregate: true }
+      - { name: gross,    type: decimal, precision: 18, scale: 2, aggregate: true }
+      - { name: discount, type: decimal, precision: 18, scale: 2, aggregate: true }
+      - { name: total,    type: decimal, precision: 18, scale: 2, aggregate: true }
+      - { name: paid,     type: decimal, precision: 18, scale: 2, aggregate: true }
       - { name: uuid, type: uuid, unique: true }
     relations:
       - { name: Customer, kind: manyToOne, to: Customer, model: customers, required: true }

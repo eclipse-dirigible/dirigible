@@ -142,6 +142,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> entityList = new ArrayList<>();
         List<Map<String, Object>> perspectiveList = new ArrayList<>();
         String tablePrefix = IntentNaming.upperSnake(intentName);
+        // Document (header-items) layout: a master that owns a composition child whose name ends in
+        // "Item" (SalesInvoice -> SalesInvoiceItem) renders as a document - header form, inline items
+        // table, totals footer - rather than the default master-detail. Maps master -> its items entity.
+        Map<String, String> documentItems = documentMasters(entities, compositionParents);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -157,6 +161,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder);
+            // A document master keeps its own perspective/nav but swaps the master-detail layout for the
+            // document layout; it names its line-items entity so the document page renders that child as
+            // the inline table (and any other composition children as ordinary detail panels).
+            if (documentItems.containsKey(name)) {
+                entityMap.put("layoutType", "MANAGE_DOCUMENT");
+                entityMap.put("documentItemsEntity", documentItems.get(name));
+            }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
             if (entity.isDashboardExcluded()) {
@@ -285,6 +296,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         return index;
+    }
+
+    /**
+     * Document masters: each entity that is the composition parent of a child whose name ends in
+     * {@code Item} maps to that child (the line-items entity). Iterated in entity-declaration order so
+     * the first {@code *Item} child wins deterministically when a master has several. Such a master
+     * renders with the document (header-items) layout instead of master-detail.
+     */
+    private static Map<String, String> documentMasters(List<EntityIntent> entities, Map<String, String> compositionParents) {
+        Map<String, String> masters = new LinkedHashMap<>();
+        for (EntityIntent entity : entities) {
+            String child = entity.getName();
+            if (child == null || !child.endsWith("Item")) {
+                continue;
+            }
+            String parent = compositionParents.get(child);
+            if (parent != null && !masters.containsKey(parent)) {
+                masters.put(parent, child);
+            }
+        }
+        return masters;
     }
 
     /**
@@ -450,6 +482,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                                .isBlank()) {
                 p.put("calculatedPropertyExpressionUpdate", field.getCalculatedOnUpdate());
             }
+        }
+        // Render hint for the document (header-items) layout: show this property in the totals footer
+        // under the items table rather than in the header form. Presentational only.
+        if (field.isAggregate()) {
+            p.put("aggregate", "true");
         }
         p.put("auditType", "NONE");
         p.put("widgetType", widgetForType(dataType));
