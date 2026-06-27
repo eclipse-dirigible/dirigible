@@ -24,7 +24,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-combobox-input input-id="id${property.name}"
 								#if($property.widgetDropDownMultiSelect)
 								multi-select="true"
@@ -58,7 +58,7 @@
 #elseif($property.widgetType == "CHECKBOX")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2"></div>
-	                    <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else bk-col--fit #end">
+	                    <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else bk-col--fit #end">
 	                        <bk-checkbox id="id${property.name}"
 	                            compact="false"
 	#if(!$property.isCalculatedProperty)
@@ -84,7 +84,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 #if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 #end
@@ -116,7 +116,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-step-input input-id="id${property.name}"
 								name="${property.name}"
 	#if(!$property.isCalculatedProperty)
@@ -141,7 +141,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 	#end
@@ -172,7 +172,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 	#end
@@ -203,7 +203,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 	#end
@@ -234,7 +234,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--3 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--3 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 	#end
@@ -265,7 +265,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{'$projectName:${tprefix}.messages.error.incorrectInput' | t}}">
 	#end
@@ -296,7 +296,7 @@
 						<div class="fd-col fd-col-md--2">
 							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
 						</div>
-						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+						<div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -350,10 +350,10 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 							<bk-link href="tel:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
-                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}" text="{{ '$projectName:${tprefix}.messages.error.pattern' | t:{'rule':'#if($property.inputRule == "")^[0-9]{0,14}$#else ${property.inputRule}#end'} }}">
 	#end
@@ -394,10 +394,10 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="{{entity.${property.name}}}" target="_blank">{{entity.${property.name}}}</bk-link>
 						</div>
-                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -450,10 +450,10 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+						<div ng-show="action === 'select'" style="margin: 4px 0px; padding: 0px 10px" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-link href="mailto:{{entity.${property.name}}}">{{entity.${property.name}}}</bk-link>
 						</div>
-                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div ng-show="action !== 'select'" class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"
@@ -506,7 +506,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	#if(!$property.isCalculatedProperty)
 							<bk-form-input-message
 								state="{{ forms.details['${property.name}'].$valid ? '' : 'error' }}"

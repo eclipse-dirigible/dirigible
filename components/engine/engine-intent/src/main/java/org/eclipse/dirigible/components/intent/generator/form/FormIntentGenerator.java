@@ -26,6 +26,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -52,6 +53,15 @@ import org.springframework.stereotype.Component;
  * </ul>
  * Fields that are not declared on the bound entity (or forms with no {@code forEntity}) fall back
  * to {@code input-textfield}.
+ *
+ * <p>
+ * A field written as a {@code relation.field} path (e.g. {@code book.price} on a form bound to
+ * {@code Loan}) is a one-hop to-one relation of the bound entity. Such a control binds to the
+ * {@code <relation>_<field>} process variable ({@code book_price}) that the process's resolver step
+ * publishes - the form model of a BPM task form is the process variables, which hold the FK id but
+ * not the related entity's own fields - and is rendered {@code readonly}, typed from the target
+ * entity's field. See
+ * {@link org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport}.
  *
  * <p>
  * Actions become buttons in a trailing {@code container-hbox}. The button {@code type} is inferred
@@ -112,7 +122,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
-            Map<String, Object> document = buildForm(form, boundEntity);
+            Map<String, Object> document = buildForm(form, boundEntity, entitiesByName);
             context.writeModelFile(fileName, JsonHelper.toJson(document));
         }
     }
@@ -127,13 +137,13 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return index;
     }
 
-    private static Map<String, Object> buildForm(FormIntent form, EntityIntent entity) {
+    private static Map<String, Object> buildForm(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName) {
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("metadata", new LinkedHashMap<>());
         document.put("feeds", new ArrayList<>());
         document.put("scripts", new ArrayList<>());
         document.put("code", buildCode(form));
-        document.put("form", buildControls(form, entity));
+        document.put("form", buildControls(form, entity, entitiesByName));
         return document;
     }
 
@@ -186,7 +196,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return sb.toString();
     }
 
-    private static List<Map<String, Object>> buildControls(FormIntent form, EntityIntent entity) {
+    private static List<Map<String, Object>> buildControls(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName) {
         List<Map<String, Object>> controls = new ArrayList<>();
         controls.add(headerControl(form));
         Map<String, FieldIntent> fieldsByName = new HashMap<>();
@@ -201,13 +211,98 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             if (fieldName == null || fieldName.isBlank()) {
                 continue;
             }
-            controls.add(fieldControl(fieldName, fieldsByName.get(fieldName)));
+            if (fieldName.indexOf('.') > 0) {
+                controls.add(relationFieldControl(fieldName, entity, entitiesByName));
+            } else {
+                controls.add(fieldControl(fieldName, fieldsByName.get(fieldName)));
+            }
         }
         if (!form.getActions()
                  .isEmpty()) {
             controls.add(actionRow(form));
         }
         return controls;
+    }
+
+    /**
+     * A control for a {@code relation.field} form field (e.g. {@code book.price} on an approval form
+     * bound to {@code Loan}). The form model of a BPM task form is the process variables, which carry
+     * the {@code Book} FK id but not the book's own fields; a resolver step generated for the process
+     * (see {@link org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport}) loads the
+     * related entity and publishes the field as the {@code <relation>_<field>} process variable
+     * ({@code book_price}), so this control binds its {@code model} to that variable. The control type
+     * is picked from the <em>target</em> entity's field (so {@code book.price} is a number control),
+     * and it is {@code readonly} - it is contextual related data shown to the reviewer, not an editable
+     * property of the bound entity (editing it would not write back to the related entity).
+     */
+    private static Map<String, Object> relationFieldControl(String path, EntityIntent boundEntity,
+            Map<String, EntityIntent> entitiesByName) {
+        int dot = path.indexOf('.');
+        String relationName = path.substring(0, dot);
+        String fieldName = path.substring(dot + 1);
+        FieldIntent targetField = null;
+        RelationIntent relation = boundEntity == null ? null : toOneRelation(boundEntity, relationName);
+        if (relation != null) {
+            EntityIntent target = entitiesByName.get(relation.getTo());
+            if (target != null) {
+                targetField = fieldOf(target, fieldName);
+            }
+        }
+        Control control = pickControl(targetField);
+        String variable = relationName + "_" + fieldName; // matches the resolver-set process variable
+        Map<String, Object> map = new LinkedHashMap<>();
+        map.put("controlId", control.controlId);
+        map.put("groupId", "fb-controls");
+        map.put("id", IntentNaming.pascalCase(relationName) + IntentNaming.pascalCase(fieldName) + "Id");
+        map.put("label", humanizePath(path));
+        map.put("horizontal", false);
+        map.put("isCompact", false);
+        map.put("readonly", true);
+        if (control.htmlType != null) {
+            map.put("type", control.htmlType);
+        }
+        map.put("model", variable);
+        map.put("required", false);
+        if ("input-textfield".equals(control.controlId) || "input-textarea".equals(control.controlId)) {
+            map.put("minLength", 0);
+            map.put("maxLength", targetField != null && targetField.getLength() != null ? targetField.getLength() : -1);
+            map.put("errorMessage", "Incorrect input");
+        }
+        return map;
+    }
+
+    private static RelationIntent toOneRelation(EntityIntent owner, String name) {
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    private static FieldIntent fieldOf(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equals(field.getName())) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Humanize each dot-separated segment of a {@code relation.field} path: {@code book.price} -> "Book
+     * Price".
+     */
+    private static String humanizePath(String path) {
+        StringBuilder out = new StringBuilder();
+        for (String segment : path.split("\\.")) {
+            if (out.length() > 0) {
+                out.append(' ');
+            }
+            out.append(humanize(segment));
+        }
+        return out.toString();
     }
 
     private static Map<String, Object> headerControl(FormIntent form) {

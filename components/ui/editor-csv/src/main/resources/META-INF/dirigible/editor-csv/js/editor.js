@@ -148,6 +148,11 @@ csvView.controller('CsvController', ($scope, $window, WorkspaceService, ViewPara
                 });
             }, (response) => {
                 console.error(response);
+                if (response && response.status === 404) {
+                    // The file no longer exists (e.g. the workspace was cleaned by a rebuild) - close the stale editor.
+                    layoutHub.closeEditor({ path: $scope.dataParameters.filePath });
+                    return;
+                }
                 $scope.$evalAsync(() => {
                     $scope.state.error = true;
                     $scope.errorMessage = 'Error while loading file. Please look at the console for more information.';

@@ -1,0 +1,297 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+/**
+ * documentsPage — the built-in Documents view: a full Document Storage browser (the Harmonia
+ * counterpart of the dashboard's AngularJS documents perspective), over the CMS REST API
+ * /services/js/documents/api/documents.js. Outlook-style master-detail: a file/folder list on the
+ * left and a File Preview pane on the right (CSV → table via PapaParse, other types → an <iframe>
+ * over /preview). Features: back/forward history, breadcrumbs, search-in-folder, new folder,
+ * rename, single + multi-select delete, download (file + folder zip), copy link, file-type icons,
+ * upload (files + "unpack zip", via button and drag-and-drop).
+ *
+ * API contract (matches the dashboard's js/documents.js and the api/documents.js routes):
+ *   - list root  : GET <base>                 (NO ?path= — GET <base>?path=/ returns 400)
+ *   - list folder: GET <base>?path=<path>      (children carry name/type/path; type cmis:folder|cmis:document)
+ *   - new folder : POST <base>/folder { parentFolder, name }
+ *   - rename     : PUT  <base> { path, name }
+ *   - delete     : DELETE <base> with a JSON body of absolute paths [ ... ]
+ *   - upload     : POST <base>?path=<folder>  (multipart) ; unpack zip: POST <base>/zip?path=<folder>
+ *   - download   : GET <base>/download?path=<path>      ; folder zip: GET <base>/zip?path=<folder>
+ *   - preview    : GET <base>/preview?path=<path>       (served with the file's content type)
+ */
+document.addEventListener('alpine:init', () => {
+  const UNKNOWN_ICON = 'file';
+  const FILE_ICONS = {
+    'file-code': ['js', 'mjs', 'ts', 'json', 'css', 'less', 'scss', 'html', 'xhtml', 'xml', 'java', 'py', 'sh'],
+    'file-text': ['txt', 'md', 'pdf', 'doc', 'docx', 'odt', 'rtf'],
+    'image': ['ico', 'bmp', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp'],
+    'file-archive': ['zip', 'bzip2', 'gzip', 'tar', 'wim', 'xz', '7z', 'rar'],
+    'file-spreadsheet': ['xls', 'xlsx', 'ods', 'csv'],
+  };
+  // Model/code artifacts the server cannot meaningfully preview.
+  const NO_PREVIEW = ['edm', 'dsm', 'bpmn', 'job', 'xsjob', 'calculationview', 'websocket', 'listener',
+    'extensionpoint', 'extension', 'table', 'view', 'access', 'roles', 'csvim', 'camel', 'form', 'gen',
+    'model', 'schema', 'dsm'];
+
+  Alpine.data('documentsPage', () => ({
+    ...basePage(),
+    base: '/services/js/documents/api/documents.js',
+    folder: { name: 'root', path: '/', children: [] },
+    breadcrumbs: [{ name: 'Home', path: '' }],
+    state: 'loading',      // loading | error | default
+    error: null,
+
+    selectedFile: null,
+    canPreview: false,
+    previewType: 'web',    // web | csv
+    previewLoading: false,
+    previewUrl: 'about:blank',
+    csv: { headers: [], rows: [] },
+
+    search: { show: false, filterBy: '' },
+    selection: { allSelected: false },
+    busy: false,
+    showDropZone: false,
+    unpackZips: false,
+
+    newFolderOpen: false, newFolderName: '', newFolderError: null,
+    renameOpen: false, renameName: '', renameTarget: null, renameError: null,
+    deleteOpen: false, deleteTargets: [],
+
+    _hist: { idx: -1, state: [] },
+
+    init() { this.openFolder(''); },
+
+    // ----- data access -----
+    async getFolder(path) {
+      // Treat '' and '/' as the root, which MUST be listed with no path param.
+      // Pass the path RAW (no encodeURIComponent): the CMS query layer does not decode an encoded
+      // slash (%2F), so an encoded path 400s ("null has no such function getName") — the dashboard
+      // sends raw paths too. See pathParam().
+      const isRoot = !path || path === '/';
+      const url = isRoot ? this.base : this.base + '?path=' + this.pathParam(path);
+      return App.services.api.get(url, { baseUrl: '' });
+    },
+
+    // Build a ?path= value. Slashes must stay literal (the backend rejects %2F); other characters in
+    // each segment are percent-encoded so names with spaces/specials still resolve.
+    pathParam(p) { return String(p).split('/').map(encodeURIComponent).join('/'); },
+
+    async loadFolder(path) {
+      this.state = 'loading';
+      this.error = null;
+      try {
+        this.setCurrentFolder(await this.getFolder(path));
+        this.state = 'default';
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not open the folder.');
+        this.state = 'error';
+      }
+      this.refreshIcons();
+    },
+
+    openFolder(path) { this._histPush(path); this.loadFolder(path); },
+
+    setCurrentFolder(data) {
+      this.folder = data || { name: 'root', path: '/', children: [] };
+      if (!Array.isArray(this.folder.children)) this.folder.children = [];
+      this.parseBreadcrumbs(this.folder.path);
+      this.clearSelection();
+    },
+
+    async refresh() {
+      this.error = null;
+      try {
+        const keep = this.selectedFile && this.selectedFile.name;
+        const data = await this.getFolder(this.folder.path);
+        this.folder = data || this.folder;
+        if (!Array.isArray(this.folder.children)) this.folder.children = [];
+        this.parseBreadcrumbs(this.folder.path);
+        this.selection.allSelected = false;
+        if (keep && !this.folder.children.some(c => c.name === keep)) this.setSelectedFile(null);
+        this.state = 'default';
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not refresh the folder.');
+        this.state = 'error';
+      }
+      this.refreshIcons();
+    },
+
+    // ----- history -----
+    _histPush(path) {
+      const h = this._hist;
+      if (h.idx >= 0) h.state.length = h.idx + 1;
+      h.state.push(path);
+      h.idx++;
+    },
+    hasBack() { return this._hist.idx > 0; },
+    hasForward() { return this._hist.idx < this._hist.state.length - 1; },
+    goBack() { if (this.hasBack()) this.loadFolder(this._hist.state[--this._hist.idx]); },
+    goForward() { if (this.hasForward()) this.loadFolder(this._hist.state[++this._hist.idx]); },
+
+    // ----- breadcrumbs (Home navigates to the no-path root) -----
+    parseBreadcrumbs(path) {
+      const parts = String(path || '/').split('/').filter(Boolean);
+      const crumbs = [{ name: 'Home', path: '' }];
+      let acc = '';
+      for (const p of parts) { acc += '/' + p; crumbs.push({ name: p, path: acc }); }
+      this.breadcrumbs = crumbs;
+    },
+
+    // ----- helpers -----
+    isFolder(item) { return item && item.type === 'cmis:folder'; },
+    isDocument(item) { return item && item.type === 'cmis:document'; },
+    // Absolute path of a child of the current folder (mirrors the dashboard getFullPath).
+    fullPath(name) { return (this.folder.path ? this.folder.path + '/' + name : name).replace(/\/\//g, '/'); },
+    ext(name) { return name.substring(name.lastIndexOf('.') + 1).toLowerCase(); },
+    fileIcon(item) {
+      if (this.isFolder(item)) return 'folder';
+      const e = this.ext(item.name);
+      const hit = Object.entries(FILE_ICONS).find(([, exts]) => exts.indexOf(e) >= 0);
+      return hit ? hit[0] : UNKNOWN_ICON;
+    },
+    downloadUrl(item) { return this.base + '/download?path=' + this.pathParam(this.fullPath(item.name)); },
+    zipUrl() { return this.base + '/zip?path=' + this.pathParam(this.folder.path); },
+
+    // ----- list / selection -----
+    get filteredChildren() {
+      const q = (this.search.filterBy || '').trim().toLowerCase();
+      let items = (this.folder.children || []).slice();
+      if (q) items = items.filter(i => i.name.toLowerCase().includes(q));
+      items.sort((a, b) => (a.type !== b.type) ? (a.type === 'cmis:folder' ? -1 : 1) : a.name.localeCompare(b.name));
+      return items;
+    },
+    onRowClick(item) {
+      if (this.isFolder(item)) this.openFolder(this.fullPath(item.name));
+      else { this.clearSelection(); this.setSelectedFile(item); }
+    },
+    clearSelection() {
+      this.setSelectedFile(null);
+      this.selection.allSelected = false;
+      (this.folder.children || []).forEach(i => { i.selected = false; });
+    },
+    selectAllChanged() { (this.folder.children || []).forEach(i => { i.selected = this.selection.allSelected; }); },
+    selectionChanged() {
+      const c = this.folder.children || [];
+      this.selection.allSelected = c.length > 0 && c.every(i => i.selected);
+    },
+    anySelected() { return (this.folder.children || []).some(i => i.selected); },
+    toggleSearch() { this.search.show = !this.search.show; if (!this.search.show) this.search.filterBy = ''; this.refreshIcons(); },
+
+    // ----- preview -----
+    canPreviewFile(name) { this.canPreview = NO_PREVIEW.indexOf(this.ext(name)) < 0; return this.canPreview; },
+    setSelectedFile(file) {
+      if (file === null) { this.selectedFile = null; return; }
+      this.selectedFile = file;
+      if (this.canPreviewFile(file.name)) this.runPreview();
+    },
+    runPreview() {
+      this.previewLoading = true;
+      this.csv.headers = []; this.csv.rows = [];
+      const self = this;
+      if (this.selectedFile.name.toLowerCase().endsWith('.csv') && window.Papa) {
+        this.previewType = 'csv';
+        window.Papa.parse(this.downloadUrl(this.selectedFile), {
+          download: true, header: true, skipEmptyLines: true,
+          delimitersToGuess: [',', '\t', '|', ';'],
+          complete: (res) => {
+            self.csv.headers = res.meta.fields || [];
+            self.csv.rows = (res.data || []).map(r => self.csv.headers.map(h => r[h]));
+            self.previewLoading = false;
+            self.refreshIcons();
+          },
+          error: () => { self.previewLoading = false; },
+        });
+      } else {
+        this.previewType = 'web';
+        this.previewUrl = this.base + '/preview?path=' + this.pathParam(this.fullPath(this.selectedFile.name));
+        // previewLoading is cleared by the iframe's @load.
+      }
+    },
+    onPreviewLoaded() { this.previewLoading = false; },
+
+    async copyLink(item) {
+      const url = window.location.origin + this.base + '/preview?path=' + this.pathParam(this.fullPath(item.name));
+      try { await navigator.clipboard.writeText(url); } catch (e) { console.error('documents: copy link failed', e); }
+    },
+
+    // ----- new folder -----
+    askNewFolder() { this.newFolderName = ''; this.newFolderError = null; this.newFolderOpen = true; },
+    async createFolder() {
+      if (!this.newFolderName.trim()) return;
+      this.busy = true; this.newFolderError = null;
+      try {
+        await App.services.api.post(this.base + '/folder', { parentFolder: this.folder.path, name: this.newFolderName.trim() }, { baseUrl: '' });
+        this.newFolderOpen = false; this.newFolderName = '';
+        await this.refresh();
+      } catch (e) { this.newFolderError = App.services.apiErrors.messageFor(e, 'Could not create the folder.'); }
+      finally { this.busy = false; }
+    },
+
+    // ----- rename -----
+    askRename(item) { this.renameTarget = item; this.renameName = item.name; this.renameError = null; this.renameOpen = true; },
+    async doRename() {
+      if (!this.renameName.trim() || !this.renameTarget) return;
+      this.busy = true; this.renameError = null;
+      try {
+        await App.services.api.request('PUT', this.base, { path: this.fullPath(this.renameTarget.name), name: this.renameName.trim() }, { baseUrl: '' });
+        this.renameOpen = false; this.renameTarget = null;
+        await this.refresh();
+      } catch (e) { this.renameError = App.services.apiErrors.messageFor(e, 'Rename failed.'); }
+      finally { this.busy = false; }
+    },
+
+    // ----- delete -----
+    askDeleteSingle(item) { this.deleteTargets = [item]; this.deleteOpen = true; },
+    askDeleteSelected() { this.deleteTargets = (this.folder.children || []).filter(i => i.selected); if (this.deleteTargets.length) this.deleteOpen = true; },
+    async confirmDelete() {
+      if (!this.deleteTargets.length) return;
+      this.busy = true;
+      try {
+        const paths = this.deleteTargets.map(i => this.fullPath(i.name));
+        await App.services.api.request('DELETE', this.base, paths, { baseUrl: '' });
+        this.deleteOpen = false; this.deleteTargets = [];
+        await this.refresh();
+      } catch (e) { this.error = App.services.apiErrors.messageFor(e, 'Could not delete.'); this.deleteOpen = false; }
+      finally { this.busy = false; }
+    },
+
+    // ----- upload (button + drag&drop), with optional zip unpacking -----
+    triggerUpload(unpackZip) { this.unpackZips = !!unpackZip; this.$refs.fileInput.click(); },
+    async onFilesPicked(ev) { await this.uploadFiles(ev.target.files); ev.target.value = ''; },
+    async uploadFiles(files) {
+      if (!files || !files.length) return;
+      this.busy = true; this.error = null;
+      try {
+        for (const f of files) {
+          const fd = new FormData();
+          fd.append('file', f, f.name);
+          const url = (this.unpackZips && f.name.toLowerCase().endsWith('.zip'))
+            ? this.base + '/zip?path=' + this.pathParam(this.folder.path)
+            : this.base + '?path=' + this.pathParam(this.folder.path);
+          const r = await fetch(url, { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'X-Requested-With': 'Fetch' } });
+          if (!r.ok) throw new Error('upload failed: ' + r.status);
+        }
+        await this.refresh();
+      } catch (e) { this.error = 'Upload failed.'; console.error(e); }
+      finally { this.busy = false; this.unpackZips = false; }
+    },
+    onDragOver(e) { e.preventDefault(); this.showDropZone = true; },
+    onDragLeave() { this.showDropZone = false; },
+    async onDrop(e) {
+      e.preventDefault();
+      this.showDropZone = false;
+      this.unpackZips = false;
+      if (e.dataTransfer && e.dataTransfer.files) await this.uploadFiles(e.dataTransfer.files);
+    },
+  }));
+}, { once: true });

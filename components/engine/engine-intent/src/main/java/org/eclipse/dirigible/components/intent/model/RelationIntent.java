@@ -21,6 +21,14 @@ public class RelationIntent {
     private boolean required;
     private boolean composition;
     private String description;
+    /**
+     * Optional cross-model reference: the {@code uses[].model} alias of the intent model that owns the
+     * {@link #to} target entity. Absent (the default) means the target is an entity in this same model.
+     * Present means the relation is a cross-model association - the generator emits a
+     * {@code PROJECTION} to the owner model plus an integer FK + dropdown, and never a local table for
+     * the target.
+     */
+    private String model;
 
     public String getName() {
         return name;
@@ -68,5 +76,18 @@ public class RelationIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
+    }
+
+    /** Whether this relation targets an entity owned by another intent model. */
+    public boolean isCrossModel() {
+        return model != null && !model.isBlank();
     }
 }

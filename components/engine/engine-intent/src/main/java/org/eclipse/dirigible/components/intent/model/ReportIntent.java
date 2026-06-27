@@ -25,6 +25,11 @@ public class ReportIntent {
     private List<String> measures = new ArrayList<>();
     private String filter;
     private String description;
+    /**
+     * Whether this report gets a tile on the home dashboard. Absent (the default) → shown;
+     * {@code dashboard: false} excludes it (it still appears in the sidebar Reports section).
+     */
+    private Boolean dashboard;
 
     public String getName() {
         return name;
@@ -72,5 +77,18 @@ public class ReportIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    /** Whether this report is excluded from the home dashboard ({@code dashboard: false}). */
+    public boolean isDashboardExcluded() {
+        return Boolean.FALSE.equals(dashboard);
+    }
+
+    public Boolean getDashboard() {
+        return dashboard;
+    }
+
+    public void setDashboard(Boolean dashboard) {
+        this.dashboard = dashboard;
     }
 }

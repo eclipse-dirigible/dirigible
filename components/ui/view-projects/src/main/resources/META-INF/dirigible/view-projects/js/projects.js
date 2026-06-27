@@ -450,6 +450,10 @@ projectsView.controller('ProjectsViewController', (
                     }],
                     separator: true,
                 };
+                // A dedicated top-level "Java" submenu (sibling of New), NOT nested inside New: BlimpKit
+                // disables scrolling for any menu that contains a submenu child, and the New menu relies
+                // on scrolling once enough artefact templates are registered.
+                const javaSubmenu = JavaNew.submenu();
                 const cutObj = {
                     id: 'cut',
                     label: 'Cut',
@@ -523,6 +527,7 @@ projectsView.controller('ProjectsViewController', (
                 if (node.type === 'project') {
                     if (nodes.length === 1) items.push(
                         newSubmenu,
+                        javaSubmenu,
                         {
                             id: 'duplicateProject',
                             label: 'Duplicate',
@@ -565,6 +570,7 @@ projectsView.controller('ProjectsViewController', (
                 } else if (node.type === 'folder') {
                     items.push(
                         newSubmenu,
+                        javaSubmenu,
                         cutObj,
                         copyObj,
                         pasteObj,
@@ -670,6 +676,8 @@ projectsView.controller('ProjectsViewController', (
                         newNodeData.parent = contextMenuNodes[0].id;
                         newNodeData.path = contextMenuNodes[0].data.path;
                         openNewFolderDialog();
+                    } else if (JavaNew.isJavaMenuId(id)) {
+                        newJavaArtifact(id, contextMenuNodes[0]);
                     } else if (id === 'cut') {
                         jstreeWidget.jstree(true).cut(jstreeWidget.jstree(true).get_top_selected(true));
                     } else if (id === 'copy') {
@@ -1774,6 +1782,193 @@ projectsView.controller('ProjectsViewController', (
         });
     }
 
+    function newJavaArtifact(menuId, node) {
+        const meta = JavaNew.itemById(menuId);
+        if (!meta) return;
+        const projectNode = node.type === 'project' ? node : getProjectNode(node.parents);
+        if (!projectNode) {
+            console.error('Could not resolve the project for the selected node');
+            return;
+        }
+        const projectPath = projectNode.data.path; // /workspace/project
+        const folderPath = node.data.path;          // /workspace/project[/sub...]
+        const folderRel = folderPath.substring(projectPath.length).replace(/^\/+/, '').replace(/\/+$/, '');
+        const form = {
+            'fdti1': {
+                label: meta.kind === 'package' ? 'Package name' : 'Name',
+                controlType: 'input',
+                type: 'text',
+                placeholder: JavaNew.placeholderFor(meta.kind),
+                submitOnEnter: true,
+                focus: true,
+                required: true,
+            },
+        };
+        // A repository wraps an entity supplied by the developer (e.g. Country or com.example.Country).
+        if (meta.kind === 'repository') {
+            form['fdti2'] = {
+                label: 'Entity type',
+                controlType: 'input',
+                type: 'text',
+                placeholder: 'com.example.Country',
+                submitOnEnter: true,
+                required: true,
+            };
+        }
+        Dialogs.showFormDialog({
+            title: `New Java ${meta.label}`,
+            form: form,
+            submitLabel: 'Create',
+            cancelLabel: 'Cancel'
+        }).then((result) => {
+            if (!result) return;
+            if (meta.kind === 'package') {
+                const parsed = JavaNew.parsePackage(result['fdti1']);
+                if (!parsed.ok) { showJavaNameError(parsed.error); return; }
+                createJavaPackage(node, folderPath, parsed.segments);
+            } else {
+                const parsed = JavaNew.parseType(result['fdti1']);
+                if (!parsed.ok) { showJavaNameError(parsed.error); return; }
+                createJavaType(projectNode, node, folderPath, folderRel, meta.kind, parsed, result['fdti2']);
+            }
+        }, (error) => {
+            console.error(error);
+        });
+    }
+
+    function showJavaNameError(message) {
+        Dialogs.showAlert({
+            title: 'Invalid name',
+            message: message,
+            type: AlertTypes.Error,
+            preformatted: false,
+        });
+    }
+
+    /**
+     * Creates the deepest folder of {@code segments} under {@code baseFolderPath}; the server's
+     * forceMkdir creates any missing parents. The leaf is passed as the (single-segment) name and the
+     * parents are folded into the target path, because WorkspaceService URL-encodes the name argument.
+     */
+    function createNestedFolder(segments, baseFolderPath) {
+        const leaf = segments[segments.length - 1];
+        const parents = segments.slice(0, -1);
+        const targetPath = parents.length ? `${baseFolderPath}/${parents.join('/')}` : baseFolderPath;
+        return WorkspaceService.createFolder(leaf, targetPath);
+    }
+
+    function createJavaPackage(contextNode, folderPath, segments) {
+        createNestedFolder(segments, folderPath).then(() => {
+            const folderNode = revealFolderNodes(contextNode, folderPath, segments);
+            jstreeWidget.jstree(true).deselect_all(true);
+            jstreeWidget.jstree(true).select_node(folderNode);
+            StatusBar.showMessage(`Created package '${segments.join('.')}'`);
+        }, (response) => {
+            console.error(response);
+            Dialogs.showAlert({
+                title: 'Could not create the package',
+                message: `There was an error while creating package '${segments.join('.')}'. It may already exist.`,
+                type: AlertTypes.Error,
+                preformatted: false,
+            });
+        });
+    }
+
+    function createJavaType(projectNode, contextNode, folderPath, folderRel, kind, parsed, entity) {
+        const relSegments = folderRel ? folderRel.split('/') : [];
+        const packageName = relSegments.concat(parsed.packageSegments).join('.');
+        const targetFolderPath = parsed.packageSegments.length
+            ? `${folderPath}/${parsed.packageSegments.join('/')}`
+            : folderPath;
+        const fileName = `${parsed.typeName}.java`;
+        const content = JavaNew.generate(kind, packageName, parsed.typeName, entity);
+        // Tolerate an already-existing package folder; the file-creation step validates the real path.
+        const proceed = () => createJavaFile(projectNode, contextNode, folderPath, parsed.packageSegments, targetFolderPath, fileName, content);
+        if (parsed.packageSegments.length) {
+            createNestedFolder(parsed.packageSegments, folderPath).then(proceed, proceed);
+        } else {
+            proceed();
+        }
+    }
+
+    function createJavaFile(projectNode, contextNode, baseFolderPath, packageSegments, targetFolderPath, fileName, content) {
+        const alertBody = {
+            title: 'Could not create the Java file',
+            message: `There was an error while creating '${fileName}'. It may already exist.`,
+            type: AlertTypes.Error,
+            preformatted: false,
+        };
+        WorkspaceService.createFile(fileName, targetFolderPath, content).then((response) => {
+            WorkspaceService.getMetadataByUrl(response.data).then((metadata) => {
+                // Build/expand the tree down to the package folder and select the new file, so the
+                // project structure stays open and reveals what was just created.
+                const folderNode = revealFolderNodes(contextNode, baseFolderPath, packageSegments);
+                jstreeWidget.jstree(true).deselect_all(true);
+                jstreeWidget.jstree(true).select_node(
+                    jstreeWidget.jstree(true).create_node(folderNode, {
+                        text: metadata.data.name,
+                        type: 'file',
+                        state: { status: metadata.data.status },
+                        icon: getFileIcon(metadata.data.name),
+                        data: {
+                            path: metadata.data.path,
+                            contentType: metadata.data.contentType,
+                        }
+                    })
+                );
+                Layout.openEditor({
+                    path: metadata.data.path,
+                    contentType: metadata.data.contentType,
+                    params: {
+                        resourceType: 'workspace',
+                        gitName: projectNode.data.git ? projectNode.data.gitName : undefined,
+                    },
+                });
+                StatusBar.showMessage(`Created '${fileName}'`);
+            }, (response) => {
+                console.error(response);
+                Dialogs.showAlert(alertBody);
+            });
+        }, (response) => {
+            console.error(response);
+            Dialogs.showAlert(alertBody);
+        });
+    }
+
+    /**
+     * Ensures jstree folder nodes exist (and are expanded) for each package segment under
+     * {@code contextNode}, reusing existing nodes and creating the missing ones. Returns the deepest
+     * folder node (or {@code contextNode} when there are no package segments).
+     */
+    function revealFolderNodes(contextNode, baseFolderPath, segments) {
+        const tree = jstreeWidget.jstree(true);
+        tree.open_node(contextNode);
+        let parentNode = contextNode;
+        let parentPath = baseFolderPath;
+        for (let i = 0; i < segments.length; i++) {
+            parentPath = `${parentPath.endsWith('/') ? parentPath.slice(0, -1) : parentPath}/${segments[i]}`;
+            let childId;
+            const children = parentNode.children || [];
+            for (let j = 0; j < children.length; j++) {
+                const child = tree.get_node(children[j]);
+                if (child.type === 'folder' && child.text === segments[i]) {
+                    childId = children[j];
+                    break;
+                }
+            }
+            if (!childId) {
+                childId = tree.create_node(parentNode, {
+                    text: segments[i],
+                    type: 'folder',
+                    data: { path: parentPath },
+                });
+            }
+            tree.open_node(childId);
+            parentNode = tree.get_node(childId);
+        }
+        return parentNode;
+    }
+
     function openRenameDialog(renameNode) {
         Dialogs.showFormDialog({
             title: `Rename ${renameNode.type}`,
@@ -1982,6 +2177,29 @@ projectsView.controller('ProjectsViewController', (
                 }
             }
         }
+    });
+
+    // A Java refactor (e.g. renaming a class/interface via F2) renames files on disk. Rename the matching
+    // tree node in place so it stays revealed and selected; fall back to a reload if it isn't loaded yet.
+    Workspace.onFileRenamed((data) => {
+        if (!data || !data.oldPath || !data.newPath) return;
+        const instance = jstreeWidget.jstree(true);
+        const newName = data.newPath.substring(data.newPath.lastIndexOf('/') + 1);
+        for (let item in instance._model.data) {
+            if (item !== '#' && instance._model.data[item].data && instance._model.data[item].data.path === data.oldPath) {
+                instance.rename_node(item, newName);
+                instance._model.data[item].data.path = data.newPath;
+                instance.set_icon(item, getFileIcon(newName));
+                instance.deselect_all(true);
+                instance.select_node(item);
+                return;
+            }
+        }
+        $scope.$evalAsync(() => { $scope.reloadWorkspace(); });
+    });
+
+    Workspace.onFileMoved(() => {
+        $scope.$evalAsync(() => { $scope.reloadWorkspace(); });
     });
 
     Workspace.onWorkspaceChanged((changed) => {

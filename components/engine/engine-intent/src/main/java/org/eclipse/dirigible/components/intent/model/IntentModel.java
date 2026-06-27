@@ -25,8 +25,16 @@ public class IntentModel {
     /** Optional one-line description shown in the IDE preview pane. */
     private String description;
 
+    /**
+     * Optional brand icon (a Lucide icon name, e.g. {@code book}) for the generated app's shell header.
+     */
+    private String icon;
+
     /** Schema version of the intent format. {@code 1} for the current draft. */
     private int version = 1;
+
+    /** Other intent models this one references cross-model (see {@link UsesIntent}). */
+    private List<UsesIntent> uses = new ArrayList<>();
 
     private List<EntityIntent> entities = new ArrayList<>();
     private List<ProcessIntent> processes = new ArrayList<>();
@@ -56,12 +64,28 @@ public class IntentModel {
         this.description = description;
     }
 
+    public String getIcon() {
+        return icon;
+    }
+
+    public void setIcon(String icon) {
+        this.icon = icon;
+    }
+
     public int getVersion() {
         return version;
     }
 
     public void setVersion(int version) {
         this.version = version;
+    }
+
+    public List<UsesIntent> getUses() {
+        return uses;
+    }
+
+    public void setUses(List<UsesIntent> uses) {
+        this.uses = uses == null ? new ArrayList<>() : uses;
     }
 
     public List<EntityIntent> getEntities() {

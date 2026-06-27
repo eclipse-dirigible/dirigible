@@ -1,7 +1,7 @@
 package gen.events;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
-import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -18,8 +18,18 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Rep
  * On each ${childEntity} event the count for the affected parent is recomputed from the store (so it
  * self-heals); under heavy write concurrency it is eventually consistent, not transactionally exact.
  */
-@Listener(name = "${projectName}-${childPerspective}-${childEntity}${topicSuffix}", kind = ListenerKind.TOPIC)
+@Component
 public class ${className} implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${childPerspective}-${childEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
 
     @Override
     public void onMessage(String message) {

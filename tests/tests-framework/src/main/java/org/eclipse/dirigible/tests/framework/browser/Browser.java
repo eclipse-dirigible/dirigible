@@ -54,6 +54,13 @@ public interface Browser {
 
     void clickOnElementByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
+    /**
+     * Navigates the open context menu along the given title path, hovering each intermediate submenu to
+     * expand its flyout and clicking the final entry (e.g. {@code "Java", "Class"}). The menu is
+     * located once and all steps run within its iframe, so it stays open between hovers.
+     */
+    void clickCascadingMenuItem(String... titlePath);
+
     void assertElementExistByAttributePatternAndText(HtmlElementType elementType, HtmlAttribute attribute, String pattern, String text);
 
     void clickOnElementByAttributePatternAndText(String elementType, String attribute, String pattern, String text);

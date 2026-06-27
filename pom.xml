@@ -127,11 +127,11 @@
         <maven-git-commit-id-plugin.version>4.9.10</maven-git-commit-id-plugin.version>
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
 
-        <!-- JDT Language Server bundled at build time -->
-        <jdtls.version>1.47.0</jdtls.version>
-        <jdtls.build.timestamp>202505151856</jdtls.build.timestamp>
-        <jdtls.download.url>https://download.eclipse.org/jdtls/milestones/${jdtls.version}/jdt-language-server-${jdtls.version}-${jdtls.build.timestamp}.tar.gz</jdtls.download.url>
-        <jdtls.sha256>354242694936016cd48635967cb28cd4b0735779dafe963077139d2823ccda3a</jdtls.sha256>
+        <!-- JDT Language Server bundled at build time.
+             Pinned milestone tarballs on download.eclipse.org get pruned (causes 404 build failures),
+             so we track the rolling 'latest' snapshot, which is never removed. The contents change over
+             time, so the download is intentionally not sha256-pinned. -->
+        <jdtls.download.url>https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz</jdtls.download.url>
         <jdtls.download.skip>false</jdtls.download.skip>
         <!-- com.microsoft.java.debug plugin bundled alongside JDT.LS (EPL-1.0, on Maven Central) -->
         <java.debug.plugin.version>0.53.1</java.debug.plugin.version>
@@ -241,7 +241,7 @@
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>1.4.2</harmonia.version>
+        <harmonia.version>1.24.1</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
         <!-- Tests -->
@@ -582,6 +582,9 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**
+                                </exclude>
+                                <exclude>
+                                    **/src/main/resources/META-INF/dirigible/application-core/vendor/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/view-terminal/js/**

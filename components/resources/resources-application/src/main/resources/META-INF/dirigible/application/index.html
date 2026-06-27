@@ -1,0 +1,193 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  The Harmonia application shell (pure Java + Harmonia; the IDE stays AngularJS + BlimpKit). It
+  REUSES the shared Harmonia runtime served from /services/web/application-core/shell for the
+  built-in pages (Dashboard/Inbox/Documents/Reports) and aggregates the `application-perspectives`
+  extension point for the domain apps, which it hosts in an iframe (their generated SPA, embedded).
+-->
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Applications</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
+    <link href="./css/app.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+  </head>
+
+  <body class="vbox size-full" x-data="app">
+
+    <!-- Narrow-viewport drawer host. -->
+    <div x-h-sheet-overlay="isOpen">
+      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    </div>
+
+    <div x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+
+      <!-- Sidebar -->
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
+           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar">
+          <div x-h-sidebar-header>
+            <div class="hbox items-center gap-2 p-1">
+              <i role="img" data-lucide="layout-grid" class="size-5 text-primary"></i>
+              <span class="font-bold">Applications</span>
+            </div>
+          </div>
+
+          <div x-h-sidebar-content>
+            <!-- Built-in shell sections (native Harmonia, reused from the shared runtime). -->
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label>Application</div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/dashboard')" @click="navigate('/dashboard')">
+                      <i role="img" data-lucide="layout-dashboard"></i><span>Dashboard</span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/inbox')" @click="navigate('/inbox')">
+                      <i role="img" data-lucide="inbox"></i><span>Inbox</span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/documents')" @click="navigate('/documents')">
+                      <i role="img" data-lucide="folder"></i><span>Documents</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Loading / empty states for the aggregated domain apps. -->
+            <div x-show="loading" x-cloak x-h-text.muted class="p-3 text-sm">Loading applications...</div>
+            <div x-show="!loading && groups.length === 0" x-cloak x-h-text.muted class="p-3 text-sm">No applications published yet.</div>
+
+            <!-- Domain apps: one group per navigation group, items host the embedded app. -->
+            <template x-for="group in groups" :key="group.id">
+              <div x-h-sidebar-group>
+                <div x-h-sidebar-group-label x-text="group.label"></div>
+                <div x-h-sidebar-group-content>
+                  <ul x-h-sidebar-menu>
+                    <template x-for="item in group.items" :key="item.id">
+                      <li x-h-sidebar-menu-item>
+                        <button x-h-sidebar-menu-button :data-active="isAppActive(item)" @click="openApp(item)">
+                          <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
+                          <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
+                          <span x-text="item.label"></span>
+                        </button>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Reports (native Harmonia, reused) pinned to the footer. -->
+          <div x-h-sidebar-footer>
+            <ul x-h-sidebar-menu>
+              <li x-h-sidebar-menu-item>
+                <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/reports')" @click="navigate('/reports')">
+                  <i role="img" data-lucide="bar-chart-3"></i><span>Reports</span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main panel -->
+      <div x-h-split-panel>
+        <div class="vbox size-full">
+          <div x-h-toolbar data-variant="transparent" x-cloak>
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <i role="img" data-lucide="menu"></i>
+            </button>
+            <span x-h-toolbar-title>Applications</span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <i x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></i>
+              <i x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></i>
+            </button>
+          </div>
+
+          <!-- Built-in pages render here (Pinecone); a hosted domain app shows in the iframe instead. -->
+          <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
+            <!-- Pinecone Router renders the matched built-in view fragment here. -->
+          </div>
+          <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative;">
+            <iframe :src="hostedUrl" title="Application"
+                    style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Built-in routes. Dashboard is local (generic landing); the rest reuse the shared runtime. -->
+    <template x-route="/" x-template.target.app="./views/_dashboard.html"></template>
+    <template x-route="/dashboard" x-template.target.app="./views/_dashboard.html"></template>
+    <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
+    <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
+    <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
+    <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
+
+    <!-- 1. Plugins (vendored) -->
+    <script src="/services/web/application-core/vendor/pinecone-router.min.js"></script>
+
+    <!-- 2. Shared Harmonia runtime (served from application-core) + local config/shell (defer keeps order) -->
+    <script src="/services/web/application-core/shell/js/app.js" defer></script>
+    <script src="./js/config.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>
+    <script src="./js/appShell.js" defer></script>
+
+    <!-- 3. Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <!-- 4. Lucide icons -->
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script>
+      document.addEventListener('alpine:initialized', () => { if (window.lucide) window.lucide.createIcons(); }, { once: true });
+      document.addEventListener('pinecone:end', () => { if (window.lucide) window.lucide.createIcons(); });
+    </script>
+  </body>
+
+</html>

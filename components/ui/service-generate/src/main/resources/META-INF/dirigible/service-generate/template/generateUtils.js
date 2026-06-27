@@ -183,6 +183,12 @@ export function generateFiles(model, parameters, templateSources) {
     const uiManageDetailsModels = model.entities.filter(e => e.layoutType === "MANAGE_DETAILS" && e.type === "DEPENDENT");
     const uiListDetailsModels = model.entities.filter(e => e.layoutType === "LIST_DETAILS" && e.type === "DEPENDENT");
 
+    // UI Document (header-items): a master owning a composition child whose name ends in "Item"
+    // (set by EdmIntentGenerator as layoutType MANAGE_DOCUMENT) — header form + inline items table +
+    // totals footer. The items child stays a DEPENDENT detail (its inline columns + controller come
+    // from its registration); other composition children render as ordinary detail panels.
+    const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -243,6 +249,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "uiListDetailsModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiListDetailsModels, parameters));
+                    break;
+                case "uiDocumentModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiDocumentModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
@@ -324,6 +333,34 @@ export function generateFiles(model, parameters, templateSources) {
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanResolverParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanResolverParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "setters":
+                    // Field setters (intent layer): one JavaDelegate per serviceTask that declares a
+                    // setField, setting a field of the process's trigger entity to a literal value. Like
+                    // resolvers, not entity-shaped, so it gets its own loop; the Java package segment of
+                    // the entity is its lowercased perspective.
+                    if (model.setters) {
+                        for (let s = 0; s < model.setters.length; s++) {
+                            const setterParameters = {
+                                ...parameters,
+                                process: model.setters[s].process,
+                                className: model.setters[s].className,
+                                entity: model.setters[s].entity,
+                                perspective: model.setters[s].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.setters[s].perspective),
+                                keyProperty: model.setters[s].keyProperty,
+                                keyAccessor: model.setters[s].keyAccessor,
+                                field: model.setters[s].field,
+                                value: model.setters[s].value
+                            };
+                            const cleanSetterParameters = cleanData(setterParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSetterParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSetterParameters)
                             });
                         }
                     }

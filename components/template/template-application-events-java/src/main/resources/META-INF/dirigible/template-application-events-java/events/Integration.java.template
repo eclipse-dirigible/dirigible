@@ -3,9 +3,9 @@ package gen.events;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.core.Configurations;
 import org.eclipse.dirigible.sdk.http.HttpClient;
-import org.eclipse.dirigible.sdk.messaging.Listener;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -17,8 +17,18 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * application. The event payload (the entity JSON) is sent as the request body. The target URL comes
  * from the intent (a literal or a configuration value).
  */
-@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
+@Component
 public class ${className}Integration implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
 
     @Override
     public void onMessage(String message) {

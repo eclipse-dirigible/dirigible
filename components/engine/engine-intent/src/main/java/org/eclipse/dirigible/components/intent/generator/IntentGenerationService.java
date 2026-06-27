@@ -86,15 +86,17 @@ public class IntentGenerationService {
      * @param projectRoot repository path of the target project root, e.g.
      *        {@code /users/admin/workspace/my-library}
      * @param projectName the target project name
+     * @param workspaceName the workspace the project lives in (used for cross-model projection paths)
      * @param fallbackName base name used for single-file outputs when the YAML omits {@code name:} -
      *        conventionally the intent file's base name
      * @return the files written and scrubbed
      * @throws org.eclipse.dirigible.components.intent.parser.IntentValidationException if the document
      *         has structural problems
      */
-    public GenerationResult generate(String yaml, String projectRoot, String projectName, String fallbackName) {
+    public GenerationResult generate(String yaml, String projectRoot, String projectName, String workspaceName, String fallbackName) {
         IntentModel model = IntentParser.parse(yaml);
-        IntentGenerationContext context = new IntentGenerationContext(model, projectRoot, projectName, fallbackName, repository);
+        IntentGenerationContext context =
+                new IntentGenerationContext(model, projectRoot, projectName, workspaceName, fallbackName, repository);
         context.setSettings(loadOrScaffoldSettings(context));
         LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", IntentNaming.baseName(context), projectRoot,
                 generators.size());

@@ -126,6 +126,9 @@ public enum DirigibleConfig {
     /** Directory where the JDT Language Server is installed (or will be extracted to). */
     JAVA_LSP_INSTALL_DIR("DIRIGIBLE_JAVA_LSP_INSTALL_DIR", null),
 
+    /** Max heap (-Xmx) for the JDT.LS process; 512m OOMs when indexing the full platform classpath. */
+    JAVA_LSP_MAX_HEAP("DIRIGIBLE_JAVA_LSP_MAX_HEAP", "2g"),
+
     /** Default JDWP port the Java debug adapter attaches to. */
     JAVA_DEBUG_JDWP_PORT("DIRIGIBLE_JAVA_DEBUG_JDWP_PORT", "8000"),
 

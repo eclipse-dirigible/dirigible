@@ -5,9 +5,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.core.Configurations;
 import org.eclipse.dirigible.sdk.job.JobHandler;
-import org.eclipse.dirigible.sdk.job.Scheduled;
 import org.eclipse.dirigible.sdk.mail.Mail;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
@@ -23,8 +23,13 @@ import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.target
  * Generated from the intent schedules block - do not edit; it is re-generated with the application.
  * The sender address comes from the DIRIGIBLE_MAIL_SENDER configuration.
  */
-@Scheduled(expression = "${cron}")
+@Component
 public class ${className}Job implements JobHandler {
+
+    @Override
+    public String cron() {
+        return "${cron}";
+    }
 
     @Override
     public void run() {
