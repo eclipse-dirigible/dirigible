@@ -133,5 +133,14 @@ function baseFormPage() {
         }
       } catch (e) { /* cross-origin / standalone: nothing to notify */ }
     },
+
+    // Ask the hosting dialog to close (embedded Cancel) instead of navigating this iframe to a list.
+    emitClose() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'harmonia.dialog.cancel' }, '*');
+        }
+      } catch (e) { /* standalone: nothing to close */ }
+    },
   };
 }

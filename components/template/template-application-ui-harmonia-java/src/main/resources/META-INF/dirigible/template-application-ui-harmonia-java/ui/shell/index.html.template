@@ -148,7 +148,9 @@
       <!-- Main panel -->
       <div x-h-split-panel>
         <div class="vbox size-full">
-          <div x-h-toolbar data-variant="transparent" x-cloak>
+          <!-- Top bar (breadcrumb + notifications + theme + user) - hidden in embedded mode so an FK
+               "Add" iframe dialog shows just the form, no shell chrome. -->
+          <div x-h-toolbar data-variant="transparent" x-cloak x-show="!embedded">
             <button x-show="hiddenPanels.left && !embedded" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <i role="img" data-lucide="menu"></i>
