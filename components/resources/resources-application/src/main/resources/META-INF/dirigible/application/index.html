@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  The Harmonia application shell (pure Java + Harmonia; the IDE remains AngularJS + BlimpKit). It
+  aggregates the `application-perspectives` extension point and hosts each perspective in an iframe.
+  Static page - the sidebar is built at runtime from the perspectives service, not generated.
+
+  Assets are served from webjars (version-less via webjars-locator) and application-core, exactly as
+  the generated Harmonia apps load them - no CDN.
+-->
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Applications</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <link href="./css/app.css" rel="stylesheet" />
+
+    <!-- Default Harmonia's colour scheme to light on first run (its own default follows the OS). -->
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+  </head>
+
+  <body class="vbox size-full" x-data="app">
+
+    <!-- Narrow-viewport drawer host: the sidebar is re-parented here below 1024px. -->
+    <div x-h-sheet-overlay="isOpen">
+      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    </div>
+
+    <div x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+
+      <!-- Sidebar -->
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
+           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar">
+          <div x-h-sidebar-header>
+            <div class="hbox items-center gap-2 p-1">
+              <i role="img" data-lucide="layout-grid" class="size-5 text-primary"></i>
+              <span class="font-bold">Applications</span>
+            </div>
+          </div>
+
+          <div x-h-sidebar-content>
+            <!-- Loading / empty / error states. -->
+            <div x-show="loading" x-cloak x-h-text.muted class="p-3 text-sm">Loading applications...</div>
+            <div x-show="!loading && failed" x-cloak x-h-text.muted class="p-3 text-sm">Could not load applications.</div>
+            <div x-show="!loading && !failed && groups.length === 0 && utilities.length === 0" x-cloak
+                 x-h-text.muted class="p-3 text-sm">No applications published yet.</div>
+
+            <!-- One sidebar group per perspective group, its items nested. -->
+            <template x-for="group in groups" :key="group.id">
+              <div x-h-sidebar-group x-show="group.items && group.items.length">
+                <div x-h-sidebar-group-label x-text="group.label"></div>
+                <div x-h-sidebar-group-content>
+                  <ul x-h-sidebar-menu>
+                    <template x-for="item in group.items" :key="item.id">
+                      <li x-h-sidebar-menu-item>
+                        <button x-h-sidebar-menu-button :data-active="isActive(item)" @click="select(item)">
+                          <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
+                          <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
+                          <span x-text="item.label"></span>
+                        </button>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Utility perspectives pinned to the footer. -->
+          <div x-h-sidebar-footer x-show="utilities.length">
+            <ul x-h-sidebar-menu>
+              <template x-for="util in utilities" :key="util.id">
+                <li x-h-sidebar-menu-item>
+                  <button x-h-sidebar-menu-button :data-active="isActive(util)" @click="select(util)">
+                    <template x-if="isImageIcon(util.icon)"><img :src="util.icon" alt="" class="size-4" /></template>
+                    <template x-if="!isImageIcon(util.icon)"><i role="img" :data-lucide="util.icon || 'box'"></i></template>
+                    <span x-text="util.label"></span>
+                  </button>
+                </li>
+              </template>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main panel -->
+      <div x-h-split-panel>
+        <div class="vbox size-full">
+          <div x-h-toolbar data-variant="transparent" x-cloak>
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <i role="img" data-lucide="menu"></i>
+            </button>
+            <span x-h-toolbar-title x-text="selected ? selected.label : 'Applications'"></span>
+            <div x-h-toolbar-spacer></div>
+
+            <!-- Light/dark theme switch, backed by Harmonia's colour-scheme API so the hosted iframes
+                 stay in sync. -->
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <i x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></i>
+              <i x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></i>
+            </button>
+          </div>
+
+          <!-- Hosted perspective. Generated apps are loaded in embedded mode so their own sidebar is
+               hidden and this shell provides the single chrome. -->
+          <div class="flex-1 size-full" style="position: relative;">
+            <iframe x-show="selected" :src="contentUrl()" title="Application"
+                    style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
+            <div x-show="!selected && !loading" x-cloak class="vbox items-center justify-center size-full gap-2"
+                 x-h-text.muted>
+              <i role="img" data-lucide="layout-grid" class="size-8"></i>
+              <span>Select an application from the sidebar.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- App code (defer keeps document order) -->
+    <script src="./js/stores/theme.js" defer></script>
+    <script src="./js/appShell.js" defer></script>
+
+    <!-- Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <!-- Lucide icons (webjar) -->
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script>
+      document.addEventListener('alpine:initialized', () => {
+        if (window.lucide) window.lucide.createIcons();
+      }, { once: true });
+    </script>
+  </body>
+
+</html>

@@ -249,6 +249,7 @@
         <module>resources/resources-theme-high-contrast</module>
         <module>resources/resources-theme-mystic</module>
         <module>resources/resources-dashboard</module>
+        <module>resources/resources-application</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
@@ -1366,6 +1367,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-dashboard</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-application</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
