@@ -170,8 +170,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // document layout; it names its line-items entity so the document page renders that child as
             // the inline table (and any other composition children as ordinary detail panels).
             if (documentItems.containsKey(name)) {
+                String itemsEntity = documentItems.get(name);
                 entityMap.put("layoutType", "MANAGE_DOCUMENT");
-                entityMap.put("documentItemsEntity", documentItems.get(name));
+                entityMap.put("documentItemsEntity", itemsEntity);
+                // Humanized labels for the document editor: the master's singular ("Sales Invoice") and
+                // the line-items' humanized + pluralized label ("Sales Invoice Items").
+                entityMap.put("documentLabel", IntentNaming.humanize(name));
+                entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
             }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.

@@ -118,5 +118,20 @@ function baseFormPage() {
     navigateBack(defaultRoute) {
       window.PineconeRouter.navigate(this.returnToParam() || defaultRoute);
     },
+
+    // This form is hosted inside an FK combobox's "Add" iframe dialog (opened with ?embedded=1).
+    // On a successful create it must report the new record to the parent and NOT navigate away.
+    get isEmbedded() {
+      return this.queryParam('embedded') === '1' || this.queryParam('embedded') === 'true';
+    },
+
+    // Tell the hosting window a record was created so the opener can refresh + select it.
+    emitCreated(id) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'harmonia.entity.created', id: id }, '*');
+        }
+      } catch (e) { /* cross-origin / standalone: nothing to notify */ }
+    },
   };
 }

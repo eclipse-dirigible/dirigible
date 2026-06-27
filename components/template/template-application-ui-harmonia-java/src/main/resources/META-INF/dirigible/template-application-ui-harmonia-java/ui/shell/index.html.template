@@ -88,7 +88,7 @@
               </div>
             </div>
 #set($hasEntities = false)
-#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
+#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
 #if($hasEntities)
             <!-- Entities: the top-level model entities (list / manage / master). -->
             <div x-h-sidebar-group>
@@ -96,7 +96,7 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
 #foreach($entity in $models)
-#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY")
+#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT") && $entity.type == "PRIMARY")
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <i role="img" data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></i>
@@ -320,6 +320,14 @@
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
 #end
 #end
+    <!-- DOCUMENT entities (header-items): browse list + a full-page document editor at create/edit. -->
+#foreach($entity in $models)
+#if($entity.layoutType == "MANAGE_DOCUMENT" && $entity.type == "PRIMARY")
+    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
+    <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
+    <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
+#end
+#end
     <!-- DETAIL entities: only a routed create/edit form (listed inside their master's panels). -->
 #foreach($entity in $models)
 #if(($entity.layoutType == "MANAGE_DETAILS" || $entity.layoutType == "LIST_DETAILS") && $entity.type == "DEPENDENT")
@@ -363,6 +371,7 @@
     <script src="./js/stores/currentUser.js" defer></script>
     <script src="./js/stores/notifications.js" defer></script>
     <script src="./js/stores/theme.js" defer></script>
+    <script src="./js/stores/related.js" defer></script>
     <script src="./js/components/pages/dashboardPage.js" defer></script>
     <script src="./js/components/pages/inboxPage.js" defer></script>
     <script src="./js/components/pages/documentsPage.js" defer></script>
@@ -378,6 +387,10 @@
 #if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}MasterPage.js" defer></script>
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
+#end
+#if($entity.layoutType == "MANAGE_DOCUMENT" && $entity.type == "PRIMARY")
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ManageListPage.js" defer></script>
+    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}DocumentPage.js" defer></script>
 #end
 #if(($entity.layoutType == "MANAGE_DETAILS" || $entity.layoutType == "LIST_DETAILS") && $entity.type == "DEPENDENT")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}.detail.js" defer></script>
@@ -404,6 +417,23 @@
         if (window.lucide) window.lucide.createIcons();
       });
     </script>
+
+    <!-- Add-related dialog: an FK combobox's "Add" button (see the entity forms) opens the target
+         entity's OWN generated create page in this iframe (App.utils.relatedCreateUrl, cross-model
+         aware). The embedded form posts a 'harmonia.entity.created' message on save; the related store
+         routes it to the opener, which refreshes that field's options and selects the new record.
+         Bare/assignment $store access only (Velocity passes it through; no method-call escaping). -->
+    <div x-h-dialog-overlay :data-open="$store.related.open">
+      <div x-h-dialog data-size="lg">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="$store.related.title"></h2>
+          <button x-h-dialog-close @click="$store.related.open = false" aria-label="Close"></button>
+        </div>
+        <div x-h-dialog-content class="p-0">
+          <iframe x-show="$store.related.open" :src="$store.related.src" title="Add new" style="width:100%; height:70vh; border:0;"></iframe>
+        </div>
+      </div>
+    </div>
   </body>
 
 </html>

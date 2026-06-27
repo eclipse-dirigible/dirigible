@@ -54,6 +54,12 @@ document.addEventListener('alpine:init', () => {
     itemOptions: {},         // edit-column name -> [{ value, text }] for relationship cells
     deleteOpen: false,
     deleteTarget: null,
+    // Add/edit line dialog
+    rowDialogOpen: false,
+    draft: {},
+    draftMode: 'create',     // 'create' | 'edit'
+    draftSaving: false,
+    draftError: null,
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
@@ -125,6 +131,15 @@ document.addEventListener('alpine:init', () => {
       }
 #end
 #end
+    },
+
+    // "Add new <related>" from a header FK combobox: open the target's own create page in the shared
+    // related-create iframe dialog; on save, reload that field's options and select the new record.
+    addRelated(field, controllerUrl, entity) {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), 'New ' + entity, async (id) => {
+        await this.loadOptions();
+        if (id != null) this.form[field] = String(id);
+      });
     },
 
     // ----- Header (master) save ------------------------------------------------------------------
@@ -222,7 +237,7 @@ document.addEventListener('alpine:init', () => {
       return payload;
     },
 
-    // ----- Items (inline, server-side per row) ---------------------------------------------------
+    // ----- Items (read-only table + add/edit dialog, server-side) --------------------------------
     get editColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
 
     async loadItems() {
@@ -233,8 +248,7 @@ document.addEventListener('alpine:init', () => {
         await this.loadItemOptions();
         const q = '?' + encodeURIComponent(this.itemsDef.masterEntityId) + '=' + encodeURIComponent(this.id);
         const rows = await App.services.api.get(this.itemsDef.apiPath + q);
-        // Stringify relationship cells so they match the <option> data-value on edit.
-        this.items = (rows || []).map(r => this.normalizeRow(r));
+        this.items = rows || [];
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
       } catch (e) {
         this.itemsError = App.services.apiErrors.messageFor(e, 'Could not load items.');
@@ -255,64 +269,101 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    normalizeRow(r) {
-      const row = { ...r, _dirty: false, _saving: false, _error: null };
-      for (const col of this.editColumns) {
-        if (col.widget === 'DROPDOWN' && row[col.name] != null) row[col.name] = String(row[col.name]);
-        else if (col.date && row[col.name] != null) row[col.name] = this.toDateInput(row[col.name], col.widget);
-      }
-      return row;
-    },
-
-    addLine() {
-      if (!this.itemsEnabled) return;
-      const row = { _dirty: true, _saving: false, _error: null, _new: true };
-      row[this.itemsDef.masterEntityId] = String(this.id);
-      for (const col of this.editColumns) {
-        row[col.name] = col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '');
-      }
-      this.items.push(row);
-      this.itemsState = 'default';
-    },
-
-    markDirty(row) { row._dirty = true; },
-
     optionsFor(name) { return this.itemOptions[name] || []; },
 
-    // Build the per-row request body: master FK + each edit column, '' -> null, dates -> ISO.
-    itemPayload(row) {
+    // "Add new <related>" from an item-dialog FK combobox.
+    addRelatedItem(col) {
+      if (!col.lookup) return;
+      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), 'New ' + col.lookup.entity, async (id) => {
+        delete this.itemOptions[col.name];
+        await this.loadItemOptions();
+        if (id != null) this.draft[col.name] = String(id);
+      });
+    },
+
+    refreshItemOptions(col) { delete this.itemOptions[col.name]; this.loadItemOptions(); },
+
+    // Read-only cell: a relationship cell shows its referenced label, a date cell is formatted, a
+    // checkbox shows Yes/No, otherwise the raw value (em dash when empty).
+    cellDisplay(col, row) {
+      const v = row[col.name];
+      if (v === null || v === undefined || v === '') return '—';
+      if (col.widget === 'DROPDOWN') {
+        const opt = this.optionsFor(col.name).find(o => String(o.value) === String(v));
+        if (opt) return opt.text;
+      }
+      if (col.date) return this.displayDate(v);
+      if (col.widget === 'CHECKBOX') return v ? 'Yes' : 'No';
+      return v;
+    },
+
+    displayDate(v) {
+      const p = (n) => String(n).padStart(2, '0');
+      if (Array.isArray(v)) {
+        if (v.length === 3) return v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        if (v.length >= 5) return v[0] + '-' + p(v[1]) + '-' + p(v[2]) + ' ' + p(v[3]) + ':' + p(v[4]);
+        return v.join(', ');
+      }
+      if (typeof v === 'number') { const d = new Date(v < 1e11 ? v * 1000 : v); if (!isNaN(d.getTime())) return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
+      return String(v);
+    },
+
+    // ----- Add / edit line dialog ----------------------------------------------------------------
+    openRowDialog(row) {
+      if (!this.itemsEnabled) return;
+      this.draftError = null;
+      this.draftMode = row ? 'edit' : 'create';
+      const pk = this.itemsDef.primaryKey;
+      const draft = {};
+      draft[this.itemsDef.masterEntityId] = String(this.id);
+      for (const col of this.editColumns) {
+        let v = row ? row[col.name] : null;
+        if (row && v != null) {
+          if (col.widget === 'DROPDOWN') v = String(v);
+          else if (col.date) v = this.toDateInput(v, col.widget);
+        }
+        draft[col.name] = v == null ? (col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '')) : v;
+      }
+      if (row && row[pk] != null) draft[pk] = row[pk];
+      this.draft = draft;
+      this.rowDialogOpen = true;
+      this.refreshIcons();
+    },
+
+    closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; },
+
+    draftPayload() {
       const payload = {};
       payload[this.itemsDef.masterEntityId] = this.id;
       const pk = this.itemsDef.primaryKey;
-      if (row[pk] != null && !row._new) payload[pk] = row[pk];
+      if (this.draftMode === 'edit' && this.draft[pk] != null) payload[pk] = this.draft[pk];
       for (const col of this.editColumns) {
-        let v = row[col.name];
+        let v = this.draft[col.name];
         if (v === '') v = null;
-        if (col.date && v != null) {
-          const d = new Date(v);
-          if (!isNaN(d.getTime())) v = d.toISOString();
-        }
+        if (col.date && v != null) { const d = new Date(v); if (!isNaN(d.getTime())) v = d.toISOString(); }
         payload[col.name] = v;
       }
       return payload;
     },
 
-    async saveRow(row) {
-      row._saving = true;
-      row._error = null;
+    async saveDraft() {
+      this.draftSaving = true;
+      this.draftError = null;
       try {
         const pk = this.itemsDef.primaryKey;
-        const body = this.itemPayload(row);
-        if (row[pk] != null && !row._new) {
-          await App.services.api.put(this.itemsDef.apiPath + '/' + encodeURIComponent(row[pk]), body);
+        const body = this.draftPayload();
+        if (this.draftMode === 'edit' && this.draft[pk] != null) {
+          await App.services.api.put(this.itemsDef.apiPath + '/' + encodeURIComponent(this.draft[pk]), body);
         } else {
           await App.services.api.post(this.itemsDef.apiPath, body);
         }
+        this.rowDialogOpen = false; this.draft = {};
         await this.loadItems();   // refresh the rows (server defaults / calculated item fields)
         await this.loadHeader();  // refresh the header + totals (server-side calculated aggregates)
       } catch (e) {
-        row._error = App.services.apiErrors.messageFor(e, 'Could not save the line.');
-        row._saving = false;
+        this.draftError = App.services.apiErrors.messageFor(e, 'Could not save the line.');
+      } finally {
+        this.draftSaving = false;
       }
     },
 
@@ -320,16 +371,9 @@ document.addEventListener('alpine:init', () => {
 
     async confirmDeleteRow() {
       if (!this.deleteTarget) return;
-      const row = this.deleteTarget;
       const pk = this.itemsDef.primaryKey;
-      // An unsaved draft row is just dropped client-side.
-      if (row._new || row[pk] == null) {
-        this.items = this.items.filter(r => r !== row);
-        this.deleteOpen = false; this.deleteTarget = null;
-        return;
-      }
       try {
-        await App.services.api.delete(this.itemsDef.apiPath + '/' + encodeURIComponent(row[pk]));
+        await App.services.api.delete(this.itemsDef.apiPath + '/' + encodeURIComponent(this.deleteTarget[pk]));
         this.deleteOpen = false; this.deleteTarget = null;
         await this.loadItems();
         await this.loadHeader();

@@ -121,6 +121,15 @@ document.addEventListener('alpine:init', () => {
       const found = (options || []).find(o => o.value === value);
       return found ? found.text : value;
     },
+
+    // "Add new <related>" from a non-setting FK combobox: open the target's own create page in the
+    // shared related-create iframe dialog; on save, reload that field's options and select the new id.
+    addRelated(field, controllerUrl, entity) {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), 'New ' + entity, async (id) => {
+        await this.loadOptions();
+        if (id != null) this.form[field] = String(id);
+      });
+    },
 #end
 
     // Client-side schema (mirrors NOT NULL / format constraints). The server remains
@@ -155,7 +164,13 @@ document.addEventListener('alpine:init', () => {
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
         } else {
-          await App.services.api.post(this.apiPath, payload);
+          const created = await App.services.api.post(this.apiPath, payload);
+          // Opened as an FK "Add" iframe dialog: report the new record to the opener and stop here
+          // (no navigation - the parent closes the dialog and selects the created record).
+          if (this.isEmbedded) {
+            this.emitCreated(created && (created.${primaryKeysString} != null ? created.${primaryKeysString} : created.id));
+            return;
+          }
         }
         this.navigateBack('/${name}');
       } catch (e) {

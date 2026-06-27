@@ -78,6 +78,13 @@
             </template>
           </div>
         </div>
+#if(!$readonly && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")
+        <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
+        <div class="hbox gap-1 mt-1">
+          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Add ${property.relationshipEntityName}" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i></button>
+          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
+        </div>
+#end
 #elseif($property.widgetType == "NUMBER")
         <div x-h-input-number>
           <input type="number" id="f_${property.name}" x-model.number="form.${property.name}"

@@ -29,4 +29,21 @@ App.registerDetail('${masterEntity}', {
 #end
 #end
   ],
+  // Full editable-column metadata for inline editing (used by the document header-items layout's
+  // item add/edit dialog; the generic detailPanel ignores it). Every editable column (auto-increment
+  // PK, the master FK and audit columns excluded). A DROPDOWN lookup carries `entity` + `creatable`
+  // (false for SETTING targets) so the dialog can offer "Add new <related>".
+  editColumns: [
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE"))
+#if($property.widgetLabel)#set($elabel = $property.widgetLabel)#else#set($elabel = $property.name)#end
+#set($ereadonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true"))
+#if($property.widgetType == "DROPDOWN")
+    { name: '${property.name}', label: '${elabel}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end } },
+#else
+    { name: '${property.name}', label: '${elabel}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end },
+#end
+#end
+#end
+  ],
 });
