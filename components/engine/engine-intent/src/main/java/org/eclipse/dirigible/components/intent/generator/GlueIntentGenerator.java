@@ -16,6 +16,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
@@ -71,14 +72,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         IntentSettings settings = context.getSettings();
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
+        List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()
-                && inbound.isEmpty() && rollups.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
+                && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -86,6 +88,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         Map<String, Object> glue = new LinkedHashMap<>();
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
+        glue.put("setters", setters);
         glue.put("notifications", notifications);
         glue.put("schedules", schedules);
         glue.put("integrations", integrations);
@@ -93,10 +96,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("rollups", rollups);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
-                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] notification(s), [{}] schedule(s), [{}] integration(s),"
-                        + " [{}] inbound webhook(s) and [{}] rollup(s)",
-                triggers.size(), resolvers.size(), notifications.size(), schedules.size(), integrations.size(), inbound.size(),
-                rollups.size());
+                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] setter(s), [{}] notification(s), [{}] schedule(s),"
+                        + " [{}] integration(s), [{}] inbound webhook(s) and [{}] rollup(s)",
+                triggers.size(), resolvers.size(), setters.size(), notifications.size(), schedules.size(), integrations.size(),
+                inbound.size(), rollups.size());
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
@@ -359,5 +362,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             resolvers.add(entry);
         }
         return resolvers;
+    }
+
+    private static List<Map<String, Object>> buildSetters(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> setters = new ArrayList<>();
+        for (Setter setter : SetFieldSupport.setters(model)) {
+            if (!settings.shouldGenerate("setters", setter.className())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for setter [{}] (not generated)", setter.className());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", setter.process());
+            entry.put("className", setter.className());
+            entry.put("entity", setter.entity());
+            entry.put("perspective", setter.perspective());
+            entry.put("keyProperty", setter.keyProperty());
+            entry.put("keyAccessor", setter.keyAccessor());
+            entry.put("field", setter.field());
+            entry.put("value", setter.value());
+            setters.add(entry);
+        }
+        return setters;
     }
 }

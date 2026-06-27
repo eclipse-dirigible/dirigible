@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -574,6 +576,56 @@ public final class IntentParser {
                 }
             }
             validateDecisionTargets(process, issues);
+            validateSetFieldSteps(process, triggerEntity, byName, issues);
+        }
+    }
+
+    /**
+     * A {@code serviceTask} declaring {@code setField} must name a {@code string}/{@code text} field of
+     * the process's trigger entity and carry a {@code value} (the literal to assign). Any step may
+     * carry a {@code next} that routes its outgoing flow to a declared step or {@code end} (used to
+     * make two decision branches converge). Without these checks a typo would surface only at runtime.
+     */
+    private static void validateSetFieldSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null) {
+                continue;
+            }
+            String setField = stepArg(step, "setField");
+            if (setField != null && !setField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses setField but is not a serviceTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setField but the process has no trigger entity to set it on");
+                } else {
+                    FieldIntent field = fieldByName(trigger, setField);
+                    if (field == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] is not a field of [" + triggerEntity + "]");
+                    } else if (field.getType() != null && !"string".equals(field.getType()) && !"text".equals(field.getType())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must be a string/text field (only literal string values are supported)");
+                    }
+                    if (stepArg(step, "value") == null || stepArg(step, "value").isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must declare a value");
+                    }
+                }
+            }
+            String next = stepArg(step, "next");
+            if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
+                issues.add(
+                        "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            }
         }
     }
 
@@ -624,6 +676,12 @@ public final class IntentParser {
     }
 
     private static void validateForms(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         Set<String> formNames = new HashSet<>();
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
@@ -634,12 +692,65 @@ public final class IntentParser {
             if (!formNames.add(form.getName())) {
                 issues.add("duplicate form [" + form.getName() + "]");
             }
+            EntityIntent bound = null;
             if (form.getForEntity() != null && !form.getForEntity()
-                                                    .isBlank()
-                    && !entityNames.contains(form.getForEntity())) {
-                issues.add("form [" + form.getName() + "] references unknown entity [" + form.getForEntity() + "]");
+                                                    .isBlank()) {
+                if (!entityNames.contains(form.getForEntity())) {
+                    issues.add("form [" + form.getName() + "] references unknown entity [" + form.getForEntity() + "]");
+                } else {
+                    bound = byName.get(form.getForEntity());
+                }
+            }
+            validateFormRelationFields(form, bound, byName, issues);
+        }
+    }
+
+    /**
+     * A {@code relation.field} form field must be a one-hop to-one relation of the form's bound entity
+     * with the field present on the target - so it can be resolved into a process variable at runtime
+     * (the same one-hop scope as decision conditions). Multi-hop paths are not supported.
+     */
+    private static void validateFormRelationFields(FormIntent form, EntityIntent bound, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        for (String field : form.getFields()) {
+            if (field == null || field.indexOf('.') < 0) {
+                continue;
+            }
+            if (bound == null) {
+                issues.add("form [" + form.getName() + "] field [" + field
+                        + "] uses a relation.field path but the form has no (valid) forEntity to resolve it against");
+                continue;
+            }
+            int dot = field.indexOf('.');
+            String relationName = field.substring(0, dot);
+            String fieldName = field.substring(dot + 1);
+            if (fieldName.indexOf('.') >= 0) {
+                issues.add("form [" + form.getName() + "] field [" + field
+                        + "] uses a multi-hop path, which is not supported - use a direct field or a one-hop relation.field");
+                continue;
+            }
+            RelationIntent relation = toOneRelation(bound, relationName);
+            if (relation == null) {
+                issues.add("form [" + form.getName() + "] field [" + field + "] is not a to-one relation.field of [" + form.getForEntity()
+                        + "]");
+                continue;
+            }
+            EntityIntent target = byName.get(relation.getTo());
+            if (target == null || fieldByName(target, fieldName) == null) {
+                issues.add("form [" + form.getName() + "] field [" + field + "] references unknown field [" + fieldName + "] on ["
+                        + relation.getTo() + "]");
             }
         }
+    }
+
+    private static RelationIntent toOneRelation(EntityIntent owner, String name) {
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     private static void validateReports(IntentModel model, Set<String> entityNames, List<String> issues) {
