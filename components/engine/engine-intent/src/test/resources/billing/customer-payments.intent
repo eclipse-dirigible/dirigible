@@ -8,6 +8,7 @@ entities:
   - name: CustomerPayment
     icon: wallet
     audit: true
+    group: payments
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 100 }

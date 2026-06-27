@@ -8,6 +8,7 @@ entities:
   - name: Customer
     icon: users
     audit: true
+    group: master-data
     fields:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: name, type: string, required: true, length: 200 }
