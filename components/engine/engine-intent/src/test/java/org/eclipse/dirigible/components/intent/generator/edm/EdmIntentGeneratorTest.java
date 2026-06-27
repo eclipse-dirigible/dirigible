@@ -108,6 +108,8 @@ class EdmIntentGeneratorTest {
         // render hint (shown in the footer, not the header form).
         assertEquals("MANAGE_DOCUMENT", invoice.get("layoutType"), "a master with an *Item composition child uses the document layout");
         assertEquals("SalesInvoiceItem", invoice.get("documentItemsEntity"), "the document names its line-items entity");
+        assertEquals("Sales Invoice", invoice.get("documentLabel"), "the document header label is the humanized master name");
+        assertEquals("Sales Invoice Items", invoice.get("documentItemsLabel"), "the items label is the humanized + pluralized child name");
         assertEquals("true", propertyByName(invoice, "Total").get("aggregate"), "a field marked aggregate carries the footer render hint");
         assertEquals("true", propertyByName(invoice, "Net").get("aggregate"));
         assertNull(propertyByName(invoice, "Date").get("aggregate"), "a non-aggregate field must not carry the hint");

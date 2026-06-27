@@ -161,17 +161,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder);
-            // A document master keeps its own perspective/nav but swaps the master-detail layout for the
-            // document layout; it names its line-items entity so the document page renders that child as
-            // the inline table (and any other composition children as ordinary detail panels).
-            if (documentItems.containsKey(name)) {
-                entityMap.put("layoutType", "MANAGE_DOCUMENT");
-                entityMap.put("documentItemsEntity", documentItems.get(name));
-            }
             // A navigation-group id makes the generated perspective nest under that group in the shared
             // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
             if (notBlank(entity.getGroup())) {
                 entityMap.put("perspectiveNavId", entity.getGroup());
+            }
+            // A document master keeps its own perspective/nav but swaps the master-detail layout for the
+            // document layout; it names its line-items entity so the document page renders that child as
+            // the inline table (and any other composition children as ordinary detail panels).
+            if (documentItems.containsKey(name)) {
+                String itemsEntity = documentItems.get(name);
+                entityMap.put("layoutType", "MANAGE_DOCUMENT");
+                entityMap.put("documentItemsEntity", itemsEntity);
+                // Humanized labels for the document editor: the master's singular ("Sales Invoice") and
+                // the line-items' humanized + pluralized label ("Sales Invoice Items").
+                entityMap.put("documentLabel", IntentNaming.humanize(name));
+                entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
             }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.

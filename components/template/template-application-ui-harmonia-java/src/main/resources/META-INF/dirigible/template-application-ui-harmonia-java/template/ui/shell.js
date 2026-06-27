@@ -114,6 +114,11 @@ export function getSources() {
             rename: "gen/{{genFolderName}}/js/stores/theme.js"
         },
         {
+            location: "/template-application-ui-harmonia-java/ui/shell/js/stores/related.js.template",
+            action: "copy",
+            rename: "gen/{{genFolderName}}/js/stores/related.js"
+        },
+        {
             location: "/template-application-ui-harmonia-java/ui/shell/js/components/pages/baseFormPage.js.template",
             action: "copy",
             rename: "gen/{{genFolderName}}/js/components/pages/baseFormPage.js"
