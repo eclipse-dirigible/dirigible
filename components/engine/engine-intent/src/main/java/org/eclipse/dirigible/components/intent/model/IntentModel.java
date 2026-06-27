@@ -33,6 +33,9 @@ public class IntentModel {
     /** Schema version of the intent format. {@code 1} for the current draft. */
     private int version = 1;
 
+    /** Other intent models this one references cross-model (see {@link UsesIntent}). */
+    private List<UsesIntent> uses = new ArrayList<>();
+
     private List<EntityIntent> entities = new ArrayList<>();
     private List<ProcessIntent> processes = new ArrayList<>();
     private List<FormIntent> forms = new ArrayList<>();
@@ -75,6 +78,14 @@ public class IntentModel {
 
     public void setVersion(int version) {
         this.version = version;
+    }
+
+    public List<UsesIntent> getUses() {
+        return uses;
+    }
+
+    public void setUses(List<UsesIntent> uses) {
+        this.uses = uses == null ? new ArrayList<>() : uses;
     }
 
     public List<EntityIntent> getEntities() {

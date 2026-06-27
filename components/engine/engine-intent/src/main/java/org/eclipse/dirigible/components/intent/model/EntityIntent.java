@@ -38,6 +38,20 @@ public class EntityIntent {
      * {@code dashboard: false} excludes it. (Setting entities are excluded regardless.)
      */
     private Boolean dashboard;
+    /**
+     * Whether the generator adds the four standard audit columns ({@code CreatedAt}, {@code CreatedBy},
+     * {@code UpdatedAt}, {@code UpdatedBy}) the platform's {@code org.eclipse.dirigible.sdk.db} audit
+     * annotations populate. Absent (the default) → no audit columns.
+     */
+    private Boolean audit;
+    /**
+     * Optional navigation-group id. When set, the generated perspective for this entity carries this as
+     * its {@code groupId}, so the shared application shell nests it under the matching navigation group
+     * (defined once, e.g. in a dedicated navigation-groups project). Absent → the perspective is
+     * top-level (or under the platform's default group). Does not affect the project's own standalone
+     * shell.
+     */
+    private String group;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -92,6 +106,27 @@ public class EntityIntent {
 
     public void setIcon(String icon) {
         this.icon = icon;
+    }
+
+    /** Whether this entity gets the four standard audit columns ({@code audit: true}). */
+    public boolean isAudited() {
+        return Boolean.TRUE.equals(audit);
+    }
+
+    public Boolean getAudit() {
+        return audit;
+    }
+
+    public void setAudit(Boolean audit) {
+        this.audit = audit;
+    }
+
+    public String getGroup() {
+        return group;
+    }
+
+    public void setGroup(String group) {
+        this.group = group;
     }
 
     public List<FieldIntent> getFields() {

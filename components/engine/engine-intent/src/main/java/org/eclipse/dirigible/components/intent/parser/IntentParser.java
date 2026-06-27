@@ -143,7 +143,8 @@ public final class IntentParser {
      */
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
-        Set<String> entityNames = validateEntities(model, issues);
+        Set<String> usesAliases = validateUses(model, issues);
+        Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
@@ -379,7 +380,26 @@ public final class IntentParser {
         }
     }
 
-    private static Set<String> validateEntities(IntentModel model, List<String> issues) {
+    /**
+     * Each {@code uses[]} entry must name a non-blank, unique model alias. Returns the set of declared
+     * aliases so {@link #validateEntities} can resolve cross-model relation targets against it.
+     */
+    private static Set<String> validateUses(IntentModel model, List<String> issues) {
+        Set<String> aliases = new HashSet<>();
+        for (org.eclipse.dirigible.components.intent.model.UsesIntent uses : model.getUses()) {
+            String alias = uses.getModel();
+            if (alias == null || alias.isBlank()) {
+                issues.add("uses entry has no model");
+                continue;
+            }
+            if (!aliases.add(alias)) {
+                issues.add("duplicate uses model [" + alias + "]");
+            }
+        }
+        return aliases;
+    }
+
+    private static Set<String> validateEntities(IntentModel model, Set<String> usesAliases, List<String> issues) {
         Set<String> entityNames = new HashSet<>();
         for (EntityIntent entity : model.getEntities()) {
             String name = entity.getName();
@@ -439,8 +459,30 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
                             + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
-                if (relation.getTo() == null || relation.getTo()
-                                                        .isBlank()) {
+                boolean crossModel = relation.isCrossModel();
+                if (crossModel) {
+                    // A cross-model relation references an entity owned by another intent model declared in
+                    // uses:. It can only be a to-one association (the FK + dropdown live on this side); it
+                    // cannot compose a detail that lives in another model, and its target is validated
+                    // against the referenced .model at generation time, not here.
+                    if (!usesAliases.contains(relation.getModel())) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] references undeclared model ["
+                                + relation.getModel() + "] - add it to uses:");
+                    }
+                    if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] is cross-model (model: "
+                                + relation.getModel() + ") so it must be a manyToOne/oneToOne association");
+                    }
+                    if (relation.isComposition()) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
+                                + "] is cross-model so it cannot be a composition - a detail cannot be owned across models");
+                    }
+                    if (relation.getTo() == null || relation.getTo()
+                                                            .isBlank()) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has no target");
+                    }
+                } else if (relation.getTo() == null || relation.getTo()
+                                                               .isBlank()) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has no target");
                 } else if (!entityNames.contains(relation.getTo())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["

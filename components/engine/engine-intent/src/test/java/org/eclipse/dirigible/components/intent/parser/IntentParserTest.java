@@ -57,4 +57,107 @@ class IntentParserTest {
                                           .get(0)
                                           .getTo());
     }
+
+    @Test
+    void crossModelRelationParsesWhenModelIsDeclaredInUses() {
+        String yaml = """
+                name: customers
+                uses:
+                  - { model: countries }
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Country, kind: manyToOne, to: Country, model: countries }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("countries", model.getEntities()
+                                       .get(0)
+                                       .getRelations()
+                                       .get(0)
+                                       .getModel());
+        assertTrue(model.getEntities()
+                        .get(0)
+                        .getRelations()
+                        .get(0)
+                        .isCrossModel());
+    }
+
+    @Test
+    void crossModelRelationToUndeclaredModelIsRejected() {
+        String yaml = """
+                name: customers
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Country, kind: manyToOne, to: Country, model: countries }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("undeclared model")),
+                "expected an undeclared-model issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void crossModelCompositionIsRejected() {
+        String yaml = """
+                name: sales
+                uses:
+                  - { model: customers }
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: customers, composition: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("cannot be a composition")),
+                "expected a cross-model composition issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void intraModelDanglingRelationTargetStillRejected() {
+        String yaml = """
+                name: lib
+                entities:
+                  - name: Loan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: book, kind: manyToOne, to: Book }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("unknown entity")),
+                "expected an unknown-entity issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void uniqueAndCalculatedFieldAttributesParse() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: uuid, type: uuid, unique: true }
+                      - { name: number, type: string, calculatedOnCreate: "java.util.UUID.randomUUID().toString()" }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        var fields = model.getEntities()
+                          .get(0)
+                          .getFields();
+        assertTrue(fields.get(1)
+                         .isUnique());
+        assertTrue(fields.get(2)
+                         .isCalculated());
+    }
 }

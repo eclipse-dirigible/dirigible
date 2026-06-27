@@ -45,6 +45,12 @@ public final class IntentGenerationContext {
     /** The target project name. */
     private final String projectName;
 
+    /**
+     * The workspace the target project lives in (e.g. {@code workspace}); used to build cross-model
+     * projection paths {@code /<workspace>/<project>/<model>.model}.
+     */
+    private final String workspaceName;
+
     /** Base-name fallback when the intent YAML declares no {@code name:} - the file's base name. */
     private final String fallbackName;
 
@@ -57,10 +63,12 @@ public final class IntentGenerationContext {
     /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
 
-    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String fallbackName, IRepository repository) {
+    IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
+            IRepository repository) {
         this.model = model;
         this.projectRoot = projectRoot;
         this.projectName = projectName;
+        this.workspaceName = workspaceName;
         this.fallbackName = fallbackName;
         this.repository = repository;
     }
@@ -98,6 +106,11 @@ public final class IntentGenerationContext {
 
     public String getProjectName() {
         return projectName;
+    }
+
+    /** The workspace the target project lives in; may be null/blank in non-workspace callers. */
+    public String getWorkspaceName() {
+        return workspaceName;
     }
 
     /**

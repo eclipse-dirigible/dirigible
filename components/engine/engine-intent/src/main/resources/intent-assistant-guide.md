@@ -82,6 +82,73 @@ entities:
 **Rules:** PK integer; field `type` from the allowed list; relation `kind` from the allowed list;
 composition is opt-in.
 
+**Field attributes (faithfulness):** besides `required`, `primaryKey`, `generated`, `length` and
+`defaultValue`, a field may declare:
+
+- `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
+  property on insert / update. The expression is emitted verbatim into the chosen runtime, so it must
+  be valid there (a Java expression for the Java DAO, e.g.
+  `calculatedOnCreate: "java.util.UUID.randomUUID().toString()"`).
+
+**Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
+`CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
+
+**Shared-shell grouping:** `group: <id>` on an entity makes its generated perspective appear under
+that navigation group in the **shared** application shell (the platform dashboard that aggregates
+`application-perspectives`), so several projects show up as one grouped app instead of separate
+shells. The project's own standalone shell is unaffected. The group ids are defined once (e.g. in a
+dedicated navigation-groups project that exports `getPerspectiveGroup()` for each id) - the entity
+only references the id (e.g. `group: master-data`).
+
+### Cross-model references (uses) - reuse entities owned by another intent model
+
+**Use when:** an entity should reference master/reference data owned by a *different* project's
+intent model (e.g. `Customer`, `Country`, `Currency`, `UoM`) instead of redefining it. The owner
+model owns the single table; this model stores an integer FK and renders a dropdown sourced from the
+owner's REST service - it does **not** generate the owner's table / API.
+
+Declare the dependencies in a top-level `uses:` block, then point a `manyToOne` / `oneToOne` relation
+at the alias with `model:`:
+
+```yaml
+name: customers
+uses:
+  - { model: countries }                       # project defaults to the model alias
+  - { model: currencies, project: currencies }  # set project when it differs from the alias
+entities:
+  - name: Customer
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true }
+    relations:
+      - { name: Country,  kind: manyToOne, to: Country,  model: countries }   # cross-model reference
+      - { name: Currency, kind: manyToOne, to: Currency, model: currencies }
+```
+
+**Rules:** a cross-model relation must be `manyToOne` / `oneToOne` (it is an association), its
+`model:` must be listed in `uses:`, and it **cannot** be `composition: true` (a detail cannot be
+owned across models). Generate leaf models (the owners) before their consumers so the dropdown
+resolves. Each project is its own `.intent`; all must be published to the same runtime.
+
+### Many-to-many (n:m) - an explicit intermediate entity
+
+There is no `manyToMany` materialization; model n:m as an **intermediate entity** that holds a
+`composition` relation to one side, a `manyToOne` to the other (which may be cross-model via
+`model:`), plus any bridge fields. Example - one invoice settled by many payments and one payment
+across many invoices, each link carrying its partial `amount`:
+
+```yaml
+  - name: SalesInvoiceCustomerPayment
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }   # partial allocation
+    relations:
+      - { name: SalesInvoice,    kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+      - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }
+```
+
 ### processes - workflows and approvals
 
 **Use when:** a record needs a multi-step flow - approvals, hand-offs, branching, or automated steps.
@@ -266,5 +333,7 @@ must be an existing **integer** field on the parent entity.
 - "call an external API when X changes" -> **integrations**
 - "let an external system create X" -> **inbound**
 - "keep a running count of children on the parent" -> **rollups**
+- "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
+- "many-to-many between X and Y (with extra fields)" -> **intermediate entity** (composition + manyToOne)
 
 When in doubt, propose the smallest combination that satisfies the request and ask before adding more.
