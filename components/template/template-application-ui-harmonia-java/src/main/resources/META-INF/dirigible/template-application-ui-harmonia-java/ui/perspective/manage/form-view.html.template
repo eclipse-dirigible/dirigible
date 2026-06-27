@@ -5,7 +5,9 @@
 -->
 <div x-data="${name}FormPage" class="vbox size-full">
 
-  <div x-h-toolbar data-variant="transparent">
+  <!-- Hidden when this form is hosted inside an FK "Add" iframe dialog (?embedded) - the dialog's own
+       header titles it; the form-page exposes isEmbedded. -->
+  <div x-h-toolbar data-variant="transparent" x-show="!isEmbedded">
     <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${name}' : 'New ${name}'"></span>
   </div>
 
@@ -48,9 +50,12 @@
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement)
 #set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
+## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
+#set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
 #if($property.widgetSize)#set($span = $property.widgetSize)#else#set($span = "6")#end
 #if($property.widgetType == "TEXTAREA" || $property.widgetType == "CHECKBOX")#set($span = "12")#end
+#if($lookup)#set($span = "12")#end
       <!-- ${property.name} (${property.widgetType}) -->
       <div x-h-field#if($span == "12") class="col-span-full"#else style="grid-column: span ${span};"#end :data-invalid="!!errors.${property.name}">
 #if($property.widgetType == "CHECKBOX")
@@ -66,7 +71,24 @@
         <!-- Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
              x-h-select-input holds the VALUE (the option data-value), a string; the input shows the
              matched option's label. data-filter enables type-to-search; x-h-select-search adds the
-             in-dropdown search box for longer option lists. -->
+             in-dropdown search box for longer option lists. A non-setting association ($lookup) is laid
+             out on one row with an "Add new" button (opens the target's own create page in an iframe
+             dialog) and a Refresh button. -->
+#if($lookup)
+        <div class="hbox gap-1 items-center">
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
+            <div x-h-select-content>
+              <div x-h-select-search></div>
+              <template x-for="opt in options${property.name}" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
+          </div>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
+        </div>
+#else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#end>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
                  :aria-invalid="!!errors.${property.name}"
@@ -77,12 +99,6 @@
               <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
             </template>
           </div>
-        </div>
-#if(!$readonly && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")
-        <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
-        <div class="hbox gap-1 mt-1">
-          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Add ${property.relationshipEntityName}" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i></button>
-          <button type="button" x-h-button data-variant="transparent" data-size="sm" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #end
 #elseif($property.widgetType == "NUMBER")
