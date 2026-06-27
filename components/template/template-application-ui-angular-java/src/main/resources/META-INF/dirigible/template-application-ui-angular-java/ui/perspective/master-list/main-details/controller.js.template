@@ -1,5 +1,5 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'platformLocale'#if($hasProcess), 'ProcessTasks'#end]).controller('PageController', ($scope, Extensions, LocaleService) => {
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale'#if($hasProcess), 'ProcessTasks'#end]).controller('PageController', ($scope, Extensions, LocaleService#if($hasProcess), ProcessTasks#end) => {
 	const Dialogs = new DialogHub();
 	$scope.entity = {};
 
@@ -48,6 +48,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale'#if($hasProc
 #end
 #end
 		});
+#if($hasProcess)
+		ProcessTasks.refresh();
+#end
 	}});
 	//-----------------Events-------------------//
 
