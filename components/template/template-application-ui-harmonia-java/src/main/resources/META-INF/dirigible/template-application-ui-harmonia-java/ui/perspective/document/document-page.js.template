@@ -489,10 +489,13 @@ document.addEventListener('alpine:init', () => {
       if (v === null || v === undefined || v === '') return '—';
       const n = Number(v);
       if (isNaN(n)) return v;
-      const p = pattern || '### ### ### ##0.00';
-      const dot = p.lastIndexOf('.');
-      const decimals = dot >= 0 ? (p.length - dot - 1) : 0;
-      const groupSep = p.indexOf(' ') >= 0 ? ' ' : (p.indexOf(',') >= 0 ? ',' : '');
+      let decimals = 2;
+      let groupSep = ' ';
+      if (pattern) {
+        const dot = pattern.lastIndexOf('.');
+        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
+        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
+      }
       const parts = n.toFixed(decimals).split('.');
       if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
       return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
