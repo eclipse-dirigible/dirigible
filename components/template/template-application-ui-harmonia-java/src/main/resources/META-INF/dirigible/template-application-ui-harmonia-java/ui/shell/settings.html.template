@@ -11,7 +11,7 @@
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
 
     <!-- Master: the setting entities -->
-    <div x-h-split-panel data-size="20%" data-min="200">
+    <div x-h-split-panel data-size="25%" data-min="200">
       <div class="vbox gap-2 p-4">
         <span x-h-text.muted>Configuration &amp; nomenclature for ${projectName}.</span>
 #foreach($entity in $models)
@@ -27,7 +27,7 @@
     </div>
 
     <!-- Detail: the selected setting's content, loaded inline -->
-    <div x-h-split-panel data-size="80%">
+    <div x-h-split-panel data-size="75%">
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
