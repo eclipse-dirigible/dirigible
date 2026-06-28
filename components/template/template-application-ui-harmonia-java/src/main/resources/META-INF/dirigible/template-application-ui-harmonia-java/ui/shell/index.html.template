@@ -44,7 +44,9 @@
       <div x-h-sheet data-align="left" x-ref="overlay"></div>
     </div>
 
-    <div x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+    <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup, so the host iframe never
+         flashes the raw, un-styled chrome (sidebar/components) before init. -->
+    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
 
       <!-- Sidebar panel -->
       <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="256" data-min="200"
