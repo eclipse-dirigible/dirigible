@@ -155,6 +155,7 @@ export function generateFiles(model, parameters, templateSources) {
     const models = model.entities.filter(e => e.type !== "REPORT" && e.type !== "FILTER");
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
     const daoModels = model.entities.filter(e => e.type !== "PROJECTION");
+    annotateDocumentModels(model.entities);
     const feedModels = model.entities.filter(e => e.feedUrl);
 
     const generateReportModels = model.entities.filter(e => e.generateReport === "true");
@@ -508,33 +509,6 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
-                case "documentRollups":
-                    // Document totals (intent layer): per document, three @Listeners (child create/update/
-                    // delete) that recompute ALL aggregate sums in one write. Not entity-shaped, own loop.
-                    if (model.documentRollups) {
-                        for (let r = 0; r < model.documentRollups.length; r++) {
-                            const documentRollupParameters = {
-                                ...parameters,
-                                className: model.documentRollups[r].className,
-                                childEntity: model.documentRollups[r].childEntity,
-                                childPerspective: model.documentRollups[r].childPerspective,
-                                javaChildPerspective: sanitizeJavaIdentifier(model.documentRollups[r].childPerspective),
-                                parentEntity: model.documentRollups[r].parentEntity,
-                                javaParentPerspective: sanitizeJavaIdentifier(model.documentRollups[r].parentPerspective),
-                                fkProperty: model.documentRollups[r].fkProperty,
-                                topicSuffix: model.documentRollups[r].topicSuffix,
-                                criteriaExpression: model.documentRollups[r].criteriaExpression,
-                                fields: model.documentRollups[r].fields
-                            };
-                            const cleanDocumentRollupParameters = cleanData(documentRollupParameters);
-                            generatedFiles.push({
-                                location: location,
-                                content: getGenerationEngine(template).generate(location, content, cleanDocumentRollupParameters),
-                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanDocumentRollupParameters)
-                            });
-                        }
-                    }
-                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
@@ -687,6 +661,50 @@ function getGenerationEngine(template) {
         generationEngine.setEm(template.em);
     }
     return generationEngine;
+}
+
+/**
+ * Annotate a document master + its line-items child with the metadata their DAOs need to keep the
+ * document totals consistent SYNCHRONOUSLY (in the same request), instead of via async roll-up
+ * listeners. A master (layoutType MANAGE_DOCUMENT) gets `documentMaster` = the child entity, its Java
+ * package, the FK column, the master PK, and the aggregate fields the child also carries by name; the
+ * child gets `documentItem` = its parent entity, package and FK. The DAO template reads these.
+ */
+function annotateDocumentModels(entities) {
+    const byName = {};
+    for (const e of entities) {
+        byName[e.name] = e;
+    }
+    for (const master of entities) {
+        if (master.layoutType !== "MANAGE_DOCUMENT" || !master.documentItemsEntity) {
+            continue;
+        }
+        const child = byName[master.documentItemsEntity];
+        if (!child) {
+            continue;
+        }
+        const fkProperty = child.masterEntityId; // FK property on the child pointing at the master
+        const masterPk = (master.primaryKeys && master.primaryKeys[0]) || "Id";
+        const childFieldNames = new Set((child.properties || []).map(p => p.name));
+        const fields = (master.properties || [])
+            .filter(p => p.aggregate === "true" && childFieldNames.has(p.name))
+            .map(p => ({ field: p.name }));
+        if (fields.length === 0 || !fkProperty) {
+            continue;
+        }
+        master.documentMaster = {
+            childEntity: child.name,
+            javaChildPerspective: sanitizeJavaIdentifier(child.perspectiveName),
+            fkProperty: fkProperty,
+            masterPk: masterPk,
+            fields: fields
+        };
+        child.documentItem = {
+            parentEntity: master.name,
+            javaParentPerspective: sanitizeJavaIdentifier(master.perspectiveName),
+            fkProperty: fkProperty
+        };
+    }
 }
 
 function cleanData(data) {
