@@ -41,7 +41,9 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && $property.aggregate != "true")
+## ProcessId is a system-managed back-reference (the process instance started for this document); it
+## stays in the form model so it round-trips on edit and is null on create, but is never rendered.
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessId")
 #set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
@@ -208,7 +210,7 @@
                 </div>
               </template>
               <template x-if="col.widget === 'NUMBER'">
-                <div x-h-input-number><input type="number" x-model.number="draft[col.name]" :readonly="col.readonly" /></div>
+                <div x-h-input-number><input type="number" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
               </template>
               <template x-if="col.widget === 'CHECKBOX'">
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>

@@ -145,7 +145,7 @@
             <!-- Pinecone Router renders the matched built-in view fragment here. -->
           </div>
           <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative;">
-            <iframe :src="hostedUrl" title="Application"
+            <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)"
                     style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
           </div>
         </div>
@@ -159,6 +159,9 @@
     <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
+    <!-- Hosted domain apps: /app/<perspective-id>[/<inner-route>]. No template - the iframe renders them;
+         the optional inner segment mirrors the embedded app's own hash route (deep-linkable). -->
+    <template x-route="/app/:id/:inner*"></template>
     <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
 
     <!-- 1. Plugins (vendored) -->

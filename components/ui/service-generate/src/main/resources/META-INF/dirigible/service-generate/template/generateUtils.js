@@ -494,6 +494,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaParentPerspective: sanitizeJavaIdentifier(model.rollups[r].parentPerspective),
                                 fkProperty: model.rollups[r].fkProperty,
                                 countField: model.rollups[r].countField,
+                                op: model.rollups[r].op,
+                                sumField: model.rollups[r].sumField,
                                 topicSuffix: model.rollups[r].topicSuffix,
                                 criteriaExpression: model.rollups[r].criteriaExpression
                             };
@@ -502,6 +504,33 @@ export function generateFiles(model, parameters, templateSources) {
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanRollupParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanRollupParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "documentRollups":
+                    // Document totals (intent layer): per document, three @Listeners (child create/update/
+                    // delete) that recompute ALL aggregate sums in one write. Not entity-shaped, own loop.
+                    if (model.documentRollups) {
+                        for (let r = 0; r < model.documentRollups.length; r++) {
+                            const documentRollupParameters = {
+                                ...parameters,
+                                className: model.documentRollups[r].className,
+                                childEntity: model.documentRollups[r].childEntity,
+                                childPerspective: model.documentRollups[r].childPerspective,
+                                javaChildPerspective: sanitizeJavaIdentifier(model.documentRollups[r].childPerspective),
+                                parentEntity: model.documentRollups[r].parentEntity,
+                                javaParentPerspective: sanitizeJavaIdentifier(model.documentRollups[r].parentPerspective),
+                                fkProperty: model.documentRollups[r].fkProperty,
+                                topicSuffix: model.documentRollups[r].topicSuffix,
+                                criteriaExpression: model.documentRollups[r].criteriaExpression,
+                                fields: model.documentRollups[r].fields
+                            };
+                            const cleanDocumentRollupParameters = cleanData(documentRollupParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanDocumentRollupParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanDocumentRollupParameters)
                             });
                         }
                     }

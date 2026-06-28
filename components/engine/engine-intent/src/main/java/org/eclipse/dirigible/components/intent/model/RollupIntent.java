@@ -10,15 +10,21 @@
 package org.eclipse.dirigible.components.intent.model;
 
 /**
- * A denormalized roll-up counter: maintain an integer {@link #field} on a parent entity equal to
- * the number of {@link #entity} (child) rows pointing at it through the {@link #via} to-one
- * relation.
+ * A denormalized roll-up: maintain a {@link #field} on a parent entity derived from the
+ * {@link #entity} (child) rows pointing at it through the {@link #via} to-one relation.
  *
  * <p>
- * The generator emits two client-Java {@code @Listener}s (on the child's create and delete events)
- * that recompute the count for the affected parent and write it back. The count is recomputed from
- * the store on each event (not blindly incremented), so it self-heals; under high write concurrency
- * it is eventually consistent rather than transactionally exact.
+ * {@link #op} selects the aggregation: {@code count} (the default) keeps an integer count of child
+ * rows, while {@code sum} keeps a decimal sum of the child rows' {@link #of} field on the parent's
+ * {@link #field}. Sum roll-ups are how a document header's totals (e.g. {@code Net} / {@code Vat} /
+ * {@code Total}) stay equal to the sum of their line items by name convention.
+ *
+ * <p>
+ * The generator emits client-Java {@code MessageHandler}s on the child's lifecycle events (create +
+ * delete for a count; create + update + delete for a sum, since editing a row changes the sum) that
+ * recompute the value for the affected parent and write it back. It is recomputed from the store on
+ * each event (not blindly incremented), so it self-heals; under high write concurrency it is
+ * eventually consistent rather than transactionally exact.
  */
 public class RollupIntent {
 
@@ -26,6 +32,10 @@ public class RollupIntent {
     private String entity;
     private String via;
     private String field;
+    /** The aggregation: {@code count} (default) or {@code sum}. */
+    private String op;
+    /** The child field summed onto {@link #field} when {@link #op} is {@code sum}. */
+    private String of;
 
     public String getName() {
         return name;
@@ -57,5 +67,21 @@ public class RollupIntent {
 
     public void setField(String field) {
         this.field = field;
+    }
+
+    public String getOp() {
+        return op;
+    }
+
+    public void setOp(String op) {
+        this.op = op;
+    }
+
+    public String getOf() {
+        return of;
+    }
+
+    public void setOf(String of) {
+        this.of = of;
     }
 }

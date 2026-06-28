@@ -43,13 +43,34 @@ document.addEventListener('alpine:init', () => {
       }
       this.loading = false;
 
-      const getPath = () => {
-        const p = window.PineconeRouter.context?.path || '/';
-        return p === '/' ? '/dashboard' : p;
+      // Resolve shell state from the current route. Hosted domain apps are addressable as
+      // /app/<perspective-id>[/<inner-route>]; everything else is a built-in page rendered into #app.
+      // The inner route is the iframe app's own hash route (e.g. /SalesInvoice/42/edit), so the top
+      // URL stays in sync with what the embedded app shows and is deep-linkable.
+      const applyRoute = () => {
+        let p = window.PineconeRouter.context?.path || '/';
+        if (p === '/') p = '/dashboard';
+        this.currentPath = p;
+        const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
+        if (match) {
+          const id = decodeURIComponent(match[1]);
+          const inner = match[2] ? '/' + match[2] : '';
+          // Only (re)point the iframe when the app changes - while the same app is hosted the iframe
+          // owns its inner route, so we must not reset its src (that would reload it and lose state).
+          if (this.hostedId !== id) {
+            const item = this.findItem(id);
+            if (item) { this.hostedId = id; this.hostedUrl = this.appUrl(item, inner); }
+          }
+        } else {
+          this.hostedId = '';
+          this.hostedUrl = '';
+        }
+        this.refreshIcons();
       };
-      this.currentPath = getPath();
-      window.addEventListener('popstate', () => { this.currentPath = getPath(); this.refreshIcons(); });
-      document.addEventListener('pinecone:end', () => { this.currentPath = getPath(); this.refreshIcons(); });
+      window.addEventListener('popstate', applyRoute);
+      document.addEventListener('pinecone:end', applyRoute);
+      // Resolve the initial route now that the perspectives are loaded (handles deep links / reloads).
+      applyRoute();
 
       this._bp = Harmonia.getBreakpointListener((isNarrow) => {
         this.hiddenPanels.left = isNarrow;
@@ -65,19 +86,68 @@ document.addEventListener('alpine:init', () => {
 
     destroy() { if (this._bp) this._bp.remove(); },
 
-    /** Navigate to a built-in page (Pinecone route into #app); leaves any hosted app. */
+    /** Navigate to a built-in page (Pinecone route into #app); applyRoute clears any hosted app. */
     navigate(route) {
-      this.hostedUrl = '';
-      this.hostedId = '';
       window.PineconeRouter.navigate(route);
       this.closeSideNav();
     },
 
-    /** Host a domain app (a perspective) in the iframe; #app is hidden while hosted. */
+    /** Host a domain app (a perspective) in the iframe via its /app/<id> route; applyRoute sets the iframe. */
     openApp(item) {
-      this.hostedId = item.id;
-      this.hostedUrl = item.path || '';
+      // Re-clicking the already-hosted app is a no-op: leave its inner route (and the URL) untouched.
+      if (this.hostedId !== item.id) {
+        window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+      }
       this.closeSideNav();
+    },
+
+    /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
+    appUrl(item, inner) {
+      const path = item.path || '';
+      const hashAt = path.indexOf('#');
+      const base = hashAt === -1 ? path : path.slice(0, hashAt);
+      const defaultHash = hashAt === -1 ? '' : path.slice(hashAt + 1);
+      const hash = inner || defaultHash;
+      return hash ? base + '#' + hash : base;
+    },
+
+    /** Wire the hosted iframe so its inner navigation is mirrored into the shell's address bar. */
+    onIframeLoad(e) {
+      const win = e.target && e.target.contentWindow;
+      if (!win) return;
+      const mirror = () => this.mirrorInner(win);
+      // The embedded app routes with Pinecone (history.pushState, no hashchange) and signals every
+      // navigation with a `pinecone:end` event on its own document; popstate covers in-app back/forward.
+      try {
+        win.document.addEventListener('pinecone:end', mirror);
+        win.addEventListener('popstate', mirror);
+      } catch (err) { return; } // cross-origin guard
+      win.addEventListener('hashchange', mirror); // fallback for non-Pinecone embedded apps
+      mirror();
+    },
+
+    /** Reflect the embedded app's current hash route into the top URL as /app/<id>/<inner-route>. */
+    mirrorInner(win) {
+      if (!this.hostedId) return;
+      let hash;
+      try { hash = win.location.hash || ''; } catch (e) { return; } // cross-origin guard
+      const inner = hash.replace(/^#\/?/, '');
+      const top = '/app/' + encodeURIComponent(this.hostedId) + (inner ? '/' + inner : '');
+      const newHash = '#' + top;
+      if (window.location.hash !== newHash) {
+        // replaceState updates the address bar without re-triggering the shell router (no reload loop).
+        history.replaceState(history.state, '', newHash);
+        this.currentPath = top;
+      }
+    },
+
+    /** Find a loaded perspective by id across all groups. */
+    findItem(id) {
+      for (const g of this.groups) {
+        const item = (g.items || []).find(i => i.id === id);
+        if (item) return item;
+      }
+      return null;
     },
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },
