@@ -208,13 +208,18 @@ document.addEventListener('alpine:init', () => {
       this.closeSideNav();
     },
 
-    /** Select a setting entity: host its app at that entity's route in the settings detail iframe. */
+    /** Select a setting entity: host its app at that entity's route in the settings detail iframe.
+     *  Update the URL with replaceState (no Pinecone re-render) so the master-detail split keeps the
+     *  layout it computed when first shown; the detail iframe just swaps its src. */
     selectSetting(item) {
       if (this.settingsSelected !== item.id) {
         this.settingsSelected = item.id;
         this.settingsUrl = item.path || '';
         this.currentPath = '/settings/' + encodeURIComponent(item.id);
-        window.PineconeRouter.navigate('/settings/' + encodeURIComponent(item.id));
+        const url = '#/settings/' + encodeURIComponent(item.id);
+        if (window.location.hash !== url && window.history && window.history.replaceState) {
+          window.history.replaceState(window.history.state, '', url);
+        }
         this.refreshIcons();
       }
     },
