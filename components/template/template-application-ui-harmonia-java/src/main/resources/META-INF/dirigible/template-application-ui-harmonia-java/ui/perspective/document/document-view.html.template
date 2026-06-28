@@ -122,7 +122,7 @@
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
-            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" x-text="col.label"></th></template>
+            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label"></th></template>
             <th x-h-table-head scope="col" class="text-right">Actions</th>
           </tr>
         </thead>
@@ -130,7 +130,7 @@
           <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
               <template x-for="col in editColumns" :key="col.name">
-                <td x-h-table-cell x-text="cellDisplay(col, row)"></td>
+                <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellDisplay(col, row)"></td>
               </template>
               <td x-h-table-cell class="text-right">
                 <div class="hbox gap-1 justify-end items-center">
@@ -155,7 +155,7 @@
 #if($property.widgetLabel)#set($alabel = $property.widgetLabel)#else#set($alabel = $property.name)#end
         <div class="hbox justify-between gap-8">
           <span class="text-secondary">${alabel}</span>
-          <span class="font-semibold tabular-nums" x-text="totalValue('${property.name}')"></span>
+          <span class="font-semibold tabular-nums" x-text="totalValue('${property.name}', '${property.formatPattern}')"></span>
         </div>
 #end
 #end

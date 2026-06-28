@@ -67,6 +67,7 @@ function detailPanel(def, masterId) {
         const t = m ? m[v] : undefined;
         if (t !== undefined && t !== null && t !== '') return t;
       }
+      if (col.float) return this.formatNumber(v, col.pattern);
       return this.displayValue(v, col.date);
     },
 

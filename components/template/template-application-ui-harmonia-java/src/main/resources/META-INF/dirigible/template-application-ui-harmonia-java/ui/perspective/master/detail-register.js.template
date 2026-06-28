@@ -26,6 +26,10 @@ App.registerDetail('${masterEntity}', {
     { name: '${property.name}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' } },
 #elseif($property.isDateType)
     { name: '${property.name}', date: true },
+#elseif($property.isFloatType)
+    { name: '${property.name}', number: true, float: true, pattern: '${property.formatPattern}' },
+#elseif($property.isNumberType)
+    { name: '${property.name}', number: true },
 #else
     { name: '${property.name}' },
 #end
@@ -44,7 +48,7 @@ App.registerDetail('${masterEntity}', {
 #if($property.widgetType == "DROPDOWN")
     { name: '${property.name}', label: '${elabel}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end } },
 #else
-    { name: '${property.name}', label: '${elabel}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#calcMeta($property) },
+    { name: '${property.name}', label: '${elabel}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property) },
 #end
 #end
 #end

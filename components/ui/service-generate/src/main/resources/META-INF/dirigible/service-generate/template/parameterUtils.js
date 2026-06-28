@@ -107,6 +107,17 @@ export function process(model, parameters) {
             } else if (p.dataTypeTypescript === "Date") {
                 p.isDateType = true;
                 e.hasDates = true;
+            } else if (p.dataTypeTypescript === "number") {
+                // All numeric values are right-aligned in tables. Floats are additionally formatted with
+                // the field's display pattern (the model's Pattern/widgetPattern), defaulting to grouped
+                // thousands with two decimals.
+                p.isNumberType = true;
+                const dt = (p.dataType || "").toUpperCase();
+                if (dt === "DECIMAL" || dt === "DOUBLE" || dt === "FLOAT" || dt === "REAL") {
+                    p.isFloatType = true;
+                    p.formatPattern = (p.widgetPattern && p.widgetPattern.trim()) ? p.widgetPattern : "### ### ### ##0.00";
+                    e.hasFloats = true;
+                }
             }
             p.inputRule = p.widgetPattern ? p.widgetPattern : "";
 

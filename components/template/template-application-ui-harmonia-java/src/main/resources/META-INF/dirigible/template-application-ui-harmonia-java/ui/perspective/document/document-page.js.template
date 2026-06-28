@@ -376,6 +376,7 @@ document.addEventListener('alpine:init', () => {
         if (opt) return opt.text;
       }
       if (col.date) return this.displayDate(v);
+      if (col.float) return this.displayNumber(v, col.pattern);
       if (col.widget === 'CHECKBOX') return v ? 'Yes' : 'No';
       return v;
     },
@@ -480,12 +481,21 @@ document.addEventListener('alpine:init', () => {
     // ----- Totals footer (aggregate fields, read-only) -------------------------------------------
     // The totals are server-managed: the DAO recomputes them synchronously on every line change and on
     // the master's own save, so the loaded record is authoritative (re-fetched after each item change).
-    totalValue(name) { return this.displayNumber(this.record[name]); },
+    totalValue(name, pattern) { return this.displayNumber(this.record[name], pattern); },
 
-    displayNumber(v) {
+    // Format a float using a DecimalFormat-style pattern (decimals from the part after '.', grouping
+    // from the pattern's separator). Defaults to grouped thousands with two decimals.
+    displayNumber(v, pattern) {
       if (v === null || v === undefined || v === '') return '—';
       const n = Number(v);
-      return isNaN(n) ? v : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (isNaN(n)) return v;
+      const p = pattern || '### ### ### ##0.00';
+      const dot = p.lastIndexOf('.');
+      const decimals = dot >= 0 ? (p.length - dot - 1) : 0;
+      const groupSep = p.indexOf(' ') >= 0 ? ' ' : (p.indexOf(',') >= 0 ? ',' : '');
+      const parts = n.toFixed(decimals).split('.');
+      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
     },
 
     backToList() { window.PineconeRouter.navigate('/${name}'); },
