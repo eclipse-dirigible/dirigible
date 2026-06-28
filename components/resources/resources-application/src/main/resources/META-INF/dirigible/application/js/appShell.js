@@ -48,7 +48,11 @@ document.addEventListener('alpine:init', () => {
       // The inner route is the iframe app's own hash route (e.g. /SalesInvoice/42/edit), so the top
       // URL stays in sync with what the embedded app shows and is deep-linkable.
       const applyRoute = () => {
-        let p = window.PineconeRouter.context?.path || '/';
+        // Read the live URL hash, not PineconeRouter.context.path: for a template-less route (our
+        // /app/:id route) Pinecone fires pinecone:end BEFORE it assigns the new context, so context
+        // would be stale here - but history.pushState has already updated the hash by then.
+        const h = window.location.hash || '';
+        let p = (h.charAt(0) === '#' ? h.slice(1) : h) || '/';
         if (p === '/') p = '/dashboard';
         this.currentPath = p;
         const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
