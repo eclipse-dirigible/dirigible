@@ -119,7 +119,7 @@ angular.module('ProcessTasks', ['platformLocale'])
             scope: { entity: '<' },
             template: `<bk-popover ng-if="tasks().length">
     <bk-popover-control>
-        <bk-button compact="true" glyph="sap-icon--inbox" state="transparent" label="{{tasks().length}}" aria-label="{{ariaLabel}}"></bk-button>
+        <bk-button compact="true" glyph="sap-icon--inbox" state="transparent" label="{{label()}}" aria-label="{{ariaLabel}}"></bk-button>
     </bk-popover-control>
     <bk-popover-body align="bottom-right">
         <bk-menu no-backdrop="true" no-shadow="true">
@@ -130,6 +130,12 @@ angular.module('ProcessTasks', ['platformLocale'])
             link: (scope) => {
                 scope.ariaLabel = LocaleService.t('dashboard.processTasks.pending', {}, 'Pending tasks');
                 scope.tasks = () => ProcessTasks.getTasks(scope.entity);
+                // Surface the current step inline: a single actionable task shows its name (answers
+                // "why is there a task here?" at a glance), several collapse to a count.
+                scope.label = () => {
+                    const open = scope.tasks();
+                    return open.length === 1 ? open[0].name : LocaleService.t('dashboard.processTasks.count', { count: open.length }, open.length + ' tasks');
+                };
                 scope.openTask = (task) => ProcessTasks.openTask(task);
                 ProcessTasks.ensureLoaded().then(() => scope.$applyAsync());
             }
