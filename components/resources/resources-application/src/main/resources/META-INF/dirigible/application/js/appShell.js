@@ -96,11 +96,17 @@ document.addEventListener('alpine:init', () => {
       this.closeSideNav();
     },
 
-    /** Host a domain app (a perspective) in the iframe via its /app/<id> route; applyRoute sets the iframe. */
+    /** Host a domain app (a perspective) in the iframe. Swap the iframe synchronously on click (do not
+     *  wait for the router's pinecone:end - for a template-less route it can fire before the context is
+     *  ready, leaving the pane stale), then update the URL. applyRoute then no-ops (hostedId already set). */
     openApp(item) {
       // Re-clicking the already-hosted app is a no-op: leave its inner route (and the URL) untouched.
       if (this.hostedId !== item.id) {
+        this.hostedId = item.id;
+        this.hostedUrl = this.appUrl(item, '');
+        this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+        this.refreshIcons();
       }
       this.closeSideNav();
     },
