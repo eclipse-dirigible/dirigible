@@ -304,6 +304,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
     <!-- SETTING entities: same CRUD list + form, grouped under the Settings perspective. -->
@@ -312,6 +313,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
     <!-- MASTER entities: master-detail page (list + selected record's detail panels) + own form. -->
@@ -328,6 +330,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
+    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
     <!-- DETAIL entities: only a routed create/edit form (listed inside their master's panels). -->

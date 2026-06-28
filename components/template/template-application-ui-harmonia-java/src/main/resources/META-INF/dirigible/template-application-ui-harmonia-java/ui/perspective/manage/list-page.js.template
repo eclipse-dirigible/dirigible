@@ -35,6 +35,28 @@ document.addEventListener('alpine:init', () => {
     async init() {
       await this.load();
       this.loadLookups();
+      this.selectFromRoute();
+    },
+
+    // Deep link / reload support: /${name}/:id pre-selects that row once the list is loaded.
+    selectFromRoute() {
+      const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
+      const id = params.id;
+      if (id === undefined || id === null || id === '') return;
+      const match = this.items.find(it => String(it.${primaryKeysString}) === String(id));
+      if (match) { this.selected = match; this.refreshIcons(); }
+    },
+
+    // Reflect the selected row in the URL (/${name}/:id) without re-rendering the list. Uses
+    // replaceState (no Pinecone re-route) and notifies the embedding shell so the top-level
+    // address bar stays in sync; deep-linking/reload is handled by selectFromRoute() above.
+    syncSelectionUrl(row) {
+      if (typeof window.history === 'undefined' || !window.history.replaceState) return;
+      const path = '/${name}' + (row ? '/' + encodeURIComponent(row.${primaryKeysString}) : '');
+      const url = '#' + path;
+      if (window.location.hash === url) return;
+      window.history.replaceState(window.history.state, '', url);
+      try { window.dispatchEvent(new HashChangeEvent('hashchange')); } catch (e) { /* older browsers */ }
     },
 
     async load() {
@@ -58,7 +80,7 @@ document.addEventListener('alpine:init', () => {
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },
-    selectRow(row)   { this.selected = row; this.refreshIcons(); },
+    selectRow(row)   { this.selected = row; this.refreshIcons(); this.syncSelectionUrl(row); },
     // Render a property value for the details pane. Jackson serializes java.time as arrays
     // (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
     displayValue(v, isDate) {
