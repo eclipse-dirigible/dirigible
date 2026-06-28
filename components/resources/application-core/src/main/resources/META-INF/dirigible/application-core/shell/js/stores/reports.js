@@ -42,9 +42,15 @@ document.addEventListener('alpine:init', () => {
 
     async load() {
       try {
+        // The application shell sets aggregateReports to collect reports from EVERY published app
+        // (walk the whole registry); a generated app walks only its own project's gen tree.
+        const aggregate = !!(App.config && App.config.aggregateReports);
         const project = (App.config && App.config.projectName) || '';
-        if (!project) { this.loaded = true; return; }
-        const r = await fetch('/services/core/repository/registry/public/' + project + '/gen', {
+        const base = aggregate
+          ? '/services/core/repository/registry/public'
+          : (project ? '/services/core/repository/registry/public/' + project + '/gen' : '');
+        if (!base) { this.loaded = true; return; }
+        const r = await fetch(base, {
           headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
         });
         if (!r.ok) { this.loaded = true; return; }
@@ -54,9 +60,9 @@ document.addEventListener('alpine:init', () => {
         const seen = new Set();
         this.items = found
           .filter(x => { if (seen.has(x.url)) return false; seen.add(x.url); return true; })
-          .sort((a, b) => a.name.localeCompare(b.name));
+          .sort((a, b) => a.label.localeCompare(b.label));
         this.loaded = true;
-        this._enrich(project);
+        this._enrich();
       } catch (e) {
         console.error('reports: discovery failed', e);
         this.loaded = true;
@@ -66,11 +72,12 @@ document.addEventListener('alpine:init', () => {
     // Enrich each discovered report from its .report model file (project root): the human label, the
     // description (shown on the dashboard tile), and the dashboard exclude flag. Best-effort — a
     // missing/unreadable .report just leaves the defaults (label = humanized name, shown on dashboard).
-    async _enrich(project) {
+    async _enrich() {
       await Promise.all(this.items.map(async (it) => {
         if (it.dashboard === undefined) it.dashboard = true;
+        if (!it.project) return;
         try {
-          const r = await fetch('/services/core/repository/registry/public/' + project + '/' + it.name + '.report', {
+          const r = await fetch('/services/core/repository/registry/public/' + it.project + '/' + it.name + '.report', {
             headers: { 'Accept': 'application/json' }, credentials: 'same-origin',
           });
           if (!r.ok) return;
@@ -92,7 +99,10 @@ document.addEventListener('alpine:init', () => {
         const path = res && res.path;
         if (res && res.name === 'index.html' && path && path.indexOf('/reports/') >= 0) {
           const m = path.match(/\/reports\/([^/]+)\/index\.html$/);
-          if (m) out.push({ name: m[1], label: humanizeReportName(m[1]), url: path.replace('/registry/public/', '/services/web/') });
+          if (m) {
+          const pm = path.match(/\/registry\/public\/([^/]+)\//);
+          out.push({ name: m[1], label: humanizeReportName(m[1]), url: path.replace('/registry/public/', '/services/web/'), project: pm ? pm[1] : '' });
+        }
         }
       });
       (node.collections || []).forEach(c => this._walk(c, out));

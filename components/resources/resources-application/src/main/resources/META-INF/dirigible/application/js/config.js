@@ -12,5 +12,7 @@ App.config = {
   projectName: 'application',
   basePath: '/services/web/application',
   // No own entities; the built-in stores (inbox/documents/reports) call platform services directly.
-  restBase: ''
+  restBase: '',
+  // The application shell aggregates reports from every published app (not just its own project).
+  aggregateReports: true
 };

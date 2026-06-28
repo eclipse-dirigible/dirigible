@@ -109,19 +109,31 @@
                 </div>
               </div>
             </template>
+
+            <!-- Reports: one entry per report, discovered at runtime across every published app
+                 (the reports store walks the whole registry). Selecting one shows it on /reports. -->
+            <div x-h-sidebar-group x-show="$store.reports.items.length > 0" x-cloak>
+              <div x-h-sidebar-group-label>Reports</div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <template x-for="r in $store.reports.items" :key="r.url">
+                    <li x-h-sidebar-menu-item>
+                      <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/reports') && $store.reports.selected && $store.reports.selected.url === r.url" @click="$store.reports.selected = r; navigate('/reports')">
+                        <i role="img" data-lucide="bar-chart-3"></i><span x-text="r.label"></span>
+                      </button>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+            </div>
           </div>
 
-          <!-- Settings + Reports pinned to the footer. Settings aggregates every app's SETTING entities. -->
+          <!-- Settings pinned to the footer; it aggregates every app's SETTING entities. -->
           <div x-h-sidebar-footer>
             <ul x-h-sidebar-menu>
               <li x-h-sidebar-menu-item x-show="settingsItems.length > 0">
                 <button x-h-sidebar-menu-button :data-active="settingsMode" @click="openSettings()">
                   <i role="img" data-lucide="settings"></i><span>Settings</span>
-                </button>
-              </li>
-              <li x-h-sidebar-menu-item>
-                <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/reports')" @click="navigate('/reports')">
-                  <i role="img" data-lucide="bar-chart-3"></i><span>Reports</span>
                 </button>
               </li>
             </ul>
@@ -205,7 +217,7 @@
                app at the entity's route in the detail iframe (cross-app, so it is hosted, not inlined). -->
           <div x-show="settingsMode" class="flex-1 size-full">
             <div x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
-              <div x-h-split-panel data-size="22%" data-min="200">
+              <div x-h-split-panel data-size="25%" data-min="200">
                 <div class="vbox gap-2 p-3">
                   <span x-h-text.muted class="text-sm">Configuration &amp; nomenclature across all applications.</span>
                   <template x-for="item in settingsItems" :key="item.id">
@@ -217,7 +229,7 @@
                   </template>
                 </div>
               </div>
-              <div x-h-split-panel data-size="78%" style="position: relative;">
+              <div x-h-split-panel data-size="75%" style="position: relative;">
                 <div x-show="!settingsUrl" x-h-info-page class="p-4">
                   <div x-h-info-page-header>
                     <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
