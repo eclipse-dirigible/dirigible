@@ -111,8 +111,10 @@ document.addEventListener('alpine:init', () => {
       const hashAt = path.indexOf('#');
       const base = hashAt === -1 ? path : path.slice(0, hashAt);
       const defaultHash = hashAt === -1 ? '' : path.slice(hashAt + 1);
-      const hash = inner || defaultHash;
-      return hash ? base + '#' + hash : base;
+      // Normalize to exactly one leading slash: the inner route is stored without it (mirrorInner
+      // strips it), but the embedded app's hash router matches "/Entity/:id", so "#Entity/1" misses.
+      const hash = (inner || defaultHash || '').replace(/^\/+/, '');
+      return hash ? base + '#/' + hash : base;
     },
 
     /** Wire the hosted iframe so its inner navigation is mirrored into the shell's address bar. */
