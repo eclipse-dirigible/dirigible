@@ -204,43 +204,14 @@
             </ul>
           </div>
 
-          <!-- Built-in pages render here (Pinecone); a hosted domain app shows in the iframe instead. -->
-          <div id="app" x-show="!hostedUrl && !settingsMode" class="size-full overflow-auto flex-1">
+          <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted
+               domain app shows in the iframe instead. -->
+          <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
             <!-- Pinecone Router renders the matched built-in view fragment here. -->
           </div>
-          <div x-show="hostedUrl && !settingsMode" class="flex-1 size-full" style="position: relative;">
+          <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative;">
             <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)"
                     style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
-          </div>
-
-          <!-- Settings: master-detail. Left lists every app's SETTING entities; selecting one hosts that
-               app at the entity's route in the detail iframe (cross-app, so it is hosted, not inlined). -->
-          <div x-show="settingsMode" class="vbox flex-1 size-full">
-            <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
-              <div x-h-split-panel data-size="25%" data-min="200">
-                <div class="vbox gap-2 p-3">
-                  <span x-h-text.muted class="text-sm">Configuration &amp; nomenclature across all applications.</span>
-                  <template x-for="item in settingsItems" :key="item.id">
-                    <button x-h-button data-variant="outline" class="justify-start"
-                            :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
-                      <i role="img" data-lucide="settings"></i>
-                      <span x-text="item.label"></span>
-                    </button>
-                  </template>
-                </div>
-              </div>
-              <div x-h-split-panel data-size="75%" style="position: relative;">
-                <div x-show="!settingsUrl" x-h-info-page class="p-4">
-                  <div x-h-info-page-header>
-                    <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-                    <div x-h-info-page-title>Select a setting</div>
-                    <div x-h-info-page-description>Choose a configuration entity on the left to manage it here.</div>
-                  </div>
-                </div>
-                <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
-                        style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -289,10 +260,10 @@
     <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
-    <!-- Settings: list (/settings) or a selected entity (/settings/<perspective-id>). No template - the
-         settings master-detail layout above renders it (driven by settingsMode). -->
-    <template x-route="/settings"></template>
-    <template x-route="/settings/:id"></template>
+    <!-- Settings: list (/settings) or a selected entity (/settings/<perspective-id>). The master-detail
+         fragment renders into #app (visible) so its split lays out correctly. -->
+    <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
+    <template x-route="/settings/:id" x-template.target.app="./views/_settings.html"></template>
     <!-- Hosted domain apps: /app/<perspective-id>[/<inner-route>]. No template - the iframe renders them;
          the optional inner segment mirrors the embedded app's own hash route (deep-linkable). -->
     <template x-route="/app/:id/:inner*"></template>
