@@ -130,10 +130,16 @@ function baseFormPage() {
       window.PineconeRouter.navigate(this.returnToParam() || defaultRoute);
     },
 
-    // This form is hosted inside an FK combobox's "Add" iframe dialog (opened with ?embedded=1).
-    // On a successful create it must report the new record to the parent and NOT navigate away.
+    // Hosted without its own chrome (the shell-hosted app OR an FK "Add" dialog both pass ?embedded).
+    // Controls whether this form renders its own toolbar - NOT whether save navigates.
     get isEmbedded() {
       return this.queryParam('embedded') === '1' || this.queryParam('embedded') === 'true';
+    },
+
+    // Hosted specifically inside an FK combobox's "Add" iframe dialog (opened with ?dialog=1). Only in
+    // this case does a create report the new record to the opener instead of navigating to the list.
+    get isDialog() {
+      return this.queryParam('dialog') === '1' || this.queryParam('dialog') === 'true';
     },
 
     // Tell the hosting window a record was created so the opener can refresh + select it.

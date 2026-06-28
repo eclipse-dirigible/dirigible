@@ -24,7 +24,7 @@ window.App = {
       if (!controllerUrl || !entity) return '';
       const i = controllerUrl.indexOf('/api/');
       const base = (i >= 0 ? controllerUrl.substring(0, i) : controllerUrl).replace('/services/java/', '/services/web/');
-      return base + '/index.html?embedded=1#/' + entity + '/create?embedded=1';
+      return base + '/index.html?embedded=1#/' + entity + '/create?embedded=1&dialog=1';
     },
   },
   config: {},
