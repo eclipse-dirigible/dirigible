@@ -421,6 +421,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Navigation label: humanized + pluralized so the menu reads naturally
         // (SalesInvoice -> "Sales Invoices", Book -> "Books").
         entity.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(name)));
+        // Singular humanized label for in-page UI text (titles, "New X", "Delete X", "X #id").
+        entity.put("entityLabel", IntentNaming.humanize(name));
         entity.put("menuIndex", "100");
         entity.put("layoutType", dependent ? "MANAGE_DETAILS" : "MANAGE_MASTER");
         entity.put("perspectiveName", perspective);

@@ -12,6 +12,7 @@ const perspectiveData = {
 	id: '${projectName}-${name}',
 	label: '${menuLabel}',
 	path: '/services/web/${projectName}/gen/${genFolderName}/index.html?embedded=true#/${name}',
+	kind: '${type}',
 #if($perspectiveNavId)
 	groupId: '${perspectiveNavId}',
 #end

@@ -6,10 +6,10 @@
 <div x-data="${name}ManageListPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title class="shrink-0">${name}</span>
+    <span x-h-toolbar-title class="shrink-0">${menuLabel}</span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
-      <input x-h-input.group type="text" placeholder="Search ${name}..."
+      <input x-h-input.group type="text" placeholder="Search ${menuLabel}..."
              x-model="searchTerm" @input="onSearchChange()" />
       <div x-h-input-group-addon data-align="inline-start">
         <svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg>
@@ -40,11 +40,11 @@
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><i role="img" data-lucide="inbox"></i></div>
-      <div x-h-info-page-title>No ${name} yet</div>
+      <div x-h-info-page-title>No ${menuLabel} yet</div>
       <div x-h-info-page-description>Get started by creating the first record.</div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="primary" @click="newEntity()">New ${name}</button>
+      <button x-h-button data-variant="primary" @click="newEntity()">New ${entityLabel}</button>
     </div>
   </div>
 
@@ -77,7 +77,7 @@
             </thead>
             <tbody x-h-table-body>
               <tr x-show="displayState === 'no-results'" x-h-table-row>
-                <td x-h-table-cell>No matching ${name}.</td>
+                <td x-h-table-cell>No matching ${menuLabel}.</td>
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
@@ -122,14 +122,14 @@
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-          <div x-h-info-page-title>Select a ${name}</div>
+          <div x-h-info-page-title>Select a ${entityLabel}</div>
           <div x-h-info-page-description>Choose a row to see all its details#if($hasProcess) and pending tasks#end.</div>
         </div>
       </div>
 
       <div x-show="selected" class="vbox size-full overflow-auto">
         <div x-h-toolbar data-variant="transparent" data-size="sm">
-          <span x-h-toolbar-title class="shrink-0" x-text="'${name} #' + selectedId"></span>
+          <span x-h-toolbar-title class="shrink-0" x-text="'${entityLabel} #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
           <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" data-lucide="pencil"></i><span>Edit</span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" data-lucide="trash-2"></i></button>
@@ -171,7 +171,7 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete ${name}</h2>
+        <h2 x-h-dialog-title>Delete ${entityLabel}</h2>
         <p x-h-dialog-description>This action cannot be undone.</p>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
       </div>

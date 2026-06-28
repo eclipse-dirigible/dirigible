@@ -27,6 +27,12 @@ document.addEventListener('alpine:init', () => {
     // The currently hosted domain app (a perspective). When set, the iframe is shown instead of #app.
     hostedUrl: '',
     hostedId: '',
+    // Settings: the SETTING entities from every app (the 'settings' perspective group), surfaced as a
+    // single footer entry + master-detail page (list left, the selected setting hosted in an iframe).
+    settingsItems: [],
+    settingsMode: false,
+    settingsSelected: '',
+    settingsUrl: '',
 
     async init() {
       try {
@@ -35,8 +41,31 @@ document.addEventListener('alpine:init', () => {
           const data = await res.json();
           // Domain apps live in named groups; skip the platform's 'undefined-group' and utilities
           // (those are the legacy AngularJS perspectives, which do not belong in the Harmonia shell).
-          this.groups = (Array.isArray(data.perspectives) ? data.perspectives : [])
-            .filter(g => g.id !== 'undefined-group' && Array.isArray(g.items) && g.items.length);
+          // Every app's SETTING entities are shown under the dedicated Settings footer entry, never in
+          // the sidebar - whether they were declared inside a nav group or with no group at all. A
+          // perspective is a setting when its kind is SETTING (from the generator); the legacy 'settings'
+          // group id is a fallback for apps generated before the kind tag existed.
+          const all = Array.isArray(data.perspectives) ? data.perspectives : [];
+          const settings = [];
+          const appGroups = [];
+          all.forEach(g => {
+            if (Array.isArray(g.items)) {
+              // A navigation group: pull its SETTING entities into Settings, keep the rest in the sidebar.
+              const isSetting = (it) => it.kind === 'SETTING' || g.id === 'settings';
+              settings.push(...g.items.filter(isSetting));
+              const keep = g.items.filter(it => !isSetting(it));
+              if (g.id !== 'undefined-group' && keep.length) {
+                appGroups.push(Object.assign({}, g, { items: keep }));
+              }
+            } else if (g.path && g.kind === 'SETTING') {
+              // A standalone setting perspective declared with no navigation group.
+              settings.push(g);
+            }
+          });
+          // Settings entities are listed alphabetically by label.
+          settings.sort((a, b) => (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase()));
+          this.groups = appGroups;
+          this.settingsItems = settings;
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -55,19 +84,32 @@ document.addEventListener('alpine:init', () => {
         let p = (h.charAt(0) === '#' ? h.slice(1) : h) || '/';
         if (p === '/') p = '/dashboard';
         this.currentPath = p;
-        const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
-        if (match) {
-          const id = decodeURIComponent(match[1]);
-          const inner = match[2] ? '/' + match[2] : '';
-          // Only (re)point the iframe when the app changes - while the same app is hosted the iframe
-          // owns its inner route, so we must not reset its src (that would reload it and lose state).
-          if (this.hostedId !== id) {
-            const item = this.findItem(id);
-            if (item) { this.hostedId = id; this.hostedUrl = this.appUrl(item, inner); }
-          }
-        } else {
+        if (p === '/settings' || p.indexOf('/settings/') === 0) {
+          // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
+          this.settingsMode = true;
           this.hostedId = '';
           this.hostedUrl = '';
+          const rest = p.indexOf('/settings/') === 0 ? p.slice('/settings/'.length) : '';
+          if (rest) {
+            const item = this.findSettingItem(decodeURIComponent(rest));
+            if (item) { this.settingsSelected = item.id; this.settingsUrl = item.path || ''; }
+          }
+        } else {
+          this.settingsMode = false;
+          const match = p.match(/^\/app\/([^/]+)(?:\/(.*))?$/);
+          if (match) {
+            const id = decodeURIComponent(match[1]);
+            const inner = match[2] ? '/' + match[2] : '';
+            // Only (re)point the iframe when the app changes - while the same app is hosted the iframe
+            // owns its inner route, so we must not reset its src (that would reload it and lose state).
+            if (this.hostedId !== id) {
+              const item = this.findItem(id);
+              if (item) { this.hostedId = id; this.hostedUrl = this.appUrl(item, inner); }
+            }
+          } else {
+            this.hostedId = '';
+            this.hostedUrl = '';
+          }
         }
         this.refreshIcons();
       };
@@ -92,15 +134,23 @@ document.addEventListener('alpine:init', () => {
 
     /** Navigate to a built-in page (Pinecone route into #app); applyRoute clears any hosted app. */
     navigate(route) {
+      this.settingsMode = false;
       window.PineconeRouter.navigate(route);
       this.closeSideNav();
     },
 
-    /** Host a domain app (a perspective) in the iframe via its /app/<id> route; applyRoute sets the iframe. */
+    /** Host a domain app (a perspective) in the iframe. Swap the iframe synchronously on click (do not
+     *  wait for the router's pinecone:end - for a template-less route it can fire before the context is
+     *  ready, leaving the pane stale), then update the URL. applyRoute then no-ops (hostedId already set). */
     openApp(item) {
       // Re-clicking the already-hosted app is a no-op: leave its inner route (and the URL) untouched.
-      if (this.hostedId !== item.id) {
+      if (this.hostedId !== item.id || this.settingsMode) {
+        this.settingsMode = false;
+        this.hostedId = item.id;
+        this.hostedUrl = this.appUrl(item, '');
+        this.currentPath = '/app/' + encodeURIComponent(item.id);
         window.PineconeRouter.navigate('/app/' + encodeURIComponent(item.id));
+        this.refreshIcons();
       }
       this.closeSideNav();
     },
@@ -144,6 +194,41 @@ document.addEventListener('alpine:init', () => {
         // replaceState updates the address bar without re-triggering the shell router (no reload loop).
         history.replaceState(history.state, '', newHash);
         this.currentPath = top;
+      }
+    },
+
+    /** Open the Settings master-detail (the aggregated SETTING entities from every app). */
+    openSettings() {
+      this.settingsMode = true;
+      this.hostedId = '';
+      this.hostedUrl = '';
+      this.currentPath = '/settings';
+      window.PineconeRouter.navigate('/settings');
+      this.refreshIcons();
+      this.closeSideNav();
+    },
+
+    /** Select a setting entity: host its app at that entity's route in the settings detail iframe. */
+    selectSetting(item) {
+      if (this.settingsSelected !== item.id) {
+        this.settingsSelected = item.id;
+        this.settingsUrl = item.path || '';
+        this.currentPath = '/settings/' + encodeURIComponent(item.id);
+        window.PineconeRouter.navigate('/settings/' + encodeURIComponent(item.id));
+        this.refreshIcons();
+      }
+    },
+
+    isSettingActive(item) { return this.settingsMode && this.settingsSelected === item.id; },
+
+    /** Find a setting entity (perspective) by id. */
+    findSettingItem(id) { return (this.settingsItems || []).find(i => i.id === id) || null; },
+
+    /** Open the task behind a (task-derived) notification, and mark it read. */
+    openNotification(n) {
+      if (n && n.task) {
+        this.$store.processTasks.openTask(n.task);
+        n.unread = false;
       }
     },
 
