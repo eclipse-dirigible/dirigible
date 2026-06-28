@@ -32,8 +32,7 @@ public final class IntentNaming {
      * Plural overrides for (humanized) labels whose last word must not be naively pluralized (keyed
      * lower-case). Both the humanized singular and the raw identifier map to the same plural.
      */
-    private static final Map<String, String> PLURALIZE_OVERRIDES =
-            Map.of("unit of measure", "Units of Measure", "uom", "Units of Measure");
+    private static final Map<String, String> PLURALIZE_OVERRIDES = Map.of("unit of measure", "Units of Measure", "uom", "Units of Measure");
 
     /**
      * The intent's base name used for single-file outputs ({@code <base>.edm}, {@code <base>.roles})
