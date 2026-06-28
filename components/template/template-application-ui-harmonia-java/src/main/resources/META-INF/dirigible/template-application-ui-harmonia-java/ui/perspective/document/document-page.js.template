@@ -15,6 +15,89 @@
  * footer. After every item change the header is re-fetched (GET) so server-side calculated fields
  * (Net / VAT / Total ...) refresh. Built on baseFormPage so a 422 maps onto per-field errors.
  */
+
+/*
+ * Neutral arithmetic evaluator — the client mirror of the server-side SDK `Calc`. One formula string,
+ * authored once on a model property, runs here for the live line-item preview and (verbatim) in Java.
+ *
+ * Grammar:  expr   := term (('+'|'-') term)*
+ *           term   := factor (('*'|'/') factor)*
+ *           factor := NUMBER | IDENT | '(' expr ')' | ('-'|'+') factor | func
+ *           func   := IDENT '(' expr (',' expr)* ')'
+ * Functions: round(x,n), abs(x), min(a,b), max(a,b), ceil(x), floor(x).
+ * Semantics contract (must match the Java side exactly):
+ *   - IDENT reads from `vars`; null / '' / missing / non-numeric -> 0
+ *   - division by zero -> 0
+ *   - round = half-up, ties away from zero (Java RoundingMode.HALF_UP)
+ *   - the final result is rounded to `scale` decimals (default 2) with the same rule
+ */
+function harmoniaCalcEval(expr, vars, scale) {
+  const roundHalfUp = (x, n) => {
+    if (!isFinite(x)) return 0;
+    const f = Math.pow(10, n);
+    const sign = x < 0 ? -1 : 1;
+    return sign * Math.floor(Math.abs(x) * f + 0.5) / f;
+  };
+  const fns = {
+    round: (x, n) => roundHalfUp(x, n == null ? 0 : Math.trunc(n)),
+    abs: Math.abs, min: Math.min, max: Math.max, ceil: Math.ceil, floor: Math.floor,
+  };
+  const s = String(expr == null ? '' : expr);
+  let i = 0;
+  const ws = () => { while (i < s.length && /\s/.test(s[i])) i++; };
+  const peek = () => { ws(); return s[i]; };
+  function parseExpr() {
+    let v = parseTerm();
+    for (;;) {
+      const c = peek();
+      if (c === '+') { i++; v += parseTerm(); }
+      else if (c === '-') { i++; v -= parseTerm(); }
+      else return v;
+    }
+  }
+  function parseTerm() {
+    let v = parseFactor();
+    for (;;) {
+      const c = peek();
+      if (c === '*') { i++; v *= parseFactor(); }
+      else if (c === '/') { i++; const d = parseFactor(); v = d === 0 ? 0 : v / d; }
+      else return v;
+    }
+  }
+  function parseFactor() {
+    const c = peek();
+    if (c === '-') { i++; return -parseFactor(); }
+    if (c === '+') { i++; return parseFactor(); }
+    if (c === '(') { i++; const v = parseExpr(); ws(); if (s[i] === ')') i++; return v; }
+    if ((c >= '0' && c <= '9') || c === '.') return parseNumber();
+    return parseIdentOrFunc();
+  }
+  function parseNumber() {
+    ws(); const j = i;
+    while (i < s.length && /[0-9.]/.test(s[i])) i++;
+    return parseFloat(s.slice(j, i)) || 0;
+  }
+  function parseIdentOrFunc() {
+    ws(); const j = i;
+    while (i < s.length && /[A-Za-z0-9_]/.test(s[i])) i++;
+    const name = s.slice(j, i);
+    if (peek() === '(') {
+      i++;
+      const args = [];
+      if (peek() !== ')') { args.push(parseExpr()); while (peek() === ',') { i++; args.push(parseExpr()); } }
+      ws(); if (s[i] === ')') i++;
+      const fn = fns[name];
+      return fn ? (Number(fn.apply(null, args)) || 0) : 0;
+    }
+    const raw = vars ? vars[name] : undefined;
+    if (raw === null || raw === undefined || raw === '') return 0;
+    const n = Number(raw);
+    return isNaN(n) ? 0 : n;
+  }
+  const result = parseExpr();
+  return roundHalfUp(isFinite(result) ? result : 0, scale == null ? 2 : scale);
+}
+
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}DocumentPage', () => ({
     ...baseFormPage(),
@@ -326,8 +409,20 @@ document.addEventListener('alpine:init', () => {
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
       this.draft = draft;
+      this.recalcDraft();
       this.rowDialogOpen = true;
       this.refreshIcons();
+    },
+
+    // Recompute every calculated (readonly) column from its `calc` expression, in editColumns order so
+    // a later field can read an earlier one (Net -> Vat -> Gross). Called when the dialog opens and on
+    // every edit of an input field. The server stays authoritative on save; this is a live preview that
+    // shares the SAME expression string as the server-side Calc evaluator.
+    recalcDraft() {
+      for (const col of this.editColumns) {
+        if (!col.calc) continue;
+        this.draft[col.name] = harmoniaCalcEval(col.calc, this.draft, col.scale != null ? col.scale : 2);
+      }
     },
 
     closeRowDialog() { this.rowDialogOpen = false; this.draft = {}; this.draftError = null; },
@@ -383,7 +478,29 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Totals footer (aggregate fields, read-only) -------------------------------------------
-    totalValue(name) { return this.displayNumber(this.record[name]); },
+    // Live client-side sum of the loaded items, keyed by item column name. Computed from the
+    // already-correct per-line values (Net -> Vat -> Total order), so the footer is instant and
+    // consistent the moment items change — no waiting on the asynchronous, eventually-consistent
+    // server roll-ups (which still persist the authoritative totals for lists/reports).
+    get itemSums() {
+      const sums = {};
+      for (const row of this.items) {
+        for (const col of this.editColumns) {
+          if (col.widget !== 'NUMBER') continue;
+          const v = Number(row[col.name]);
+          if (!isNaN(v)) sums[col.name] = (sums[col.name] || 0) + v;
+        }
+      }
+      return sums;
+    },
+
+    // An aggregate the items carry by name is summed live from them; anything else (e.g. a paid total
+    // that comes from payments, not line items) falls back to the server-persisted record value.
+    totalValue(name) {
+      const sums = this.itemSums;
+      if (Object.prototype.hasOwnProperty.call(sums, name)) return this.displayNumber(sums[name]);
+      return this.displayNumber(this.record[name]);
+    },
 
     displayNumber(v) {
       if (v === null || v === undefined || v === '') return '—';

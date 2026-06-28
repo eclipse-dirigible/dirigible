@@ -48,7 +48,9 @@
          (textarea/checkbox) always span the full width. Mirrors codbex-athena-app's create forms. -->
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement)
+## ProcessId is a system-managed back-reference (the process instance started for this record); it
+## stays in the form model so it round-trips on edit and is null on create, but is never rendered.
+#if(!$property.dataAutoIncrement && $property.name != "ProcessId")
 #set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))

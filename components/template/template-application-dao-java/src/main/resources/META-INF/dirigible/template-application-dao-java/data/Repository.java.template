@@ -1,10 +1,5 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
-import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
-import org.eclipse.dirigible.sdk.component.Repository;
-import org.eclipse.dirigible.sdk.messaging.Producer;
-import org.eclipse.dirigible.sdk.utils.Json;
-
 #foreach ($property in $properties)
     #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
         #set($haveCalculatedPropertyOnCreate = "true")
@@ -13,6 +8,36 @@ import org.eclipse.dirigible.sdk.utils.Json;
         #set($haveCalculatedPropertyOnUpdate = "true")
     #end
 #end
+## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
+#macro(calcScale $property)#if($property.dataScale)${property.dataScale}#elseif($property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float")2#{else}0#end#end
+## Assign a calculated property. Numeric properties evaluate the neutral arithmetic expression via the
+## shared Calc evaluator (the same expression the generated UI previews with); the BigDecimal result is
+## narrowed to the field type. Non-numeric calculated properties keep their expression verbatim.
+#macro(calcAssign $property $expr)
+#if($property.dataTypeJavaClass == "java.math.BigDecimal")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property));
+#elseif($property.dataTypeJavaClass == "Double")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).doubleValue();
+#elseif($property.dataTypeJavaClass == "Float")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).floatValue();
+#elseif($property.dataTypeJavaClass == "Long")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).longValue();
+#elseif($property.dataTypeJavaClass == "Integer")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).intValue();
+#elseif($property.dataTypeJavaClass == "Short")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).shortValue();
+#else
+        entity.${property.name} = ${expr};
+#end
+#end
+import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
+import org.eclipse.dirigible.sdk.component.Repository;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
+#if($haveCalculatedPropertyOnCreate || $haveCalculatedPropertyOnUpdate)
+import org.eclipse.dirigible.sdk.utils.Calc;
+#end
+
 @Repository
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
@@ -25,7 +50,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
-        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+#calcAssign($property $property.calculatedPropertyExpressionCreate)
 #end
 #end
 #end
@@ -40,7 +65,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
-        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+#calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
 #end

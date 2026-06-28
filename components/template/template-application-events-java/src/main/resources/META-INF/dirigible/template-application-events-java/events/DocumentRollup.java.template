@@ -5,9 +5,8 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if($op == "sum")
 import java.math.BigDecimal;
-#end
+import java.util.List;
 
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
@@ -15,11 +14,12 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Ent
 import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
 
 /**
- * Maintains the ${parentEntity}.${countField} roll-up over ${childEntity} rows.
+ * Maintains ${parentEntity}'s document totals as the sum of its ${childEntity} line items.
  *
- * Generated from the intent rollups block - do not edit; it is re-generated with the application.
- * On each ${childEntity} event the value for the affected parent is recomputed from the store (so it
- * self-heals); under heavy write concurrency it is eventually consistent, not transactionally exact.
+ * Generated from the intent - do not edit; it is re-generated with the application. ALL totals are
+ * recomputed in a single read-modify-write so the per-field sums cannot clobber one another (separate
+ * per-field handlers on the same child topic each rewrite the whole parent row, causing lost updates).
+ * Recomputed from the store on each event (self-healing); eventually consistent under heavy concurrency.
  */
 @Component
 public class ${className} implements MessageHandler {
@@ -45,20 +45,17 @@ public class ${className} implements MessageHandler {
         if (parent == null) {
             return;
         }
-#if($op == "sum")
-        BigDecimal sum = BigDecimal.ZERO;
-        for (${childEntity}Entity row : new ${childEntity}Repository().findAll(${criteriaExpression})) {
-            if (row.${sumField} != null) {
-                sum = sum.add(row.${sumField});
+        List<${childEntity}Entity> items = new ${childEntity}Repository().findAll(${criteriaExpression});
+#foreach($f in $fields)
+        BigDecimal sum${f.field} = BigDecimal.ZERO;
+        for (${childEntity}Entity row : items) {
+            if (row.${f.field} != null) {
+                sum${f.field} = sum${f.field}.add(row.${f.field});
             }
         }
-        parent.${countField} = sum;
-        // System-managed denormalization - persist without re-publishing the parent "-updated" event.
-        parents.updateWithoutEvent(parent);
-#else
-        int count = new ${childEntity}Repository().findAll(${criteriaExpression}).size();
-        parent.${countField} = count;
-        parents.update(parent);
+        parent.${f.field} = sum${f.field};
 #end
+        // Single system-managed write of all totals - no "-updated" event, no inter-field clobber.
+        parents.updateWithoutEvent(parent);
     }
 }

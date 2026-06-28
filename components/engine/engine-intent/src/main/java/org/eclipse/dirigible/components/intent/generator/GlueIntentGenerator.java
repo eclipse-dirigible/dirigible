@@ -18,6 +18,7 @@ import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -78,9 +79,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
+        List<Map<String, Object>> documentRollups = buildDocumentRollups(model, compositionParents, settings);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
-                && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
+                && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && documentRollups.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -94,6 +96,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("integrations", integrations);
         glue.put("inbound", inbound);
         glue.put("rollups", rollups);
+        glue.put("documentRollups", documentRollups);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
                 "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] setter(s), [{}] notification(s), [{}] schedule(s),"
@@ -197,6 +200,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing listeners for rollup [{}] (not generated)", rollup.getName());
                 continue;
             }
+            String op = rollup.getOp() == null || rollup.getOp()
+                                                        .isBlank() ? "count" : rollup.getOp();
+            boolean sum = "sum".equals(op);
+            if (sum && (rollup.getOf() == null || rollup.getOf()
+                                                        .isBlank())) {
+                LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", rollup.getName());
+                continue;
+            }
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("childEntity", rollup.getEntity());
@@ -205,11 +216,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("parentPerspective", IntentEntities.resolvePerspective(via.getTo(), compositionParents));
             base.put("fkProperty", fkProperty);
             base.put("countField", IntentNaming.pascalCase(rollup.getField()));
-            // Recompute the count for the affected parent from the store on each child event.
+            base.put("op", op);
+            base.put("sumField", sum ? IntentNaming.pascalCase(rollup.getOf()) : "");
+            // Recompute the value for the affected parent from the store on each child event.
             base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
             String className = IntentNaming.pascalCase(rollup.getName());
-            // Two listeners: recompute when a child is created and when one is deleted.
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
+            if (sum) {
+                // A line edit changes the sum, so a sum roll-up must also recompute on update.
+                rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
+            }
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
         }
         return rollups;
@@ -220,6 +236,102 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         entry.put("className", className);
         entry.put("topicSuffix", topicSuffix);
         return entry;
+    }
+
+    /**
+     * Auto-derive a document-totals handler by name convention: when a parent entity has aggregate
+     * fields that a composition child also carries (same property name, numeric type), ONE handler per
+     * child lifecycle event keeps every such parent field equal to the sum of that field across the
+     * children. This is what makes a document footer's Net / Vat / Total reflect its line items without
+     * any explicit roll-up.
+     *
+     * <p>
+     * Crucially this is a single grouped handler (all totals recomputed in one read-modify-write), not
+     * one handler per field: per-field handlers on the same child topic each rewrite the whole parent
+     * row and clobber each other's columns (lost update), which left Vat/Total stale while Net won.
+     */
+    private static List<Map<String, Object>> buildDocumentRollups(IntentModel model, Map<String, String> compositionParents,
+            IntentSettings settings) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (EntityIntent parent : model.getEntities()) {
+            List<FieldIntent> aggregates = new ArrayList<>();
+            for (FieldIntent field : parent.getFields()) {
+                if (field.isAggregate()) {
+                    aggregates.add(field);
+                }
+            }
+            if (aggregates.isEmpty()) {
+                continue;
+            }
+            for (EntityIntent child : model.getEntities()) {
+                for (RelationIntent relation : child.getRelations()) {
+                    boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                    if (!toOne || !relation.isComposition() || !parent.getName()
+                                                                      .equals(relation.getTo())) {
+                        continue;
+                    }
+                    List<Map<String, Object>> fields = new ArrayList<>();
+                    for (FieldIntent aggregate : aggregates) {
+                        FieldIntent childField = findField(child, aggregate.getName());
+                        if (childField == null || !isNumeric(childField.getType())) {
+                            continue;
+                        }
+                        Map<String, Object> field = new LinkedHashMap<>();
+                        field.put("field", IntentNaming.pascalCase(aggregate.getName()));
+                        fields.add(field);
+                    }
+                    if (fields.isEmpty()) {
+                        continue;
+                    }
+                    String settingsKey = parent.getName() + "Totals";
+                    if (!settings.shouldGenerate("rollups", settingsKey)) {
+                        LOGGER.info("Settings opt-out: keeping existing document-totals handlers for [{}] (not generated)", settingsKey);
+                        continue;
+                    }
+                    String fkProperty = IntentNaming.pascalCase(relation.getName());
+                    Map<String, Object> base = new LinkedHashMap<>();
+                    base.put("childEntity", child.getName());
+                    base.put("childPerspective", IntentEntities.resolvePerspective(child.getName(), compositionParents));
+                    base.put("parentEntity", parent.getName());
+                    base.put("parentPerspective", IntentEntities.resolvePerspective(parent.getName(), compositionParents));
+                    base.put("fkProperty", fkProperty);
+                    base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
+                    base.put("fields", fields);
+                    String className = IntentNaming.pascalCase(parent.getName()) + "Totals";
+                    // A line edit changes a sum too, so recompute on create + update + delete.
+                    result.add(rollupEntry(base, className + "RollupOnCreate", ""));
+                    result.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
+                    result.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
+                }
+            }
+        }
+        return result;
+    }
+
+    private static FieldIntent findField(EntityIntent entity, String name) {
+        String target = IntentNaming.pascalCase(name);
+        for (FieldIntent field : entity.getFields()) {
+            if (target.equals(IntentNaming.pascalCase(field.getName()))) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNumeric(String type) {
+        if (type == null) {
+            return false;
+        }
+        switch (type) {
+            case "integer":
+            case "int":
+            case "long":
+            case "decimal":
+            case "double":
+                return true;
+            default:
+                return false;
+        }
     }
 
     private static RelationIntent toOneRelation(EntityIntent owner, String name) {
