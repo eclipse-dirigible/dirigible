@@ -165,9 +165,9 @@ document.addEventListener('alpine:init', () => {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
         } else {
           const created = await App.services.api.post(this.apiPath, payload);
-          // Opened as an FK "Add" iframe dialog: report the new record to the opener and stop here
-          // (no navigation - the parent closes the dialog and selects the created record).
-          if (this.isEmbedded) {
+          // Only when opened as an FK "Add" iframe dialog: report the new record to the opener and stop
+          // here (the parent closes the dialog and selects it). Otherwise fall through to the list.
+          if (this.isDialog) {
             this.emitCreated(created && (created.${primaryKeysString} != null ? created.${primaryKeysString} : created.id));
             return;
           }
@@ -241,9 +241,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     cancel() {
-      // Opened as an FK "Add" iframe dialog: ask the parent to close the dialog instead of navigating
+      // Only when opened as an FK "Add" iframe dialog: ask the parent to close it instead of navigating
       // this iframe to a list.
-      if (this.isEmbedded) {
+      if (this.isDialog) {
         this.emitClose();
         return;
       }
