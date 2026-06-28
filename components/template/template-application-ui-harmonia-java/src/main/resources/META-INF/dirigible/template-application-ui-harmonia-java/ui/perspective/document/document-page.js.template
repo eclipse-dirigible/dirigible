@@ -255,7 +255,8 @@ document.addEventListener('alpine:init', () => {
         const payload = this.toPayload();
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
-          await this.loadHeader();
+          this.backToList();
+          return;
         } else {
           // Create the header, then stay on the document (now in edit mode) so items can be added.
           const created = await App.services.api.post(this.apiPath, payload);
