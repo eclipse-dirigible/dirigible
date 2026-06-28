@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.generator;
 
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * Naming conventions shared by every intent generator. The physical table name in particular is
@@ -20,6 +21,19 @@ import java.util.Locale;
 public final class IntentNaming {
 
     private IntentNaming() {}
+
+    /**
+     * Identifiers whose human-readable singular form cannot be produced by case-boundary splitting -
+     * acronyms and mixed-case domain terms (keyed lower-case). {@code UoM} -> {@code Unit of Measure}.
+     */
+    private static final Map<String, String> HUMANIZE_OVERRIDES = Map.of("uom", "Unit of Measure");
+
+    /**
+     * Plural overrides for (humanized) labels whose last word must not be naively pluralized (keyed
+     * lower-case). Both the humanized singular and the raw identifier map to the same plural.
+     */
+    private static final Map<String, String> PLURALIZE_OVERRIDES =
+            Map.of("unit of measure", "Units of Measure", "uom", "Units of Measure");
 
     /**
      * The intent's base name used for single-file outputs ({@code <base>.edm}, {@code <base>.roles})
@@ -141,6 +155,10 @@ public final class IntentNaming {
         if (name == null || name.isEmpty()) {
             return "";
         }
+        String override = HUMANIZE_OVERRIDES.get(name.toLowerCase(Locale.ROOT));
+        if (override != null) {
+            return override;
+        }
         StringBuilder out = new StringBuilder(name.length() + 8);
         for (int i = 0; i < name.length(); i++) {
             char c = name.charAt(i);
@@ -164,6 +182,10 @@ public final class IntentNaming {
     public static String pluralize(String label) {
         if (label == null || label.isEmpty()) {
             return "";
+        }
+        String override = PLURALIZE_OVERRIDES.get(label.toLowerCase(Locale.ROOT));
+        if (override != null) {
+            return override;
         }
         int sp = label.lastIndexOf(' ');
         String head = sp >= 0 ? label.substring(0, sp + 1) : "";
