@@ -478,29 +478,9 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Totals footer (aggregate fields, read-only) -------------------------------------------
-    // Live client-side sum of the loaded items, keyed by item column name. Computed from the
-    // already-correct per-line values (Net -> Vat -> Total order), so the footer is instant and
-    // consistent the moment items change — no waiting on the asynchronous, eventually-consistent
-    // server roll-ups (which still persist the authoritative totals for lists/reports).
-    get itemSums() {
-      const sums = {};
-      for (const row of this.items) {
-        for (const col of this.editColumns) {
-          if (col.widget !== 'NUMBER') continue;
-          const v = Number(row[col.name]);
-          if (!isNaN(v)) sums[col.name] = (sums[col.name] || 0) + v;
-        }
-      }
-      return sums;
-    },
-
-    // An aggregate the items carry by name is summed live from them; anything else (e.g. a paid total
-    // that comes from payments, not line items) falls back to the server-persisted record value.
-    totalValue(name) {
-      const sums = this.itemSums;
-      if (Object.prototype.hasOwnProperty.call(sums, name)) return this.displayNumber(sums[name]);
-      return this.displayNumber(this.record[name]);
-    },
+    // The totals are server-managed: the DAO recomputes them synchronously on every line change and on
+    // the master's own save, so the loaded record is authoritative (re-fetched after each item change).
+    totalValue(name) { return this.displayNumber(this.record[name]); },
 
     displayNumber(v) {
       if (v === null || v === undefined || v === '') return '—';

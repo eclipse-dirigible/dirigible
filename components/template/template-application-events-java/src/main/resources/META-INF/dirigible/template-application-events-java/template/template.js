@@ -80,13 +80,6 @@ export function getTemplate(parameters) {
                 collection: "rollups"
             },
             {
-                location: "/template-application-events-java/events/DocumentRollup.java.template",
-                action: "generate",
-                rename: "gen/events/{{className}}.java",
-                engine: "velocity",
-                collection: "documentRollups"
-            },
-            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

@@ -37,6 +37,15 @@ import org.eclipse.dirigible.sdk.utils.Json;
 #if($haveCalculatedPropertyOnCreate || $haveCalculatedPropertyOnUpdate)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
+#if($documentMaster)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import java.math.BigDecimal;
+import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Entity;
+import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Repository;
+#end
+#if($documentItem)
+import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
+#end
 
 @Repository
 public class ${name}Repository extends JavaRepository<${name}Entity> {
@@ -54,9 +63,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #end
+#if($documentMaster)
+        recalculate(entity);
+#end
         ${name}Entity saved = super.save(entity);
         // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
+#end
         return saved;
     }
 
@@ -69,9 +85,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #end
+#if($documentMaster)
+        recalculate(entity);
+#end
         ${name}Entity updated = super.update(entity);
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+#end
         return updated;
     }
 
@@ -90,6 +113,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         super.delete(entity);
         // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
+#end
     }
 
     @Override
@@ -98,6 +125,47 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         super.deleteById(id);
         if (entity != null) {
             Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+#if($documentItem)
+            // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+            new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
+#end
         }
     }
+#if($documentMaster)
+
+    /**
+     * Document totals: each aggregate field is the sum of the line items' same-named field. Recomputed
+     * synchronously (in the same request) so the document stays consistent - NOT via async roll-up
+     * listeners. Called on the master's own save/update, and by ${documentMaster.childEntity}Repository
+     * after every line change.
+     */
+    private void recalculate(${name}Entity entity) {
+#foreach($f in $documentMaster.fields)
+        BigDecimal sum${f.field} = BigDecimal.ZERO;
+#end
+        if (entity.${documentMaster.masterPk} != null) {
+            for (${documentMaster.childEntity}Entity row : new ${documentMaster.childEntity}Repository().findAll(
+                    Criteria.create().eq("${documentMaster.fkProperty}", entity.${documentMaster.masterPk}))) {
+#foreach($f in $documentMaster.fields)
+                if (row.${f.field} != null) {
+                    sum${f.field} = sum${f.field}.add(row.${f.field});
+                }
+#end
+            }
+        }
+#foreach($f in $documentMaster.fields)
+        entity.${f.field} = sum${f.field};
+#end
+    }
+
+    /** Reload the master, recompute its document totals from the current line items, and persist. */
+    public ${name}Entity recalculate(Object id) {
+        ${name}Entity entity = findById(id);
+        if (entity == null) {
+            return null;
+        }
+        recalculate(entity);
+        return super.update(entity);
+    }
+#end
 }
