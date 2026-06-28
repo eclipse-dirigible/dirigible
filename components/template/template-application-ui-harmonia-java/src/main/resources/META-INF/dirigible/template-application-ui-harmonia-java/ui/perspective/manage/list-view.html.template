@@ -62,7 +62,7 @@
               <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true" @click="cycleSort('${property.name}')">
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType) class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     ${property.name}
                     <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
@@ -87,6 +87,10 @@
                   <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                   <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+#elseif($property.isFloatType)
+                  <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+#elseif($property.isNumberType)
+                  <td x-h-table-cell class="text-right" x-text="displayValue(row.${property.name})"></td>
 #else
                   <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
 #end
@@ -146,8 +150,12 @@
         </div>
 #end
 
-        <!-- Every property of the selected record (the table above shows only the major ones). -->
-        <div class="vbox gap-3 p-4">
+        <!-- Every property of the selected record (the table above shows only the major ones). A framed
+             condensed two-column grid (matches the master-detail pane). -->
+        <div x-h-card class="m-4">
+          <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+          <div x-h-card-content>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
@@ -156,12 +164,16 @@
             <span x-h-text.muted class="text-xs">${plabel}</span>
 #if($property.widgetType == "DROPDOWN")
             <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
+#elseif($property.isFloatType)
+            <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #else
             <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end
           </div>
 #end
 #end
+            </div>
+          </div>
         </div>
       </div>
     </div>

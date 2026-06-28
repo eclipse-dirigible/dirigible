@@ -324,6 +324,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
 #end
 #end
     <!-- DOCUMENT entities (header-items): browse list + a full-page document editor at create/edit. -->

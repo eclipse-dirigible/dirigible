@@ -31,7 +31,7 @@
             <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-              <th x-h-table-head scope="col">${property.name}</th>
+              <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end>${property.name}</th>
 #end
 #end
               <th x-h-table-head scope="col"></th>
@@ -47,6 +47,10 @@
                 <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                 <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+#elseif($property.isFloatType)
+                <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
+#elseif($property.isNumberType)
+                <td x-h-table-cell class="text-right" x-text="displayValue(row.${property.name})"></td>
 #else
                 <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
 #end
@@ -108,6 +112,8 @@
                 <span x-h-text.muted class="text-xs">${plabel}</span>
 #if($property.widgetType == "DROPDOWN")
                 <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
+#elseif($property.isFloatType)
+                <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #else
                 <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end
@@ -138,7 +144,7 @@
                   <thead x-h-table-header>
                     <tr x-h-table-row>
                       <template x-for="col in def.columns" :key="col.name">
-                        <th x-h-table-head scope="col" x-text="col.name"></th>
+                        <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.name"></th>
                       </template>
                       <th x-h-table-head scope="col"></th>
                     </tr>
@@ -147,7 +153,7 @@
                     <template x-for="row in rows" :key="row[def.primaryKey]">
                       <tr x-h-table-row data-hoverable="true">
                         <template x-for="col in def.columns" :key="col.name">
-                          <td x-h-table-cell x-text="cellValue(col, row)"></td>
+                          <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
                         </template>
                         <td x-h-table-cell data-row-actions>
                           <!-- This detail record's actionable user tasks (e.g. a triggered review), one button each. -->
