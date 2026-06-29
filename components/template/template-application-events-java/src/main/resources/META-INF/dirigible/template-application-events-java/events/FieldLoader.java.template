@@ -1,0 +1,36 @@
+package gen.events;
+
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Repository;
+
+/**
+ * Loads the ${ownerEntity} (the ${process} trigger entity) by its id and publishes the fields a
+ * decision branches on as process variables. Generated from the intent .glue file - do not edit; it
+ * is re-generated with the application. Runs as a BPMN service task
+ * (flowable:delegateExpression="\${JavaTask}") right before the gateway. Under the clear-D id-only
+ * context the field values are not in the process context, so the gateway's rewritten condition (e.g.
+ * Amount > 10000) needs them loaded here at the latest moment - the own-field counterpart of the
+ * relation.field resolver.
+ */
+public class ${handler} implements JavaDelegate {
+
+    private final ${ownerEntity}Repository repository = new ${ownerEntity}Repository();
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${ownerKeyProperty}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        ${ownerEntity}Entity entity = repository.findById(((Number) key).${ownerKeyAccessor}());
+        if (entity == null) {
+            return;
+        }
+#foreach($field in $fields)
+        execution.setVariable("${field}", entity.${field});
+#end
+    }
+}

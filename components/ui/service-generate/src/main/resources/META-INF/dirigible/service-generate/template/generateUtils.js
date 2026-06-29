@@ -357,6 +357,33 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "fieldLoaders":
+                    // Own-field decision loaders (intent layer): one JavaDelegate per decision that
+                    // branches on the trigger entity's own field. Loads the owner by id and publishes
+                    // the referenced fields before the gateway (clear-D id-only context). Like resolvers,
+                    // not entity-shaped; the Java package segment is the owner's lowercased perspective.
+                    if (model.fieldLoaders) {
+                        for (let f = 0; f < model.fieldLoaders.length; f++) {
+                            const fieldLoaderParameters = {
+                                ...parameters,
+                                process: model.fieldLoaders[f].process,
+                                handler: model.fieldLoaders[f].handler,
+                                ownerEntity: model.fieldLoaders[f].ownerEntity,
+                                ownerPerspective: model.fieldLoaders[f].ownerPerspective,
+                                javaOwnerPerspective: sanitizeJavaIdentifier(model.fieldLoaders[f].ownerPerspective),
+                                ownerKeyProperty: model.fieldLoaders[f].ownerKeyProperty,
+                                ownerKeyAccessor: model.fieldLoaders[f].ownerKeyAccessor,
+                                fields: model.fieldLoaders[f].fields
+                            };
+                            const cleanFieldLoaderParameters = cleanData(fieldLoaderParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanFieldLoaderParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanFieldLoaderParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "setters":
                     // Field setters (intent layer): one JavaDelegate per serviceTask that declares a
                     // setField, setting a field of the process's trigger entity to a literal value. Like

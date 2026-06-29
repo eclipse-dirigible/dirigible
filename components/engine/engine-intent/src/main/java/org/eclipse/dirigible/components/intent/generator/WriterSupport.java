@@ -31,12 +31,12 @@ import org.slf4j.LoggerFactory;
  * edits from the process variables back onto the trigger entity.
  * <p>
  * This is the write-side mirror of {@link ProcessResolverSupport} (which loads entity data
- * <em>into</em> the context) and the variable-valued sibling of
- * {@link SetFieldSupport} (which writes a literal): where a setter assigns a fixed value, a writer
- * assigns the value the form captured into the {@code <Property>} process variable when the task
- * completed. It loads the entity by its PK process variable, assigns each editable field, and
- * persists via the repository's {@code updateWithoutEvent} - a workflow-driven system write that
- * must not re-fire {@code onUpdate} reactions (the same rule the trigger and setters follow).
+ * <em>into</em> the context) and the variable-valued sibling of {@link SetFieldSupport} (which
+ * writes a literal): where a setter assigns a fixed value, a writer assigns the value the form
+ * captured into the {@code <Property>} process variable when the task completed. It loads the
+ * entity by its PK process variable, assigns each editable field, and persists via the repository's
+ * {@code updateWithoutEvent} - a workflow-driven system write that must not re-fire
+ * {@code onUpdate} reactions (the same rule the trigger and setters follow).
  * <p>
  * Scope (v1): editable fields are {@code string}/{@code text} fields of the trigger entity (the
  * parser enforces this), so the value flows straight from the variable with no type coercion -

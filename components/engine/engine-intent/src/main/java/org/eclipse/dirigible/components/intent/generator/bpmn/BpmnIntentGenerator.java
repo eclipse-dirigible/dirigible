@@ -27,6 +27,8 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport;
@@ -128,6 +130,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // decision that loads the related entity and a condition rewritten to test the resolved
         // variable (book_price). The handler itself is generated from the .glue file, not here.
         List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
+        // Field loaders: a decision on the trigger entity's own field gets a JavaDelegate inserted before
+        // the gateway that loads the owner by id and publishes the referenced fields (clear-D id-only).
+        List<FieldLoad> allFieldLoads = ProcessFieldLoadSupport.fieldLoads(model);
         // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
@@ -166,6 +171,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processResolvers.add(resolver);
                 }
             }
+            List<FieldLoad> processFieldLoads = new ArrayList<>();
+            for (FieldLoad load : allFieldLoads) {
+                if (process.getName()
+                           .equals(load.process())) {
+                    processFieldLoads.add(load);
+                }
+            }
             Map<String, String> writerByTask = new HashMap<>();
             String writerPrefix = process.getName() + "/";
             for (Map.Entry<String, String> entry : writerByProcessTask.entrySet()) {
@@ -177,7 +189,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             }
             context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask));
+                    processFieldLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask));
         }
     }
 
@@ -230,13 +242,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask) {
+            List<FieldLoad> fieldLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
+            Map<String, String> writerByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
-        // original relation.field condition). Also insert a writer service task after a user task with
-        // editable fields to persist the reviewer's edits.
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase, writerByTask);
+        // original relation.field condition). Also insert a field-loader service task before an
+        // own-field decision, and a writer service task after a user task with editable fields.
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, ownFieldPascalCase, writerByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -285,7 +298,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * sets persists, so a decision downstream of the inserting step still resolves correctly even
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
-    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers,
+    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers, List<FieldLoad> fieldLoads,
             Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
@@ -295,6 +308,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     // The task id is the lower-camel form of the handler so it matches the casing of the
                     // authored step ids; the delegate still resolves the PascalCase handler class.
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
+                }
+            }
+            for (FieldLoad load : fieldLoads) {
+                if (step.getName() != null && step.getName()
+                                                  .equals(load.beforeStep())) {
+                    // Load the trigger entity's own fields the decision tests, right before the gateway.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
                 }
             }
             String writerClass = "userTask".equals(step.getKind()) && step.getName() != null ? writerByTask.get(step.getName()) : null;

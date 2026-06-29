@@ -15,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.WriteField;
@@ -77,6 +78,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         IntentSettings settings = context.getSettings();
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
+        List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
@@ -85,8 +87,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
-                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
+                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -94,6 +96,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         Map<String, Object> glue = new LinkedHashMap<>();
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
+        glue.put("fieldLoaders", fieldLoaders);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -429,6 +432,26 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             loads.add(entry);
         }
         return loads;
+    }
+
+    private static List<Map<String, Object>> buildFieldLoaders(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> loaders = new ArrayList<>();
+        for (FieldLoad load : ProcessFieldLoadSupport.fieldLoads(model)) {
+            if (!settings.shouldGenerate("fieldLoaders", load.handler())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for field loader [{}] (not generated)", load.handler());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", load.process());
+            entry.put("handler", load.handler());
+            entry.put("ownerEntity", load.ownerEntity());
+            entry.put("ownerPerspective", load.ownerPerspective());
+            entry.put("ownerKeyProperty", load.ownerKeyProperty());
+            entry.put("ownerKeyAccessor", load.ownerKeyAccessor());
+            entry.put("fields", new ArrayList<>(load.fields()));
+            loaders.add(entry);
+        }
+        return loaders;
     }
 
     private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {

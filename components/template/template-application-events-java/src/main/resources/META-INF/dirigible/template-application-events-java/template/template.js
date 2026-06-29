@@ -45,6 +45,13 @@ export function getTemplate(parameters) {
                 collection: "setters"
             },
             {
+                location: "/template-application-events-java/events/FieldLoader.java.template",
+                action: "generate",
+                rename: "gen/events/{{handler}}.java",
+                engine: "velocity",
+                collection: "fieldLoaders"
+            },
+            {
                 location: "/template-application-events-java/events/Writer.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}.java",
