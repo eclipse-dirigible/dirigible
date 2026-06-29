@@ -19,7 +19,9 @@ import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.WriteField;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
+import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -28,6 +30,7 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
+import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -72,7 +75,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         Map<String, String> compositionParents = IntentEntities.compositionParents(model);
 
         IntentSettings settings = context.getSettings();
-        List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings);
+        List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
@@ -107,7 +110,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildTriggers(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> triggers = new ArrayList<>();
         for (ProcessIntent process : model.getProcesses()) {
             if (process.getName() == null || process.getName()
@@ -140,9 +143,77 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             trigger.put("generateBusinessKey", String.valueOf(generateBusinessKey));
             trigger.put("topicSuffix", EventBinding.topicSuffix(TriggerSupport.triggerKind(process)));
             trigger.put("guardExpression", NotificationSupport.guard(TriggerSupport.triggerWhen(process)));
+            // Per to-one relation: enough to build the target controller URL so the task form can resolve
+            // each FK to a display name (the form falls back to the raw id when a URL is missing).
+            trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
             triggers.add(trigger);
         }
         return triggers;
+    }
+
+    /**
+     * One link per to-one relation of the trigger entity: the FK property plus the logical names needed
+     * to build the target's REST controller URL (project / model / perspective / entity) and its label
+     * field. The events template assembles the URL (it knows the path layout); the task form fetches
+     * the related record and shows its label, falling back to the raw FK id. Cross-model relations
+     * carry the target project + model alias; same-model ones leave those blank so the template uses
+     * the owner's.
+     */
+    private static List<Map<String, Object>> buildRelationLinks(EntityIntent owner, IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentGenerationContext context) {
+        List<Map<String, Object>> links = new ArrayList<>();
+        if (owner == null) {
+            return links;
+        }
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (!toOne || relation.getName() == null || relation.getTo() == null) {
+                continue;
+            }
+            Map<String, Object> link = new LinkedHashMap<>();
+            link.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
+            link.put("targetEntity", relation.getTo());
+            boolean crossModel = relation.getModel() != null && !relation.getModel()
+                                                                         .isBlank();
+            link.put("crossModel", crossModel);
+            if (crossModel) {
+                UsesIntent uses = findUses(model, relation.getModel());
+                CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, relation.getTo());
+                link.put("targetProject", uses == null ? relation.getModel() : uses.resolveProject());
+                link.put("targetModel", relation.getModel());
+                link.put("targetPerspective", target != null ? target.perspectiveName() : relation.getTo());
+                link.put("labelField", target != null ? target.labelField() : "Name");
+            } else {
+                link.put("targetProject", "");
+                link.put("targetModel", "");
+                link.put("targetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                link.put("labelField", nameField(byName.get(relation.getTo())));
+            }
+            links.add(link);
+        }
+        return links;
+    }
+
+    /** The to-one target's label property: its {@code name} field (PascalCased), else {@code Name}. */
+    private static String nameField(EntityIntent target) {
+        if (target != null) {
+            for (FieldIntent field : target.getFields()) {
+                if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                    return IntentNaming.pascalCase(field.getName());
+                }
+            }
+        }
+        return "Name";
+    }
+
+    /** The {@code uses:} entry for a model alias, or null if the intent declares none. */
+    private static UsesIntent findUses(IntentModel model, String alias) {
+        for (UsesIntent uses : model.getUses()) {
+            if (alias.equals(uses.getModel())) {
+                return uses;
+            }
+        }
+        return null;
     }
 
     private static List<Map<String, Object>> buildNotifications(IntentModel model, Map<String, EntityIntent> byName,

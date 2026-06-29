@@ -139,6 +139,7 @@ document.addEventListener('alpine:init', () => {
                   if (entity && typeof entity === 'object') {
                     Object.keys(entity).forEach((k) => { self.model[k] = entity[k]; });
                   }
+                  return self.resolveRelationNames();
                 })
                 .catch((e) => console.warn('[form] could not load live entity', e));
             }
@@ -170,6 +171,27 @@ document.addEventListener('alpine:init', () => {
         this.state = 'error';
         this.message = (e && e.message) || 'Submit failed.';
       }
+    },
+
+    // Resolve each foreign key to its display name: the trigger seeded __<Fk>EntityUrl + __<Fk>EntityLabel
+    // for every to-one relation, so fetch the related record and replace the raw FK id in the model with
+    // its label. Independent + best-effort - a missing URL/record just leaves the id (the documented
+    // fallback). Runs after the live entity is loaded, since the FK ids come from that entity.
+    async resolveRelationNames() {
+      const keys = Object.keys(this.model).filter((k) => /^__.+EntityUrl$/.test(k));
+      await Promise.all(keys.map(async (key) => {
+        const fk = key.slice(2, key.length - 'EntityUrl'.length); // __CustomerEntityUrl -> Customer
+        const url = this.model[key];
+        const label = this.model['__' + fk + 'EntityLabel'];
+        const id = this.model[fk];
+        if (!url || id === undefined || id === null || id === '') return;
+        try {
+          const related = await harmoniaHttp.get(url + '/' + encodeURIComponent(id));
+          if (related && label && related[label] !== undefined && related[label] !== null && related[label] !== '') {
+            this.model[fk] = related[label];
+          }
+        } catch (e) { /* keep the id */ }
+      }));
     },
 
     // Format a number for read-only display using a DecimalFormat-style pattern (decimals from the part

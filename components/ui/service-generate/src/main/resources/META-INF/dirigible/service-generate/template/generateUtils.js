@@ -300,7 +300,21 @@ export function generateFiles(model, parameters, templateSources) {
                                 businessKeyProperty: model.triggers[t].businessKeyProperty,
                                 generateBusinessKey: model.triggers[t].generateBusinessKey,
                                 topicSuffix: model.triggers[t].topicSuffix,
-                                guardExpression: model.triggers[t].guardExpression
+                                guardExpression: model.triggers[t].guardExpression,
+                                // Per to-one relation: assemble the target controller URL here (the
+                                // template engine knows the path layout; the intent glue carried only
+                                // logical names). A cross-model link uses the target project + sanitized
+                                // model alias as the gen folder; a same-model one uses the owner's.
+                                relationLinks: (model.triggers[t].relationLinks || []).map(function (rl) {
+                                    const targetGenFolder = rl.crossModel ? sanitizeJavaIdentifier(rl.targetModel) : parameters.javaGenFolderName;
+                                    const targetProject = rl.crossModel ? rl.targetProject : parameters.projectName;
+                                    return {
+                                        fkProperty: rl.fkProperty,
+                                        labelField: rl.labelField,
+                                        url: '/services/java/' + targetProject + '/gen/' + targetGenFolder + '/api/'
+                                            + sanitizeJavaIdentifier(rl.targetPerspective) + '/' + rl.targetEntity + 'Controller'
+                                    };
+                                })
                             };
                             const cleanTriggerParameters = cleanData(triggerParameters);
                             generatedFiles.push({

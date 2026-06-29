@@ -75,6 +75,12 @@ public class ${process}Trigger implements MessageHandler {
         Process.setVariable(processId, "__entityUrl",
                 "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
         Process.setVariable(processId, "__entityId", entity.${keyProperty});
+#foreach($rl in $relationLinks)
+        // FK locator: the task form fetches __${rl.fkProperty}EntityUrl/<fk id> and shows its
+        // __${rl.fkProperty}EntityLabel field, so a foreign key renders as a name (falls back to the id).
+        Process.setVariable(processId, "__${rl.fkProperty}EntityUrl", "${rl.url}");
+        Process.setVariable(processId, "__${rl.fkProperty}EntityLabel", "${rl.labelField}");
+#end
         // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
         // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
         repository.updateWithoutEvent(entity);
