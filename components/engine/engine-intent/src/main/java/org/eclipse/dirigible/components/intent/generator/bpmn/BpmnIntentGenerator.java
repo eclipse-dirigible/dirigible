@@ -27,8 +27,6 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
-import org.eclipse.dirigible.components.intent.generator.HydrateSupport;
-import org.eclipse.dirigible.components.intent.generator.HydrateSupport.Hydrator;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport;
@@ -130,13 +128,6 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // decision that loads the related entity and a condition rewritten to test the resolved
         // variable (book_price). The handler itself is generated from the .glue file, not here.
         List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
-        // Hydrators: a process with a user task gets a JavaDelegate (gen.events.<Process>Hydrate) inserted
-        // before each user task to re-publish the trigger entity's own fields fresh. Index by process so
-        // render() knows the handler class to bind the inserted service task to.
-        Map<String, String> hydratorByProcess = new HashMap<>();
-        for (Hydrator hydrator : HydrateSupport.hydrators(model)) {
-            hydratorByProcess.put(hydrator.process(), hydrator.className());
-        }
         // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
@@ -186,7 +177,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 }
             }
             context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    ownFieldPascalCase(process, byName), candidateGroupsExtra, hydratorByProcess.get(process.getName()), writerByTask));
+                    ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask));
         }
     }
 
@@ -239,14 +230,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, String hydratorClass, Map<String, String> writerByTask) {
+            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, Map<String, String> writerByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
-        // original relation.field condition). Also insert a hydrator service task before each user task
-        // (when the process has one) so the task form sees the trigger entity's fields fresh, and a
-        // writer service task after a user task with editable fields to persist the reviewer's edits.
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase, hydratorClass, writerByTask);
+        // original relation.field condition). Also insert a writer service task after a user task with
+        // editable fields to persist the reviewer's edits.
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase, writerByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -296,7 +286,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
     private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase, String hydratorClass, Map<String, String> writerByTask) {
+            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
             for (Resolver resolver : resolvers) {
@@ -306,12 +296,6 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     // authored step ids; the delegate still resolves the PascalCase handler class.
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
                 }
-            }
-            // Freshen the trigger entity's own fields right before each user task (one delegate per
-            // process, inserted before every user task; the node id is unique per task). The variable
-            // write persists, so the form opened for this task reads current values.
-            if (hydratorClass != null && "userTask".equals(step.getKind()) && step.getName() != null) {
-                result.add(javaServiceTaskStep("hydrate" + IntentNaming.pascalCase(step.getName()), "gen.events." + hydratorClass));
             }
             String writerClass = "userTask".equals(step.getKind()) && step.getName() != null ? writerByTask.get(step.getName()) : null;
             if (writerClass != null) {
@@ -641,16 +625,6 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 return END_ID;
             }
         }
-        // If the target is a user task with a hydrator inserted before it, route the explicit jump
-        // (a decision then/else or a `next`) to the hydrator instead of the task itself, so a reject
-        // loop or any branch into the task re-reads the entity fresh - "loop just before the task". The
-        // linear chain already enters via the hydrator; this only redirects explicit jumps.
-        String hydrateId = "hydrate" + IntentNaming.pascalCase(targetName);
-        for (StepIntent step : steps) {
-            if (hydrateId.equals(step.getName())) {
-                return hydrateId;
-            }
-        }
         return targetName;
     }
 
@@ -764,9 +738,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * dropped.
      * <p>
      * Without the full walk, only the immediate target dropped: a multi-node reject branch (e.g.
-     * {@code else -> cancel} where {@code cancel} is a user task with its own hydrator) left {@code
-     * cancel} on the main lane between {@code send} and {@code end}, so the {@code send -> end} edge
-     * ran straight through {@code cancel} and looked like {@code send -> cancel}.
+     * {@code else -> cancel} followed by more steps) left those steps on the main lane between
+     * {@code send} and {@code end}, so the {@code send -> end} edge ran straight through them and
+     * looked like {@code send -> cancel}.
      */
     private static Set<String> secondaryBranchTargets(List<SequenceFlow> flows) {
         Map<String, List<String>> adjacency = new HashMap<>();

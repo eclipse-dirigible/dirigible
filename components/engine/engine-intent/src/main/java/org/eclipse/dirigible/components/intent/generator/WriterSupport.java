@@ -30,8 +30,8 @@ import org.slf4j.LoggerFactory;
  * <b>writer</b>: a BPMN service task, inserted just after the user task, that writes the reviewer's
  * edits from the process variables back onto the trigger entity.
  * <p>
- * This is the write-side mirror of {@link ProcessResolverSupport}/{@link HydrateSupport} (which
- * load entity data <em>into</em> the context) and the variable-valued sibling of
+ * This is the write-side mirror of {@link ProcessResolverSupport} (which loads entity data
+ * <em>into</em> the context) and the variable-valued sibling of
  * {@link SetFieldSupport} (which writes a literal): where a setter assigns a fixed value, a writer
  * assigns the value the form captured into the {@code <Property>} process variable when the task
  * completed. It loads the entity by its PK process variable, assigns each editable field, and

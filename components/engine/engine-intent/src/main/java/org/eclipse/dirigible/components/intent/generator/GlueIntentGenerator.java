@@ -15,7 +15,6 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
-import org.eclipse.dirigible.components.intent.generator.HydrateSupport.Hydrator;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport.Setter;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.WriteField;
@@ -75,7 +74,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         IntentSettings settings = context.getSettings();
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
-        List<Map<String, Object>> hydrators = buildHydrators(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
@@ -84,8 +82,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && hydrators.isEmpty() && writers.isEmpty() && setters.isEmpty()
-                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty()
+                && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -93,7 +91,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         Map<String, Object> glue = new LinkedHashMap<>();
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
-        glue.put("hydrators", hydrators);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -103,9 +100,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("rollups", rollups);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
-                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] hydrator(s), [{}] writer(s), [{}] setter(s),"
+                "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] writer(s), [{}] setter(s),"
                         + " [{}] notification(s), [{}] schedule(s), [{}] integration(s), [{}] inbound webhook(s) and [{}] rollup(s)",
-                triggers.size(), resolvers.size(), hydrators.size(), writers.size(), setters.size(), notifications.size(), schedules.size(),
+                triggers.size(), resolvers.size(), writers.size(), setters.size(), notifications.size(), schedules.size(),
                 integrations.size(), inbound.size(), rollups.size());
     }
 
@@ -379,29 +376,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("targetField", resolver.targetField());
             entry.put("targetIdAccessor", resolver.targetIdAccessor());
             entry.put("variable", resolver.variable());
+            // Owner = the trigger entity; the resolver loads it by its id (the only thing in the id-only
+            // process context) to read the FK, then loads the target. See Resolver.java.template.
+            entry.put("ownerEntity", resolver.ownerEntity());
+            entry.put("ownerPerspective", resolver.ownerPerspective());
+            entry.put("ownerKeyProperty", resolver.ownerKeyProperty());
+            entry.put("ownerKeyAccessor", resolver.ownerKeyAccessor());
             resolvers.add(entry);
         }
         return resolvers;
-    }
-
-    private static List<Map<String, Object>> buildHydrators(IntentModel model, IntentSettings settings) {
-        List<Map<String, Object>> hydrators = new ArrayList<>();
-        for (Hydrator hydrator : HydrateSupport.hydrators(model)) {
-            if (!settings.shouldGenerate("hydrators", hydrator.className())) {
-                LOGGER.info("Settings opt-out: keeping existing handler for hydrator [{}] (not generated)", hydrator.className());
-                continue;
-            }
-            Map<String, Object> entry = new LinkedHashMap<>();
-            entry.put("process", hydrator.process());
-            entry.put("className", hydrator.className());
-            entry.put("entity", hydrator.entity());
-            entry.put("perspective", hydrator.perspective());
-            entry.put("keyProperty", hydrator.keyProperty());
-            entry.put("keyAccessor", hydrator.keyAccessor());
-            entry.put("fields", new ArrayList<>(hydrator.fields()));
-            hydrators.add(entry);
-        }
-        return hydrators;
     }
 
     private static List<Map<String, Object>> buildWriters(IntentModel model, IntentSettings settings) {

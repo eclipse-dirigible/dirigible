@@ -45,13 +45,6 @@ export function getTemplate(parameters) {
                 collection: "setters"
             },
             {
-                location: "/template-application-events-java/events/Hydrate.java.template",
-                action: "generate",
-                rename: "gen/events/{{className}}.java",
-                engine: "velocity",
-                collection: "hydrators"
-            },
-            {
                 location: "/template-application-events-java/events/Writer.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}.java",

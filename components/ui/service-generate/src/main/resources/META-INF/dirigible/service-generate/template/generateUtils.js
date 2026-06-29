@@ -327,7 +327,12 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaTargetPerspective: sanitizeJavaIdentifier(model.resolvers[r].targetPerspective),
                                 targetField: model.resolvers[r].targetField,
                                 targetIdAccessor: model.resolvers[r].targetIdAccessor,
-                                variable: model.resolvers[r].variable
+                                variable: model.resolvers[r].variable,
+                                ownerEntity: model.resolvers[r].ownerEntity,
+                                ownerPerspective: model.resolvers[r].ownerPerspective,
+                                javaOwnerPerspective: sanitizeJavaIdentifier(model.resolvers[r].ownerPerspective),
+                                ownerKeyProperty: model.resolvers[r].ownerKeyProperty,
+                                ownerKeyAccessor: model.resolvers[r].ownerKeyAccessor
                             };
                             const cleanResolverParameters = cleanData(resolverParameters);
                             generatedFiles.push({
@@ -362,34 +367,6 @@ export function generateFiles(model, parameters, templateSources) {
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanSetterParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSetterParameters)
-                            });
-                        }
-                    }
-                    break;
-                case "hydrators":
-                    // Hydrators (intent layer): one JavaDelegate per process with a user task. Inserted
-                    // before each user task, it re-loads the trigger entity by its id process-variable and
-                    // re-publishes the entity's own fields as variables, so the task form shows current
-                    // values at task creation rather than the start-time snapshot. Not entity-shaped, so
-                    // it gets its own loop; the Java package segment is the lowercased perspective.
-                    if (model.hydrators) {
-                        for (let h = 0; h < model.hydrators.length; h++) {
-                            const hydratorParameters = {
-                                ...parameters,
-                                process: model.hydrators[h].process,
-                                className: model.hydrators[h].className,
-                                entity: model.hydrators[h].entity,
-                                perspective: model.hydrators[h].perspective,
-                                javaPerspective: sanitizeJavaIdentifier(model.hydrators[h].perspective),
-                                keyProperty: model.hydrators[h].keyProperty,
-                                keyAccessor: model.hydrators[h].keyAccessor,
-                                fields: model.hydrators[h].fields
-                            };
-                            const cleanHydratorParameters = cleanData(hydratorParameters);
-                            generatedFiles.push({
-                                location: location,
-                                content: getGenerationEngine(template).generate(location, content, cleanHydratorParameters),
-                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanHydratorParameters)
                             });
                         }
                     }
