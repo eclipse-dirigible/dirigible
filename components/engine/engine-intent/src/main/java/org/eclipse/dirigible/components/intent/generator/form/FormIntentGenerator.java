@@ -26,7 +26,9 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -64,13 +66,22 @@ import org.springframework.stereotype.Component;
  * {@link org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport}.
  *
  * <p>
+ * When the form backs a BPM user task it is rendered <b>read-only by default</b> (each control is
+ * marked {@code readonly}; the runtime shows a Label: Value card), with only the fields listed in
+ * {@code editable} kept as bound inputs - those edits are written back to the entity by the
+ * process's writer service task. A {@code close} action is auto-appended (a non-completing button
+ * that just closes the form/dialog, like the dialog frame's X), so the task stays open in the
+ * inbox. The form's other actions are the task's choices: list {@code approve}/{@code reject} when
+ * a decision branches on the chosen {@code action}, or a single action (e.g. {@code issue}) when
+ * the task flows on linearly with no branching.
+ * <p>
  * Actions become buttons in a trailing {@code container-hbox}. The button {@code type} is inferred
  * from the action name ({@code approve} -> positive, {@code reject}/{@code decline}/{@code delete}
- * -> negative, {@code save}/{@code submit} -> emphasized, anything else -> standard). Each button
- * carries a {@code callback} like {@code onApproveClicked()} wired in the {@code code} block to
- * complete the current BPM user task: the Inbox/Process perspective opens the form with
- * {@code ?taskId=&processInstanceId=}, and the handler POSTs {@code COMPLETE} to
- * {@code /services/inbox/tasks/<taskId>} (the per-task permission-checked Inbox endpoint, so a
+ * -> negative, {@code save}/{@code submit} -> emphasized, {@code close} -> transparent, anything
+ * else -> standard). Each button carries a {@code callback} like {@code onApproveClicked()} wired
+ * in the {@code code} block to complete the current BPM user task: the Inbox/Process perspective
+ * opens the form with {@code ?taskId=&processInstanceId=}, and the handler POSTs {@code COMPLETE}
+ * to {@code /services/inbox/tasks/<taskId>} (the per-task permission-checked Inbox endpoint, so a
  * candidate-group user - not only ADMINISTRATOR/DEVELOPER/OPERATOR - can complete) with the action
  * name and the form model as process variables (so a downstream gateway can branch on the action).
  * On success the handler closes its host via both {@code DialogHub.closeWindow()} and
@@ -103,6 +114,10 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             return;
         }
         Map<String, EntityIntent> entitiesByName = indexEntities(model);
+        // A form referenced by a userTask is a BPM task form: read-only by default (it presents the
+        // entity for an Approve/Reject decision), with only the explicitly listed `editable` fields
+        // bound. Forms not used by a user task (e.g. an inbound create form) keep editable controls.
+        Set<String> taskFormNames = taskFormNames(model);
         Set<String> seenFiles = new HashSet<>();
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
@@ -122,9 +137,26 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
-            Map<String, Object> document = buildForm(form, boundEntity, entitiesByName);
+            Map<String, Object> document = buildForm(form, boundEntity, entitiesByName, taskFormNames.contains(form.getName()));
             context.writeModelFile(fileName, JsonHelper.toJson(document));
         }
+    }
+
+    /** Names of forms referenced by a {@code userTask} step in any process (the BPM task forms). */
+    private static Set<String> taskFormNames(IntentModel model) {
+        Set<String> names = new HashSet<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            for (StepIntent step : process.getSteps()) {
+                if ("userTask".equals(step.getKind()) && step.getArgs() != null) {
+                    Object form = step.getArgs()
+                                      .get("form");
+                    if (form != null) {
+                        names.add(form.toString());
+                    }
+                }
+            }
+        }
+        return names;
     }
 
     private static Map<String, EntityIntent> indexEntities(IntentModel model) {
@@ -137,19 +169,65 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return index;
     }
 
-    private static Map<String, Object> buildForm(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName) {
+    private static Map<String, Object> buildForm(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName,
+            boolean isTaskForm) {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("metadata", new LinkedHashMap<>());
+        document.put("metadata", buildMetadata(form, isTaskForm));
         document.put("feeds", new ArrayList<>());
         document.put("scripts", new ArrayList<>());
-        document.put("code", buildCode(form));
-        document.put("form", buildControls(form, entity, entitiesByName));
+        document.put("code", buildCode(form, isTaskForm));
+        document.put("form", buildControls(form, entity, entitiesByName, isTaskForm));
         return document;
     }
 
-    private static String buildCode(FormIntent form) {
-        if (form.getActions()
-                .isEmpty()) {
+    /**
+     * Form-builder metadata. For a BPM task form it records {@code taskForm: true} (so the runtime
+     * renders the controls as a read-only Label: Value card and surfaces the change-warning) plus the
+     * bound entity's logical name and the editable-field set. Only logical model names are emitted -
+     * never a template-engine output path, which the intent layer must stay agnostic about.
+     */
+    private static Map<String, Object> buildMetadata(FormIntent form, boolean isTaskForm) {
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        if (isTaskForm) {
+            metadata.put("taskForm", true);
+            if (form.getForEntity() != null) {
+                metadata.put("entity", form.getForEntity());
+            }
+            metadata.put("editable", new ArrayList<>(form.getEditable()));
+        }
+        return metadata;
+    }
+
+    /**
+     * The form's actions, with a {@code close} action appended for a BPM task form when the author did
+     * not declare one. {@code close} is a non-completing action - it just closes the form/dialog (the
+     * same as the dialog frame's X), leaving the task open in the inbox - so every task form has an
+     * explicit "leave without deciding" button next to its Approve/Reject. Other forms are unchanged.
+     */
+    private static List<String> effectiveActions(FormIntent form, boolean isTaskForm) {
+        List<String> actions = new ArrayList<>();
+        for (String action : form.getActions()) {
+            if (action != null && !action.isBlank()) {
+                actions.add(action);
+            }
+        }
+        if (isTaskForm && actions.stream()
+                                 .noneMatch(FormIntentGenerator::isCloseAction)) {
+            actions.add("close");
+        }
+        return actions;
+    }
+
+    /**
+     * {@code close} is the non-completing "just close the form" action (mirrors the dialog frame X).
+     */
+    private static boolean isCloseAction(String action) {
+        return "close".equalsIgnoreCase(action);
+    }
+
+    private static String buildCode(FormIntent form, boolean isTaskForm) {
+        List<String> actions = effectiveActions(form, isTaskForm);
+        if (actions.isEmpty()) {
             return "";
         }
         StringBuilder sb = new StringBuilder();
@@ -183,20 +261,27 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                         }
 
                         """);
-        for (String action : form.getActions()) {
-            if (action == null || action.isBlank()) {
-                continue;
+        for (String action : actions) {
+            if (isCloseAction(action)) {
+                // Close does NOT complete the task: it just closes the dialog/window (same as the X), so
+                // the task stays open in the inbox. closeWindow() covers the dialog/inbox iframe host;
+                // window.close() covers a standalone window. Each is a harmless no-op where it doesn't apply.
+                sb.append("$scope.on")
+                  .append(pascalCase(action))
+                  .append("Clicked = function () { __dialogs.closeWindow(); window.close(); };\n");
+            } else {
+                sb.append("$scope.on")
+                  .append(pascalCase(action))
+                  .append("Clicked = function () { __completeTask('")
+                  .append(action)
+                  .append("'); };\n");
             }
-            sb.append("$scope.on")
-              .append(pascalCase(action))
-              .append("Clicked = function () { __completeTask('")
-              .append(action)
-              .append("'); };\n");
         }
         return sb.toString();
     }
 
-    private static List<Map<String, Object>> buildControls(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName) {
+    private static List<Map<String, Object>> buildControls(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName,
+            boolean isTaskForm) {
         List<Map<String, Object>> controls = new ArrayList<>();
         controls.add(headerControl(form));
         Map<String, FieldIntent> fieldsByName = new HashMap<>();
@@ -207,21 +292,31 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 }
             }
         }
+        Set<String> editable = new HashSet<>(form.getEditable());
         for (String fieldName : form.getFields()) {
             if (fieldName == null || fieldName.isBlank()) {
                 continue;
             }
             if (fieldName.indexOf('.') > 0) {
+                // A relation.field is always read-only (editing it would not write back to the related
+                // entity); on a task form it shows the resolved name/value variable.
                 controls.add(relationFieldControl(fieldName, entity, entitiesByName));
             } else {
-                controls.add(fieldControl(fieldName, fieldsByName.get(fieldName)));
+                // Task-form fields are read-only unless explicitly opted in via `editable`; other forms
+                // keep the legacy "editable except a generated PK" behavior.
+                boolean readonly = isTaskForm ? !editable.contains(fieldName) : isReadonlyByDefault(fieldsByName.get(fieldName));
+                controls.add(fieldControl(fieldName, fieldsByName.get(fieldName), readonly));
             }
         }
-        if (!form.getActions()
-                 .isEmpty()) {
-            controls.add(actionRow(form));
+        List<String> actions = effectiveActions(form, isTaskForm);
+        if (!actions.isEmpty()) {
+            controls.add(actionRow(actions));
         }
         return controls;
+    }
+
+    private static boolean isReadonlyByDefault(FieldIntent field) {
+        return field != null && field.isPrimaryKey() && field.isGenerated();
     }
 
     /**
@@ -319,7 +414,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return header;
     }
 
-    private static Map<String, Object> fieldControl(String fieldName, FieldIntent field) {
+    private static Map<String, Object> fieldControl(String fieldName, FieldIntent field, boolean readonly) {
         Control control = pickControl(field);
         // The control binds to the entity property, whose name the EDM generator emits in PascalCase
         // (loanedOn -> LoanedOn); the `model` binding (and the control id) must match it so the form
@@ -332,7 +427,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         map.put("label", humanize(fieldName));
         map.put("horizontal", false);
         map.put("isCompact", false);
-        map.put("readonly", field != null && field.isPrimaryKey() && field.isGenerated());
+        map.put("readonly", readonly);
         if (control.htmlType != null) {
             map.put("type", control.htmlType);
         }
@@ -346,9 +441,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return map;
     }
 
-    private static Map<String, Object> actionRow(FormIntent form) {
+    private static Map<String, Object> actionRow(List<String> actions) {
         List<Map<String, Object>> buttons = new ArrayList<>();
-        for (String action : form.getActions()) {
+        for (String action : actions) {
             if (action == null || action.isBlank()) {
                 continue;
             }
@@ -368,7 +463,8 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         button.put("groupId", "fb-controls");
         button.put("label", humanize(action));
         button.put("type", buttonType(action));
-        button.put("isSubmit", true);
+        // Close just dismisses the form (no task completion), so it must not act as a submit button.
+        button.put("isSubmit", !isCloseAction(action));
         button.put("isCompact", false);
         button.put("callback", "on" + pascalCase(action) + "Clicked()");
         return button;
@@ -376,6 +472,8 @@ public class FormIntentGenerator implements IntentTargetGenerator {
 
     private static String buttonType(String action) {
         switch (action.toLowerCase(Locale.ROOT)) {
+            case "close":
+                return "transparent";
             case "approve":
             case "accept":
             case "confirm":

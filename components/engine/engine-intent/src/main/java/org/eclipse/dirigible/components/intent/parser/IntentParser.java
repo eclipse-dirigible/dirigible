@@ -577,7 +577,75 @@ public final class IntentParser {
             }
             validateDecisionTargets(process, issues);
             validateSetFieldSteps(process, triggerEntity, byName, issues);
+            validateTaskFormActions(process, model, issues);
         }
+    }
+
+    /**
+     * A user task is a <b>decision point</b> exactly when its form offers more than one completing
+     * action (e.g. Approve / Reject - the auto-added {@code close} button never completes the task). In
+     * that case the task must be <b>immediately followed by a decision</b> that branches on the chosen
+     * {@code action}, or the extra buttons would all funnel into the same linear successor and do
+     * nothing different - almost always an authoring mistake. A single-action task (e.g. {@code issue})
+     * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
+     * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
+     */
+    private static void validateTaskFormActions(ProcessIntent process, IntentModel model, List<String> issues) {
+        Map<String, FormIntent> formsByName = new HashMap<>();
+        for (FormIntent form : model.getForms()) {
+            if (form.getName() != null) {
+                formsByName.put(form.getName(), form);
+            }
+        }
+        List<StepIntent> steps = process.getSteps();
+        for (int i = 0; i < steps.size(); i++) {
+            StepIntent step = steps.get(i);
+            if (!"userTask".equals(step.getKind()) || step.getArgs() == null) {
+                continue;
+            }
+            Object formArg = step.getArgs()
+                                 .get("form");
+            FormIntent form = formArg == null ? null : formsByName.get(formArg.toString());
+            if (form == null) {
+                continue;
+            }
+            List<String> completing = new ArrayList<>();
+            for (String action : form.getActions()) {
+                if (action != null && !action.isBlank() && !"close".equalsIgnoreCase(action)) {
+                    completing.add(action);
+                }
+            }
+            if (completing.size() <= 1) {
+                continue; // single (or no) completing action -> linear flow, no decision required
+            }
+            StepIntent successor = successorStep(step, steps, i);
+            if (successor == null || !"decision".equals(successor.getKind())) {
+                issues.add("user task [" + step.getName() + "] in process [" + process.getName() + "] uses form [" + form.getName()
+                        + "] with multiple actions " + completing + " but is not immediately followed by a decision - a multi-option"
+                        + " task must branch on the chosen action via a decision (e.g. `kind: decision, args: { if: \"action == '"
+                        + completing.get(0) + "'\", then: ..., else: ... }`), or reduce the form to a single action");
+            }
+        }
+    }
+
+    /**
+     * The step a user task flows to: its {@code next} arg when set, otherwise the next declared step.
+     */
+    private static StepIntent successorStep(StepIntent step, List<StepIntent> steps, int index) {
+        Object next = step.getArgs() == null ? null
+                : step.getArgs()
+                      .get("next");
+        if (next != null && !next.toString()
+                                 .isBlank()) {
+            for (StepIntent candidate : steps) {
+                if (next.toString()
+                        .equals(candidate.getName())) {
+                    return candidate;
+                }
+            }
+            return null; // next names `end` or an unknown step (the latter is reported elsewhere)
+        }
+        return index + 1 < steps.size() ? steps.get(index + 1) : null;
     }
 
     /**
@@ -702,6 +770,47 @@ public final class IntentParser {
                 }
             }
             validateFormRelationFields(form, bound, byName, issues);
+            validateFormEditable(form, bound, issues);
+        }
+    }
+
+    /**
+     * An {@code editable} field (the per-field opt-out of a BPM task form's read-only default) must be
+     * a plain, displayed field of the bound entity. v1 write-back supports {@code string}/{@code text}
+     * fields only - the reviewer's edit flows straight from the process variable onto the entity with
+     * no type coercion; {@code date}/{@code number}/{@code boolean} editable fields are a documented
+     * follow-up. A {@code relation.field} can never be editable (editing it would not write back).
+     */
+    private static void validateFormEditable(FormIntent form, EntityIntent bound, List<String> issues) {
+        Set<String> displayed = new HashSet<>(form.getFields());
+        for (String field : form.getEditable()) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            if (field.indexOf('.') >= 0) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is a relation.field, which cannot be edited");
+                continue;
+            }
+            if (!displayed.contains(field)) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not in the form's fields - only a displayed field"
+                        + " can be made editable");
+                continue;
+            }
+            if (bound == null) {
+                continue; // the unknown-forEntity issue is already reported above
+            }
+            FieldIntent bf = fieldByName(bound, field);
+            if (bf == null) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field of [" + form.getForEntity() + "]");
+                continue;
+            }
+            String type = bf.getType() == null ? "string"
+                    : bf.getType()
+                        .toLowerCase(Locale.ROOT);
+            if (!"string".equals(type) && !"text".equals(type) && !"uuid".equals(type)) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is [" + type
+                        + "]; v1 write-back supports string/text only (date/number/boolean editable fields are not yet supported)");
+            }
         }
     }
 

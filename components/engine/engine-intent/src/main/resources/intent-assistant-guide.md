@@ -169,6 +169,27 @@ the literal `end`. The `trigger` fires on exactly one lifecycle event of a decla
 `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
 guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
 
+**Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
+Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
+tests it. Continue on approve, branch to a cancel-and-end on reject - or loop the reject branch back to
+the task (the loop re-reads the entity fresh on retry):
+
+```yaml
+processes:
+  - name: InvoiceApproval
+    trigger: { onCreate: Invoice }
+    steps:
+      - { name: approve,  kind: userTask,    args: { assignee: approver, form: ApproveInvoice } }
+      - { name: decide,   kind: decision,    args: { if: "action == 'approve'", then: activate, else: cancel } }
+      - { name: activate, kind: serviceTask, args: { setField: status, value: APPROVED, next: done } }
+      - { name: cancel,   kind: serviceTask, args: { setField: status, value: CANCELLED, next: end } }   # or `else: approve` to loop
+      - { name: done,     kind: end }
+```
+
+A user-task form with **more than one** completing action must be followed by a decision like this
+(enforced at parse time); a **single**-action task (e.g. `issue`) flows on linearly - typically a
+`setField` status change, then the next user task - with no decision.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process
@@ -176,10 +197,32 @@ guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
 
 ```yaml
 forms:
-  - { name: ApproveLoan, forEntity: Loan, fields: [member, book, dueOn], actions: [approve, reject] }
+  # A BPM task form: read-only review + a decision. List the choices as `actions`; a `close` button is
+  # added automatically. `editable` opts specific fields back to editable (written to the entity on
+  # completion); `book.price` is a read-only one-hop relation.field shown as its resolved value.
+  - { name: ApproveLoan, forEntity: Loan, fields: [member, book, dueOn, book.price], editable: [notes], actions: [approve, reject] }
+  # A single-action task form: no branching afterwards.
+  - { name: IssueInvoice, forEntity: Invoice, fields: [number, customer, total], actions: [issue] }
 ```
 
-**Rules:** `forEntity` must be a declared entity; `fields` are its fields/relations.
+**Rules:** `forEntity` must be a declared entity; `fields` are its fields / one-hop `relation.field`
+paths / relations.
+
+**Task forms (a form used by a `userTask`) behave specially - design them to match the flow:**
+- They render **read-only by default** (a Label: Value card, like the detail card). The data shown is
+  re-read from the entity at the moment the task is created (so it is current, not the start-time
+  snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
+  FK.
+- **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
+  entity on completion. **v1 supports `string`/`text` editable fields only** (date/number/boolean are not
+  yet supported - do not put them in `editable`). An editable field must also appear in `fields`; a
+  `relation.field` can never be editable.
+- **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
+  task) is always added automatically - never list it yourself.
+- **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
+  time): list `actions: [approve, reject]` only when the `userTask` is immediately followed by a
+  `decision` that branches on the chosen `action` (e.g. `if: "action == 'approve'"`). For a task that
+  just continues linearly, use a **single action** (e.g. `actions: [issue]`) and no decision.
 
 ### reports - read-only aggregations
 

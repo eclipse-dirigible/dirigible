@@ -366,6 +366,62 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "hydrators":
+                    // Hydrators (intent layer): one JavaDelegate per process with a user task. Inserted
+                    // before each user task, it re-loads the trigger entity by its id process-variable and
+                    // re-publishes the entity's own fields as variables, so the task form shows current
+                    // values at task creation rather than the start-time snapshot. Not entity-shaped, so
+                    // it gets its own loop; the Java package segment is the lowercased perspective.
+                    if (model.hydrators) {
+                        for (let h = 0; h < model.hydrators.length; h++) {
+                            const hydratorParameters = {
+                                ...parameters,
+                                process: model.hydrators[h].process,
+                                className: model.hydrators[h].className,
+                                entity: model.hydrators[h].entity,
+                                perspective: model.hydrators[h].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.hydrators[h].perspective),
+                                keyProperty: model.hydrators[h].keyProperty,
+                                keyAccessor: model.hydrators[h].keyAccessor,
+                                fields: model.hydrators[h].fields
+                            };
+                            const cleanHydratorParameters = cleanData(hydratorParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanHydratorParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanHydratorParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "writers":
+                    // Writers (intent layer): one JavaDelegate per user task with editable fields.
+                    // Inserted after the user task, it writes the reviewer's edits from the process
+                    // variables back onto the trigger entity (updateWithoutEvent). Not entity-shaped, so
+                    // it gets its own loop; the Java package segment is the lowercased perspective.
+                    if (model.writers) {
+                        for (let w = 0; w < model.writers.length; w++) {
+                            const writerParameters = {
+                                ...parameters,
+                                process: model.writers[w].process,
+                                userTask: model.writers[w].userTask,
+                                className: model.writers[w].className,
+                                entity: model.writers[w].entity,
+                                perspective: model.writers[w].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.writers[w].perspective),
+                                keyProperty: model.writers[w].keyProperty,
+                                keyAccessor: model.writers[w].keyAccessor,
+                                fields: model.writers[w].fields
+                            };
+                            const cleanWriterParameters = cleanData(writerParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanWriterParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanWriterParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "notifications":
                     // Notifications (intent layer): one @Listener per declarative notification, binding
                     // to the entity's event topic and sending via the SDK. Not entity-shaped, so it gets

@@ -22,6 +22,7 @@ public class FormIntent {
     private String forEntity;
     private String description;
     private List<String> fields = new ArrayList<>();
+    private List<String> editable = new ArrayList<>();
     private List<String> actions = new ArrayList<>();
 
     public String getName() {
@@ -54,6 +55,20 @@ public class FormIntent {
 
     public void setFields(List<String> fields) {
         this.fields = fields == null ? new ArrayList<>() : fields;
+    }
+
+    /**
+     * The subset of {@link #fields} the reviewer may edit when this form backs a BPM user task. A user
+     * task form is read-only by default (it shows the entity for a decision); a field listed here
+     * renders as a bound, editable control whose value is written back to the entity by the process's
+     * Writer service task on completion. Empty (the default) = fully read-only.
+     */
+    public List<String> getEditable() {
+        return editable;
+    }
+
+    public void setEditable(List<String> editable) {
+        this.editable = editable == null ? new ArrayList<>() : editable;
     }
 
     public List<String> getActions() {

@@ -25,8 +25,12 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.HydrateSupport;
+import org.eclipse.dirigible.components.intent.generator.HydrateSupport.Hydrator;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.WriterSupport;
+import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -124,6 +128,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // decision that loads the related entity and a condition rewritten to test the resolved
         // variable (book_price). The handler itself is generated from the .glue file, not here.
         List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
+        // Hydrators: a process with a user task gets a JavaDelegate (gen.events.<Process>Hydrate) inserted
+        // before each user task to re-publish the trigger entity's own fields fresh. Index by process so
+        // render() knows the handler class to bind the inserted service task to.
+        Map<String, String> hydratorByProcess = new HashMap<>();
+        for (Hydrator hydrator : HydrateSupport.hydrators(model)) {
+            hydratorByProcess.put(hydrator.process(), hydrator.className());
+        }
+        // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
+        // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
+        // it right after the matching user task.
+        Map<String, String> writerByProcessTask = new HashMap<>();
+        for (Writer writer : WriterSupport.writers(model)) {
+            writerByProcessTask.put(writer.process() + "/" + writer.userTask(), writer.className());
+        }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
@@ -155,8 +173,18 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processResolvers.add(resolver);
                 }
             }
+            Map<String, String> writerByTask = new HashMap<>();
+            String writerPrefix = process.getName() + "/";
+            for (Map.Entry<String, String> entry : writerByProcessTask.entrySet()) {
+                if (entry.getKey()
+                         .startsWith(writerPrefix)) {
+                    writerByTask.put(entry.getKey()
+                                          .substring(writerPrefix.length()),
+                            entry.getValue());
+                }
+            }
             context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    ownFieldPascalCase(process, byName), candidateGroupsExtra));
+                    ownFieldPascalCase(process, byName), candidateGroupsExtra, hydratorByProcess.get(process.getName()), writerByTask));
         }
     }
 
@@ -209,12 +237,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra) {
+            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra, String hydratorClass, Map<String, String> writerByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
-        // original relation.field condition).
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase);
+        // original relation.field condition). Also insert a hydrator service task before each user task
+        // (when the process has one) so the task form sees the trigger entity's fields fresh, and a
+        // writer service task after a user task with editable fields to persist the reviewer's edits.
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase, hydratorClass, writerByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -264,7 +294,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
     private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase) {
+            Map<String, String> ownFieldPascalCase, String hydratorClass, Map<String, String> writerByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
             for (Resolver resolver : resolvers) {
@@ -275,11 +305,43 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
                 }
             }
+            // Freshen the trigger entity's own fields right before each user task (one delegate per
+            // process, inserted before every user task; the node id is unique per task). The variable
+            // write persists, so the form opened for this task reads current values.
+            if (hydratorClass != null && "userTask".equals(step.getKind()) && step.getName() != null) {
+                result.add(javaServiceTaskStep("hydrate" + IntentNaming.pascalCase(step.getName()), "gen.events." + hydratorClass));
+            }
+            String writerClass = "userTask".equals(step.getKind()) && step.getName() != null ? writerByTask.get(step.getName()) : null;
+            if (writerClass != null) {
+                // The writer runs right after the user task: persist the user task linearly into the
+                // writer (stripping any `next` so it cannot bypass it), then carry the original `next`
+                // onto the writer so downstream routing (e.g. converging branches) is preserved.
+                String next = stringArg(step, "next");
+                result.add(next == null ? step : withoutNext(step));
+                StepIntent writerStep = javaServiceTaskStep(IntentNaming.camelCase(writerClass), "gen.events." + writerClass);
+                if (next != null && !next.isBlank()) {
+                    writerStep.getArgs()
+                              .put("next", next);
+                }
+                result.add(writerStep);
+                continue;
+            }
             // Rewrite a decision against ALL process resolvers (the variables are process-global), not
             // just those anchored at this step - the path may have been resolved by an earlier step.
             result.add("decision".equals(step.getKind()) ? rewriteDecision(step, resolvers, ownFieldPascalCase) : step);
         }
         return result;
+    }
+
+    /** A copy of a user-task step with its {@code next} routing removed (transferred to the writer). */
+    private static StepIntent withoutNext(StepIntent step) {
+        StepIntent copy = new StepIntent();
+        copy.setName(step.getName());
+        copy.setKind(step.getKind());
+        Map<String, Object> args = new LinkedHashMap<>(step.getArgs());
+        args.remove("next");
+        copy.setArgs(args);
+        return copy;
     }
 
     /**
@@ -577,6 +639,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 return END_ID;
             }
         }
+        // If the target is a user task with a hydrator inserted before it, route the explicit jump
+        // (a decision then/else or a `next`) to the hydrator instead of the task itself, so a reject
+        // loop or any branch into the task re-reads the entity fresh - "loop just before the task". The
+        // linear chain already enters via the hydrator; this only redirects explicit jumps.
+        String hydrateId = "hydrate" + IntentNaming.pascalCase(targetName);
+        for (StepIntent step : steps) {
+            if (hydrateId.equals(step.getName())) {
+                return hydrateId;
+            }
+        }
         return targetName;
     }
 
@@ -593,18 +665,28 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     // ----- BPMN diagram interchange (bpmndi) ---------------------------------------------------
 
     private static final int LANE_Y = 140;
+    /**
+     * The lane a decision's secondary (default / {@code else}) branch target sits on, dropped below the
+     * main lane so the gateway's two outgoing flows diverge visibly instead of overlapping on one line.
+     */
+    private static final int SECONDARY_LANE_Y = 300;
     private static final int NODE_SPACING = 160;
     private static final int FIRST_NODE_CENTER_X = 100;
 
     /**
      * Append the {@code bpmndi:BPMNDiagram} block. The Flowable/Oryx modeler renders the canvas
      * <b>only</b> from this diagram interchange (a process with no {@code BPMNShape}s opens empty), so
-     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane; edges
-     * connect the right edge of the source to the left edge of the target. The layout is deterministic
-     * so re-generation is byte-stable; the modeler re-routes on first manual edit.
+     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane, except
+     * a decision's secondary ({@code else}) branch target, which drops to a lower lane so the gateway's
+     * two outgoing flows are visibly distinct rather than overlapping on one line; edges connect the
+     * right edge of the source to the left edge of the target. The layout is deterministic so
+     * re-generation is byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
             List<StepIntent> steps) {
+        // A decision's secondary branch target (the default / `else` flow's target) is dropped to a lower
+        // lane so the gateway's two outgoing flows are visibly distinct instead of running along one line.
+        Set<String> secondaryNodes = secondaryBranchTargets(flows);
         Map<String, int[]> bounds = new java.util.LinkedHashMap<>();
         for (int i = 0; i < effectiveIds.size(); i++) {
             String id = effectiveIds.get(i);
@@ -613,8 +695,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             int[] size = nodeSize(id, steps);
             int centerX = FIRST_NODE_CENTER_X + i * NODE_SPACING;
+            int laneY = secondaryNodes.contains(id) ? SECONDARY_LANE_Y : LANE_Y;
             int x = centerX - size[0] / 2;
-            int y = LANE_Y - size[1] / 2;
+            int y = laneY - size[1] / 2;
             bounds.put(id, new int[] {x, y, size[0], size[1]});
         }
 
@@ -668,6 +751,25 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         sb.append("    </bpmndi:BPMNPlane>\n");
         sb.append("  </bpmndi:BPMNDiagram>\n");
+    }
+
+    /**
+     * The target nodes of decisions' default ({@code else}) flows - the "second option" of each gateway
+     * - which are placed on the lower lane. The end event is never dropped (a branch straight to
+     * {@code end} stays on the main lane). A node reached by both a default flow and the
+     * conditioned/linear path is still treated as secondary so the gateway's two outgoing edges
+     * separate.
+     */
+    private static Set<String> secondaryBranchTargets(List<SequenceFlow> flows) {
+        Set<String> secondary = new HashSet<>();
+        for (SequenceFlow flow : flows) {
+            if (flow.id() != null && flow.id()
+                                         .endsWith("_default")
+                    && !END_ID.equals(flow.target())) {
+                secondary.add(flow.target());
+            }
+        }
+        return secondary;
     }
 
     /** Width/height of a node's shape by its element id / step kind. */
