@@ -200,6 +200,8 @@ angular.module('edmDetails', ['blimpKit', 'platformView'])
                             isCalculatedProperty: $scope.dataParameters.isCalculatedProperty,
                             calculatedPropertyExpressionCreate: $scope.dataParameters.calculatedPropertyExpressionCreate,
                             calculatedPropertyExpressionUpdate: $scope.dataParameters.calculatedPropertyExpressionUpdate,
+                            calculatedActionOnCreate: $scope.dataParameters.calculatedActionOnCreate,
+                            calculatedActionOnUpdate: $scope.dataParameters.calculatedActionOnUpdate,
                             auditType: $scope.dataParameters.auditType,
 							isReadOnlyProperty: $scope.dataParameters.isReadOnlyProperty,
                             dataName: $scope.dataParameters.dataName,

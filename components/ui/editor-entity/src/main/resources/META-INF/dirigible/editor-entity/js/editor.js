@@ -332,6 +332,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.isCalculatedProperty = data.isCalculatedProperty;
 				cell.value.calculatedPropertyExpressionCreate = data.calculatedPropertyExpressionCreate;
 				cell.value.calculatedPropertyExpressionUpdate = data.calculatedPropertyExpressionUpdate;
+				cell.value.calculatedActionOnCreate = data.calculatedActionOnCreate;
+				cell.value.calculatedActionOnUpdate = data.calculatedActionOnUpdate;
 				cell.value.auditType = data.auditType;
 				cell.value.isReadOnlyProperty = data.isReadOnlyProperty;
 				cell.value.dataName = data.dataName;
@@ -967,6 +969,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									isCalculatedProperty: cell.value.isCalculatedProperty,
 									calculatedPropertyExpressionCreate: cell.value.calculatedPropertyExpressionCreate,
 									calculatedPropertyExpressionUpdate: cell.value.calculatedPropertyExpressionUpdate,
+									calculatedActionOnCreate: cell.value.calculatedActionOnCreate,
+									calculatedActionOnUpdate: cell.value.calculatedActionOnUpdate,
 									auditType: cell.value.auditType,
 									isReadOnlyProperty: cell.value.isReadOnlyProperty,
 									dataName: cell.value.dataName,

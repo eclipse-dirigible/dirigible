@@ -1,11 +1,17 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
 #foreach ($property in $properties)
-    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
         #set($haveCalculatedPropertyOnCreate = "true")
     #end
-    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate))
         #set($haveCalculatedPropertyOnUpdate = "true")
+    #end
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate))
+        #set($haveCalculatedPropertyExpression = "true")
+    #end
+    #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
+        #set($haveCalculatedPropertyAction = "true")
     #end
 #end
 ## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
@@ -30,12 +36,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         entity.${property.name} = ${expr};
 #end
 #end
+## Assign a calculated property via a hand-written action: resolve the @Component implementing
+## CalculatedField and call it with the entity. The action's return type matches the field type, so
+## no cast is needed. Unlike the neutral expression, an action runs only on the server.
+#macro(actionAssign $property $action)
+        entity.${property.name} = Beans.get(${action}.class).calculate(entity);
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if($haveCalculatedPropertyOnCreate || $haveCalculatedPropertyOnUpdate)
+#if($haveCalculatedPropertyExpression)
 import org.eclipse.dirigible.sdk.utils.Calc;
+#end
+#if($haveCalculatedPropertyAction)
+import org.eclipse.dirigible.sdk.component.Beans;
 #end
 #if($documentMaster)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
@@ -45,6 +60,10 @@ import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${do
 #end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
+#end
+#if($importsCode && $importsCode != "")
+// custom imports
+${importsCode}
 #end
 
 @Repository
@@ -58,7 +77,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity save(${name}Entity entity) {
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
-#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+#if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
+#actionAssign($property $property.calculatedActionOnCreate)
+#elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
 #calcAssign($property $property.calculatedPropertyExpressionCreate)
 #end
 #end
@@ -80,7 +101,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity update(${name}Entity entity) {
 #if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
-#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+#if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
+#actionAssign($property $property.calculatedActionOnUpdate)
+#elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
 #calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
