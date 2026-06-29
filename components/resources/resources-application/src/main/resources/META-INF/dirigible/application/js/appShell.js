@@ -82,6 +82,8 @@ document.addEventListener('alpine:init', () => {
           }
           this.groups = appGroups;
           this.settingsItems = settings;
+          // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
+          this.loadCounts();
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -169,6 +171,24 @@ document.addEventListener('alpine:init', () => {
         this.refreshIcons();
       }
       this.closeSideNav();
+    },
+
+    /** Load each PRIMARY entity's live record count for the dashboard KPI tiles. Lazy and independent:
+     *  a slow/erroring controller never blocks the others, and an app generated before countUrl existed
+     *  simply shows a dash. The number lands on the perspective item (reactive) so the tile re-renders. */
+    loadCounts() {
+      const items = this.groups.flatMap(g => g.items || [])
+        .filter(it => it && it.kind === 'PRIMARY' && it.countUrl && it.count === undefined);
+      items.forEach(async (it) => {
+        try {
+          const r = await fetch(it.countUrl, { headers: { 'Accept': 'application/json' } });
+          if (!r.ok) { it.countError = true; return; }
+          const d = await r.json();
+          it.count = (d && typeof d.count === 'number') ? d.count : 0;
+        } catch (e) {
+          it.countError = true;
+        }
+      });
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */
