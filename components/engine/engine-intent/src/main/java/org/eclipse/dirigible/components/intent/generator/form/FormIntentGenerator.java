@@ -358,12 +358,41 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         }
         map.put("model", variable);
         map.put("required", false);
+        if ("input-number".equals(control.controlId)) {
+            map.put("pattern", numberPattern(targetField));
+        }
         if ("input-textfield".equals(control.controlId) || "input-textarea".equals(control.controlId)) {
             map.put("minLength", 0);
             map.put("maxLength", targetField != null && targetField.getLength() != null ? targetField.getLength() : -1);
             map.put("errorMessage", "Incorrect input");
         }
         return map;
+    }
+
+    /**
+     * A DecimalFormat-style display pattern for a number field, derived from its decimal scale (a
+     * grouped integer part plus that many decimals): {@code decimal scale 2 -> "#,##0.00"},
+     * {@code integer -> "#,##0"}. The runtime's read-only Label: Value rendering formats with it, the
+     * same way the document/list views format their numbers.
+     */
+    private static String numberPattern(FieldIntent field) {
+        String type = field == null || field.getType() == null ? "decimal"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        int decimals;
+        if ("integer".equals(type) || "int".equals(type) || "long".equals(type)) {
+            decimals = 0;
+        } else {
+            decimals = field != null && field.getScale() != null ? field.getScale() : 2;
+        }
+        StringBuilder pattern = new StringBuilder("#,##0");
+        if (decimals > 0) {
+            pattern.append('.');
+            for (int i = 0; i < decimals; i++) {
+                pattern.append('0');
+            }
+        }
+        return pattern.toString();
     }
 
     private static RelationIntent toOneRelation(EntityIntent owner, String name) {
@@ -433,6 +462,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         }
         map.put("model", property);
         map.put("required", field != null && field.isRequired());
+        if ("input-number".equals(control.controlId)) {
+            map.put("pattern", numberPattern(field));
+        }
         if ("input-textfield".equals(control.controlId) || "input-textarea".equals(control.controlId)) {
             map.put("minLength", 0);
             map.put("maxLength", field != null && field.getLength() != null ? field.getLength() : -1);

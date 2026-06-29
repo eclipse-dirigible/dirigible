@@ -3,10 +3,15 @@
         <!-- BPM task form: a read-only field is shown as a Label: Value row (like the detail card), not
              an editable input. Editable opt-in fields (readonly=false) fall through to the input below.
              A relation.field control's model is the resolver-set name/value variable, so e.g. listing
-             `customer.name` shows the customer's name here rather than the raw FK id. -->
+             `customer.name` shows the customer's name here rather than the raw FK id. A number is
+             formatted with its pattern (grouped, fixed decimals); other values render as-is. -->
         <div x-h-field>
           <label x-h-label>$!el.label</label>
+#if($el.controlId == "input-number")
+          <div x-h-text class="py-1" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></div>
+#else
           <div x-h-text class="py-1" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></div>
+#end
         </div>
 #elseif($el.controlId == "header")
         <h1 x-h-text.h3 class="mb-2">$!el.label</h1>
