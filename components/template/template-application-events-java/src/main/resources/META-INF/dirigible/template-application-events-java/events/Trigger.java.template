@@ -64,6 +64,13 @@ public class ${process}Trigger implements MessageHandler {
         String businessKey = String.valueOf(entity.${businessKeyProperty});
         String processId = Process.start("${process}", businessKey, message);
         entity.ProcessId = processId;
+        // Clear-D context: publish only a LOCATOR for the entity - its REST controller URL + id - so the
+        // task form fetches the LIVE entity dynamically when it is opened, rather than relying on the
+        // start-time snapshot in `message` (which is stale once the entity is edited after the process
+        // starts - e.g. a document whose line items, and therefore its total, are added after creation).
+        Process.setVariable(processId, "__entityUrl",
+                "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
+        Process.setVariable(processId, "__entityId", entity.${keyProperty});
         // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
         // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
         repository.updateWithoutEvent(entity);

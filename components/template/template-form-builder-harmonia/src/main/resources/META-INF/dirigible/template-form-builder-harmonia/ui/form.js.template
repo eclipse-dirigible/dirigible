@@ -128,8 +128,22 @@ document.addEventListener('alpine:init', () => {
           .then((res) => {
             const vars = (res && res.variables) || {};
             Object.keys(vars).forEach((k) => { self.model[k] = vars[k]; });
-            self.refreshIcons();
+            // Clear D: the process context holds only a locator (the entity's REST URL + id), so fetch the
+            // LIVE entity now and overlay its current fields onto the model. This is what makes the task
+            // form show up-to-date values (e.g. a document total updated after the task was created)
+            // instead of the start-time snapshot. Falls back to whatever variables exist if no locator.
+            const entityUrl = self.model.__entityUrl, entityId = self.model.__entityId;
+            if (entityUrl && entityId !== undefined && entityId !== null) {
+              return harmoniaHttp.get(entityUrl + '/' + encodeURIComponent(entityId))
+                .then((entity) => {
+                  if (entity && typeof entity === 'object') {
+                    Object.keys(entity).forEach((k) => { self.model[k] = entity[k]; });
+                  }
+                })
+                .catch((e) => console.warn('[form] could not load live entity', e));
+            }
           })
+          .then(() => self.refreshIcons())
           .catch((e) => console.warn('[form] could not load task variables', e));
       }
       this.refreshIcons();

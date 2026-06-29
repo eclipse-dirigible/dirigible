@@ -405,7 +405,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         header.put("controlId", "header");
         header.put("groupId", "fb-display");
         String label = form.getDescription() != null && !form.getDescription()
-                                                             .isBlank() ? form.getDescription() : form.getName();
+                                                             .isBlank() ? form.getDescription() : humanize(form.getName());
         header.put("label", label);
         header.put("headerSize", 2);
         header.put("level", 1);
