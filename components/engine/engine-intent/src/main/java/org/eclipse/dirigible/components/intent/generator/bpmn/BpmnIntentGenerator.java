@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -754,19 +756,49 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The target nodes of decisions' default ({@code else}) flows - the "second option" of each gateway
-     * - which are placed on the lower lane. The end event is never dropped (a branch straight to
-     * {@code end} stays on the main lane). A node reached by both a default flow and the
-     * conditioned/linear path is still treated as secondary so the gateway's two outgoing edges
-     * separate.
+     * The nodes of each decision's default ({@code else}) branch - its "second option" - placed on the
+     * lower lane so the gateway's flows diverge and a later main-lane edge (e.g. a {@code next: end}
+     * jump) does not visually cross them. Starts from each default-flow target and walks the branch
+     * forward along the sequence flows, collecting every node until it reaches {@code end} or rejoins
+     * the main path (a node entered by a conditioned {@code then} flow). The end event is never
+     * dropped.
+     * <p>
+     * Without the full walk, only the immediate target dropped: a multi-node reject branch (e.g.
+     * {@code else -> cancel} where {@code cancel} is a user task with its own hydrator) left {@code
+     * cancel} on the main lane between {@code send} and {@code end}, so the {@code send -> end} edge
+     * ran straight through {@code cancel} and looked like {@code send -> cancel}.
      */
     private static Set<String> secondaryBranchTargets(List<SequenceFlow> flows) {
-        Set<String> secondary = new HashSet<>();
+        Map<String, List<String>> adjacency = new HashMap<>();
+        Set<String> thenTargets = new HashSet<>();
+        Deque<String> frontier = new ArrayDeque<>();
         for (SequenceFlow flow : flows) {
-            if (flow.id() != null && flow.id()
-                                         .endsWith("_default")
+            adjacency.computeIfAbsent(flow.source(), k -> new ArrayList<>())
+                     .add(flow.target());
+            if (flow.id() == null) {
+                continue;
+            }
+            if (flow.id()
+                    .endsWith("_then")) {
+                thenTargets.add(flow.target());
+            } else if (flow.id()
+                           .endsWith("_default")
                     && !END_ID.equals(flow.target())) {
-                secondary.add(flow.target());
+                frontier.add(flow.target());
+            }
+        }
+        // Forward walk of the else branch(es). Stop at the end event and where the branch rejoins the
+        // main path (a `then` target), so a shared convergence/end node stays on the main lane.
+        Set<String> secondary = new HashSet<>();
+        while (!frontier.isEmpty()) {
+            String node = frontier.poll();
+            if (node == null || END_ID.equals(node) || thenTargets.contains(node) || !secondary.add(node)) {
+                continue;
+            }
+            for (String next : adjacency.getOrDefault(node, List.of())) {
+                if (!END_ID.equals(next) && !thenTargets.contains(next)) {
+                    frontier.add(next);
+                }
             }
         }
         return secondary;
