@@ -193,9 +193,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // A setting entity's controller lives under the shared "Settings" perspective, not its
                 // own name (the template routes SETTING entities there); resolvePerspective only handles
                 // composition nesting, so special-case settings or the FK URL 404s.
-                link.put("targetPerspective",
-                        target != null && target.isSetting() ? "Settings"
-                                : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                link.put("targetPerspective", target != null && target.isSetting() ? "Settings"
+                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
                 link.put("labelField", nameField(target));
             }
             links.add(link);
