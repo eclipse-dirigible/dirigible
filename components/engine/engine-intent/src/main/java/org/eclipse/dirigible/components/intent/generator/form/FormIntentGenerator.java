@@ -505,7 +505,9 @@ public class FormIntentGenerator implements IntentTargetGenerator {
     private static String buttonType(String action) {
         switch (action.toLowerCase(Locale.ROOT)) {
             case "close":
-                return "transparent";
+                // Non-completing dismiss: a bordered (outline) secondary button, distinct from the
+                // primary action - "transparent" had no border until hover.
+                return "outline";
             case "approve":
             case "accept":
             case "confirm":
@@ -516,13 +518,10 @@ public class FormIntentGenerator implements IntentTargetGenerator {
             case "remove":
             case "cancel":
                 return "negative";
-            case "save":
-            case "submit":
-            case "create":
-            case "update":
-                return "emphasized";
             default:
-                return "standard";
+                // Every other completing action (issue, send, save, submit, ...) is the task's primary
+                // action -> emphasized, which the runtime renders as the primary (blue) button.
+                return "emphasized";
         }
     }
 
