@@ -52,6 +52,14 @@ public class EntityIntent {
      * shell.
      */
     private String group;
+    /**
+     * Optional Java import lines injected verbatim into the generated entity Repository so calculated
+     * fields can reference custom classes - chiefly a {@code calculatedActionOnCreate} action's
+     * {@code org.eclipse.dirigible.sdk.db.CalculatedField} implementation. A multi-line string of
+     * {@code import ...;} statements; the EDM generator Base64-encodes it into the model's
+     * {@code importsCode} the DAO template emits. Absent → no custom imports.
+     */
+    private String imports;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -127,6 +135,14 @@ public class EntityIntent {
 
     public void setGroup(String group) {
         this.group = group;
+    }
+
+    public String getImports() {
+        return imports;
+    }
+
+    public void setImports(String imports) {
+        this.imports = imports;
     }
 
     public List<FieldIntent> getFields() {

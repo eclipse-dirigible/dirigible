@@ -88,12 +88,45 @@ composition is opt-in.
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
-  property on insert / update. The expression is emitted verbatim into the chosen runtime, so it must
-  be valid there (a Java expression for the Java DAO, e.g.
+  property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
+  (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
+  the UI previews it live with the same evaluator. A non-numeric field's expression is emitted verbatim
+  into the runtime, so it must be valid Java for the Java DAO (e.g.
   `calculatedOnCreate: "java.util.UUID.randomUUID().toString()"`).
+- `calculatedActionOnCreate` / `calculatedActionOnUpdate` - the **server-side action call-out**
+  alternative to the expression, for logic too custom to model (conditional / sequential number
+  generation, lookups against other tables). The value names a Java class - a `@Component` implementing
+  `org.eclipse.dirigible.sdk.db.CalculatedField<E, T>` (one method, `T calculate(E entity)`) - and the
+  generated repository assigns the field via `Beans.get(<class>.class).calculate(entity)`. It runs
+  **only on the server** (no live UI preview, unlike a neutral expression) and **takes precedence** over
+  the expression on the same create/update slot. When you propose an action:
+  1. The implementation is **hand-written by the developer under the project's `custom/` folder** (never
+     `gen/`, which is wiped on regeneration). You author the intent + remind the developer to add the
+     class; you do not emit Java.
+  2. Referencing it by **simple name** (`calculatedActionOnCreate: SalesInvoiceNumberAction`) REQUIRES the
+     owning entity to declare an `imports:` line that imports it (see below). Alternatively give the
+     fully-qualified class name and omit the import.
+  3. Use an action only when a neutral expression cannot express it; for sums/totals keep the expression
+     so the value previews in the UI.
 
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
+
+**Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
+verbatim into that entity's generated repository, so a calculated-field action (or any custom class)
+can be referenced from the calculated fields by simple name. Pair it with `calculatedActionOnCreate`:
+
+```yaml
+entities:
+  - name: SalesInvoice
+    imports: |
+      import custom.sales_invoices.SalesInvoiceNumberAction;
+    fields:
+      - { name: number, type: string, length: 100, calculatedActionOnCreate: SalesInvoiceNumberAction }
+```
+
+The developer adds `custom/sales_invoices/SalesInvoiceNumberAction.java` (a `@Component implements
+CalculatedField<...>`); the import lets the generated repository call it by simple name.
 
 **Shared-shell grouping:** `group: <id>` on an entity makes its generated perspective appear under
 that navigation group in the **shared** application shell (the platform dashboard that aggregates

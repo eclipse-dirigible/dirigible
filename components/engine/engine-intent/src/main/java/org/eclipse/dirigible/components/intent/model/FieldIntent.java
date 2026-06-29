@@ -42,6 +42,19 @@ public class FieldIntent {
      */
     private String calculatedOnUpdate;
     /**
+     * Optional fully-qualified Java class that computes this property on create, as the server-side
+     * call-out alternative to {@link #calculatedOnCreate}. The class is a {@code @Component}
+     * implementing {@code org.eclipse.dirigible.sdk.db.CalculatedField}; the generated repository
+     * invokes it via {@code Beans.get(<class>.class).calculate(entity)} and it takes precedence over
+     * the expression. Reference the class from the owning entity's {@link EntityIntent#getImports()}.
+     */
+    private String calculatedActionOnCreate;
+    /**
+     * Optional fully-qualified Java class that computes this property on update (see
+     * {@link #calculatedActionOnCreate}).
+     */
+    private String calculatedActionOnUpdate;
+    /**
      * Render hint: a document (header-items) layout shows this property in the right-aligned totals
      * footer under the items table, not in the header form. Typically a calculated numeric total
      * ({@code net} / {@code vat} / {@code total}). Purely presentational - the value is produced by the
@@ -137,10 +150,28 @@ public class FieldIntent {
         this.calculatedOnUpdate = calculatedOnUpdate;
     }
 
-    /** Whether this property is computed (has a create or update expression). */
+    public String getCalculatedActionOnCreate() {
+        return calculatedActionOnCreate;
+    }
+
+    public void setCalculatedActionOnCreate(String calculatedActionOnCreate) {
+        this.calculatedActionOnCreate = calculatedActionOnCreate;
+    }
+
+    public String getCalculatedActionOnUpdate() {
+        return calculatedActionOnUpdate;
+    }
+
+    public void setCalculatedActionOnUpdate(String calculatedActionOnUpdate) {
+        this.calculatedActionOnUpdate = calculatedActionOnUpdate;
+    }
+
+    /** Whether this property is computed (has a create/update expression or a create/update action). */
     public boolean isCalculated() {
         return (calculatedOnCreate != null && !calculatedOnCreate.isBlank())
-                || (calculatedOnUpdate != null && !calculatedOnUpdate.isBlank());
+                || (calculatedOnUpdate != null && !calculatedOnUpdate.isBlank())
+                || (calculatedActionOnCreate != null && !calculatedActionOnCreate.isBlank())
+                || (calculatedActionOnUpdate != null && !calculatedActionOnUpdate.isBlank());
     }
 
     public boolean isAggregate() {
