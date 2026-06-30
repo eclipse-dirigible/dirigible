@@ -946,6 +946,8 @@ class IntentEngineIT extends IntegrationTest {
         // OrderApproval has trigger { onCreate: Order }, so Order gains a ProcessId back-reference.
         assertTrue(edmXml.contains("name=\"ProcessId\"") && edmXml.contains("dataName=\"ORDER_PROCESS_ID\""),
                 "an entity a process starts on create should get a ProcessId back-reference property");
+        assertTrue(edmXml.contains("isReadOnlyProperty=\"true\""),
+                "system fields (ProcessId, audit columns) should be flagged read-only so forms render them in the read-only details block");
 
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
         // empty. Assert the diagram block, an entity vertex, and a relation edge are present.

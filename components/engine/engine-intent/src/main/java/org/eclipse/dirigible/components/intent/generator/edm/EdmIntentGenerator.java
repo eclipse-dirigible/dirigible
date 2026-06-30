@@ -459,6 +459,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataName", column);
         p.put("dataType", dataType);
         p.put("dataNullable", field.isRequired() || field.isPrimaryKey() ? "false" : "true");
+        // Read-only in generated forms (rendered in the read-only details block, not an editable input):
+        // an author-marked field, or a uuid (a system/business key, not user input).
+        if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType())) {
+            p.put("isReadOnlyProperty", "true");
+        }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         } else if (field.isRequired()) {
@@ -539,6 +544,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataNullable", "true");
         p.put("dataLength", "100");
         p.put("auditType", "NONE");
+        // System-managed back-reference: read-only in forms (shown in the details block, not editable).
+        p.put("isReadOnlyProperty", "true");
         p.put("widgetType", "TEXTBOX");
         p.put("widgetSize", "");
         p.put("widgetLength", "100");
@@ -734,10 +741,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("dataLength", Integer.toString(length));
         }
         p.put("auditType", auditType);
+        // Audit values are system-managed, not user input: read-only in forms (shown in the details block).
+        p.put("isReadOnlyProperty", "true");
         p.put("widgetType", widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length > 0 ? Integer.toString(length) : "20");
-        // Audit values are system-managed, not user input.
         p.put("widgetIsMajor", "false");
         return p;
     }

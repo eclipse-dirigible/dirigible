@@ -61,6 +61,13 @@ public class FieldIntent {
      * calculated-field expressions ({@link #calculatedOnCreate} / {@link #calculatedOnUpdate}).
      */
     private boolean aggregate;
+    /**
+     * Whether the field is read-only in generated forms: shown in the read-only details block
+     * (Label: Value) above the action buttons rather than as an editable input. System fields
+     * ({@code ProcessId}, the audit columns, {@code uuid}) are flagged automatically by the EDM
+     * generator; set this on any other field (e.g. a workflow-managed {@code status}) to do the same.
+     */
+    private boolean readOnly;
 
     public String getName() {
         return name;
@@ -180,6 +187,14 @@ public class FieldIntent {
 
     public void setAggregate(boolean aggregate) {
         this.aggregate = aggregate;
+    }
+
+    public boolean isReadOnly() {
+        return readOnly;
+    }
+
+    public void setReadOnly(boolean readOnly) {
+        this.readOnly = readOnly;
     }
 
     public String getDefaultValue() {

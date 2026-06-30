@@ -86,6 +86,10 @@ composition is opt-in.
 `defaultValue`, a field may declare:
 
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
+  block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
+  `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
+  read-only automatically — you don't need this on them.)
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals

@@ -48,10 +48,11 @@
          (textarea/checkbox) always span the full width. Mirrors codbex-athena-app's create forms. -->
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
 #foreach($property in $properties)
-## ProcessId is a system-managed back-reference (the process instance started for this record); it
-## stays in the form model so it round-trips on edit and is null on create, but is never rendered.
-#if(!$property.dataAutoIncrement && $property.name != "ProcessId")
-#set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
+## Read-only / system fields (ProcessId, audit columns, uuid, any field marked read-only) are not
+## editable inputs here - they render in the read-only details block below, above the buttons. They
+## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+#set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
@@ -151,6 +152,31 @@
 #end
 #end
     </div>
+
+    <!-- Read-only details: system / read-only fields (audit, ProcessId, uuid, any field marked
+         read-only) shown as Label: Value (like the detail card), above the actions. Only on edit, and
+         each row only when its value is populated, so the Create form stays clean. -->
+#set($hasReadOnly = false)
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
+#end
+#if($hasReadOnly)
+    <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 pt-2 border-t" x-show="isEdit">
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
+#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
+      <div x-h-field style="grid-column: span 4;" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+        <label x-h-label>${rolabel}</label>
+#if($property.widgetType == "DROPDOWN")
+        <div x-h-text class="py-1" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></div>
+#else
+        <div x-h-text class="py-1" x-text="form.${property.name}"></div>
+#end
+      </div>
+#end
+#end
+    </div>
+#end
 
     <div x-h-toolbar.footer>
       <div x-h-toolbar-spacer></div>
