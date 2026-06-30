@@ -44,6 +44,14 @@ Treat it as the contract: anything you propose must parse and validate against i
 - **Relations:** a `composition: true` on a `manyToOne` / `oneToOne` makes the owning entity a
   *managed detail* of its parent (NOT NULL FK, edited under the parent). `required: true` *alone* is
   just a NOT NULL association (its own screen). Declare the inverse `oneToMany` on the master entity.
+- **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
+  a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
+  invoice starts as DRAFT / Bank transfer / E-mail:
+  `- { name: Status, kind: manyToOne, to: SalesInvoiceStatus, documentStatus: true, init: 1 }`.
+  **Prefer `init` over a process step for an initial status.** A `serviceTask` that sets the status on
+  process start races the trigger's `ProcessId` write-back (a full-row update with the pre-step value)
+  and gets clobbered; a DB default is race-free. Use `setRelationField` only for *transitions* (after a
+  user task), where there is no trigger race.
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
 - **Recipients** (`to` on notifications and schedule notify): a literal email address, a direct field

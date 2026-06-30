@@ -35,6 +35,16 @@ public class RelationIntent {
      * in the form's title bar instead of an editable dropdown - typically a workflow-managed status.
      */
     private boolean documentStatus;
+    /**
+     * Optional initial value for this to-one relation's FK: the integer id of a seed row of the target
+     * (e.g. a status nomenclature). Emitted as the FK column's {@code dataDefaultValue}, so a new row
+     * gets this FK at the <b>database level</b> on insert when the column is left unset. Use this for
+     * an initial document status (e.g. {@code Status} defaults to the DRAFT seed) instead of a process
+     * step - a default is race-free, whereas a process step that sets it on start races the trigger's
+     * {@code ProcessId} write-back. Named {@code init} for readability (it is the relation's analogue
+     * of a field's {@code defaultValue}).
+     */
+    private String init;
 
     public String getName() {
         return name;
@@ -103,5 +113,13 @@ public class RelationIntent {
 
     public void setDocumentStatus(boolean documentStatus) {
         this.documentStatus = documentStatus;
+    }
+
+    public String getInit() {
+        return init;
+    }
+
+    public void setInit(String init) {
+        this.init = init;
     }
 }

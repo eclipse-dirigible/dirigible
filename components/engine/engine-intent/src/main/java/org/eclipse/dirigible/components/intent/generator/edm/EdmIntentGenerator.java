@@ -587,6 +587,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 p.put("dataLength", length.toString());
             }
         }
+        // init: the FK's database-level default (a target seed id) - a new row gets this FK on insert
+        // when the column is left unset (e.g. an initial document status, race-free vs a process step).
+        if (relation.getInit() != null && !relation.getInit()
+                                                   .isBlank()) {
+            p.put("dataDefaultValue", relation.getInit());
+        }
         p.put("auditType", "NONE");
         // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
@@ -631,6 +637,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataNullable", notNull ? "false" : "true");
         if (notNull) {
             p.put("isRequiredProperty", "true");
+        }
+        // init: FK database-level default (a target seed id), as in relationProperty.
+        if (relation.getInit() != null && !relation.getInit()
+                                                   .isBlank()) {
+            p.put("dataDefaultValue", relation.getInit());
         }
         p.put("auditType", "NONE");
         p.put("relationshipType", "ASSOCIATION");
