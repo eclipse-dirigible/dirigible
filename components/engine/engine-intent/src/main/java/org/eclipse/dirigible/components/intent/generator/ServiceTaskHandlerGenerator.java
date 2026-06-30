@@ -19,16 +19,20 @@ import org.springframework.stereotype.Component;
 
 /**
  * Scaffolds a Java {@code JavaDelegate} stub under {@code custom/} for every author-declared
- * service task that does not point at an external handler (no {@code call}). The BPMN binds such a
- * task to {@code ${JavaTask}} -> {@code custom.<Step>}; this writes {@code custom/<Step>.java} as a
- * minimal logging stub for the developer to implement.
+ * service task with <b>no built-in handler</b> - i.e. one that is NOT a {@code call} (TS handler)
+ * and NOT a {@code setField} / {@code setRelationField} (which the BPMN binds to the generated
+ * {@code gen.events.<Process><Step>} delegate). The BPMN binds such a bare task to
+ * {@code ${JavaTask}} -> {@code custom.<Step>}; this writes {@code custom/<Step>.java} as a minimal
+ * logging stub for the developer to implement.
  * <p>
  * <b>Generate-once, never overwritten.</b> {@code custom/} is the escape-hatch tier the intent
  * layer does not own, so the stub is written only when the file is absent (the developer's edits
  * survive regeneration). This is a deliberate one-time scaffold - the same exception the
  * {@code .settings} file makes to the "intent generators emit models, not code" rule - not ongoing
- * code generation. A service task that keeps a {@code call} (a TS handler) is left to the
- * {@code ${JSTask}} path and gets no Java stub.
+ * code generation. A {@code call} (TS handler) is left to the {@code ${JSTask}} path; a
+ * {@code setField}/{@code setRelationField} gets the generated setter delegate - neither gets a
+ * stub. (Because {@code custom/} is never scrubbed, a stub scaffolded before such a step gained a
+ * {@code setField}/{@code setRelationField} stays orphaned and must be deleted by hand.)
  */
 @Component
 @Order(360)
@@ -59,6 +63,19 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                 if (call != null && !call.toString()
                                          .isBlank()) {
                     continue; // external (TS) handler - not a Java stub
+                }
+                // A setField / setRelationField service task is bound by the BPMN to the GENERATED
+                // gen.events.<Process><Step> delegate (SetFieldSupport -> setters glue), not a custom stub -
+                // scaffolding one here produces an orphaned, never-invoked custom/<Step>.java.
+                Object setField = step.getArgs()
+                                      .get("setField");
+                Object setRelationField = step.getArgs()
+                                              .get("setRelationField");
+                if ((setField != null && !setField.toString()
+                                                  .isBlank())
+                        || (setRelationField != null && !setRelationField.toString()
+                                                                         .isBlank())) {
+                    continue;
                 }
                 String handler = IntentNaming.pascalCase(step.getName());
                 String fileName = "custom/" + handler + ".java";
