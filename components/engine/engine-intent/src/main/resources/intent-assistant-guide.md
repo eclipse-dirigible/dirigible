@@ -235,18 +235,36 @@ A user-task form with **more than one** completing action must be followed by a 
 **Setting a status modelled as a relation: `setRelationField`.** When the status is a plain
 `string`/`text` field, use `setField` as above. When the status is a **to-one relation** (a FK to a
 settings/nomenclature entity like `Status`), use `setRelationField: <Relation>, value: <id>` to set the
-FK to a seed row's integer id. It works on a `serviceTask` (like `setField`) **and** directly on a
-`userTask` (the FK is set the moment the task completes), so the Approve step can set the status itself:
+FK to a seed row's integer id. `value` must be the integer id of a seed row of the related entity (e.g.
+the `Status` whose name is `APPROVED`); the relation must be a `manyToOne`/`oneToOne` of the process's
+trigger entity. `setRelationField` works on a `serviceTask` (like `setField`) **and** directly on a
+`userTask` (the FK is set the moment the task completes).
 
-```yaml
-      # on a serviceTask branch (mirrors the setField example, but Status is a relation to a Status entity)
-      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
-      # or directly on the user task - Status becomes APPROVED (seed id 2) as soon as Approve is clicked
-      - { name: approve,  kind: userTask,    args: { assignee: approver, form: ApproveInvoice, setRelationField: Status, value: 2 } }
-```
+**Where to put the status set - the pattern to follow (and to recommend to users):**
 
-`value` must be the integer id of a seed row of the related entity (e.g. the `Status` whose name is
-`APPROVED`); the relation must be a `manyToOne`/`oneToOne` of the process's trigger entity.
+- **A task FOLLOWED BY a decision (Approve/Reject) → set the status on a `serviceTask` on the chosen
+  branch, NOT on the task itself.** If you set the status on the Approve user task and then branch on
+  the result, a Reject still runs the on-task setter first, so the record flips
+  `DRAFT → APPROVED → CANCELLED` - an **artificial APPROVED transition** that never should have happened.
+  Put the set on a serviceTask after the decision so each outcome sets exactly its own status:
+
+  ```yaml
+  steps:
+    - { name: approve,  kind: userTask,    args: { assignee: approver, form: ApproveInvoice } }   # no set here
+    - { name: decide,   kind: decision,    args: { if: "action == 'approve'", then: activate, else: cancel } }
+    - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: issue } }   # APPROVED only on approve
+    - { name: cancel,   kind: serviceTask, args: { setRelationField: Status, value: 5, next: end } }      # CANCELLED only on reject
+  ```
+
+- **A SINGLE-ACTION task (no following decision) → set the status right on the task.** There is no
+  branch and therefore no transient state to worry about, so the convenience form is correct:
+
+  ```yaml
+    - { name: issue, kind: userTask, args: { assignee: issuer, form: IssueInvoice, setRelationField: Status, value: 3, next: send } }
+  ```
+
+  The same rule applies to `setField`: branch-then-set on a serviceTask when a decision follows; set
+  on the task only when nothing branches on its outcome.
 
 ### forms - data-entry UI
 
