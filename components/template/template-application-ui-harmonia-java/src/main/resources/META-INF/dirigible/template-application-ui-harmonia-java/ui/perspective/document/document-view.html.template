@@ -179,7 +179,7 @@
 #if($property.aggregate == "true")
 #if($property.widgetLabel)#set($alabel = $property.widgetLabel)#else#set($alabel = $property.name)#end
         <div class="hbox justify-between gap-8">
-          <span class="text-secondary">${alabel}</span>
+          <span class="text-secondary-foreground">${alabel}</span>
           <span class="font-semibold tabular-nums" x-text="totalValue('${property.name}', '${property.formatPattern}')"></span>
         </div>
 #end
