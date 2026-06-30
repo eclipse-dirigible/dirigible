@@ -141,7 +141,7 @@
 
 #if($hasProcess)
         <!-- Actionable user tasks for this record, one button each (claimed on open). -->
-        <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pb-2">
+        <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
               <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>

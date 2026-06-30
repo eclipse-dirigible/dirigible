@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.edm;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -182,6 +184,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
             if (entity.isDashboardExcluded()) {
                 entityMap.put("dashboardWidget", "false");
+            }
+            // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
+            // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
+            // DAO template's parameterUtils decodes before emitting them into the import block.
+            if (notBlank(entity.getImports())) {
+                entityMap.put("importsCode", Base64.getEncoder()
+                                                   .encodeToString(entity.getImports()
+                                                                         .getBytes(StandardCharsets.UTF_8)));
             }
             if (!dependent && !setting) {
                 perspectiveList.add(perspectiveEntry(name, perspectiveOrder, iconUrl(entity.getIcon())));
@@ -482,17 +492,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
             p.put("dataDefaultValue", field.getDefaultValue());
         }
-        // A calculated property is assigned by the generated repository on insert/update from the
-        // authored expression (emitted verbatim into the chosen runtime).
+        // A calculated property is assigned by the generated repository on insert/update - either from
+        // the authored expression (emitted verbatim into the chosen runtime) or, when an action class is
+        // given, by a server-side call-out to that CalculatedField implementation (which the DAO template
+        // gives precedence over the expression).
         if (field.isCalculated()) {
             p.put("isCalculatedProperty", "true");
-            if (field.getCalculatedOnCreate() != null && !field.getCalculatedOnCreate()
-                                                               .isBlank()) {
+            if (notBlank(field.getCalculatedOnCreate())) {
                 p.put("calculatedPropertyExpressionCreate", field.getCalculatedOnCreate());
             }
-            if (field.getCalculatedOnUpdate() != null && !field.getCalculatedOnUpdate()
-                                                               .isBlank()) {
+            if (notBlank(field.getCalculatedOnUpdate())) {
                 p.put("calculatedPropertyExpressionUpdate", field.getCalculatedOnUpdate());
+            }
+            if (notBlank(field.getCalculatedActionOnCreate())) {
+                p.put("calculatedActionOnCreate", field.getCalculatedActionOnCreate());
+            }
+            if (notBlank(field.getCalculatedActionOnUpdate())) {
+                p.put("calculatedActionOnUpdate", field.getCalculatedActionOnUpdate());
             }
         }
         // Render hint for the document (header-items) layout: show this property in the totals footer
@@ -1074,7 +1090,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             appendAttribute(sb, "entityType", entityType);
         }
         for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName"}) {
+                "menuLabel", "layoutType", "perspectiveName", "importsCode"}) {
             if (entity.get(key) != null) {
                 appendAttribute(sb, key, entity.get(key));
             }

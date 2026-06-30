@@ -128,8 +128,23 @@ document.addEventListener('alpine:init', () => {
           .then((res) => {
             const vars = (res && res.variables) || {};
             Object.keys(vars).forEach((k) => { self.model[k] = vars[k]; });
-            self.refreshIcons();
+            // Clear D: the process context holds only a locator (the entity's REST URL + id), so fetch the
+            // LIVE entity now and overlay its current fields onto the model. This is what makes the task
+            // form show up-to-date values (e.g. a document total updated after the task was created)
+            // instead of the start-time snapshot. Falls back to whatever variables exist if no locator.
+            const entityUrl = self.model.__entityUrl, entityId = self.model.__entityId;
+            if (entityUrl && entityId !== undefined && entityId !== null) {
+              return harmoniaHttp.get(entityUrl + '/' + encodeURIComponent(entityId))
+                .then((entity) => {
+                  if (entity && typeof entity === 'object') {
+                    Object.keys(entity).forEach((k) => { self.model[k] = entity[k]; });
+                  }
+                  return self.resolveRelationNames();
+                })
+                .catch((e) => console.warn('[form] could not load live entity', e));
+            }
           })
+          .then(() => self.refreshIcons())
           .catch((e) => console.warn('[form] could not load task variables', e));
       }
       this.refreshIcons();
@@ -156,6 +171,46 @@ document.addEventListener('alpine:init', () => {
         this.state = 'error';
         this.message = (e && e.message) || 'Submit failed.';
       }
+    },
+
+    // Resolve each foreign key to its display name: the trigger seeded __<Fk>EntityUrl + __<Fk>EntityLabel
+    // for every to-one relation, so fetch the related record and replace the raw FK id in the model with
+    // its label. Independent + best-effort - a missing URL/record just leaves the id (the documented
+    // fallback). Runs after the live entity is loaded, since the FK ids come from that entity.
+    async resolveRelationNames() {
+      const keys = Object.keys(this.model).filter((k) => /^__.+EntityUrl$/.test(k));
+      await Promise.all(keys.map(async (key) => {
+        const fk = key.slice(2, key.length - 'EntityUrl'.length); // __CustomerEntityUrl -> Customer
+        const url = this.model[key];
+        const label = this.model['__' + fk + 'EntityLabel'];
+        const id = this.model[fk];
+        if (!url || id === undefined || id === null || id === '') return;
+        try {
+          const related = await harmoniaHttp.get(url + '/' + encodeURIComponent(id));
+          if (related && label && related[label] !== undefined && related[label] !== null && related[label] !== '') {
+            this.model[fk] = related[label];
+          }
+        } catch (e) { /* keep the id */ }
+      }));
+    },
+
+    // Format a number for read-only display using a DecimalFormat-style pattern (decimals from the part
+    // after '.', grouping from the pattern's separator) — the same logic the document/list views use, so
+    // a read-only total renders "1,234.50" rather than a raw "1234.5". No pattern -> grouped 2 decimals.
+    fmtNumber(value, pattern) {
+      if (value === null || value === undefined || value === '') return '—';
+      const n = Number(value);
+      if (isNaN(n)) return value;
+      let decimals = 2;
+      let groupSep = ',';
+      if (pattern) {
+        const dot = pattern.lastIndexOf('.');
+        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
+        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
+      }
+      const parts = n.toFixed(decimals).split('.');
+      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
     },
 
     refreshIcons() {

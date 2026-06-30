@@ -1,0 +1,40 @@
+package gen.events;
+
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Writes the reviewer's edits from the ${process} process variables back onto the ${entity}. Generated
+ * from the intent .glue file - do not edit; it is re-generated with the application. Runs as a BPMN
+ * service task (flowable:delegateExpression="\${JavaTask}") inserted immediately after the user task,
+ * so a field the reviewer edited on the (otherwise read-only) task form is persisted on completion. It
+ * loads the ${entity} by its process-variable id, assigns each editable field from its variable, and
+ * persists via the repository's updateWithoutEvent - a workflow-driven system write that must not
+ * re-fire onUpdate reactions. v1 writes string/text fields straight from the variable (no coercion).
+ */
+public class ${className} implements JavaDelegate {
+
+    private final ${entity}Repository repository = new ${entity}Repository();
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${keyProperty}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        ${entity}Entity entity = repository.findById(((Number) key).${keyAccessor}());
+        if (entity == null) {
+            return;
+        }
+#foreach($field in $fields)
+        Object ${field.property}Value = execution.getVariable("${field.property}");
+        if (${field.property}Value != null) {
+            entity.${field.property} = ${field.property}Value.toString();
+        }
+#end
+        repository.updateWithoutEvent(entity);
+    }
+}

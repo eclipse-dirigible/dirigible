@@ -97,7 +97,9 @@ document.addEventListener('alpine:init', () => {
       if (!node) return;
       (node.resources || []).forEach(res => {
         const path = res && res.path;
-        if (res && res.name === 'index.html' && path && path.indexOf('/reports/') >= 0) {
+        // Skip the `bin/` build-output mirror (client-Java build copies gen/ under bin/), or the same
+        // report page is discovered twice and listed twice.
+        if (res && res.name === 'index.html' && path && path.indexOf('/reports/') >= 0 && path.indexOf('/bin/') < 0) {
           const m = path.match(/\/reports\/([^/]+)\/index\.html$/);
           if (m) {
           const pm = path.match(/\/registry\/public\/([^/]+)\//);
@@ -105,7 +107,8 @@ document.addEventListener('alpine:init', () => {
         }
         }
       });
-      (node.collections || []).forEach(c => this._walk(c, out));
+      // Don't descend into a `bin` collection - it's a build-output mirror, not source of truth.
+      (node.collections || []).forEach(c => { if (!c || c.name !== 'bin') this._walk(c, out); });
     },
   });
 }, { once: true });

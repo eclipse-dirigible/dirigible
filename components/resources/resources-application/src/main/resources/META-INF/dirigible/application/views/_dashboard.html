@@ -2,30 +2,81 @@
   Copyright (c) 2010-2026 Eclipse Dirigible contributors
   SPDX-License-Identifier: EPL-2.0
 
-  Generic application-shell landing: a launchpad of the published domain apps, grouped. Rendered into
-  #app within the shell's x-data="app" scope, so it reads `groups` and calls `openApp` directly.
+  Shared application-shell dashboard: KPI tiles for every published app entity (one per PRIMARY
+  perspective, grouped by its navigation group, showing the live record count from the perspective's
+  countUrl, click -> open the app) plus a preview tile per discovered report. Rendered into #app within
+  the shell's x-data="app" scope, so it reads `groups` / `openApp` / `isImageIcon` / `navigate` and the
+  `reports` store directly. KPI-tile style mirrors the standalone per-app dashboard.
 -->
-<div class="vbox size-full p-6 gap-6" style="overflow:auto;">
-  <div class="vbox gap-1">
-    <h1 class="text-2xl font-bold">Applications</h1>
-    <p x-h-text.muted>Select an application to manage its data.</p>
-  </div>
+<div class="vbox size-full overflow-auto" x-init="$nextTick(() => { if (window.lucide) window.lucide.createIcons(); })">
+  <div class="vbox gap-6 p-6">
+    <div class="vbox gap-1">
+      <h1 class="text-2xl font-bold">Dashboard</h1>
+      <p x-h-text.muted>Overview of your published applications.</p>
+    </div>
 
-  <div x-show="groups.length === 0" x-h-text.muted>No applications published yet.</div>
+    <div x-show="!loading && groups.length === 0 && $store.reports.items.length === 0" x-cloak x-h-text.muted>
+      No applications published yet.
+    </div>
 
-  <template x-for="group in groups" :key="group.id">
-    <div class="vbox gap-2">
-      <h2 class="font-bold" x-text="group.label"></h2>
-      <div class="hbox gap-3" style="flex-wrap: wrap;">
-        <template x-for="item in group.items" :key="item.id">
-          <button x-h-button data-variant="outline" class="hbox items-center gap-2"
-                  style="min-width: 200px; justify-content: flex-start;" @click="openApp(item)">
-            <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
-            <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
-            <span x-text="item.label"></span>
-          </button>
+    <!-- One KPI section per navigation group; a tile per PRIMARY entity. -->
+    <template x-for="group in groups" :key="group.id">
+      <div class="vbox gap-3" x-show="group.items.some(i => i.kind === 'PRIMARY')">
+        <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
+          <i role="img" data-lucide="layout-grid" class="size-4"></i><span x-text="group.label"></span>
+        </div>
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <template x-for="item in group.items.filter(i => i.kind === 'PRIMARY')" :key="item.id">
+            <div x-h-card role="button" tabindex="0" class="cursor-pointer"
+                 @click="openApp(item)" @keydown.enter.prevent="openApp(item)">
+              <div x-h-card-header>
+                <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                  <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
+                  <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'" class="size-4"></i></template>
+                  <span x-text="item.label"></span>
+                </div>
+              </div>
+              <div x-h-card-content>
+                <template x-if="item.countUrl && item.count === undefined && !item.countError">
+                  <div x-h-skeleton class="w-1/2 h-9"></div>
+                </template>
+                <p x-show="item.count !== undefined" class="text-3xl font-bold" x-text="item.count"></p>
+                <p x-show="item.count === undefined && (item.countError || !item.countUrl)" x-h-text.muted class="text-3xl font-bold">—</p>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </template>
+
+    <!-- Reports: a preview tile per discovered report (the same set as the sidebar Reports section). -->
+    <div class="vbox gap-3" x-show="$store.reports.items.length > 0" x-cloak>
+      <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
+        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span>Reports</span>
+      </div>
+      <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <template x-for="r in $store.reports.items" :key="r.url">
+          <div x-h-card>
+            <div x-h-card-header>
+              <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
+                  @click="$store.reports.selected = r; navigate('/reports')">
+                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="r.label"></span>
+              </h3>
+              <div x-h-card-action>
+                <button x-h-button data-variant="transparent" data-size="icon-sm"
+                        @click="$store.reports.selected = r; navigate('/reports')" aria-label="Open report">
+                  <i role="img" data-lucide="arrow-up-right"></i>
+                </button>
+              </div>
+            </div>
+            <div x-h-card-content class="vbox gap-2">
+              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="r.description"></p>
+              <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
+                      style="width:100%; height:220px; border:0;"></iframe>
+            </div>
+          </div>
         </template>
       </div>
     </div>
-  </template>
+  </div>
 </div>

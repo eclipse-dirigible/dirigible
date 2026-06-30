@@ -37,7 +37,7 @@ import com.google.gson.Gson;
  * assumes a PRIMARY (own-perspective) target; the dropdown then resolves only once the owner is
  * generated and published, which the generator logs.
  */
-final class CrossModelSupport {
+public final class CrossModelSupport {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CrossModelSupport.class);
     private static final Gson GSON = new Gson();
@@ -56,12 +56,12 @@ final class CrossModelSupport {
      * @param labelField the target's label property name (PascalCase) for the dropdown value
      * @param fkType the JDBC type of the foreign-key column (the target PK's type)
      */
-    record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn, String labelField,
-            String fkType) {
+    public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
+            String labelField, String fkType) {
     }
 
     @SuppressWarnings("unchecked")
-    static TargetInfo resolve(IntentGenerationContext context, UsesIntent uses, String targetEntity) {
+    public static TargetInfo resolve(IntentGenerationContext context, UsesIntent uses, String targetEntity) {
         String alias = uses.getModel();
         String project = uses.resolveProject();
         TargetInfo fallback = convention(alias, targetEntity);

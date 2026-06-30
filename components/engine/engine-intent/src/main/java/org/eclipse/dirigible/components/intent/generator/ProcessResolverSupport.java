@@ -77,7 +77,8 @@ public final class ProcessResolverSupport {
      *        / {@code longValue})
      */
     public record Resolver(String process, String beforeStep, String token, String variable, String handler, String fkProperty,
-            String targetEntity, String targetField, String targetPerspective, String targetIdAccessor) {
+            String targetEntity, String targetField, String targetPerspective, String targetIdAccessor, String ownerEntity,
+            String ownerPerspective, String ownerKeyProperty, String ownerKeyAccessor) {
     }
 
     /** Every resolver across every process in the model. */
@@ -165,7 +166,9 @@ public final class ProcessResolverSupport {
         }
         resolvers.add(new Resolver(process.getName(), step.getName(), relationName + "." + fieldName, relationName + "_" + fieldName,
                 handler, IntentNaming.pascalCase(relationName), relation.getTo(), IntentNaming.pascalCase(fieldName),
-                IntentEntities.resolvePerspective(relation.getTo(), compositionParents), idAccessor(IntentEntities.primaryKeyOf(target))));
+                IntentEntities.resolvePerspective(relation.getTo(), compositionParents), idAccessor(IntentEntities.primaryKeyOf(target)),
+                owner.getName(), IntentEntities.resolvePerspective(owner.getName(), compositionParents), IntentEntities.keyFieldName(owner),
+                idAccessor(IntentEntities.primaryKeyOf(owner))));
     }
 
     private static RelationIntent toOneRelation(EntityIntent owner, String name) {

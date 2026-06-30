@@ -13,6 +13,9 @@ const perspectiveData = {
 	label: '${menuLabel}',
 	path: '/services/web/${projectName}/gen/${genFolderName}/index.html?embedded=true#/${name}',
 	kind: '${type}',
+	// Absolute /count of this entity's generated REST controller, so the shared shell dashboard can show
+	// a live KPI tile (same controller the standalone dashboard hits, just fully qualified).
+	countUrl: '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller/count',
 #if($perspectiveNavId)
 	groupId: '${perspectiveNavId}',
 #end

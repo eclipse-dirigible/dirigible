@@ -62,8 +62,25 @@ public class ${process}Trigger implements MessageHandler {
         }
 #end
         String businessKey = String.valueOf(entity.${businessKeyProperty});
-        String processId = Process.start("${process}", businessKey, message);
+        // Clear-D context: start the process with ONLY the entity id, not a snapshot of its fields.
+        // Everything else is fetched dynamically when needed - the task form loads the live entity and
+        // decision resolvers load it by this id - so the process never carries the entity's data and can
+        // never present it stale.
+        String processId = Process.start("${process}", businessKey, "{\"${keyProperty}\": " + entity.${keyProperty} + "}");
         entity.ProcessId = processId;
+        // Clear-D context: publish only a LOCATOR for the entity - its REST controller URL + id - so the
+        // task form fetches the LIVE entity dynamically when it is opened, rather than relying on the
+        // start-time snapshot in `message` (which is stale once the entity is edited after the process
+        // starts - e.g. a document whose line items, and therefore its total, are added after creation).
+        Process.setVariable(processId, "__entityUrl",
+                "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
+        Process.setVariable(processId, "__entityId", entity.${keyProperty});
+#foreach($rl in $relationLinks)
+        // FK locator: the task form fetches __${rl.fkProperty}EntityUrl/<fk id> and shows its
+        // __${rl.fkProperty}EntityLabel field, so a foreign key renders as a name (falls back to the id).
+        Process.setVariable(processId, "__${rl.fkProperty}EntityUrl", "${rl.url}");
+        Process.setVariable(processId, "__${rl.fkProperty}EntityLabel", "${rl.labelField}");
+#end
         // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
         // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
         repository.updateWithoutEvent(entity);

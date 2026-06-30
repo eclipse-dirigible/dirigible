@@ -48,6 +48,12 @@ document.addEventListener('alpine:init', () => {
           const all = Array.isArray(data.perspectives) ? data.perspectives : [];
           const settings = [];
           const appGroups = [];
+          // App entities declared without a navigation group come back as standalone PRIMARY
+          // perspectives (no `items`); collect them into a catch-all "Other" section so they are
+          // still reachable from the shared shell instead of being silently dropped. SETTING ones go to
+          // the Settings footer; the shell's own built-ins (dashboard/inbox/documents - no `kind`) are
+          // rendered natively and must not be re-listed here.
+          const ungrouped = [];
           all.forEach(g => {
             if (Array.isArray(g.items)) {
               // A navigation group: pull its SETTING entities into Settings, keep the rest in the sidebar.
@@ -60,12 +66,24 @@ document.addEventListener('alpine:init', () => {
             } else if (g.path && g.kind === 'SETTING') {
               // A standalone setting perspective declared with no navigation group.
               settings.push(g);
+            } else if (g.path && g.kind === 'PRIMARY') {
+              // A standalone (un-grouped) app entity perspective.
+              ungrouped.push(g);
             }
           });
           // Settings entities are listed alphabetically by label.
           settings.sort((a, b) => (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase()));
+          // Append the catch-all "Other" group last, after the named navigation groups, sorted by the
+          // perspective's declared order then label so output is stable.
+          if (ungrouped.length) {
+            ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0)
+              || (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase()));
+            appGroups.push({ id: 'other', label: 'Other', items: ungrouped });
+          }
           this.groups = appGroups;
           this.settingsItems = settings;
+          // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
+          this.loadCounts();
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
@@ -153,6 +171,24 @@ document.addEventListener('alpine:init', () => {
         this.refreshIcons();
       }
       this.closeSideNav();
+    },
+
+    /** Load each PRIMARY entity's live record count for the dashboard KPI tiles. Lazy and independent:
+     *  a slow/erroring controller never blocks the others, and an app generated before countUrl existed
+     *  simply shows a dash. The number lands on the perspective item (reactive) so the tile re-renders. */
+    loadCounts() {
+      const items = this.groups.flatMap(g => g.items || [])
+        .filter(it => it && it.kind === 'PRIMARY' && it.countUrl && it.count === undefined);
+      items.forEach(async (it) => {
+        try {
+          const r = await fetch(it.countUrl, { headers: { 'Accept': 'application/json' } });
+          if (!r.ok) { it.countError = true; return; }
+          const d = await r.json();
+          it.count = (d && typeof d.count === 'number') ? d.count : 0;
+        } catch (e) {
+          it.countError = true;
+        }
+      });
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */

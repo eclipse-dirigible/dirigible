@@ -104,6 +104,9 @@ class IntentEngineIT extends IntegrationTest {
                   - name: cfoReview
                     kind: userTask
                     args: { assignee: cfo, form: ApproveOrder }
+                  - name: cfoDecision
+                    kind: decision
+                    args: { if: "action == 'approve'", then: notifyCustomer, else: done }
                   - name: notifyCustomer
                     kind: serviceTask
                   - name: done
@@ -194,7 +197,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("entities", hasSize(4))
                                                  .body("entities.name", hasItems("Country", "Customer", "Order", "OrderItem"))
                                                  .body("processes", hasSize(1))
-                                                 .body("processes[0].steps", hasSize(5))
+                                                 .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
                                                  .body("reports", hasSize(2))
                                                  .body("permissions", hasSize(2))
@@ -379,8 +382,12 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should be a Flowable JavaDelegate");
         assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
                 "the resolver should load the target entity from its real (lowercased) Java package");
-        assertTrue(resolver.contains("execution.getVariable(\"Customer\")"),
-                "the resolver should read the FK id from the process variables");
+        // Clear-D: the process context holds only the trigger entity's id, so the resolver loads the
+        // OWNER (Order) by that id and reads the FK off it, rather than reading the FK from a start-time
+        // process variable.
+        assertTrue(resolver.contains("execution.getVariable(\"Id\")"),
+                "the resolver should read the trigger entity's id from the process variables (id-only context)");
+        assertTrue(resolver.contains("owner.Customer"), "the resolver should read the FK off the owner entity it loaded by id");
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
 
@@ -657,8 +664,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.OrderNumber);"),
                 "the BPM business key must be the flagged field (OrderNumber), not the primary key");
-        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey, message)"),
-                "the started process should receive the resolved business key");
+        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey,"),
+                "the started process should receive the resolved business key as the second argument");
     }
 
     @Test
@@ -782,6 +789,45 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(422)
                                                  .body("issues", hasItem("entity [A] field [x] has unknown type [nosuchtype]")));
+    }
+
+    @Test
+    void calculated_field_action_emits_an_imports_backed_callout_in_the_repository() {
+        // A field can be computed server-side by a hand-written CalculatedField action instead of a
+        // neutral expression; the owning entity declares the Java import so the generated repository
+        // references the action by simple name (the implementation is hand-added under custom/).
+        writeIntent("""
+                name: invoicing
+                entities:
+                  - name: Invoice
+                    imports: |
+                      import custom.invoicing.InvoiceNumberAction;
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string,  length: 100, calculatedActionOnCreate: InvoiceNumberAction }
+                      - { name: total,  type: decimal, precision: 18, scale: 2 }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // The .model carries the action attribute on the property and the Base64-encoded imports on the
+        // entity (the same importsCode the EDM editor's Imports tab produces).
+        String model = contentOf("invoicing.model");
+        assertTrue(model.contains("\"calculatedActionOnCreate\": \"InvoiceNumberAction\""),
+                "the model property should carry the calculated-action class");
+        assertTrue(model.contains("\"importsCode\""), "the model entity should carry the (Base64) custom imports");
+
+        // The Java DAO template injects the imports and emits the action call-out
+        // (Beans.get(...).calculate).
+        generateFromModel("template-application-dao-java/template/template.js", "invoicing.model");
+        String repository = contentOf("gen/invoicing/data/invoice/InvoiceRepository.java");
+        assertTrue(repository.contains("import custom.invoicing.InvoiceNumberAction;"),
+                "the entity Imports should be injected into the generated repository");
+        assertTrue(repository.contains("import org.eclipse.dirigible.sdk.component.Beans;"),
+                "Beans should be imported for the action call-out");
+        assertTrue(repository.contains("entity.Number = Beans.get(InvoiceNumberAction.class).calculate(entity);"),
+                "the calculated field should be assigned by calling the action via Beans");
     }
 
     private void writeIntent(String yaml) {
