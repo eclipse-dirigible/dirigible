@@ -9,8 +9,8 @@
     - Alpine + Harmonia are webjars (org.webjars.npm:alpinejs / codbex__harmonia, pulled by
       components/resources/application-core), served version-less via webjars-locator at /webjars/.
     - Lucide is a webjar too (org.webjars.npm:lucide via application-core).
-    - Pinecone Router has no published webjar, so it is vendored under application-core/vendor
-      and served at /services/web/application-core/vendor/.
+    - Pinecone Router is a webjar too (org.webjars.npm:pinecone-router via application-core),
+      served version-less at /webjars/pinecone-router/dist/router.min.js.
   Script load order is load-bearing: plugins -> app code (defer, document order) -> Alpine -> Harmonia -> Lucide.
 -->
 <html lang="en">
@@ -362,7 +362,7 @@
     </script>
 
     <!-- 1. Plugins (vendored, no CDN) -->
-    <script src="/services/web/application-core/vendor/pinecone-router.min.js"></script>
+    <script src="/webjars/pinecone-router/dist/router.min.js"></script>
 
     <!-- 2. App code (defer keeps document order). The model-independent shell runtime is loaded ONCE
          from the shared location (/services/web/application-core/shell) - the same runtime the Harmonia

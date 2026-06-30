@@ -39,6 +39,11 @@
             <artifactId>lucide</artifactId>
             <version>${lucide.version}</version>
         </dependency>
+        <dependency>
+            <groupId>org.webjars.npm</groupId>
+            <artifactId>pinecone-router</artifactId>
+            <version>${pinecone-router.version}</version>
+        </dependency>
     </dependencies>
 
     <properties>

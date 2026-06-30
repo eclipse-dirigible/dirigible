@@ -241,9 +241,10 @@
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
         <alpinejs.version>3.15.11</alpinejs.version>
-        <harmonia.version>1.24.1</harmonia.version>
+        <harmonia.version>1.24.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
+        <pinecone-router.version>7.5.2</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.16.2</selenide.version>
@@ -582,9 +583,6 @@
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/platform-core/ui/**
-                                </exclude>
-                                <exclude>
-                                    **/src/main/resources/META-INF/dirigible/application-core/vendor/**
                                 </exclude>
                                 <exclude>
                                     **/src/main/resources/META-INF/dirigible/view-terminal/js/**
