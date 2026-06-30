@@ -18,6 +18,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +32,14 @@ import com.google.gson.Gson;
  * .schema}), and its key / label fields (drive the dropdown).
  *
  * <p>
- * When the owner model has already been generated (the recommended leaf-first order), every fact is
- * read from its {@code .model} - exact and order-independent. When it has not (the owner is
- * generated later), the resolution falls back to the deterministic Dirigible naming convention and
- * assumes a PRIMARY (own-perspective) target; the dropdown then resolves only once the owner is
- * generated and published, which the generator logs.
+ * Resolution is <b>order-independent</b>: the facts are read from the owner's {@code .model} -
+ * first the WORKSPACE copy (generated this cycle), else the PUBLISHED copy in the registry (present
+ * after the owner's first publish). Only an owner that was never generated and never published
+ * falls back to the deterministic Dirigible naming convention (assuming a PRIMARY own-perspective
+ * target); that dropdown self-heals on the next generate, which the generator logs. The registry
+ * fallback is what makes a "generate all" immune to the alphabetical project order (e.g.
+ * {@code sales-invoices} generated before its {@code uoms} leaf): the leaf's published model still
+ * pins the exact perspective.
  */
 public final class CrossModelSupport {
 
@@ -68,17 +72,43 @@ public final class CrossModelSupport {
         if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
             return fallback;
         }
-        String modelPath = siblingModelPath(context.getProjectRoot(), project, alias);
-        if (modelPath == null) {
-            return fallback;
-        }
         IRepository repository = context.getRepository();
+        // Order-INDEPENDENT resolution. Prefer the sibling's WORKSPACE .model (the copy being generated in
+        // this same cycle); but if it is not present/usable yet - a "generate all" that reached this
+        // dependent before its leaf (the classic alphabetical-order trap: `sales-invoices` is generated
+        // before `uoms`) - fall back to the sibling's PUBLISHED .model in the registry, which exists after
+        // the leaf's first publish, BEFORE the dumb naming convention. Either real model yields the exact
+        // perspective (e.g. `Settings` for a setting); only a leaf that was never generated and never
+        // published falls through to the convention (and the dropdown self-heals on the next generate).
+        String workspacePath = siblingModelPath(context.getProjectRoot(), project, alias);
+        TargetInfo fromWorkspace = readTarget(repository, workspacePath, targetEntity, fallback);
+        if (fromWorkspace != null) {
+            return fromWorkspace;
+        }
+        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, fallback);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+        LOGGER.info(
+                "Cross-model target [{}] of model [{}] not found in workspace [{}] or registry [{}] - using convention fallbacks; generate/publish [{}] first (the dropdown self-heals on the next generate)",
+                targetEntity, alias, workspacePath, registryPath, alias);
+        return fallback;
+    }
+
+    /**
+     * Read the cross-model target entity's facts from a {@code .model} resource, or {@code null} when
+     * the resource is absent, unparseable, or does not contain the target entity (so the caller can try
+     * the next source).
+     */
+    @SuppressWarnings("unchecked")
+    private static TargetInfo readTarget(IRepository repository, String modelPath, String targetEntity, TargetInfo fallback) {
+        if (modelPath == null) {
+            return null;
+        }
         IResource resource = repository.getResource(modelPath);
         if (!resource.exists()) {
-            LOGGER.info(
-                    "Cross-model target [{}] of model [{}] not yet generated at [{}] - using convention fallbacks; regenerate after [{}] is generated",
-                    targetEntity, alias, modelPath, alias);
-            return fallback;
+            return null;
         }
         try {
             String content = new String(resource.getContent(), StandardCharsets.UTF_8);
@@ -86,7 +116,7 @@ public final class CrossModelSupport {
             Map<String, Object> body = (Map<String, Object>) root.get("model");
             List<Map<String, Object>> entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
             if (entities == null) {
-                return fallback;
+                return null;
             }
             for (Map<String, Object> entity : entities) {
                 if (!targetEntity.equals(entity.get("name"))) {
@@ -111,13 +141,10 @@ public final class CrossModelSupport {
                 }
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType);
             }
-            LOGGER.warn("Cross-model target entity [{}] not found in owner model [{}] - using convention fallbacks", targetEntity,
-                    modelPath);
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}] - using convention fallbacks", modelPath, targetEntity,
-                    e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
         }
-        return fallback;
+        return null;
     }
 
     /**
