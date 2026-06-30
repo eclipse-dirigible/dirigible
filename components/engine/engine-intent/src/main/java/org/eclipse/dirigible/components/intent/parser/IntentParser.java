@@ -689,12 +689,52 @@ public final class IntentParser {
                     }
                 }
             }
+            String setRelationField = stepArg(step, "setRelationField");
+            if (setRelationField != null && !setRelationField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind()) && !"userTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setRelationField but is not a serviceTask or userTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setRelationField but the process has no trigger entity to set it on");
+                } else {
+                    RelationIntent relation = toOneRelationByName(trigger, setRelationField);
+                    if (relation == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] is not a manyToOne/oneToOne relation of [" + triggerEntity + "]");
+                    }
+                    String value = stepArg(step, "value");
+                    if (value == null || value.isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] must declare a value (the related record id)");
+                    } else if (!value.matches("-?\\d+")) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] value [" + value + "] must be an integer record id");
+                    }
+                }
+            }
             String next = stepArg(step, "next");
             if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
                 issues.add(
                         "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
             }
         }
+    }
+
+    /**
+     * The to-one ({@code manyToOne}/{@code oneToOne}) relation of the entity with the given name, or
+     * null.
+     */
+    private static RelationIntent toOneRelationByName(EntityIntent entity, String name) {
+        if (entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equals(relation.getName()) && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**

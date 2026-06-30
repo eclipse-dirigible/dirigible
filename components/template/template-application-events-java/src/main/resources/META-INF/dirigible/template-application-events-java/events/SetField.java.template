@@ -7,8 +7,9 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
- * Sets ${entity}.${field} = "${value}" for the ${process} process. Generated from the intent .glue
- * file (a serviceTask declared setField) - do not edit; it is re-generated with the application. Runs
+ * Sets ${entity}.${field} for the ${process} process (a string field via setField, or a to-one
+ * relation's FK to a seed id via setRelationField). Generated from the intent .glue file - do not edit;
+ * it is re-generated with the application. Runs
  * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it loads the ${entity} by its
  * process-variable id and persists the change WITHOUT publishing an "-updated" event, because this is
  * a workflow-driven system write, not a user edit, and must not re-fire onUpdate reactions.
@@ -25,7 +26,11 @@ public class ${className} implements JavaDelegate {
         }
         ${entity}Entity entity = repository.findById(((Number) key).${keyAccessor}());
         if (entity != null) {
+#if($relation == "true")
+            entity.${field} = ${value};
+#else
             entity.${field} = "${value}";
+#end
             repository.updateWithoutEvent(entity);
         }
     }

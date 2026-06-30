@@ -232,6 +232,22 @@ A user-task form with **more than one** completing action must be followed by a 
 (enforced at parse time); a **single**-action task (e.g. `issue`) flows on linearly - typically a
 `setField` status change, then the next user task - with no decision.
 
+**Setting a status modelled as a relation: `setRelationField`.** When the status is a plain
+`string`/`text` field, use `setField` as above. When the status is a **to-one relation** (a FK to a
+settings/nomenclature entity like `Status`), use `setRelationField: <Relation>, value: <id>` to set the
+FK to a seed row's integer id. It works on a `serviceTask` (like `setField`) **and** directly on a
+`userTask` (the FK is set the moment the task completes), so the Approve step can set the status itself:
+
+```yaml
+      # on a serviceTask branch (mirrors the setField example, but Status is a relation to a Status entity)
+      - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: done } }
+      # or directly on the user task - Status becomes APPROVED (seed id 2) as soon as Approve is clicked
+      - { name: approve,  kind: userTask,    args: { assignee: approver, form: ApproveInvoice, setRelationField: Status, value: 2 } }
+```
+
+`value` must be the integer id of a seed row of the related entity (e.g. the `Status` whose name is
+`APPROVED`); the relation must be a `manyToOne`/`oneToOne` of the process's trigger entity.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process

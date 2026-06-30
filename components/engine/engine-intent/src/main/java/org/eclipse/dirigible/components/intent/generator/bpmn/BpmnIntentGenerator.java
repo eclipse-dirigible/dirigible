@@ -140,6 +140,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         for (Writer writer : WriterSupport.writers(model)) {
             writerByProcessTask.put(writer.process() + "/" + writer.userTask(), writer.className());
         }
+        // Relation setters declared on a user task get a JavaDelegate (gen.events.<Process><Task>)
+        // inserted right after the task (like the writer) to set the relation FK once the task completes;
+        // a setRelationField on a serviceTask is bound directly by appendServiceTask instead, so only the
+        // user-task setters go in this map. Built from the validated setter list so an unknown relation
+        // (which SetFieldSupport skips with a warning) never gets a dangling BPMN reference.
+        Set<String> userTaskKeys = new HashSet<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            for (StepIntent step : process.getSteps()) {
+                if ("userTask".equals(step.getKind()) && step.getName() != null) {
+                    userTaskKeys.add(process.getName() + "/" + step.getName());
+                }
+            }
+        }
+        Map<String, String> setterByProcessTask = new HashMap<>();
+        for (SetFieldSupport.Setter setter : SetFieldSupport.setters(model)) {
+            String key = setter.process() + "/" + setter.step();
+            if (setter.relation() && userTaskKeys.contains(key)) {
+                setterByProcessTask.put(key, setter.className());
+            }
+        }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
@@ -178,19 +198,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processFieldLoads.add(load);
                 }
             }
-            Map<String, String> writerByTask = new HashMap<>();
-            String writerPrefix = process.getName() + "/";
-            for (Map.Entry<String, String> entry : writerByProcessTask.entrySet()) {
-                if (entry.getKey()
-                         .startsWith(writerPrefix)) {
-                    writerByTask.put(entry.getKey()
-                                          .substring(writerPrefix.length()),
-                            entry.getValue());
-                }
-            }
+            String taskPrefix = process.getName() + "/";
+            Map<String, String> writerByTask = stripProcessPrefix(writerByProcessTask, taskPrefix);
+            Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
             context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    processFieldLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask));
+                    processFieldLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask, setterByTask));
         }
+    }
+
+    /** The {@code <process>/<task>}-keyed entries for one process, re-keyed by the bare task name. */
+    private static Map<String, String> stripProcessPrefix(Map<String, String> byProcessTask, String processPrefix) {
+        Map<String, String> byTask = new HashMap<>();
+        for (Map.Entry<String, String> entry : byProcessTask.entrySet()) {
+            if (entry.getKey()
+                     .startsWith(processPrefix)) {
+                byTask.put(entry.getKey()
+                                .substring(processPrefix.length()),
+                        entry.getValue());
+            }
+        }
+        return byTask;
     }
 
     /**
@@ -243,13 +270,15 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
             List<FieldLoad> fieldLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
-            Map<String, String> writerByTask) {
+            Map<String, String> writerByTask, Map<String, String> setterByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
         // original relation.field condition). Also insert a field-loader service task before an
-        // own-field decision, and a writer service task after a user task with editable fields.
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, ownFieldPascalCase, writerByTask);
+        // own-field decision, and writer/setter service tasks after a user task with editable fields or a
+        // setRelationField.
+        List<StepIntent> steps =
+                augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, ownFieldPascalCase, writerByTask, setterByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -299,7 +328,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
     private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers, List<FieldLoad> fieldLoads,
-            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask) {
+            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask, Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
             for (Resolver resolver : resolvers) {
@@ -317,19 +346,29 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
                 }
             }
-            String writerClass = "userTask".equals(step.getKind()) && step.getName() != null ? writerByTask.get(step.getName()) : null;
-            if (writerClass != null) {
-                // The writer runs right after the user task: persist the user task linearly into the
-                // writer (stripping any `next` so it cannot bypass it), then carry the original `next`
-                // onto the writer so downstream routing (e.g. converging branches) is preserved.
+            boolean userTask = "userTask".equals(step.getKind()) && step.getName() != null;
+            // Delegates that run right after a user task, in order: the writer (persist the reviewer's
+            // edits) then the setter (set a relation FK). Each falls through linearly into the next, and
+            // the original `next` is carried onto the LAST one so downstream routing can't be bypassed.
+            List<String> afterTask = new ArrayList<>(2);
+            if (userTask && writerByTask.get(step.getName()) != null) {
+                afterTask.add(writerByTask.get(step.getName()));
+            }
+            if (userTask && setterByTask.get(step.getName()) != null) {
+                afterTask.add(setterByTask.get(step.getName()));
+            }
+            if (!afterTask.isEmpty()) {
                 String next = stringArg(step, "next");
                 result.add(next == null ? step : withoutNext(step));
-                StepIntent writerStep = javaServiceTaskStep(IntentNaming.camelCase(writerClass), "gen.events." + writerClass);
-                if (next != null && !next.isBlank()) {
-                    writerStep.getArgs()
-                              .put("next", next);
+                for (int i = 0; i < afterTask.size(); i++) {
+                    String handler = afterTask.get(i);
+                    StepIntent delegateStep = javaServiceTaskStep(IntentNaming.camelCase(handler), "gen.events." + handler);
+                    if (i == afterTask.size() - 1 && next != null && !next.isBlank()) {
+                        delegateStep.getArgs()
+                                    .put("next", next);
+                    }
+                    result.add(delegateStep);
                 }
-                result.add(writerStep);
                 continue;
             }
             // Rewrite a decision against ALL process resolvers (the variables are process-global), not
@@ -491,23 +530,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName) {
-        // Four service-task shapes:
+        // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
         // - an author-declared serviceTask with a `setField` -> JavaTask bound to the gen.events.<Handler>
         // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
+        // - an author-declared serviceTask with a `setRelationField` -> JavaTask bound to the same
+        // gen.events.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
         // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
         // with the project name (the JSTask delegate resolves relative to the registry root);
         // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
         // handler that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer.
         String javaHandler = stringArg(step, "javaHandler");
         String setField = stringArg(step, "setField");
+        String setRelationField = stringArg(step, "setRelationField");
         String call = stringArg(step, "call");
         boolean java;
         String handlerValue;
         if (javaHandler != null && !javaHandler.isBlank()) {
             java = true;
             handlerValue = javaHandler;
-        } else if (setField != null && !setField.isBlank()) {
+        } else if (setField != null && !setField.isBlank() || setRelationField != null && !setRelationField.isBlank()) {
             java = true;
             handlerValue = "gen.events." + SetFieldSupport.className(processName, step.getName());
         } else if (call != null && !call.isBlank()) {

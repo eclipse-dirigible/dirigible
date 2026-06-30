@@ -529,6 +529,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("keyAccessor", setter.keyAccessor());
             entry.put("field", setter.field());
             entry.put("value", setter.value());
+            entry.put("relation", setter.relation() ? "true" : "false");
             setters.add(entry);
         }
         return setters;
