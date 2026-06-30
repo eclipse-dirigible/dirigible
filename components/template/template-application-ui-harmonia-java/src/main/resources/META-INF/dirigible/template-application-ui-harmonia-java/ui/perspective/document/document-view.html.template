@@ -117,16 +117,16 @@
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
 #end
 #if($hasReadOnly)
-      <div class="grid grid-cols-1 sm:grid-cols-12 gap-4 pt-2 border-t" x-show="isEdit">
+      <div class="grid grid-cols-1 sm:grid-cols-12 gap-x-4 gap-y-1 pt-3 border-t" x-show="isEdit">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
-        <div x-h-field style="grid-column: span 4;" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
-          <label x-h-label>${rolabel}</label>
+        <div style="grid-column: span 4;" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+          <div class="text-xs text-muted-foreground">${rolabel}</div>
 #if($property.widgetType == "DROPDOWN")
-          <div x-h-text class="py-1" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></div>
+          <div class="text-sm" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></div>
 #else
-          <div x-h-text class="py-1" x-text="form.${property.name}"></div>
+          <div class="text-sm" x-text="form.${property.name}"></div>
 #end
         </div>
 #end
