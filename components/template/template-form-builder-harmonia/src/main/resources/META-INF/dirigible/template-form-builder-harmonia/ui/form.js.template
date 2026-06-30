@@ -102,7 +102,7 @@ document.addEventListener('alpine:init', () => {
           processInstanceId: params.processInstanceId || null,
           complete(variables) {
             return harmoniaHttp.post('/services/inbox/tasks/' + params.taskId,
-              { action: 'COMPLETE', data: variables || self.model });
+              { action: 'COMPLETE', data: variables || self.taskVariables() });
           },
         },
         notify(message) { self.message = message; },
@@ -144,7 +144,7 @@ document.addEventListener('alpine:init', () => {
                 .catch((e) => console.warn('[form] could not load live entity', e));
             }
           })
-          .then(() => self.refreshIcons())
+          .then(() => { self.normalizeDates(); self.refreshIcons(); })
           .catch((e) => console.warn('[form] could not load task variables', e));
       }
       this.refreshIcons();
@@ -239,6 +239,36 @@ document.addEventListener('alpine:init', () => {
       if (controlId === 'input-datetime-local') return date + 'T' + pad(h) + ':' + pad(mi);
       if (controlId === 'input-month') return y + '-' + pad(mo);
       return date;
+    },
+
+    // After loading the live entity, convert each date/time control's value (a Jackson array / epoch /
+    // ISO string) to the ISO shape its <input> needs — fmtDate produces exactly that. Without this an
+    // editable date input gets a raw array and breaks; a read-only one already routes through fmtDate.
+    normalizeDates() {
+      (window.__harmoniaDateControls || []).forEach((c) => {
+        const v = this.model[c.model];
+        if (v !== null && v !== undefined && v !== '') this.model[c.model] = this.fmtDate(v, c.controlId);
+      });
+    },
+
+    // The variables to send on task completion: the model with editable datetime-local fields turned
+    // into a full ISO instant (…Z) so the Writer's Instant.parse accepts them. Date (YYYY-MM-DD) and
+    // time (HH:mm) already parse as LocalDate / LocalTime; numbers and booleans pass through.
+    taskVariables() {
+      const out = Object.assign({}, this.model);
+      (window.__harmoniaDateControls || []).forEach((c) => {
+        if (!c.editable || c.controlId !== 'input-datetime-local') return;
+        const v = out[c.model];
+        if (v === null || v === undefined || v === '') return;
+        out[c.model] = this.toInstant(v);
+      });
+      return out;
+    },
+
+    // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).
+    toInstant(value) {
+      const d = new Date(String(value));
+      return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 
     refreshIcons() {

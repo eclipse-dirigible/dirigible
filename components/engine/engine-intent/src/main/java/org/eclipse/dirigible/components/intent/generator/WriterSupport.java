@@ -38,10 +38,11 @@ import org.slf4j.LoggerFactory;
  * {@code updateWithoutEvent} - a workflow-driven system write that must not re-fire
  * {@code onUpdate} reactions (the same rule the trigger and setters follow).
  * <p>
- * Scope (v1): editable fields are {@code string}/{@code text} fields of the trigger entity (the
- * parser enforces this), so the value flows straight from the variable with no type coercion -
- * exactly like {@link SetFieldSupport}. Editable {@code date}/{@code number}/{@code boolean} fields
- * need widget-format coercion and are a documented follow-up. A relation.field is never editable.
+ * Editable fields may be any plain field of the trigger entity; each carries a {@link
+ * WriteField#coercion() coercion} category so the generated Writer converts the form's process variable
+ * to the entity's Java type ({@code LocalDate} / {@code Instant} / {@code Integer} / {@code Long} /
+ * {@code BigDecimal} / {@code Double} / {@code Boolean} / {@code String}). The form-builder sends
+ * date/timestamp values ISO-shaped; a relation.field is never editable.
  */
 public final class WriterSupport {
 
@@ -50,9 +51,12 @@ public final class WriterSupport {
     private WriterSupport() {}
 
     /**
-     * One editable field a writer assigns: the PascalCase property, which is also the variable name.
+     * One editable field a writer assigns: the PascalCase property (also the process-variable name) and
+     * the {@code coercion} category the {@code Writer.java.template} uses to convert the variable to the
+     * field's Java type ({@code string} / {@code integer} / {@code long} / {@code decimal} /
+     * {@code double} / {@code boolean} / {@code date} / {@code timestamp}).
      */
-    public record WriteField(String property) {
+    public record WriteField(String property, String coercion) {
     }
 
     /**
@@ -126,23 +130,39 @@ public final class WriterSupport {
                         fieldName, form.getName(), step.getName(), process.getName(), owner.getName());
                 continue;
             }
-            if (!isStringType(field)) {
-                // v1 writes string/text fields straight from the variable; other types need coercion.
-                LOGGER.warn(
-                        "Editable field [{}] on form [{}] is [{}]; v1 write-back supports string/text only - skipping (it stays read-only on the entity)",
-                        fieldName, form.getName(), field.getType());
-                continue;
-            }
-            fields.add(new WriteField(IntentNaming.pascalCase(fieldName)));
+            fields.add(new WriteField(IntentNaming.pascalCase(fieldName), coercion(field)));
         }
         return new ArrayList<>(fields);
     }
 
-    private static boolean isStringType(FieldIntent field) {
+    /**
+     * The coercion category for an editable field's type - tells {@code Writer.java.template} how to turn
+     * the process variable into the entity's Java field type. string/text/uuid flow straight through;
+     * the rest parse from the variable.
+     */
+    private static String coercion(FieldIntent field) {
         String type = field.getType() == null ? "string"
                 : field.getType()
                        .toLowerCase(java.util.Locale.ROOT);
-        return "string".equals(type) || "text".equals(type) || "uuid".equals(type);
+        switch (type) {
+            case "integer":
+            case "int":
+                return "integer";
+            case "long":
+                return "long";
+            case "decimal":
+                return "decimal";
+            case "double":
+                return "double";
+            case "boolean":
+                return "boolean";
+            case "date":
+                return "date";
+            case "timestamp":
+                return "timestamp";
+            default:
+                return "string"; // string / text / uuid
+        }
     }
 
     private static Map<String, FormIntent> formsByName(IntentModel model) {

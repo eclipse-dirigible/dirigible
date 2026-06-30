@@ -247,9 +247,9 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. **v1 supports `string`/`text` editable fields only** (date/number/boolean are not
-  yet supported - do not put them in `editable`). An editable field must also appear in `fields`; a
-  `relation.field` can never be editable.
+  entity on completion. **Any field type may be editable** - the generated Writer coerces the value to
+  the field's Java type (date, timestamp, number, boolean, string). An editable field must also appear in
+  `fields`; a `relation.field` can never be editable.
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
