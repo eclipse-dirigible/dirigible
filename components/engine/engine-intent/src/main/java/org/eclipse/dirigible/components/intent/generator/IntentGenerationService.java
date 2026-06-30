@@ -17,6 +17,7 @@ import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.repository.api.ICollection;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.slf4j.Logger;
@@ -103,6 +104,10 @@ public class IntentGenerationService {
         for (IntentTargetGenerator generator : generators) {
             try {
                 generator.generate(context);
+            } catch (IntentValidationException e) {
+                // A fatal authoring error the developer must fix (e.g. an unresolvable cross-model
+                // dependency) - surface it to the caller (-> 422), do NOT isolate it like a generator bug.
+                throw e;
             } catch (RuntimeException e) {
                 LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), projectName, e);
             }

@@ -17,6 +17,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -32,14 +33,20 @@ import com.google.gson.Gson;
  * .schema}), and its key / label fields (drive the dropdown).
  *
  * <p>
- * Resolution is <b>order-independent</b>: the facts are read from the owner's {@code .model} -
- * first the WORKSPACE copy (generated this cycle), else the PUBLISHED copy in the registry (present
- * after the owner's first publish). Only an owner that was never generated and never published
- * falls back to the deterministic Dirigible naming convention (assuming a PRIMARY own-perspective
- * target); that dropdown self-heals on the next generate, which the generator logs. The registry
- * fallback is what makes a "generate all" immune to the alphabetical project order (e.g.
- * {@code sales-invoices} generated before its {@code uoms} leaf): the leaf's published model still
- * pins the exact perspective.
+ * Resolution is <b>order-independent</b> and reads a <b>real</b> model from two equally valid
+ * sources: the owner's WORKSPACE {@code .model} (a locally-developed dependency generated this
+ * cycle), else its PUBLISHED {@code .model} in the registry. The registry is not a mere fallback -
+ * a prebuilt, prepackaged npm-module dependency ({@code uoms}, {@code currencies}, ...) ships
+ * <b>only</b> in the registry and is never in the workspace, so the registry read is a first-class
+ * source. This makes the outcome immune to the alphabetical "generate all" order (e.g.
+ * {@code sales-invoices} generated before its {@code uoms} leaf).
+ *
+ * <p>
+ * If neither source has the model, resolution <b>fails loudly</b> with an
+ * {@link IntentValidationException} - it does NOT guess a perspective from the naming convention,
+ * because a wrong guess for a setting target (Settings vs the entity name) silently produced a dead
+ * dropdown / 404 controller URL. Generate the dependency, or install/publish its prebuilt module,
+ * first.
  */
 public final class CrossModelSupport {
 
@@ -68,32 +75,38 @@ public final class CrossModelSupport {
     public static TargetInfo resolve(IntentGenerationContext context, UsesIntent uses, String targetEntity) {
         String alias = uses.getModel();
         String project = uses.resolveProject();
-        TargetInfo fallback = convention(alias, targetEntity);
+        // Naming-convention DEFAULTS for the within-model sub-fields (table/key column) a found model may
+        // omit - NOT a substitute for a missing model (we fail loudly for that, below).
+        TargetInfo defaults = convention(alias, targetEntity);
         if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
-            return fallback;
+            return defaults; // no repository to read from (e.g. a unit test) - cannot resolve against a real model
         }
         IRepository repository = context.getRepository();
-        // Order-INDEPENDENT resolution. Prefer the sibling's WORKSPACE .model (the copy being generated in
-        // this same cycle); but if it is not present/usable yet - a "generate all" that reached this
-        // dependent before its leaf (the classic alphabetical-order trap: `sales-invoices` is generated
-        // before `uoms`) - fall back to the sibling's PUBLISHED .model in the registry, which exists after
-        // the leaf's first publish, BEFORE the dumb naming convention. Either real model yields the exact
-        // perspective (e.g. `Settings` for a setting); only a leaf that was never generated and never
-        // published falls through to the convention (and the dropdown self-heals on the next generate).
+        // Order-INDEPENDENT resolution against a REAL model, from two equally valid sources:
+        // 1. the sibling's WORKSPACE .model - a locally-developed dependency generated this cycle; and
+        // 2. its PUBLISHED .model in the registry - which is ALSO where a prebuilt, prepackaged npm-module
+        // dependency (uoms, currencies, ...) lives: such a dependency is NEVER in the workspace, only
+        // in the registry. So the registry read is a first-class source, not merely a fallback.
+        // Workspace wins when present (local dev overrides the published copy); otherwise the registry.
+        // This makes the result independent of project generation order (the alphabetical "generate all"
+        // trap where `sales-invoices` is generated before its `uoms` leaf).
         String workspacePath = siblingModelPath(context.getProjectRoot(), project, alias);
-        TargetInfo fromWorkspace = readTarget(repository, workspacePath, targetEntity, fallback);
+        TargetInfo fromWorkspace = readTarget(repository, workspacePath, targetEntity, defaults);
         if (fromWorkspace != null) {
             return fromWorkspace;
         }
         String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
-        TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, fallback);
+        TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, defaults);
         if (fromRegistry != null) {
             return fromRegistry;
         }
-        LOGGER.info(
-                "Cross-model target [{}] of model [{}] not found in workspace [{}] or registry [{}] - using convention fallbacks; generate/publish [{}] first (the dropdown self-heals on the next generate)",
-                targetEntity, alias, workspacePath, registryPath, alias);
-        return fallback;
+        // Fail LOUDLY. We never guess a perspective from the naming convention: guessing wrong for a
+        // setting target (Settings vs the entity name) silently produces a dead dropdown / 404 controller
+        // URL - the bug this replaced. A cross-model dependency must resolve against a real model.
+        throw new IntentValidationException(List.of("Cross-model relation target [" + targetEntity + "] (model alias [" + alias
+                + "], project [" + project + "]) cannot be resolved: no model found in the workspace [" + workspacePath
+                + "] or the registry [" + registryPath + "]. Generate the [" + alias
+                + "] model first, or install/publish its prebuilt module so its .model is in the registry."));
     }
 
     /**
