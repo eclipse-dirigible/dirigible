@@ -28,10 +28,11 @@
 #else
     <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${documentLabel}' : 'New ${documentLabel}'"></span>
 #end
+    <div x-h-toolbar-spacer></div>
 #if($docStatusProp != "")
+    <!-- Status pill is right-aligned: the spacer above pushes it (and the Back button) to the far end. -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="isEdit && statusText()" x-text="statusText()"></span>
 #end
-    <div x-h-toolbar-spacer></div>
     <button type="button" x-h-button data-variant="transparent" @click="backToList()">Back to list</button>
   </div>
 

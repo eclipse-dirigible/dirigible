@@ -8,7 +8,9 @@
   <!-- Hidden when this form is hosted inside an FK "Add" iframe dialog (?embedded) - the dialog's own
        header titles it; the form-page exposes isEmbedded. -->
   <div x-h-toolbar data-variant="transparent" x-show="!isEmbedded">
-    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${name}' : 'New ${name}'"></span>
+    <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
+         text-2xl normal weight - matches the document header look across the app. -->
+    <span class="text-2xl font-normal tracking-tight shrink-0" x-text="'${entityLabel}'.toUpperCase()"></span>
   </div>
 
   <!-- Load failure (edit) -->
