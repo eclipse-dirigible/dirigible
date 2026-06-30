@@ -18,7 +18,11 @@
 
   <div x-h-toolbar data-variant="transparent">
 #if($docNumberProp != "")
-    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? ('${documentLabel}'.toUpperCase() + ' ' + (form.${docNumberProp} || '')) : 'New ${documentLabel}'"></span>
+    <!-- Document title: the uppercased document label + the number in bold (e.g. SALES INVOICE 00001231). -->
+    <div class="hbox items-baseline gap-2 shrink-0">
+      <h3 x-h-text.h3 class="text-2xl tracking-tight" x-text="'${documentLabel}'.toUpperCase()"></h3>
+      <h3 x-h-text.h3 class="text-2xl font-bold tracking-tight" x-show="isEdit && form.${docNumberProp}" x-text="form.${docNumberProp}"></h3>
+    </div>
 #else
     <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${documentLabel}' : 'New ${documentLabel}'"></span>
 #end
