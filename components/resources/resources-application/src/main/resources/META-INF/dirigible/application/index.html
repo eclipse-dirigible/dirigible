@@ -99,8 +99,9 @@
                     <template x-for="item in group.items" :key="item.id">
                       <li x-h-sidebar-menu-item>
                         <button x-h-sidebar-menu-button :data-active="isAppActive(item)" @click="openApp(item)">
+                          <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                           <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
-                          <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
+                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
                           <span x-text="item.label"></span>
                         </button>
                       </li>

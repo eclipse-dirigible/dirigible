@@ -284,7 +284,8 @@ document.addEventListener('alpine:init', () => {
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },
     isAppActive(item) { return this.hostedId === item.id; },
-    isImageIcon(icon) { return !!icon && (icon.indexOf('/') !== -1 || icon.indexOf('.') !== -1 || icon.indexOf('http') === 0); },
+    isSvgIcon(icon) { return !!icon && /\.svg(\?|#|$)/i.test(icon); },
+    isImageIcon(icon) { return !!icon && !this.isSvgIcon(icon) && (icon.indexOf('/') !== -1 || icon.indexOf('.') !== -1 || icon.indexOf('http') === 0); },
 
     openSideNav() { this.isOpen = true; },
     closeSideNav() { if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false; },
