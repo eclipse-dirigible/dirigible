@@ -5,9 +5,11 @@
 -->
 <div x-data="${name}FormPage" class="vbox size-full">
 
-  <!-- Hidden when this form is hosted inside an FK "Add" iframe dialog (?embedded) - the dialog's own
-       header titles it; the form-page exposes isEmbedded. -->
-  <div x-h-toolbar data-variant="transparent" x-show="!isEmbedded">
+  <!-- Hidden ONLY inside the FK "Add" iframe dialog (?dialog=1), which provides its own header. The
+       shell-hosted app also passes ?embedded but is NOT a dialog, so the caption must still show there
+       (matching the list/master/document views, which have no such guard) - gate on isDialog, not
+       isEmbedded. -->
+  <div x-h-toolbar data-variant="transparent" x-show="!isDialog">
     <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
          text-2xl normal weight - matches the document header look across the app. -->
     <span class="text-2xl font-normal tracking-tight shrink-0" x-text="'${entityLabel}'.toUpperCase()"></span>
