@@ -207,7 +207,7 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
       try {
-        const rows${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -331,7 +331,7 @@ document.addEventListener('alpine:init', () => {
       try {
         await this.loadItemOptions();
         const q = '?' + encodeURIComponent(this.itemsDef.masterEntityId) + '=' + encodeURIComponent(this.id);
-        const rows = await App.services.api.get(this.itemsDef.apiPath + q);
+        const rows = await App.services.api.getAll(this.itemsDef.apiPath + q);
         this.items = rows || [];
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
       } catch (e) {
@@ -345,7 +345,7 @@ document.addEventListener('alpine:init', () => {
       for (const col of this.editColumns) {
         if (col.widget !== 'DROPDOWN' || !col.lookup || this.itemOptions[col.name]) continue;
         try {
-          const rows = await App.services.api.get(col.lookup.url, { baseUrl: '' });
+          const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           this.itemOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
         } catch (e) {
           console.error('[${name}DocumentPage] failed to load item options for ' + col.name, e);

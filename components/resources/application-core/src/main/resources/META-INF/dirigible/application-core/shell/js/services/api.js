@@ -131,4 +131,24 @@ App.services.api = {
   post(url, body, opts) { return this.request('POST', url, body, opts); },
   put(url, body, opts)  { return this.request('PUT', url, body, opts); },
   delete(url, opts)     { return this.request('DELETE', url, undefined, opts); },
+
+  // getAll(url, opts?) — fetch an ENTIRE collection, transparently paging past the
+  // generated controllers' default page size. A bare GET on a list controller returns
+  // only its first page ($limit defaults to 20), which silently truncated client-side-
+  // paginated lists and relationship dropdowns to 20 rows. This walks $limit/$offset
+  // pages until a short (or empty) page, concatenating the results. Use it wherever the
+  // UI needs the whole set (entity lists with client-side pagination, dropdown options);
+  // keep get() for single records and /count.
+  async getAll(url, opts = {}) {
+    const pageSize = 1000;
+    const sep = url.includes('?') ? '&' : '?';
+    const all = [];
+    for (let offset = 0;; offset += pageSize) {
+      const page = await this.get(`${url}${sep}$limit=${pageSize}&$offset=${offset}`, opts);
+      if (!Array.isArray(page) || page.length === 0) break;
+      all.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return all;
+  },
 };
