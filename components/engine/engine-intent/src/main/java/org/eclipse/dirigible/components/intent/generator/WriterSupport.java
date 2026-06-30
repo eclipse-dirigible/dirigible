@@ -38,11 +38,11 @@ import org.slf4j.LoggerFactory;
  * {@code updateWithoutEvent} - a workflow-driven system write that must not re-fire
  * {@code onUpdate} reactions (the same rule the trigger and setters follow).
  * <p>
- * Editable fields may be any plain field of the trigger entity; each carries a {@link
- * WriteField#coercion() coercion} category so the generated Writer converts the form's process variable
- * to the entity's Java type ({@code LocalDate} / {@code Instant} / {@code Integer} / {@code Long} /
- * {@code BigDecimal} / {@code Double} / {@code Boolean} / {@code String}). The form-builder sends
- * date/timestamp values ISO-shaped; a relation.field is never editable.
+ * Editable fields may be any plain field of the trigger entity; each carries a
+ * {@link WriteField#coercion() coercion} category so the generated Writer converts the form's
+ * process variable to the entity's Java type ({@code LocalDate} / {@code Instant} / {@code Integer}
+ * / {@code Long} / {@code BigDecimal} / {@code Double} / {@code Boolean} / {@code String}). The
+ * form-builder sends date/timestamp values ISO-shaped; a relation.field is never editable.
  */
 public final class WriterSupport {
 
@@ -52,8 +52,8 @@ public final class WriterSupport {
 
     /**
      * One editable field a writer assigns: the PascalCase property (also the process-variable name) and
-     * the {@code coercion} category the {@code Writer.java.template} uses to convert the variable to the
-     * field's Java type ({@code string} / {@code integer} / {@code long} / {@code decimal} /
+     * the {@code coercion} category the {@code Writer.java.template} uses to convert the variable to
+     * the field's Java type ({@code string} / {@code integer} / {@code long} / {@code decimal} /
      * {@code double} / {@code boolean} / {@code date} / {@code timestamp}).
      */
     public record WriteField(String property, String coercion) {
@@ -136,9 +136,9 @@ public final class WriterSupport {
     }
 
     /**
-     * The coercion category for an editable field's type - tells {@code Writer.java.template} how to turn
-     * the process variable into the entity's Java field type. string/text/uuid flow straight through;
-     * the rest parse from the variable.
+     * The coercion category for an editable field's type - tells {@code Writer.java.template} how to
+     * turn the process variable into the entity's Java field type. string/text/uuid flow straight
+     * through; the rest parse from the variable.
      */
     private static String coercion(FieldIntent field) {
         String type = field.getType() == null ? "string"
