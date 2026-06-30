@@ -90,6 +90,11 @@ composition is opt-in.
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
   read-only automatically — you don't need this on them.)
+- `documentTitle: true` (on a field) / `documentStatus: true` (on a to-one relation) - **document layout
+  roles** for a document (header-items) entity. The `documentTitle` field shows in the form's title (e.g.
+  `SALES INVOICE 00001231` = the document name + the number) and the `documentStatus` relation shows as a
+  read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
+  field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals

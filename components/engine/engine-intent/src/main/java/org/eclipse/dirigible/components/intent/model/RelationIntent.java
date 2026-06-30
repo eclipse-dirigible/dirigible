@@ -29,6 +29,12 @@ public class RelationIntent {
      * the target.
      */
     private String model;
+    /**
+     * Document role: marks this to-one relation as the document's <b>status</b> (widget {@code
+     * DOCUMENT_STATUS}). In the document (header-items) layout it renders as a read-only coloured pill
+     * in the form's title bar instead of an editable dropdown - typically a workflow-managed status.
+     */
+    private boolean documentStatus;
 
     public String getName() {
         return name;
@@ -89,5 +95,13 @@ public class RelationIntent {
     /** Whether this relation targets an entity owned by another intent model. */
     public boolean isCrossModel() {
         return model != null && !model.isBlank();
+    }
+
+    public boolean isDocumentStatus() {
+        return documentStatus;
+    }
+
+    public void setDocumentStatus(boolean documentStatus) {
+        this.documentStatus = documentStatus;
     }
 }

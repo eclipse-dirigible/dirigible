@@ -522,7 +522,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("aggregate", "true");
         }
         p.put("auditType", "NONE");
-        p.put("widgetType", widgetForType(dataType));
+        // Document role: the number/title field renders in the document form's title, not as an input.
+        p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length == null ? "20" : length.toString());
         p.put("widgetIsMajor", "true");
@@ -598,7 +599,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipEntityName", relation.getTo());
         p.put("relationshipEntityPerspectiveName", targetPerspective);
         p.put("relationshipEntityPerspectiveLabel", "Entities");
-        p.put("widgetType", "DROPDOWN");
+        // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
+        // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
+        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
@@ -639,7 +642,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // own name - resolved from the owner model when present.
         p.put("relationshipEntityPerspectiveName", info.perspectiveName());
         p.put("relationshipEntityPerspectiveLabel", "Entities");
-        p.put("widgetType", "DROPDOWN");
+        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");

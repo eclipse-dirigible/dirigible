@@ -7,9 +7,24 @@
   totals footer appear; the Save / Create action sits at the very bottom.
 -->
 <div x-data="${name}DocumentPage" class="vbox size-full">
+## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
+## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).
+#set($docNumberProp = "")
+#set($docStatusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_NUMBER")#set($docNumberProp = $property.name)#end
+#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#end
+#end
 
   <div x-h-toolbar data-variant="transparent">
+#if($docNumberProp != "")
+    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? ('${documentLabel}'.toUpperCase() + ' ' + (form.${docNumberProp} || '')) : 'New ${documentLabel}'"></span>
+#else
     <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${documentLabel}' : 'New ${documentLabel}'"></span>
+#end
+#if($docStatusProp != "")
+    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="isEdit && statusText()" x-text="statusText()"></span>
+#end
     <div x-h-toolbar-spacer></div>
     <button type="button" x-h-button data-variant="transparent" @click="backToList()">Back to list</button>
   </div>
@@ -44,7 +59,7 @@
 ## Read-only / system fields (ProcessId, audit, uuid, any field marked read-only) render in the
 ## read-only details block below the header form, not as editable inputs; they stay in the model for
 ## round-trip. Aggregate totals go in the totals footer; calculated fields stay inline (read-only).
-#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "DOCUMENT_STATUS" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
 #set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))

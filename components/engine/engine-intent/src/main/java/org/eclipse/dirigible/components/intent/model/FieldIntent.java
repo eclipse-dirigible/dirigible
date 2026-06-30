@@ -62,12 +62,18 @@ public class FieldIntent {
      */
     private boolean aggregate;
     /**
-     * Whether the field is read-only in generated forms: shown in the read-only details block
-     * (Label: Value) above the action buttons rather than as an editable input. System fields
+     * Whether the field is read-only in generated forms: shown in the read-only details block (Label:
+     * Value) above the action buttons rather than as an editable input. System fields
      * ({@code ProcessId}, the audit columns, {@code uuid}) are flagged automatically by the EDM
      * generator; set this on any other field (e.g. a workflow-managed {@code status}) to do the same.
      */
     private boolean readOnly;
+    /**
+     * Document role: marks this field as the document's <b>number/title</b> (widget {@code
+     * DOCUMENT_NUMBER}). In the document (header-items) layout the value is shown in the form's title
+     * (e.g. {@code SALES INVOICE 00001231}) instead of as an editable field.
+     */
+    private boolean documentTitle;
 
     public String getName() {
         return name;
@@ -195,6 +201,14 @@ public class FieldIntent {
 
     public void setReadOnly(boolean readOnly) {
         this.readOnly = readOnly;
+    }
+
+    public boolean isDocumentTitle() {
+        return documentTitle;
+    }
+
+    public void setDocumentTitle(boolean documentTitle) {
+        this.documentTitle = documentTitle;
     }
 
     public String getDefaultValue() {
