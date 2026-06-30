@@ -213,6 +213,34 @@ document.addEventListener('alpine:init', () => {
       return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
     },
 
+    // Format a date/time value as an ISO string for read-only display. Jackson serializes java.time as
+    // arrays (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]) and Instant as an epoch number — NOT
+    // ISO strings — so a raw render shows "2026,6,30". Produce YYYY-MM-DD / YYYY-MM-DDTHH:mm / HH:mm by
+    // the control type; an already-ISO string is sliced to the same shape.
+    fmtDate(value, controlId) {
+      if (value === null || value === undefined || value === '') return '—';
+      const pad = (n) => String(n).padStart(2, '0');
+      let y, mo = 1, da = 1, h = 0, mi = 0;
+      if (Array.isArray(value)) {
+        y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
+      } else if (typeof value === 'number') {
+        const d = new Date(value < 1e11 ? value * 1000 : value); // epoch seconds or millis
+        if (isNaN(d.getTime())) return String(value);
+        y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
+      } else {
+        const s = String(value);
+        if (controlId === 'input-time') return s.slice(0, 5);
+        if (controlId === 'input-datetime-local') return s.slice(0, 16);
+        if (controlId === 'input-month') return s.slice(0, 7);
+        return s.slice(0, 10);
+      }
+      const date = y + '-' + pad(mo) + '-' + pad(da);
+      if (controlId === 'input-time') return pad(h) + ':' + pad(mi);
+      if (controlId === 'input-datetime-local') return date + 'T' + pad(h) + ':' + pad(mi);
+      if (controlId === 'input-month') return y + '-' + pad(mo);
+      return date;
+    },
+
     refreshIcons() {
       this.$nextTick(() => { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); });
     },

@@ -9,6 +9,8 @@
           <label x-h-label>$!el.label</label>
 #if($el.controlId == "input-number")
           <div x-h-text class="py-1" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></div>
+#elseif($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
+          <div x-h-text class="py-1" x-text="fmtDate(model.$el.model, '$el.controlId')"></div>
 #else
           <div x-h-text class="py-1" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></div>
 #end
