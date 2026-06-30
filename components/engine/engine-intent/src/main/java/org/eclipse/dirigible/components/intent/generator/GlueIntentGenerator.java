@@ -497,6 +497,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             for (WriteField field : writer.fields()) {
                 Map<String, Object> f = new LinkedHashMap<>();
                 f.put("property", field.property());
+                f.put("coercion", field.coercion());
                 fields.add(f);
             }
             Map<String, Object> entry = new LinkedHashMap<>();
