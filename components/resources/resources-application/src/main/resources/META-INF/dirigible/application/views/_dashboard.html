@@ -31,8 +31,9 @@
                  @click="openApp(item)" @keydown.enter.prevent="openApp(item)">
               <div x-h-card-header>
                 <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                  <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                   <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
-                  <template x-if="!isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'" class="size-4"></i></template>
+                  <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'" class="size-4"></i></template>
                   <span x-text="item.label"></span>
                 </div>
               </div>
