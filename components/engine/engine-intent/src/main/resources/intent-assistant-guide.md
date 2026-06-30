@@ -102,7 +102,9 @@ composition is opt-in.
   the expression on the same create/update slot. When you propose an action:
   1. The implementation is **hand-written by the developer under the project's `custom/` folder** (never
      `gen/`, which is wiped on regeneration). You author the intent + remind the developer to add the
-     class; you do not emit Java.
+     class; you do not emit Java. It **must be in a named package** (e.g. `package custom.<model>;`) - a
+     default-package class can't be imported or referenced from the generated repository, and the
+     illegal `import Foo;` fails the whole client-Java compile (taking down every project's endpoints).
   2. Referencing it by **simple name** (`calculatedActionOnCreate: SalesInvoiceNumberAction`) REQUIRES the
      owning entity to declare an `imports:` line that imports it (see below). Alternatively give the
      fully-qualified class name and omit the import.

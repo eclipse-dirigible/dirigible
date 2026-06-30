@@ -26,6 +26,16 @@ component shapes. Read this before changing anything under `engine-java`, `data-
 - Platform classpath for `javac` comes from `ClassPathIndex` — it extracts `BOOT-INF/lib/*.jar` once
   to disk; **never** introspect nested fat-jar entries in-process (closes pooled `NestedJarFile`
   handles → cascading `NoClassDefFoundError`).
+- **One `javac` batch = all-or-nothing.** Since every client `.java` across every project compiles in a
+  single `javac` task, ONE uncompilable file fails the **whole** batch — a syntax error in one project
+  silently unregisters EVERY project's `@Controller`/bean, so all `/services/java/...` endpoints 404
+  (not just the offending project's). When endpoints vanish wholesale, find the first `javac error at …`
+  in the `JavaSourceCompiler` log (or the IDE Problems view) — that one file is the cause.
+- **Publish copies, it does not unpublish.** Deleting a `.java` from the workspace does NOT remove it
+  from `/registry/public` on the next publish (publish is copy/overwrite, not sync-with-delete); the
+  stale file lingers in the registry and keeps failing the batch. Remove it from the registry too
+  (delete in the Projects/registry view, or the file under `/registry/public/...`), or it never goes
+  away.
 
 ## The bean container (`ComponentContainer`, `engine-java`)
 
@@ -128,6 +138,11 @@ browser-IDE developer sees what's wrong without reading the server log.
   return `void`/`String`/other → write-yourself / `text/plain` / JSON.
 - Spring Boot strips `ResponseStatusException.getReason()` from the JSON body — ITs assert status code
   only, not body text.
+- **Client code must be in a named package.** A type in the default (unnamed) package can't be imported
+  or referenced from packaged code, so a default-package class is unusable from generated
+  repositories/controllers — e.g. a calculated-field `org.eclipse.dirigible.sdk.db.CalculatedField`
+  action must live in `custom.<x>` (not the project root). `import Foo;` (no dots) is illegal Java and,
+  per the all-or-nothing batch above, fails every project's compile.
 
 ## Tests
 
