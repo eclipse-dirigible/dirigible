@@ -102,7 +102,7 @@ document.addEventListener('alpine:init', () => {
           processInstanceId: params.processInstanceId || null,
           complete(variables) {
             return harmoniaHttp.post('/services/inbox/tasks/' + params.taskId,
-              { action: 'COMPLETE', data: variables || self.model });
+              { action: 'COMPLETE', data: variables || self.taskVariables() });
           },
         },
         notify(message) { self.message = message; },
@@ -144,7 +144,7 @@ document.addEventListener('alpine:init', () => {
                 .catch((e) => console.warn('[form] could not load live entity', e));
             }
           })
-          .then(() => self.refreshIcons())
+          .then(() => { self.normalizeDates(); self.refreshIcons(); })
           .catch((e) => console.warn('[form] could not load task variables', e));
       }
       this.refreshIcons();
@@ -211,6 +211,64 @@ document.addEventListener('alpine:init', () => {
       const parts = n.toFixed(decimals).split('.');
       if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
       return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+    },
+
+    // Format a date/time value as an ISO string for read-only display. Jackson serializes java.time as
+    // arrays (LocalDate [y,m,d], LocalDateTime [y,m,d,h,mi,s,ns]) and Instant as an epoch number — NOT
+    // ISO strings — so a raw render shows "2026,6,30". Produce YYYY-MM-DD / YYYY-MM-DDTHH:mm / HH:mm by
+    // the control type; an already-ISO string is sliced to the same shape.
+    fmtDate(value, controlId) {
+      if (value === null || value === undefined || value === '') return '—';
+      const pad = (n) => String(n).padStart(2, '0');
+      let y, mo = 1, da = 1, h = 0, mi = 0;
+      if (Array.isArray(value)) {
+        y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
+      } else if (typeof value === 'number') {
+        const d = new Date(value < 1e11 ? value * 1000 : value); // epoch seconds or millis
+        if (isNaN(d.getTime())) return String(value);
+        y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
+      } else {
+        const s = String(value);
+        if (controlId === 'input-time') return s.slice(0, 5);
+        if (controlId === 'input-datetime-local') return s.slice(0, 16);
+        if (controlId === 'input-month') return s.slice(0, 7);
+        return s.slice(0, 10);
+      }
+      const date = y + '-' + pad(mo) + '-' + pad(da);
+      if (controlId === 'input-time') return pad(h) + ':' + pad(mi);
+      if (controlId === 'input-datetime-local') return date + 'T' + pad(h) + ':' + pad(mi);
+      if (controlId === 'input-month') return y + '-' + pad(mo);
+      return date;
+    },
+
+    // After loading the live entity, convert each date/time control's value (a Jackson array / epoch /
+    // ISO string) to the ISO shape its <input> needs — fmtDate produces exactly that. Without this an
+    // editable date input gets a raw array and breaks; a read-only one already routes through fmtDate.
+    normalizeDates() {
+      (window.__harmoniaDateControls || []).forEach((c) => {
+        const v = this.model[c.model];
+        if (v !== null && v !== undefined && v !== '') this.model[c.model] = this.fmtDate(v, c.controlId);
+      });
+    },
+
+    // The variables to send on task completion: the model with editable datetime-local fields turned
+    // into a full ISO instant (…Z) so the Writer's Instant.parse accepts them. Date (YYYY-MM-DD) and
+    // time (HH:mm) already parse as LocalDate / LocalTime; numbers and booleans pass through.
+    taskVariables() {
+      const out = Object.assign({}, this.model);
+      (window.__harmoniaDateControls || []).forEach((c) => {
+        if (!c.editable || c.controlId !== 'input-datetime-local') return;
+        const v = out[c.model];
+        if (v === null || v === undefined || v === '') return;
+        out[c.model] = this.toInstant(v);
+      });
+      return out;
+    },
+
+    // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).
+    toInstant(value) {
+      const d = new Date(String(value));
+      return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 
     refreshIcons() {

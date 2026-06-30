@@ -497,6 +497,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             for (WriteField field : writer.fields()) {
                 Map<String, Object> f = new LinkedHashMap<>();
                 f.put("property", field.property());
+                f.put("coercion", field.coercion());
                 fields.add(f);
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -529,6 +530,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("keyAccessor", setter.keyAccessor());
             entry.put("field", setter.field());
             entry.put("value", setter.value());
+            entry.put("relation", setter.relation() ? "true" : "false");
             setters.add(entry);
         }
         return setters;

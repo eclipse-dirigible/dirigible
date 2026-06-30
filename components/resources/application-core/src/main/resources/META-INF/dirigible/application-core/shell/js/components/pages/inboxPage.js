@@ -92,6 +92,8 @@ document.addEventListener('alpine:init', () => {
         this._timer = setInterval(() => {
           // Self-clean if the view was swapped out (no Alpine destroy hook for intervals).
           if (!this.$root || !this.$root.isConnected) return this.stopAuto();
+          // Server gone — processTasks already stopped its own poll; stop auto-refresh too (refresh to resume).
+          if (Alpine.store('processTasks').serverUnavailable) return this.stopAuto();
           this.refresh();
         }, 15000);
       } else {

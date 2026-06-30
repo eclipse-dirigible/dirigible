@@ -29,6 +29,22 @@ public class RelationIntent {
      * the target.
      */
     private String model;
+    /**
+     * Document role: marks this to-one relation as the document's <b>status</b> (widget {@code
+     * DOCUMENT_STATUS}). In the document (header-items) layout it renders as a read-only coloured pill
+     * in the form's title bar instead of an editable dropdown - typically a workflow-managed status.
+     */
+    private boolean documentStatus;
+    /**
+     * Optional initial value for this to-one relation's FK: the integer id of a seed row of the target
+     * (e.g. a status nomenclature). Emitted as the FK column's {@code dataDefaultValue}, so a new row
+     * gets this FK at the <b>database level</b> on insert when the column is left unset. Use this for
+     * an initial document status (e.g. {@code Status} defaults to the DRAFT seed) instead of a process
+     * step - a default is race-free, whereas a process step that sets it on start races the trigger's
+     * {@code ProcessId} write-back. Named {@code init} for readability (it is the relation's analogue
+     * of a field's {@code defaultValue}).
+     */
+    private String init;
 
     public String getName() {
         return name;
@@ -89,5 +105,21 @@ public class RelationIntent {
     /** Whether this relation targets an entity owned by another intent model. */
     public boolean isCrossModel() {
         return model != null && !model.isBlank();
+    }
+
+    public boolean isDocumentStatus() {
+        return documentStatus;
+    }
+
+    public void setDocumentStatus(boolean documentStatus) {
+        this.documentStatus = documentStatus;
+    }
+
+    public String getInit() {
+        return init;
+    }
+
+    public void setInit(String init) {
+        this.init = init;
     }
 }

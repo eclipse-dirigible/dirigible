@@ -30,6 +30,8 @@ document.addEventListener('alpine:init', () => {
     formOpen: false,
     formUrl: '',
     formTitle: '',
+    serverUnavailable: false,   // set once the backend is unreachable; stops the poll until a reload
+    _poll: null,
 
     init() {
       this.load();
@@ -42,10 +44,13 @@ document.addEventListener('alpine:init', () => {
       // on a periodic poll. So a task raised by a just-created record (e.g. a new Loan starting a
       // process) shows up on its own, not only after a full refresh or visiting the Inbox.
       document.addEventListener('pinecone:end', () => { if (this.loaded) this.load(); });
-      setInterval(() => this.load(), 30000);
+      this._poll = setInterval(() => this.load(), 30000);
     },
 
     async load() {
+      // Once the server has gone away we stop polling entirely; a browser refresh recreates this
+      // store (serverUnavailable back to false) and resumes.
+      if (this.serverUnavailable) return;
       try {
         const [mine, groups] = await Promise.all([
           App.services.api.get('/services/inbox/tasks?type=assignee&limit=100', { baseUrl: '' }),
@@ -71,6 +76,15 @@ document.addEventListener('alpine:init', () => {
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
       } catch (e) {
+        // Server unreachable (transport failure → httpStatus 0): stop the loop instead of erroring
+        // every 30s against a dead server. A 4xx/5xx means the server DID respond (an app error), so
+        // keep polling for those. The user refreshes the browser to resume once the server is back.
+        if (e && e.isApiError && e.httpStatus === 0) {
+          this.serverUnavailable = true;
+          if (this._poll) { clearInterval(this._poll); this._poll = null; }
+          console.warn('processTasks: server unavailable — stopped polling for tasks; refresh the page to resume');
+          return;
+        }
         this.byProcessId = {};
         this.tasks = [];
         console.error('processTasks: unable to load inbox tasks', e);

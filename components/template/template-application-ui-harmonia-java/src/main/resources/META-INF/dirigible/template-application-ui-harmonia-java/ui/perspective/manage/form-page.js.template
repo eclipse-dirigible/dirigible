@@ -105,7 +105,7 @@ document.addEventListener('alpine:init', () => {
       try {
         // TODO (Phase 2): paginate/search large option sets (the Angular module
         // lazy-loads + server-filters). Skeleton fetches the first page.
-        const rows${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         this.options${property.name} = (rows${property.name} || []).map(e => ({
           value: e.${property.widgetDropDownKey},
           text: e.${property.widgetDropDownValue}

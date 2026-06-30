@@ -37,7 +37,7 @@ document.addEventListener('alpine:init', () => {
       this.currentPage = 1;
       try {
         // TODO (Phase 2): use the controller's $limit/$offset + /count for server-side paging.
-        this.items = await App.services.api.get(this.apiPath);
+        this.items = await App.services.api.getAll(this.apiPath);
         this.state = this.items.length === 0 ? 'empty' : 'default';
         // Keep the current selection if it still exists, else clear it.
         if (this.selected) {
@@ -81,7 +81,7 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN")
       try {
-        const opt${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
         (opt${property.name} || []).forEach(e => { map${property.name}[e.${property.widgetDropDownKey}] = e.${property.widgetDropDownValue}; });
         all['${property.name}'] = map${property.name};

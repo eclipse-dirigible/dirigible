@@ -7,10 +7,32 @@
   totals footer appear; the Save / Create action sits at the very bottom.
 -->
 <div x-data="${name}DocumentPage" class="vbox size-full">
+## Document roles: the DOCUMENT_NUMBER field shows in the title (e.g. "SALES INVOICE 00001231"); the
+## DOCUMENT_STATUS FK shows as a read-only coloured pill (statusText/statusVariant resolve + colour it).
+#set($docNumberProp = "")
+#set($docStatusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_NUMBER")#set($docNumberProp = $property.name)#end
+#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#end
+#end
 
   <div x-h-toolbar data-variant="transparent">
+#if($docNumberProp != "")
+    <!-- Document title: the uppercased document label (normal weight) + the number in bold
+         (e.g. SALES INVOICE 00001231). The label is a plain span on purpose - the x-h-text.h3
+         directive injects font-semibold, which the label must NOT have; only the number is bold. -->
+    <div class="hbox items-baseline gap-2 shrink-0">
+      <span class="text-2xl font-normal tracking-tight" x-text="'${documentLabel}'.toUpperCase()"></span>
+      <span class="text-2xl font-bold tracking-tight" x-show="isEdit && form.${docNumberProp}" x-text="form.${docNumberProp}"></span>
+    </div>
+#else
     <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${documentLabel}' : 'New ${documentLabel}'"></span>
+#end
     <div x-h-toolbar-spacer></div>
+#if($docStatusProp != "")
+    <!-- Status pill is right-aligned: the spacer above pushes it (and the Back button) to the far end. -->
+    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="isEdit && statusText()" x-text="statusText()"></span>
+#end
     <button type="button" x-h-button data-variant="transparent" @click="backToList()">Back to list</button>
   </div>
 
@@ -41,10 +63,11 @@
 
       <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
 #foreach($property in $properties)
-## ProcessId is a system-managed back-reference (the process instance started for this document); it
-## stays in the form model so it round-trips on edit and is null on create, but is never rendered.
-#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.name != "ProcessId")
-#set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
+## Read-only / system fields (ProcessId, audit, uuid, any field marked read-only) render in the
+## read-only details block below the header form, not as editable inputs; they stay in the model for
+## round-trip. Aggregate totals go in the totals footer; calculated fields stay inline (read-only).
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "DOCUMENT_STATUS" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+#set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
@@ -108,6 +131,34 @@
 #end
 #end
       </div>
+
+      <!-- Read-only details: system / read-only fields (audit, ProcessId, uuid, any field marked
+           read-only) shown as Label: Value under the header form, only when populated. -->
+#set($hasReadOnly = false)
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
+#end
+#if($hasReadOnly)
+      <div x-h-card x-show="isEdit">
+        <div x-h-card-content>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
+#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
+            <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+              <span class="text-xs text-muted-foreground">${rolabel}</span>
+#if($property.widgetType == "DROPDOWN")
+              <span class="text-sm" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
+#else
+              <span class="text-sm" x-text="form.${property.name}"></span>
+#end
+            </div>
+#end
+#end
+          </div>
+        </div>
+      </div>
+#end
     </form>
 
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
@@ -123,7 +174,7 @@
         <thead x-h-table-header>
           <tr x-h-table-row>
             <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label"></th></template>
-            <th x-h-table-head scope="col" class="text-right">Actions</th>
+            <th x-h-table-head scope="col"></th>
           </tr>
         </thead>
         <tbody x-h-table-body>
@@ -132,11 +183,15 @@
               <template x-for="col in editColumns" :key="col.name">
                 <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellDisplay(col, row)"></td>
               </template>
-              <td x-h-table-cell class="text-right">
-                <div class="hbox gap-1 justify-end items-center">
-                  <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="openRowDialog(row)">Edit</button>
-                  <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDeleteRow(row)">Delete</button>
-                </div>
+              <td x-h-table-cell data-row-actions @click.stop>
+                <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
+                  <i role="img" data-lucide="ellipsis"></i>
+                </button>
+                <ul x-h-menu data-align="bottom-end">
+                  <li x-h-menu-item @click="openRowDialog(row)">Edit</li>
+                  <li x-h-menu-separator></li>
+                  <li x-h-menu-item data-variant="negative" @click="askDeleteRow(row)">Delete</li>
+                </ul>
               </td>
             </tr>
           </template>
@@ -154,7 +209,7 @@
 #if($property.aggregate == "true")
 #if($property.widgetLabel)#set($alabel = $property.widgetLabel)#else#set($alabel = $property.name)#end
         <div class="hbox justify-between gap-8">
-          <span class="text-secondary">${alabel}</span>
+          <span class="text-secondary-foreground">${alabel}</span>
           <span class="font-semibold tabular-nums" x-text="totalValue('${property.name}', '${property.formatPattern}')"></span>
         </div>
 #end

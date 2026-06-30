@@ -150,7 +150,9 @@ export function process(model, parameters) {
                 }
             })
 
-            if (p.widgetType == "DROPDOWN") {
+            // DOCUMENT_STATUS is a dropdown-backed FK rendered as a status pill: it still needs the
+            // lookup controller URL built here so the UI can resolve the FK id to the status name.
+            if (p.widgetType == "DROPDOWN" || p.widgetType == "DOCUMENT_STATUS") {
                 e.hasDropdowns = true;
 
                 let targetProject = parameters.projectName;

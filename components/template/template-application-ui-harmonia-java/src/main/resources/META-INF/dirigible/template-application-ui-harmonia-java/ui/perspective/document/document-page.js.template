@@ -124,7 +124,7 @@ document.addEventListener('alpine:init', () => {
     },
 
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && $property.aggregate != "true")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
     options${property.name}: [],
 #end
 #end
@@ -196,7 +196,7 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && $property.aggregate != "true")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
       if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
 #end
 #end
@@ -205,9 +205,9 @@ document.addEventListener('alpine:init', () => {
 
     async loadOptions() {
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && $property.aggregate != "true")
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
       try {
-        const rows${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -331,7 +331,7 @@ document.addEventListener('alpine:init', () => {
       try {
         await this.loadItemOptions();
         const q = '?' + encodeURIComponent(this.itemsDef.masterEntityId) + '=' + encodeURIComponent(this.id);
-        const rows = await App.services.api.get(this.itemsDef.apiPath + q);
+        const rows = await App.services.api.getAll(this.itemsDef.apiPath + q);
         this.items = rows || [];
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
       } catch (e) {
@@ -345,7 +345,7 @@ document.addEventListener('alpine:init', () => {
       for (const col of this.editColumns) {
         if (col.widget !== 'DROPDOWN' || !col.lookup || this.itemOptions[col.name]) continue;
         try {
-          const rows = await App.services.api.get(col.lookup.url, { baseUrl: '' });
+          const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           this.itemOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
         } catch (e) {
           console.error('[${name}DocumentPage] failed to load item options for ' + col.name, e);
@@ -381,6 +381,29 @@ document.addEventListener('alpine:init', () => {
       if (col.widget === 'CHECKBOX') return v ? 'Yes' : 'No';
       return v;
     },
+#set($docStatusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#end
+#end
+#if($docStatusProp != "")
+
+    // Document status pill: resolve the FK id to the status name, then map the name to a badge colour.
+    statusText() {
+      const v = this.form.${docStatusProp};
+      if (v === null || v === undefined || v === '') return '';
+      const opt = (this.options${docStatusProp} || []).find(o => String(o.value) === String(v));
+      return opt ? opt.text : String(v);
+    },
+    statusVariant(text) {
+      const t = String(text || '').toLowerCase();
+      if (/draft/.test(t)) return 'outline';
+      if (/(cancel|reject|declin|void|fail|overdue)/.test(t)) return 'negative';
+      if (/(pending|await|hold|review)/.test(t)) return 'warning';
+      if (/(approv|accept|activ|complet|paid|done)/.test(t)) return 'positive';
+      if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
+      return 'default';
+    },
+#end
 
     displayDate(v) {
       const p = (n) => String(n).padStart(2, '0');

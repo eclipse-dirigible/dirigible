@@ -459,6 +459,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataName", column);
         p.put("dataType", dataType);
         p.put("dataNullable", field.isRequired() || field.isPrimaryKey() ? "false" : "true");
+        // Read-only in generated forms (rendered in the read-only details block, not an editable input):
+        // an author-marked field, or a uuid (a system/business key, not user input).
+        if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType())) {
+            p.put("isReadOnlyProperty", "true");
+        }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         } else if (field.isRequired()) {
@@ -517,7 +522,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("aggregate", "true");
         }
         p.put("auditType", "NONE");
-        p.put("widgetType", widgetForType(dataType));
+        // Document role: the number/title field renders in the document form's title, not as an input.
+        p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length == null ? "20" : length.toString());
         p.put("widgetIsMajor", "true");
@@ -539,6 +545,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("dataNullable", "true");
         p.put("dataLength", "100");
         p.put("auditType", "NONE");
+        // System-managed back-reference: read-only in forms (shown in the details block, not editable).
+        p.put("isReadOnlyProperty", "true");
         p.put("widgetType", "TEXTBOX");
         p.put("widgetSize", "");
         p.put("widgetLength", "100");
@@ -579,6 +587,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 p.put("dataLength", length.toString());
             }
         }
+        // init: the FK's database-level default (a target seed id) - a new row gets this FK on insert
+        // when the column is left unset (e.g. an initial document status, race-free vs a process step).
+        if (relation.getInit() != null && !relation.getInit()
+                                                   .isBlank()) {
+            p.put("dataDefaultValue", relation.getInit());
+        }
         p.put("auditType", "NONE");
         // Relationship metadata the generation reads (Dirigible .model convention): composition vs
         // association + cardinality (composition 1_n; association n_1 for manyToOne, 1_1 for oneToOne);
@@ -591,7 +605,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipEntityName", relation.getTo());
         p.put("relationshipEntityPerspectiveName", targetPerspective);
         p.put("relationshipEntityPerspectiveLabel", "Entities");
-        p.put("widgetType", "DROPDOWN");
+        // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
+        // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
+        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
@@ -622,6 +638,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (notNull) {
             p.put("isRequiredProperty", "true");
         }
+        // init: FK database-level default (a target seed id), as in relationProperty.
+        if (relation.getInit() != null && !relation.getInit()
+                                                   .isBlank()) {
+            p.put("dataDefaultValue", relation.getInit());
+        }
         p.put("auditType", "NONE");
         p.put("relationshipType", "ASSOCIATION");
         p.put("relationshipCardinality", oneToOne ? "1_1" : "n_1");
@@ -632,7 +653,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // own name - resolved from the owner model when present.
         p.put("relationshipEntityPerspectiveName", info.perspectiveName());
         p.put("relationshipEntityPerspectiveLabel", "Entities");
-        p.put("widgetType", "DROPDOWN");
+        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", "");
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
@@ -734,10 +755,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("dataLength", Integer.toString(length));
         }
         p.put("auditType", auditType);
+        // Audit values are system-managed, not user input: read-only in forms (shown in the details block).
+        p.put("isReadOnlyProperty", "true");
         p.put("widgetType", widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length > 0 ? Integer.toString(length) : "20");
-        // Audit values are system-managed, not user input.
         p.put("widgetIsMajor", "false");
         return p;
     }

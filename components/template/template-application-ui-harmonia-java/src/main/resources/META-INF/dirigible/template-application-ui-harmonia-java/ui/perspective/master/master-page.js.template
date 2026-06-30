@@ -59,7 +59,7 @@ document.addEventListener('alpine:init', () => {
       this.state = 'loading';
       this.error = null;
       try {
-        this.masters = await App.services.api.get(this.apiPath);
+        this.masters = await App.services.api.getAll(this.apiPath);
         this.state = this.masters.length === 0 ? 'empty' : 'default';
         // Keep the current selection if it still exists, else clear.
         if (this.selected) {
@@ -108,7 +108,7 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN")
       try {
-        const opt${property.name} = await App.services.api.get('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
         (opt${property.name} || []).forEach(e => { map${property.name}[e.${property.widgetDropDownKey}] = e.${property.widgetDropDownValue}; });
         all['${property.name}'] = map${property.name};

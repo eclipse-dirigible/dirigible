@@ -17,7 +17,9 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +33,20 @@ import com.google.gson.Gson;
  * .schema}), and its key / label fields (drive the dropdown).
  *
  * <p>
- * When the owner model has already been generated (the recommended leaf-first order), every fact is
- * read from its {@code .model} - exact and order-independent. When it has not (the owner is
- * generated later), the resolution falls back to the deterministic Dirigible naming convention and
- * assumes a PRIMARY (own-perspective) target; the dropdown then resolves only once the owner is
- * generated and published, which the generator logs.
+ * Resolution is <b>order-independent</b> and reads a <b>real</b> model from two equally valid
+ * sources: the owner's WORKSPACE {@code .model} (a locally-developed dependency generated this
+ * cycle), else its PUBLISHED {@code .model} in the registry. The registry is not a mere fallback -
+ * a prebuilt, prepackaged npm-module dependency ({@code uoms}, {@code currencies}, ...) ships
+ * <b>only</b> in the registry and is never in the workspace, so the registry read is a first-class
+ * source. This makes the outcome immune to the alphabetical "generate all" order (e.g.
+ * {@code sales-invoices} generated before its {@code uoms} leaf).
+ *
+ * <p>
+ * If neither source has the model, resolution <b>fails loudly</b> with an
+ * {@link IntentValidationException} - it does NOT guess a perspective from the naming convention,
+ * because a wrong guess for a setting target (Settings vs the entity name) silently produced a dead
+ * dropdown / 404 controller URL. Generate the dependency, or install/publish its prebuilt module,
+ * first.
  */
 public final class CrossModelSupport {
 
@@ -64,21 +75,53 @@ public final class CrossModelSupport {
     public static TargetInfo resolve(IntentGenerationContext context, UsesIntent uses, String targetEntity) {
         String alias = uses.getModel();
         String project = uses.resolveProject();
-        TargetInfo fallback = convention(alias, targetEntity);
+        // Naming-convention DEFAULTS for the within-model sub-fields (table/key column) a found model may
+        // omit - NOT a substitute for a missing model (we fail loudly for that, below).
+        TargetInfo defaults = convention(alias, targetEntity);
         if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
-            return fallback;
-        }
-        String modelPath = siblingModelPath(context.getProjectRoot(), project, alias);
-        if (modelPath == null) {
-            return fallback;
+            return defaults; // no repository to read from (e.g. a unit test) - cannot resolve against a real model
         }
         IRepository repository = context.getRepository();
+        // Order-INDEPENDENT resolution against a REAL model, from two equally valid sources:
+        // 1. the sibling's WORKSPACE .model - a locally-developed dependency generated this cycle; and
+        // 2. its PUBLISHED .model in the registry - which is ALSO where a prebuilt, prepackaged npm-module
+        // dependency (uoms, currencies, ...) lives: such a dependency is NEVER in the workspace, only
+        // in the registry. So the registry read is a first-class source, not merely a fallback.
+        // Workspace wins when present (local dev overrides the published copy); otherwise the registry.
+        // This makes the result independent of project generation order (the alphabetical "generate all"
+        // trap where `sales-invoices` is generated before its `uoms` leaf).
+        String workspacePath = siblingModelPath(context.getProjectRoot(), project, alias);
+        TargetInfo fromWorkspace = readTarget(repository, workspacePath, targetEntity, defaults);
+        if (fromWorkspace != null) {
+            return fromWorkspace;
+        }
+        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        TargetInfo fromRegistry = readTarget(repository, registryPath, targetEntity, defaults);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+        // Fail LOUDLY. We never guess a perspective from the naming convention: guessing wrong for a
+        // setting target (Settings vs the entity name) silently produces a dead dropdown / 404 controller
+        // URL - the bug this replaced. A cross-model dependency must resolve against a real model.
+        throw new IntentValidationException(List.of("Cross-model relation target [" + targetEntity + "] (model alias [" + alias
+                + "], project [" + project + "]) cannot be resolved: no model found in the workspace [" + workspacePath
+                + "] or the registry [" + registryPath + "]. Generate the [" + alias
+                + "] model first, or install/publish its prebuilt module so its .model is in the registry."));
+    }
+
+    /**
+     * Read the cross-model target entity's facts from a {@code .model} resource, or {@code null} when
+     * the resource is absent, unparseable, or does not contain the target entity (so the caller can try
+     * the next source).
+     */
+    @SuppressWarnings("unchecked")
+    private static TargetInfo readTarget(IRepository repository, String modelPath, String targetEntity, TargetInfo fallback) {
+        if (modelPath == null) {
+            return null;
+        }
         IResource resource = repository.getResource(modelPath);
         if (!resource.exists()) {
-            LOGGER.info(
-                    "Cross-model target [{}] of model [{}] not yet generated at [{}] - using convention fallbacks; regenerate after [{}] is generated",
-                    targetEntity, alias, modelPath, alias);
-            return fallback;
+            return null;
         }
         try {
             String content = new String(resource.getContent(), StandardCharsets.UTF_8);
@@ -86,7 +129,7 @@ public final class CrossModelSupport {
             Map<String, Object> body = (Map<String, Object>) root.get("model");
             List<Map<String, Object>> entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
             if (entities == null) {
-                return fallback;
+                return null;
             }
             for (Map<String, Object> entity : entities) {
                 if (!targetEntity.equals(entity.get("name"))) {
@@ -111,13 +154,10 @@ public final class CrossModelSupport {
                 }
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType);
             }
-            LOGGER.warn("Cross-model target entity [{}] not found in owner model [{}] - using convention fallbacks", targetEntity,
-                    modelPath);
         } catch (RuntimeException e) {
-            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}] - using convention fallbacks", modelPath, targetEntity,
-                    e);
+            LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
         }
-        return fallback;
+        return null;
     }
 
     /**

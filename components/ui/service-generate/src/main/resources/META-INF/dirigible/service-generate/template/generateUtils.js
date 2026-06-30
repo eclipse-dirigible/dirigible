@@ -385,10 +385,10 @@ export function generateFiles(model, parameters, templateSources) {
                     }
                     break;
                 case "setters":
-                    // Field setters (intent layer): one JavaDelegate per serviceTask that declares a
-                    // setField, setting a field of the process's trigger entity to a literal value. Like
-                    // resolvers, not entity-shaped, so it gets its own loop; the Java package segment of
-                    // the entity is its lowercased perspective.
+                    // Field setters (intent layer): one JavaDelegate per step that declares a setField
+                    // (set a string/text field to a literal) or a setRelationField (set a to-one relation's
+                    // FK to a seed id; relation=="true"). Like resolvers, not entity-shaped, so it gets its
+                    // own loop; the Java package segment of the entity is its lowercased perspective.
                     if (model.setters) {
                         for (let s = 0; s < model.setters.length; s++) {
                             const setterParameters = {
@@ -401,7 +401,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 keyProperty: model.setters[s].keyProperty,
                                 keyAccessor: model.setters[s].keyAccessor,
                                 field: model.setters[s].field,
-                                value: model.setters[s].value
+                                value: model.setters[s].value,
+                                relation: model.setters[s].relation
                             };
                             const cleanSetterParameters = cleanData(setterParameters);
                             generatedFiles.push({

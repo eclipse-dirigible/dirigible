@@ -830,6 +830,54 @@ class IntentEngineIT extends IntegrationTest {
                 "the calculated field should be assigned by calling the action via Beans");
     }
 
+    @Test
+    void editable_task_form_fields_are_coerced_to_their_java_type_on_write_back() {
+        // A BPM task form opts fields back to editable; on completion the generated Writer persists them,
+        // coercing each from its process variable to the entity's Java type
+        // (date/timestamp/number/boolean),
+        // not a raw toString. A single-action form needs no decision, so the rule doesn't apply here.
+        writeIntent("""
+                name: orders
+                entities:
+                  - name: SalesOrder
+                    fields:
+                      - { name: id,        type: integer,  primaryKey: true, generated: true }
+                      - { name: shippedOn, type: date }
+                      - { name: shippedAt, type: timestamp }
+                      - { name: quantity,  type: integer }
+                      - { name: approved,  type: boolean }
+                processes:
+                  - name: Approve
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: review, kind: userTask, args: { assignee: approver, form: ReviewOrder } }
+                      - { name: done,   kind: end }
+                forms:
+                  - name: ReviewOrder
+                    forEntity: SalesOrder
+                    fields: [shippedOn, shippedAt, quantity, approved]
+                    editable: [shippedOn, shippedAt, quantity, approved]
+                    actions: [approve]
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "orders.glue");
+
+        String writer = contentOf("gen/events/ApproveReviewWrite.java");
+        assertTrue(writer.contains("class ApproveReviewWrite implements JavaDelegate"),
+                "a user task with editable fields should generate a Writer JavaDelegate");
+        assertTrue(writer.contains("entity.ShippedOn = java.time.LocalDate.parse(ShippedOnValue.toString().trim());"),
+                "a date editable should be coerced with LocalDate.parse");
+        assertTrue(writer.contains("entity.ShippedAt = java.time.Instant.parse(ShippedAtValue.toString().trim());"),
+                "a timestamp editable should be coerced with Instant.parse");
+        assertTrue(writer.contains("((Number) QuantityValue).intValue()"), "an integer editable should be coerced to int");
+        assertTrue(writer.contains("Boolean.valueOf(ApprovedValue.toString().trim())"),
+                "a boolean editable should be coerced with Boolean.valueOf");
+        assertTrue(writer.contains("repository.updateWithoutEvent(entity)"), "the writer must persist without re-firing an update event");
+    }
+
     private void writeIntent(String yaml) {
         String path = PROJECT_PATH + "/app.intent";
         IResource existing = repository.getResource(path);
@@ -898,6 +946,8 @@ class IntentEngineIT extends IntegrationTest {
         // OrderApproval has trigger { onCreate: Order }, so Order gains a ProcessId back-reference.
         assertTrue(edmXml.contains("name=\"ProcessId\"") && edmXml.contains("dataName=\"ORDER_PROCESS_ID\""),
                 "an entity a process starts on create should get a ProcessId back-reference property");
+        assertTrue(edmXml.contains("isReadOnlyProperty=\"true\""),
+                "system fields (ProcessId, audit columns) should be flagged read-only so forms render them in the read-only details block");
 
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
         // empty. Assert the diagram block, an entity vertex, and a relation edge are present.

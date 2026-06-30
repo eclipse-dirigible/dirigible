@@ -44,6 +44,14 @@ Treat it as the contract: anything you propose must parse and validate against i
 - **Relations:** a `composition: true` on a `manyToOne` / `oneToOne` makes the owning entity a
   *managed detail* of its parent (NOT NULL FK, edited under the parent). `required: true` *alone* is
   just a NOT NULL association (its own screen). Declare the inverse `oneToMany` on the master entity.
+- **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
+  a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
+  invoice starts as DRAFT / Bank transfer / E-mail:
+  `- { name: Status, kind: manyToOne, to: SalesInvoiceStatus, documentStatus: true, init: 1 }`.
+  **Prefer `init` over a process step for an initial status.** A `serviceTask` that sets the status on
+  process start races the trigger's `ProcessId` write-back (a full-row update with the pre-step value)
+  and gets clobbered; a DB default is race-free. Use `setRelationField` only for *transitions* (after a
+  user task), where there is no trigger race.
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
 - **Recipients** (`to` on notifications and schedule notify): a literal email address, a direct field
@@ -86,6 +94,15 @@ composition is opt-in.
 `defaultValue`, a field may declare:
 
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
+  block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
+  `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
+  read-only automatically — you don't need this on them.)
+- `documentTitle: true` (on a field) / `documentStatus: true` (on a to-one relation) - **document layout
+  roles** for a document (header-items) entity. The `documentTitle` field shows in the form's title (e.g.
+  `SALES INVOICE 00001231` = the document name + the number) and the `documentStatus` relation shows as a
+  read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
+  field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
@@ -223,6 +240,40 @@ A user-task form with **more than one** completing action must be followed by a 
 (enforced at parse time); a **single**-action task (e.g. `issue`) flows on linearly - typically a
 `setField` status change, then the next user task - with no decision.
 
+**Setting a status modelled as a relation: `setRelationField`.** When the status is a plain
+`string`/`text` field, use `setField` as above. When the status is a **to-one relation** (a FK to a
+settings/nomenclature entity like `Status`), use `setRelationField: <Relation>, value: <id>` to set the
+FK to a seed row's integer id. `value` must be the integer id of a seed row of the related entity (e.g.
+the `Status` whose name is `APPROVED`); the relation must be a `manyToOne`/`oneToOne` of the process's
+trigger entity. `setRelationField` works on a `serviceTask` (like `setField`) **and** directly on a
+`userTask` (the FK is set the moment the task completes).
+
+**Where to put the status set - the pattern to follow (and to recommend to users):**
+
+- **A task FOLLOWED BY a decision (Approve/Reject) → set the status on a `serviceTask` on the chosen
+  branch, NOT on the task itself.** If you set the status on the Approve user task and then branch on
+  the result, a Reject still runs the on-task setter first, so the record flips
+  `DRAFT → APPROVED → CANCELLED` - an **artificial APPROVED transition** that never should have happened.
+  Put the set on a serviceTask after the decision so each outcome sets exactly its own status:
+
+  ```yaml
+  steps:
+    - { name: approve,  kind: userTask,    args: { assignee: approver, form: ApproveInvoice } }   # no set here
+    - { name: decide,   kind: decision,    args: { if: "action == 'approve'", then: activate, else: cancel } }
+    - { name: activate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: issue } }   # APPROVED only on approve
+    - { name: cancel,   kind: serviceTask, args: { setRelationField: Status, value: 5, next: end } }      # CANCELLED only on reject
+  ```
+
+- **A SINGLE-ACTION task (no following decision) → set the status right on the task.** There is no
+  branch and therefore no transient state to worry about, so the convenience form is correct:
+
+  ```yaml
+    - { name: issue, kind: userTask, args: { assignee: issuer, form: IssueInvoice, setRelationField: Status, value: 3, next: send } }
+  ```
+
+  The same rule applies to `setField`: branch-then-set on a serviceTask when a decision follows; set
+  on the task only when nothing branches on its outcome.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process
@@ -247,9 +298,9 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. **v1 supports `string`/`text` editable fields only** (date/number/boolean are not
-  yet supported - do not put them in `editable`). An editable field must also appear in `fields`; a
-  `relation.field` can never be editable.
+  entity on completion. **Any field type may be editable** - the generated Writer coerces the value to
+  the field's Java type (date, timestamp, number, boolean, string). An editable field must also appear in
+  `fields`; a `relation.field` can never be editable.
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse

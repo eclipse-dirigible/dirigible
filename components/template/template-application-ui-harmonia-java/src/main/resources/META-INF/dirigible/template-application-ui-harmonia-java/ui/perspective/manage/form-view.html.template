@@ -5,10 +5,17 @@
 -->
 <div x-data="${name}FormPage" class="vbox size-full">
 
-  <!-- Hidden when this form is hosted inside an FK "Add" iframe dialog (?embedded) - the dialog's own
-       header titles it; the form-page exposes isEmbedded. -->
-  <div x-h-toolbar data-variant="transparent" x-show="!isEmbedded">
-    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${name}' : 'New ${name}'"></span>
+  <!-- Hidden ONLY inside the FK "Add" iframe dialog (?dialog=1), which provides its own header. The
+       shell-hosted app also passes ?embedded but is NOT a dialog, so the caption must still show there
+       (matching the list/master/document views, which have no such guard) - gate on isDialog, not
+       isEmbedded. -->
+  <div x-h-toolbar data-variant="transparent" x-show="!isDialog">
+    <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
+         text-2xl normal weight - matches the document header look. This caption is intentionally only
+         on the create/edit form, NOT on the list/master browse views. -->
+    <span class="text-2xl font-normal tracking-tight shrink-0" x-text="'${entityLabel}'.toUpperCase()"></span>
+    <div x-h-toolbar-spacer></div>
+    <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')">Back to list</button>
   </div>
 
   <!-- Load failure (edit) -->
@@ -48,10 +55,11 @@
          (textarea/checkbox) always span the full width. Mirrors codbex-athena-app's create forms. -->
     <div class="grid grid-cols-1 sm:grid-cols-12 gap-4">
 #foreach($property in $properties)
-## ProcessId is a system-managed back-reference (the process instance started for this record); it
-## stays in the form model so it round-trips on edit and is null on create, but is never rendered.
-#if(!$property.dataAutoIncrement && $property.name != "ProcessId")
-#set($readonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE")))
+## Read-only / system fields (ProcessId, audit columns, uuid, any field marked read-only) are not
+## editable inputs here - they render in the read-only details block below, above the buttons. They
+## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+#set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
 #if($property.widgetLabel)#set($label = $property.widgetLabel)#else#set($label = $property.name)#end
@@ -151,6 +159,35 @@
 #end
 #end
     </div>
+
+    <!-- Read-only details: system / read-only fields (audit, ProcessId, uuid, any field marked
+         read-only) shown as Label: Value (like the detail card), above the actions. Only on edit, and
+         each row only when its value is populated, so the Create form stays clean. -->
+#set($hasReadOnly = false)
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
+#end
+#if($hasReadOnly)
+    <div x-h-card x-show="isEdit">
+      <div x-h-card-content>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
+#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
+          <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+            <span class="text-xs text-muted-foreground">${rolabel}</span>
+#if($property.widgetType == "DROPDOWN")
+            <span class="text-sm" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
+#else
+            <span class="text-sm" x-text="form.${property.name}"></span>
+#end
+          </div>
+#end
+#end
+        </div>
+      </div>
+    </div>
+#end
 
     <div x-h-toolbar.footer>
       <div x-h-toolbar-spacer></div>

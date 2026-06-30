@@ -9,8 +9,8 @@
     - Alpine + Harmonia are webjars (org.webjars.npm:alpinejs / codbex__harmonia, pulled by
       components/resources/application-core), served version-less via webjars-locator at /webjars/.
     - Lucide is a webjar too (org.webjars.npm:lucide via application-core).
-    - Pinecone Router has no published webjar, so it is vendored under application-core/vendor
-      and served at /services/web/application-core/vendor/.
+    - Pinecone Router is a webjar too (org.webjars.npm:pinecone-router via application-core),
+      served version-less at /webjars/pinecone-router/dist/router.min.js.
   Script load order is load-bearing: plugins -> app code (defer, document order) -> Alpine -> Harmonia -> Lucide.
 -->
 <html lang="en">
@@ -362,7 +362,7 @@
     </script>
 
     <!-- 1. Plugins (vendored, no CDN) -->
-    <script src="/services/web/application-core/vendor/pinecone-router.min.js"></script>
+    <script src="/webjars/pinecone-router/dist/router.min.js"></script>
 
     <!-- 2. App code (defer keeps document order). The model-independent shell runtime is loaded ONCE
          from the shared location (/services/web/application-core/shell) - the same runtime the Harmonia
@@ -445,6 +445,22 @@
         </div>
       </div>
     </div>
+
+    <!-- React to a theme switch from the parent window: when this shell is embedded in an iframe (the
+         application shell, or an FK "Add new" dialog) and the parent flips the shared colour-scheme key,
+         the `storage` event fires here; re-apply it (Harmonia reads the key only at load), so every
+         routed view (list / manage / master-detail / document) follows the parent's light/dark switch.
+         Track the last applied scheme rather than gating on Harmonia.getColorScheme(), which already
+         holds the new value (gating there would always skip and nothing would re-apply). -->
+    <script>
+      var __harmoniaScheme = null;
+      window.addEventListener('storage', (e) => {
+        if (e.key === 'codbex.harmonia.colorMode' && window.Harmonia) {
+          const scheme = e.newValue || 'light';
+          if (scheme !== __harmoniaScheme) { __harmoniaScheme = scheme; Harmonia.setColorScheme(scheme); }
+        }
+      });
+    </script>
   </body>
 
 </html>

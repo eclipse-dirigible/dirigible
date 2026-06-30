@@ -689,12 +689,52 @@ public final class IntentParser {
                     }
                 }
             }
+            String setRelationField = stepArg(step, "setRelationField");
+            if (setRelationField != null && !setRelationField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind()) && !"userTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setRelationField but is not a serviceTask or userTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setRelationField but the process has no trigger entity to set it on");
+                } else {
+                    RelationIntent relation = toOneRelationByName(trigger, setRelationField);
+                    if (relation == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] is not a manyToOne/oneToOne relation of [" + triggerEntity + "]");
+                    }
+                    String value = stepArg(step, "value");
+                    if (value == null || value.isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] must declare a value (the related record id)");
+                    } else if (!value.matches("-?\\d+")) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
+                                + "] value [" + value + "] must be an integer record id");
+                    }
+                }
+            }
             String next = stepArg(step, "next");
             if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
                 issues.add(
                         "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
             }
         }
+    }
+
+    /**
+     * The to-one ({@code manyToOne}/{@code oneToOne}) relation of the entity with the given name, or
+     * null.
+     */
+    private static RelationIntent toOneRelationByName(EntityIntent entity, String name) {
+        if (entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (name.equals(relation.getName()) && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**
@@ -776,10 +816,10 @@ public final class IntentParser {
 
     /**
      * An {@code editable} field (the per-field opt-out of a BPM task form's read-only default) must be
-     * a plain, displayed field of the bound entity. v1 write-back supports {@code string}/{@code text}
-     * fields only - the reviewer's edit flows straight from the process variable onto the entity with
-     * no type coercion; {@code date}/{@code number}/{@code boolean} editable fields are a documented
-     * follow-up. A {@code relation.field} can never be editable (editing it would not write back).
+     * a plain, displayed field of the bound entity. Any field type is allowed: the generated Writer
+     * coerces the form's process variable to the field's Java type ({@code date}/{@code timestamp}/
+     * {@code number}/{@code boolean}/{@code string}). A {@code relation.field} can never be editable
+     * (editing it would not write back).
      */
     private static void validateFormEditable(FormIntent form, EntityIntent bound, List<String> issues) {
         Set<String> displayed = new HashSet<>(form.getFields());
@@ -804,13 +844,9 @@ public final class IntentParser {
                 issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field of [" + form.getForEntity() + "]");
                 continue;
             }
-            String type = bf.getType() == null ? "string"
-                    : bf.getType()
-                        .toLowerCase(Locale.ROOT);
-            if (!"string".equals(type) && !"text".equals(type) && !"uuid".equals(type)) {
-                issues.add("form [" + form.getName() + "] editable [" + field + "] is [" + type
-                        + "]; v1 write-back supports string/text only (date/number/boolean editable fields are not yet supported)");
-            }
+            // Any plain entity field type is editable: the generated Writer coerces the form's process
+            // variable to the field's Java type (LocalDate / Instant / Integer / Long / BigDecimal /
+            // Double / Boolean / String). Only a relation.field (handled above) can never be written back.
         }
     }
 
