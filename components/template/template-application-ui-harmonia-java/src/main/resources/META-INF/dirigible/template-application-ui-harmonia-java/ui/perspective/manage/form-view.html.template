@@ -11,8 +11,11 @@
        isEmbedded. -->
   <div x-h-toolbar data-variant="transparent" x-show="!isDialog">
     <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
-         text-2xl normal weight - matches the document header look across the app. -->
+         text-2xl normal weight - matches the document header look. This caption is intentionally only
+         on the create/edit form, NOT on the list/master browse views. -->
     <span class="text-2xl font-normal tracking-tight shrink-0" x-text="'${entityLabel}'.toUpperCase()"></span>
+    <div x-h-toolbar-spacer></div>
+    <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')">Back to list</button>
   </div>
 
   <!-- Load failure (edit) -->
