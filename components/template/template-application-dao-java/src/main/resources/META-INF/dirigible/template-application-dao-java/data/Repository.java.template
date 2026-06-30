@@ -1,18 +1,71 @@
 package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 
+#foreach ($property in $properties)
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedActionOnCreate))
+        #set($haveCalculatedPropertyOnCreate = "true")
+    #end
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate))
+        #set($haveCalculatedPropertyOnUpdate = "true")
+    #end
+    #if($property.isCalculatedProperty && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate))
+        #set($haveCalculatedPropertyExpression = "true")
+    #end
+    #if($property.isCalculatedProperty && ($property.calculatedActionOnCreate || $property.calculatedActionOnUpdate))
+        #set($haveCalculatedPropertyAction = "true")
+    #end
+#end
+## Decimal places of a calculated property: its own scale, else 2 for floating-point types, else 0.
+#macro(calcScale $property)#if($property.dataScale)${property.dataScale}#elseif($property.dataTypeJavaClass == "Double" || $property.dataTypeJavaClass == "Float")2#{else}0#end#end
+## Assign a calculated property. Numeric properties evaluate the neutral arithmetic expression via the
+## shared Calc evaluator (the same expression the generated UI previews with); the BigDecimal result is
+## narrowed to the field type. Non-numeric calculated properties keep their expression verbatim.
+#macro(calcAssign $property $expr)
+#if($property.dataTypeJavaClass == "java.math.BigDecimal")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property));
+#elseif($property.dataTypeJavaClass == "Double")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).doubleValue();
+#elseif($property.dataTypeJavaClass == "Float")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).floatValue();
+#elseif($property.dataTypeJavaClass == "Long")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).longValue();
+#elseif($property.dataTypeJavaClass == "Integer")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).intValue();
+#elseif($property.dataTypeJavaClass == "Short")
+        entity.${property.name} = Calc.eval("${expr}", entity, #calcScale($property)).shortValue();
+#else
+        entity.${property.name} = ${expr};
+#end
+#end
+## Assign a calculated property via a hand-written action: resolve the @Component implementing
+## CalculatedField and call it with the entity. The action's return type matches the field type, so
+## no cast is needed. Unlike the neutral expression, an action runs only on the server.
+#macro(actionAssign $property $action)
+        entity.${property.name} = Beans.get(${action}.class).calculate(entity);
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-
-#foreach ($property in $properties)
-    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
-        #set($haveCalculatedPropertyOnCreate = "true")
-    #end
-    #if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
-        #set($haveCalculatedPropertyOnUpdate = "true")
-    #end
+#if($haveCalculatedPropertyExpression)
+import org.eclipse.dirigible.sdk.utils.Calc;
 #end
+#if($haveCalculatedPropertyAction)
+import org.eclipse.dirigible.sdk.component.Beans;
+#end
+#if($documentMaster)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import java.math.BigDecimal;
+import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Entity;
+import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Repository;
+#end
+#if($documentItem)
+import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
+#end
+#if($importsCode && $importsCode != "")
+// custom imports
+${importsCode}
+#end
+
 @Repository
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
@@ -24,14 +77,23 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity save(${name}Entity entity) {
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
-#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
-        entity.${property.name} = ${property.calculatedPropertyExpressionCreate};
+#if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
+#actionAssign($property $property.calculatedActionOnCreate)
+#elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionCreate)
+#calcAssign($property $property.calculatedPropertyExpressionCreate)
 #end
 #end
+#end
+#if($documentMaster)
+        recalculate(entity);
 #end
         ${name}Entity saved = super.save(entity);
         // Publish the create event so listeners (e.g. intent process triggers / reactions under gen/events) can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}", Json.stringify(saved));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(saved.${documentItem.fkProperty});
+#end
         return saved;
     }
 
@@ -39,15 +101,34 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity update(${name}Entity entity) {
 #if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
-#if($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
-        entity.${property.name} = ${property.calculatedPropertyExpressionUpdate};
+#if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
+#actionAssign($property $property.calculatedActionOnUpdate)
+#elseif($property.isCalculatedProperty && $property.calculatedPropertyExpressionUpdate)
+#calcAssign($property $property.calculatedPropertyExpressionUpdate)
 #end
 #end
+#end
+#if($documentMaster)
+        recalculate(entity);
 #end
         ${name}Entity updated = super.update(entity);
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});
+#end
         return updated;
+    }
+
+    /**
+     * Persists changes WITHOUT publishing the "-updated" event. Intended for system-managed
+     * back-references — e.g. an intent process trigger writing ProcessId back onto the entity that
+     * started it. Going through {@link #update} would re-publish "${name}-updated" and spuriously
+     * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
+     */
+    public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+        return super.update(entity);
     }
 
     @Override
@@ -55,6 +136,10 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         super.delete(entity);
         // Publish the delete event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+#if($documentItem)
+        // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+        new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
+#end
     }
 
     @Override
@@ -63,6 +148,47 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         super.deleteById(id);
         if (entity != null) {
             Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-deleted", Json.stringify(entity));
+#if($documentItem)
+            // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
+            new ${documentItem.parentEntity}Repository().recalculate(entity.${documentItem.fkProperty});
+#end
         }
     }
+#if($documentMaster)
+
+    /**
+     * Document totals: each aggregate field is the sum of the line items' same-named field. Recomputed
+     * synchronously (in the same request) so the document stays consistent - NOT via async roll-up
+     * listeners. Called on the master's own save/update, and by ${documentMaster.childEntity}Repository
+     * after every line change.
+     */
+    private void recalculate(${name}Entity entity) {
+#foreach($f in $documentMaster.fields)
+        BigDecimal sum${f.field} = BigDecimal.ZERO;
+#end
+        if (entity.${documentMaster.masterPk} != null) {
+            for (${documentMaster.childEntity}Entity row : new ${documentMaster.childEntity}Repository().findAll(
+                    Criteria.create().eq("${documentMaster.fkProperty}", entity.${documentMaster.masterPk}))) {
+#foreach($f in $documentMaster.fields)
+                if (row.${f.field} != null) {
+                    sum${f.field} = sum${f.field}.add(row.${f.field});
+                }
+#end
+            }
+        }
+#foreach($f in $documentMaster.fields)
+        entity.${f.field} = sum${f.field};
+#end
+    }
+
+    /** Reload the master, recompute its document totals from the current line items, and persist. */
+    public ${name}Entity recalculate(Object id) {
+        ${name}Entity entity = findById(id);
+        if (entity == null) {
+            return null;
+        }
+        recalculate(entity);
+        return super.update(entity);
+    }
+#end
 }

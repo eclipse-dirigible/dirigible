@@ -1,0 +1,163 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ *
+ * All rights reserved. This program and the accompanying materials
+ * are made available under the terms of the Eclipse Public License v2.0
+ * which accompanies this distribution, and is available at
+ * http://www.eclipse.org/legal/epl-v20.html
+ *
+ * SPDX-FileCopyrightText: Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ */
+/**
+ * Adopted from codbex-athena-app (js/components/pages/baseFormPage.js).
+ *
+ * baseFormPage — mixin for form page components. Extends basePage — spread this
+ * instead of basePage in form pages.
+ *
+ * Provides: errors, saveFailureMessage, loadFailureMessage, unmatchedCauses,
+ *           fieldMap, clearError, scrollToSummary, navigateBack, refreshIcons,
+ *           applyApiError, mapCauses, applyLoadError.
+ *
+ * NOTE: Do NOT put ES6 getters in this object — the spread operator invokes
+ * them at spread-time and copies the result as a plain value, breaking Alpine
+ * reactivity. Define getters (e.g. errorCount) directly on the page component.
+ */
+function baseFormPage() {
+  return {
+    ...basePage(),
+
+    errors: {},
+    saveFailureMessage: '',
+    loadFailureMessage: '',
+    // 422 causes that could not be matched to a form field. Surfaced in the
+    // summary so they are never silently dropped.
+    unmatchedCauses: [],
+    // Per-page override: maps a backend errorCauses[].field name to this page's
+    // `errors` key when they differ.
+    fieldMap: {},
+
+    clearError(field) {
+      if (this.errors[field]) this.errors[field] = '';
+      if (this.errors.__summary) this.errors.__summary = '';
+      this.unmatchedCauses = [];
+    },
+
+    /**
+     * Central catch handler for save()/submit. Selects UX by errorType:
+     *  - ValidationError (422) -> map causes onto field errors + summary
+     *  - everything else       -> generic save-failure banner (localized)
+     * Tolerates non-ApiError values.
+     */
+    applyApiError(err, { fallbackMessage, formState } = {}) {
+      if (err && err.isApiError && err.errorType === 'ValidationError') {
+        this.mapCauses(err.errorCauses);
+        this.state = 'validation-error';
+        this.scrollToSummary();
+        return;
+      }
+      this.saveFailureMessage = App.services.apiErrors.messageFor(err, fallbackMessage);
+      this.state = formState || 'save-failure';
+      this.scrollToSummary();
+    },
+
+    /** Build this.errors (+ summary) from 422 errorCauses, honoring fieldMap. */
+    mapCauses(causes) {
+      const apiErrors = App.services.apiErrors;
+      const errors = {};
+      const unmatched = [];
+      for (const cause of (causes || [])) {
+        let key = null;
+        if (cause.field && Object.prototype.hasOwnProperty.call(this.fieldMap, cause.field)) {
+          key = this.fieldMap[cause.field];                 // deliberate mapping
+        } else if (cause.field && Object.prototype.hasOwnProperty.call(this.form, cause.field)) {
+          key = cause.field;                                // direct 1:1 form field
+        }
+        if (key) {
+          errors[key] = apiErrors.fieldMessageFor(cause);
+        } else {
+          unmatched.push(cause);
+        }
+      }
+      this.unmatchedCauses = unmatched;
+      if (unmatched.length) {
+        errors.__summary = `${unmatched.length} additional ${unmatched.length === 1 ? 'error' : 'errors'} occurred.`;
+      }
+      this.errors = errors;
+    },
+
+    /** Catch handler for edit-page init() load failures -> load-failure page. */
+    applyLoadError(err, { fallbackMessage } = {}) {
+      this.loadFailureMessage = App.services.apiErrors.messageFor(err, fallbackMessage);
+      this.state = 'load-failure';
+    },
+
+    scrollToSummary() {
+      this.$nextTick(() => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            const container = document.getElementById('app');
+            if (container) container.scrollTop = 0;
+          });
+        });
+      });
+    },
+
+    // Raw query string from the current URL. With hash routing the query lives in the
+    // hash (e.g. #/Detail/create?Customer=3&returnTo=/Customer), not location.search.
+    queryString() {
+      if (window.location.hash.includes('?')) return window.location.hash.split('?')[1];
+      if (window.location.search) return window.location.search.slice(1);
+      return '';
+    },
+
+    // A single query param value, or null.
+    queryParam(name) {
+      try {
+        return new URLSearchParams(this.queryString()).get(name);
+      } catch (_) {
+        return null;
+      }
+    },
+
+    // Read a validated `returnTo` from the current URL (must be an in-app path).
+    returnToParam() {
+      const ret = this.queryParam('returnTo');
+      return ret && ret.startsWith('/') ? ret : '';
+    },
+
+    navigateBack(defaultRoute) {
+      window.PineconeRouter.navigate(this.returnToParam() || defaultRoute);
+    },
+
+    // Hosted without its own chrome (the shell-hosted app OR an FK "Add" dialog both pass ?embedded).
+    // Controls whether this form renders its own toolbar - NOT whether save navigates.
+    get isEmbedded() {
+      return this.queryParam('embedded') === '1' || this.queryParam('embedded') === 'true';
+    },
+
+    // Hosted specifically inside an FK combobox's "Add" iframe dialog (opened with ?dialog=1). Only in
+    // this case does a create report the new record to the opener instead of navigating to the list.
+    get isDialog() {
+      return this.queryParam('dialog') === '1' || this.queryParam('dialog') === 'true';
+    },
+
+    // Tell the hosting window a record was created so the opener can refresh + select it.
+    emitCreated(id) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'harmonia.entity.created', id: id }, '*');
+        }
+      } catch (e) { /* cross-origin / standalone: nothing to notify */ }
+    },
+
+    // Ask the hosting dialog to close (embedded Cancel) instead of navigating this iframe to a list.
+    emitClose() {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'harmonia.dialog.cancel' }, '*');
+        }
+      } catch (e) { /* standalone: nothing to close */ }
+    },
+  };
+}

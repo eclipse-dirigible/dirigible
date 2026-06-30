@@ -26,6 +26,7 @@ import org.eclipse.dirigible.sdk.http.PathParam;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.QueryParam;
 import org.eclipse.dirigible.sdk.security.Roles;
+import org.eclipse.dirigible.engine.java.component.TestComponentContainers;
 import org.eclipse.dirigible.engine.java.handler.JavaHandler;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
 import org.junit.jupiter.api.Test;
@@ -38,7 +39,9 @@ class ControllerClassConsumerBuildTest {
 
     private final ControllerRouter router = new ControllerRouter();
 
-    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty());
+    private final ControllerClassConsumer consumer = new ControllerClassConsumer(router, Optional.empty(),
+            TestComponentContainers.of(SampleController.class, HybridConfusion.class, DuplicateRoutes.class, EmptyController.class,
+                    NoArgFreeController.class, ContextOnlyController.class, TwoBodiesController.class));
 
     @Test
     void accepts_only_controller_annotated_classes() {

@@ -140,6 +140,10 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-ui-view-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-view-properties</artifactId>
         </dependency>
         <dependency>

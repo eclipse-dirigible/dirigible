@@ -107,7 +107,7 @@ public class IntentEndpoint {
         String yaml = new String(intentFile.getContent(), StandardCharsets.UTF_8);
         try {
             IntentGenerationService.GenerationResult result =
-                    generationService.generate(yaml, projectObject.getPath(), project, baseName(path));
+                    generationService.generate(yaml, projectObject.getPath(), project, workspace, baseName(path));
             return ResponseEntity.ok(Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed",
                     result.scrubbed(), "codeGenerations", result.codeGenerations()));
         } catch (IntentValidationException e) {

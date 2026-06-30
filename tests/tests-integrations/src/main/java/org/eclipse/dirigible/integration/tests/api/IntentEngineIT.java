@@ -104,6 +104,9 @@ class IntentEngineIT extends IntegrationTest {
                   - name: cfoReview
                     kind: userTask
                     args: { assignee: cfo, form: ApproveOrder }
+                  - name: cfoDecision
+                    kind: decision
+                    args: { if: "action == 'approve'", then: notifyCustomer, else: done }
                   - name: notifyCustomer
                     kind: serviceTask
                   - name: done
@@ -113,7 +116,9 @@ class IntentEngineIT extends IntegrationTest {
               - name: ApproveOrder
                 forEntity: Order
                 description: Approve or reject an order
-                fields: [orderDate, total]
+                # customer.creditLimit is also used by the bigOrder decision (so its resolver moves
+                # earlier, before this form); customer.name is referenced only here (form-only resolver).
+                fields: [orderDate, total, customer.creditLimit, customer.name]
                 actions: [approve, reject]
 
             reports:
@@ -192,7 +197,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("entities", hasSize(4))
                                                  .body("entities.name", hasItems("Country", "Customer", "Order", "OrderItem"))
                                                  .body("processes", hasSize(1))
-                                                 .body("processes[0].steps", hasSize(5))
+                                                 .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
                                                  .body("reports", hasSize(2))
                                                  .body("permissions", hasSize(2))
@@ -327,12 +332,12 @@ class IntentEngineIT extends IntegrationTest {
                                                          hasItems("orders.model", "orders.glue", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.templateId",
-                                                         equalTo("template-application-angular-java/template/template.js"))
+                                                         equalTo("template-application-ui-harmonia-java/template/template.js"))
                                                  .body("codeGenerations.find { it.path == 'orders.model' }.parameters.dataSource",
                                                          equalTo("DefaultDB"))
-                                                 // The report is generated server-side as Java (DAO + REST controller).
-                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId",
-                                                         equalTo("template-application-ui-angular-java/template/template-report-file.js")));
+                                                 // The report is generated server-side as Java (DAO + REST controller) with a Harmonia UI.
+                                                 .body("codeGenerations.find { it.path == 'OrdersByCustomer.report' }.templateId", equalTo(
+                                                         "template-application-ui-harmonia-java/template/template-report-file.js")));
 
         assertEdmAndModel();
         assertBpmn();
@@ -359,8 +364,9 @@ class IntentEngineIT extends IntegrationTest {
         String handler = contentOf("gen/events/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
                 "the glue template should generate a handler class named after the process");
-        assertTrue(handler.contains("@Listener(name = \"intent-test-Order-Order\""),
-                "the handler should bind to the entity's event topic <project>-<perspective>-<entity>");
+        assertTrue(handler.contains("implements MessageHandler"), "the trigger should be a self-describing MessageHandler");
+        assertTrue(handler.contains("return \"intent-test-Order-Order\""),
+                "the handler should bind to the entity's event topic <project>-<perspective>-<entity> via destination()");
         assertTrue(handler.contains("Process.start(\"OrderApproval\""), "the handler should start the process");
         assertTrue(handler.contains("import gen.orders.data.order.OrderRepository"),
                 "the handler should import the generated typed repository from its real (lowercased) Java package");
@@ -376,18 +382,32 @@ class IntentEngineIT extends IntegrationTest {
                 "the resolver should be a Flowable JavaDelegate");
         assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
                 "the resolver should load the target entity from its real (lowercased) Java package");
-        assertTrue(resolver.contains("execution.getVariable(\"Customer\")"),
-                "the resolver should read the FK id from the process variables");
+        // Clear-D: the process context holds only the trigger entity's id, so the resolver loads the
+        // OWNER (Order) by that id and reads the FK off it, rather than reading the FK from a start-time
+        // process variable.
+        assertTrue(resolver.contains("execution.getVariable(\"Id\")"),
+                "the resolver should read the trigger entity's id from the process variables (id-only context)");
+        assertTrue(resolver.contains("owner.Customer"), "the resolver should read the FK off the owner entity it loaded by id");
         assertTrue(resolver.contains("execution.setVariable(\"customer_creditLimit\""), "the resolver should set the resolved variable");
         assertTrue(resolver.contains("entity.CreditLimit"), "the resolver should read the target field");
 
-        // The notification (onUpdate: Order) is an @Listener that sends mail when an Order is updated -
+        // The form-only relation.field (customer.name on the ApproveOrder form) produces its own resolver
+        // even though no decision references it - the user-task form is a resolver trigger in its own
+        // right.
+        String formResolver = contentOf("gen/events/ResolveCustomerName.java");
+        assertTrue(formResolver.contains("class ResolveCustomerName implements JavaDelegate"),
+                "a relation.field referenced only by a user-task form should still generate a resolver");
+        assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
+                "the form resolver should publish the related field as the customer_name variable the form control binds to");
+
+        // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
+        // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
         String notification = contentOf("gen/events/OrderUpdatedNotification.java");
         assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
                 "the notification should be a message-handling listener (PascalCased class name)");
-        assertTrue(notification.contains("@Listener(name = \"intent-test-Order-Order-updated\""),
-                "an onUpdate notification should bind to the entity's -updated topic");
+        assertTrue(notification.contains("@Component") && notification.contains("return \"intent-test-Order-Order-updated\""),
+                "an onUpdate notification (self-describing @Component MessageHandler) should bind the entity's -updated topic via destination()");
         assertTrue(notification.contains("Mail.send("), "the notification should send via the SDK Mail API");
         assertTrue(notification.contains("String to = \"ops@example.com\""), "a literal recipient should be emitted as a literal");
         assertTrue(notification.contains("import gen.orders.data.order.OrderEntity"),
@@ -406,10 +426,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(notification.contains("\"Order \" + entity.Id + \" for \" + (customer == null ? null : customer.Name)"),
                 "the subject should interpolate the relation.field against the loaded related entity");
 
-        // The schedule is a @Scheduled JobHandler that queries via a typed Criteria and notifies per row.
+        // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
+        // Criteria and notifies per row.
         String job = contentOf("gen/events/StaleOrdersJob.java");
-        assertTrue(job.contains("@Scheduled(expression = \"0 0 9 * * ?\")") && job.contains("class StaleOrdersJob implements JobHandler"),
-                "the schedule should generate a @Scheduled JobHandler");
+        assertTrue(
+                job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
+                        && job.contains("return \"0 0 9 * * ?\""),
+                "the schedule should generate a self-describing @Component JobHandler whose cron() returns the expression");
         assertTrue(job.contains("new OrderRepository().findAll(Criteria.create().lt(\"OrderDate\", java.time.LocalDate.now()))"),
                 "the job should query the entity with a typed Criteria built from the where clause");
         assertTrue(job.contains("for (OrderEntity entity : rows)"), "the job should iterate the matching rows");
@@ -419,12 +442,13 @@ class IntentEngineIT extends IntegrationTest {
                 "the per-row notify should load the one-hop related entity");
         assertTrue(job.contains("Mail.send("), "the job should notify per row via the SDK Mail API");
 
-        // The integration is an @Listener that forwards the entity JSON to an external endpoint.
+        // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
+        // an external endpoint.
         String integration = contentOf("gen/events/PushOrderToWarehouseIntegration.java");
         assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
                 "the integration should be a message-handling listener");
-        assertTrue(integration.contains("@Listener(name = \"intent-test-Order-Order\""),
-                "an onCreate integration should bind to the entity's base (create) topic");
+        assertTrue(integration.contains("@Component") && integration.contains("return \"intent-test-Order-Order\""),
+                "an onCreate integration (self-describing @Component MessageHandler) should bind the entity's base topic via destination()");
         assertTrue(integration.contains("String url = Configurations.get(\"WAREHOUSE_URL\")"),
                 "an @config: URL should resolve through the configuration at run time");
         assertTrue(
@@ -442,19 +466,97 @@ class IntentEngineIT extends IntegrationTest {
                         && webhook.contains("new OrderRepository().save(entity)"),
                 "the webhook should deserialize the payload and save it through the repository");
 
-        // Rollups: two @Listeners (child create/delete) that recompute the parent counter via Criteria.
+        // Rollups: two self-describing @Component MessageHandlers (child create/delete) that recompute the
+        // parent counter via Criteria.
         // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
         // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
         // from a single app.intent.
         String rollupCreate = contentOf("gen/events/CustomerOrderCountRollupOnCreate.java");
         assertTrue(
-                rollupCreate.contains("@Listener(name = \"intent-test-Order-Order\"")
+                rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
                         && rollupCreate.contains(
                                 "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
                         && rollupCreate.contains("parent.OrderCount = count"),
                 "the rollup create-listener should recompute the parent count via Criteria");
         assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
+    }
+
+    @Test
+    void set_field_glue_sets_entity_status_on_approve_reject_branches() {
+        // A MemberApproval process whose approve/reject decision routes to two setField service tasks:
+        // approve -> status ACTIVE, reject -> status REJECTED. `next: done` on the activate branch makes
+        // both branches converge on `done` instead of activate falling through into reject. The form
+        // completes the task with the chosen action as a process variable the decision tests.
+        String yaml = """
+                name: members
+                entities:
+                  - name: Member
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string,  required: true, length: 100 }
+                      - { name: status, type: string,  length: 20, defaultValue: "PENDING" }
+                processes:
+                  - name: MemberApproval
+                    trigger: { onCreate: Member }
+                    steps:
+                      - { name: librarianReview, kind: userTask, args: { assignee: librarian, form: ApproveMember } }
+                      - name: approved
+                        kind: decision
+                        args: { if: "action == 'approve'", then: activate, else: reject }
+                      - { name: activate, kind: serviceTask, args: { setField: status, value: ACTIVE,   next: done } }
+                      - { name: reject,   kind: serviceTask, args: { setField: status, value: REJECTED } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ApproveMember, forEntity: Member, fields: [name, status], actions: [approve, reject] }
+                permissions:
+                  - { role: Librarian, can: [Member:approve] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: each setField serviceTask binds the generated JavaDelegate (NOT a custom/ stub), the
+        // decision routes to both branches, and `next: done` makes activate skip past reject to the end.
+        String bpmn = contentOf("MemberApproval.bpmn");
+        assertTrue(bpmn.contains("<serviceTask id=\"activate\"") && bpmn.contains("gen.events.MemberApprovalActivate"),
+                "the activate setField step should bind the generated JavaDelegate handler");
+        assertTrue(bpmn.contains("<serviceTask id=\"reject\"") && bpmn.contains("gen.events.MemberApprovalReject"),
+                "the reject setField step should bind its own generated handler");
+        assertFalse(bpmn.contains("custom.Activate") || bpmn.contains("custom.Reject"),
+                "a setField service task must not scaffold a custom/ stub");
+        assertTrue(bpmn.contains("id=\"flow_approved_then\" sourceRef=\"approved\" targetRef=\"activate\""),
+                "approve branch should route to the activate setter");
+        assertTrue(bpmn.contains("id=\"flow_approved_default\" sourceRef=\"approved\" targetRef=\"reject\""),
+                "reject branch should be the gateway default");
+        assertTrue(bpmn.contains("sourceRef=\"activate\" targetRef=\"end\"") && bpmn.contains("sourceRef=\"reject\" targetRef=\"end\""),
+                "both branches should converge on the end via `next` (activate must not fall through into reject)");
+        assertTrue(bpmn.contains("${action == 'approve'}"), "the decision should test the form action variable");
+
+        // Glue: a `setters` collection, one entry per setField step, carrying the field + literal value.
+        String glue = contentOf("members.glue");
+        assertTrue(glue.contains("\"setters\""), "the glue should carry a setters collection");
+        assertTrue(
+                glue.contains("\"className\": \"MemberApprovalActivate\"") && glue.contains("\"field\": \"Status\"")
+                        && glue.contains("\"value\": \"ACTIVE\"") && glue.contains("\"keyProperty\": \"Id\""),
+                "the activate setter should set the PascalCase field to its literal, loading by the PK property");
+        assertTrue(glue.contains("\"className\": \"MemberApprovalReject\"") && glue.contains("\"value\": \"REJECTED\""),
+                "the reject setter should carry its own value");
+
+        // Run the glue-code template: each setter becomes a JavaDelegate that loads the entity by id,
+        // assigns the field, and persists WITHOUT re-publishing an update event.
+        generateFromModel("template-application-events-java/template/template.js", "members.glue");
+        String activate = contentOf("gen/events/MemberApprovalActivate.java");
+        assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
+                "the setter should be generated as a Flowable JavaDelegate");
+        assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
+                "the setter should import the entity from its real Java package and load it by the PK process variable");
+        assertTrue(activate.contains("entity.Status = \"ACTIVE\"") && activate.contains("repository.updateWithoutEvent(entity)"),
+                "the setter should assign the field and persist without re-firing an update event");
+        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("entity.Status = \"REJECTED\""),
+                "the reject setter should assign the rejected status");
     }
 
     @Test
@@ -481,8 +583,8 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
 
         String trigger = contentOf("gen/events/DeliverTrigger.java");
-        assertTrue(trigger.contains("@Listener(name = \"intent-test-Shipment-Shipment-updated\""),
-                "an onUpdate trigger should bind to the entity's -updated topic");
+        assertTrue(trigger.contains("return \"intent-test-Shipment-Shipment-updated\""),
+                "an onUpdate trigger should bind to the entity's -updated topic via destination()");
         assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
                 "the trigger should gate Process.start on the translated when-guard");
         assertTrue(trigger.contains("Process.start(\"Deliver\""), "the trigger should start the process when the guard holds");
@@ -518,7 +620,8 @@ class IntentEngineIT extends IntegrationTest {
         String onCreate = contentOf("gen/events/MemberLoanCountRollupOnCreate.java");
         assertTrue(onCreate.contains("class MemberLoanCountRollupOnCreate implements MessageHandler"),
                 "the create-side rollup listener should be generated");
-        assertTrue(onCreate.contains("@Listener(name = \"intent-test-Loan-Loan\""), "the create listener binds the child's base topic");
+        assertTrue(onCreate.contains("@Component") && onCreate.contains("return \"intent-test-Loan-Loan\""),
+                "the create listener (self-describing @Component) binds the child's base topic via destination()");
         assertTrue(onCreate.contains("MemberEntity parent = parents.findById(entity.Member)"),
                 "it should load the parent via the child's FK");
         assertTrue(
@@ -527,8 +630,8 @@ class IntentEngineIT extends IntegrationTest {
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
         String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
-        assertTrue(onDelete.contains("@Listener(name = \"intent-test-Loan-Loan-deleted\""),
-                "the delete listener binds the child's -deleted topic");
+        assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
+                "the delete listener binds the child's -deleted topic via destination()");
     }
 
     @Test
@@ -561,8 +664,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.OrderNumber);"),
                 "the BPM business key must be the flagged field (OrderNumber), not the primary key");
-        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey, message)"),
-                "the started process should receive the resolved business key");
+        assertTrue(trigger.contains("Process.start(\"Approve\", businessKey,"),
+                "the started process should receive the resolved business key as the second argument");
     }
 
     @Test
@@ -598,7 +701,8 @@ class IntentEngineIT extends IntegrationTest {
                 "a timestamp strategy should mint a yyyyMMddHHmmss value into the flagged field when blank");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.Number);"),
                 "the business key must be the minted number field");
-        assertTrue(trigger.contains("repository.update(entity)"), "the minted number must be persisted via the existing update");
+        assertTrue(trigger.contains("repository.updateWithoutEvent(entity)"),
+                "the minted number and ProcessId must be persisted via the silent update (no spurious -updated event)");
     }
 
     @Test
@@ -685,6 +789,45 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(422)
                                                  .body("issues", hasItem("entity [A] field [x] has unknown type [nosuchtype]")));
+    }
+
+    @Test
+    void calculated_field_action_emits_an_imports_backed_callout_in_the_repository() {
+        // A field can be computed server-side by a hand-written CalculatedField action instead of a
+        // neutral expression; the owning entity declares the Java import so the generated repository
+        // references the action by simple name (the implementation is hand-added under custom/).
+        writeIntent("""
+                name: invoicing
+                entities:
+                  - name: Invoice
+                    imports: |
+                      import custom.invoicing.InvoiceNumberAction;
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string,  length: 100, calculatedActionOnCreate: InvoiceNumberAction }
+                      - { name: total,  type: decimal, precision: 18, scale: 2 }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // The .model carries the action attribute on the property and the Base64-encoded imports on the
+        // entity (the same importsCode the EDM editor's Imports tab produces).
+        String model = contentOf("invoicing.model");
+        assertTrue(model.contains("\"calculatedActionOnCreate\": \"InvoiceNumberAction\""),
+                "the model property should carry the calculated-action class");
+        assertTrue(model.contains("\"importsCode\""), "the model entity should carry the (Base64) custom imports");
+
+        // The Java DAO template injects the imports and emits the action call-out
+        // (Beans.get(...).calculate).
+        generateFromModel("template-application-dao-java/template/template.js", "invoicing.model");
+        String repository = contentOf("gen/invoicing/data/invoice/InvoiceRepository.java");
+        assertTrue(repository.contains("import custom.invoicing.InvoiceNumberAction;"),
+                "the entity Imports should be injected into the generated repository");
+        assertTrue(repository.contains("import org.eclipse.dirigible.sdk.component.Beans;"),
+                "Beans should be imported for the action call-out");
+        assertTrue(repository.contains("entity.Number = Beans.get(InvoiceNumberAction.class).calculate(entity);"),
+                "the calculated field should be assigned by calling the action via Beans");
     }
 
     private void writeIntent(String yaml) {
@@ -788,9 +931,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(
                 glue.contains("\"triggers\"") && glue.contains("\"process\": \"OrderApproval\"") && glue.contains("\"entity\": \"Order\""),
                 "glue should carry the trigger for the OrderApproval process on Order");
-        // Resolvers: one per relation.field referenced in a decision.
+        // Resolvers: one per relation.field referenced in a decision OR a user-task form.
         assertTrue(glue.contains("\"resolvers\"") && glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""),
-                "glue should carry the customer.creditLimit decision resolver");
+                "glue should carry the customer.creditLimit resolver (used by both the form and the decision)");
+        assertTrue(glue.contains("\"handler\": \"ResolveCustomerName\"") && glue.contains("\"variable\": \"customer_name\""),
+                "glue should carry the form-only customer.name resolver");
         assertTrue(
                 glue.contains("\"fkProperty\": \"Customer\"") && glue.contains("\"targetEntity\": \"Customer\"")
                         && glue.contains("\"targetField\": \"CreditLimit\"") && glue.contains("\"variable\": \"customer_creditLimit\""),
@@ -824,7 +969,7 @@ class IntentEngineIT extends IntegrationTest {
     private void assertSettings() {
         assertTrue(resource("orders.settings").exists(), "the .settings file should be scaffolded");
         String settings = contentOf("orders.settings");
-        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-angular-java"),
+        assertTrue(settings.contains("\"generation\"") && settings.contains("template-application-ui-harmonia-java"),
                 "settings should carry the model generation recipe");
         assertTrue(settings.contains("\"glue\"") && settings.contains("template-application-events-java"),
                 "settings should carry the glue generation recipe");
@@ -903,20 +1048,24 @@ class IntentEngineIT extends IntegrationTest {
                 "the conditioned flow should target the `then` step");
         assertTrue(body.contains("id=\"flow_bigOrder_default\" sourceRef=\"bigOrder\" targetRef=\"notifyCustomer\""),
                 "the gateway default flow should target the `else` step so small orders skip CFO review");
-        // The decision references customer.creditLimit, so a JavaTask resolver is inserted before the
-        // gateway and the condition is rewritten to test the resolved variable.
+        // customer.creditLimit is referenced by BOTH the managerReview user-task form and the bigOrder
+        // decision; customer.name only by the form. Each relation.field gets a JavaTask resolver inserted
+        // before the EARLIEST step that needs it - here the managerReview form - so the form fields are
+        // populated and the later decision still tests the (process-global, already-resolved) variable.
         // The resolver task id is the lower-camel form of the handler (unified with the authored step
         // ids), with a humanized name; the delegate still resolves the PascalCase handler class.
         assertTrue(
                 body.contains("<serviceTask id=\"resolveCustomerCreditLimit\" name=\"Resolve Customer Credit Limit\"")
                         && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
-                "a JavaTask resolver service task should precede the decision with a unified id and humanized name");
-        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit"),
-                "the resolver task should point at the generated PascalCase handler FQN");
+                "a JavaTask resolver service task should be generated for the shared relation.field");
+        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit") && body.contains("gen.events.ResolveCustomerName"),
+                "both the shared and the form-only relation.field should produce a resolver task pointing at its handler FQN");
         assertTrue(
-                body.contains("sourceRef=\"managerReview\" targetRef=\"resolveCustomerCreditLimit\"")
-                        && body.contains("sourceRef=\"resolveCustomerCreditLimit\" targetRef=\"bigOrder\""),
-                "the resolver should sit on the linear flow right before the decision");
+                body.contains("sourceRef=\"start\" targetRef=\"resolveCustomerCreditLimit\"")
+                        && body.contains("sourceRef=\"resolveCustomerName\" targetRef=\"managerReview\""),
+                "the resolvers should sit at the head of the flow, right before the user-task form that needs them");
+        assertTrue(body.contains("sourceRef=\"managerReview\" targetRef=\"bigOrder\""),
+                "the decision should follow the form directly - its resolver already ran before the form, not just before the gateway");
         assertTrue(body.contains("${customer_creditLimit > 10000}"),
                 "the decision condition should be rewritten to test the resolved variable");
         assertFalse(body.contains("customer.creditLimit"), "the raw relation.field path must not leak into the BPMN condition");
@@ -936,14 +1085,28 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"controlId\": \"input-number\""), "form should pick input-number for the total decimal field");
         assertTrue(body.contains("\"model\": \"OrderDate\""),
                 "form field model should bind to the PascalCase entity property (orderDate -> OrderDate)");
+        // A relation.field form field (customer.creditLimit / customer.name) binds to the resolver-set
+        // process variable (<relation>_<field>, NOT a PascalCase property), is typed from the TARGET
+        // entity's field (creditLimit is decimal -> input-number), is read-only, and is labelled by the
+        // humanized path. The matching resolver step is asserted in assertBpmn / the glue test.
+        assertTrue(body.contains("\"model\": \"customer_creditLimit\""),
+                "a relation.field control should bind to the resolver-set process variable, not a PascalCase property");
+        assertTrue(body.contains("\"model\": \"customer_name\""), "a form-only relation.field should also bind to its resolver variable");
+        assertTrue(body.contains("\"label\": \"Customer Credit Limit\""), "a relation.field label should be the humanized path");
+        assertTrue(body.contains("\"readonly\": true"),
+                "a relation.field control should be read-only (resolved related data, not editable)");
         assertTrue(body.contains("\"type\": \"positive\""), "form should mark the approve button as positive");
         assertTrue(body.contains("onApproveClicked"), "form code should declare the approve handler");
         // The action handler must complete the BPM task, not be a no-op stub. (The .form code is
         // HTML-escaped by Gson - ' becomes \\u0027, = becomes \\u003d - so match escape-free substrings;
         // the form-builder un-escapes the code when it injects it into the controller.)
         assertTrue(body.contains("__completeTask("), "the action buttons should complete the task");
-        assertTrue(body.contains("/services/bpm/bpm-processes/tasks/") && body.contains("COMPLETE"),
-                "the form should complete the task via the platform BPM task API");
+        assertTrue(body.contains("/services/inbox/tasks/") && body.contains("COMPLETE"),
+                "the form should complete the task via the per-task permission-checked Inbox endpoint");
+        assertFalse(body.contains("/services/bpm/bpm-processes/tasks/"),
+                "the form must not use the role-guarded BPM endpoint, which would block candidate-group users");
+        assertTrue(body.contains("closeWindow(") && body.contains("window.close("),
+                "on completion the form should close its host (dialog via closeWindow, standalone via window.close)");
         assertFalse(body.contains("TODO: wire"), "the action handlers must no longer be TODO stubs");
     }
 

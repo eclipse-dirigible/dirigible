@@ -1,9 +1,9 @@
 #set($dollar = '$')
-angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'])
+angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntityService'#if($hasProcess), 'ProcessTasks'#end])
 	.config(["EntityServiceProvider", (EntityServiceProvider) => {
 		EntityServiceProvider.baseUrl = '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller';
 	}])
-	.controller('PageController', ($scope, ${dollar}http, Extensions, LocaleService, EntityService) => {
+	.controller('PageController', ($scope, ${dollar}http, Extensions, LocaleService, EntityService#if($hasProcess), ProcessTasks#end) => {
 		const Dialogs = new DialogHub();
 		const Notifications = new NotificationHub();
 		let description = 'Description';
@@ -76,6 +76,9 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #end
 				$scope.action = 'select';
 			});
+#if($hasProcess)
+			ProcessTasks.refresh();
+#end
 		}});
 		Dialogs.addMessageListener({ topic: '${projectName}.${perspectiveName}.${name}.createEntity', handler: (data) => {
 			$scope.$evalAsync(() => {

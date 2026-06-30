@@ -21,7 +21,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-combobox-input input-id="id${property.name}"
 								#if($property.widgetDropDownMultiSelect)
 								multi-select="true"
@@ -39,7 +39,7 @@
 #elseif($property.widgetType == "CHECKBOX")
                     <bk-form-item class="fd-row">
                     	<div class="fd-col fd-col-md--2"></div>
-	                    <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+	                    <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-checkbox id="id${property.name}" compact="false" ng-required="${property.isRequiredProperty}" ng-readonly="true" ng-model="entity.${property.name}"></bk-checkbox>
                         	<bk-checkbox-label for="id${property.name}" ng-required="${property.isRequiredProperty}">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-checkbox-label>
                         </div>
@@ -49,7 +49,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -65,7 +65,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-step-input input-id="id${property.name}"
 								class="right-align"
 								name="${property.name}"
@@ -81,7 +81,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -96,7 +96,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -111,7 +111,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -126,7 +126,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -141,7 +141,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--2 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--2 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -156,7 +156,7 @@
 						<div class="fd-col fd-col-md--2">
 							<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
 						</div>
-						<div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+						<div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 							<bk-textarea id="id${property.name}"
 								name="${property.name}"
 								ng-required="${property.isRequiredProperty}"
@@ -171,7 +171,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -187,7 +187,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -203,7 +203,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--4 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--4 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"
@@ -219,7 +219,7 @@
                     	<div class="fd-col fd-col-md--2">
                         	<bk-form-label for="id${property.name}" ng-required="${property.isRequiredProperty}" colon="true">{{ '$projectName:${tprefix}.t.$property.dataName' | t }}</bk-form-label>
                         </div>
-                        <div class="fd-col #if($property.widgetSize)${property.widgetSize}#else fd-col-md--8 #end">
+                        <div class="fd-col #if($property.widgetSize)fd-col-md--${property.widgetSize}#else fd-col-md--8 #end">
 	                        <bk-input id="id${property.name}"
 	                            name="${property.name}"
 	                            ng-required="${property.isRequiredProperty}"

@@ -1,10 +1,13 @@
 package gen.events;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
-import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
+#if($op == "sum")
+import java.math.BigDecimal;
+#end
 
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
@@ -12,14 +15,24 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Ent
 import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
 
 /**
- * Maintains the ${parentEntity}.${countField} roll-up count of ${childEntity} rows.
+ * Maintains the ${parentEntity}.${countField} roll-up over ${childEntity} rows.
  *
  * Generated from the intent rollups block - do not edit; it is re-generated with the application.
- * On each ${childEntity} event the count for the affected parent is recomputed from the store (so it
+ * On each ${childEntity} event the value for the affected parent is recomputed from the store (so it
  * self-heals); under heavy write concurrency it is eventually consistent, not transactionally exact.
  */
-@Listener(name = "${projectName}-${childPerspective}-${childEntity}${topicSuffix}", kind = ListenerKind.TOPIC)
+@Component
 public class ${className} implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${childPerspective}-${childEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
 
     @Override
     public void onMessage(String message) {
@@ -32,8 +45,20 @@ public class ${className} implements MessageHandler {
         if (parent == null) {
             return;
         }
+#if($op == "sum")
+        BigDecimal sum = BigDecimal.ZERO;
+        for (${childEntity}Entity row : new ${childEntity}Repository().findAll(${criteriaExpression})) {
+            if (row.${sumField} != null) {
+                sum = sum.add(row.${sumField});
+            }
+        }
+        parent.${countField} = sum;
+        // System-managed denormalization - persist without re-publishing the parent "-updated" event.
+        parents.updateWithoutEvent(parent);
+#else
         int count = new ${childEntity}Repository().findAll(${criteriaExpression}).size();
         parent.${countField} = count;
         parents.update(parent);
+#end
     }
 }

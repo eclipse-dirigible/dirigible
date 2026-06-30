@@ -54,7 +54,8 @@ class ControllerInvokerBindingTest {
     @BeforeEach
     void setUp() {
         router = new ControllerRouter();
-        consumer = new ControllerClassConsumer(router, Optional.empty());
+        consumer = new ControllerClassConsumer(router, Optional.empty(),
+                org.eclipse.dirigible.engine.java.component.TestComponentContainers.of(Demo.class));
         invoker = new ControllerInvoker(new ObjectMapper());
     }
 

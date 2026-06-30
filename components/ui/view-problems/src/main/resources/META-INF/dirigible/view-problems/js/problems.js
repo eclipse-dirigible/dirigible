@@ -9,7 +9,185 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
-const problemsView = angular.module('problems', ['blimpKit', 'platformView']);
+const problemsView = angular.module('problems', ['blimpKit', 'platformView', 'WorkspaceService']);
+
+// Hosts the two sub-tabs of the Problems view: "Java" (live JDT.LS diagnostics) and
+// "Synchronization" (publish-time problems). Tab state is an object so child panes read it through
+// prototypal inheritance without the primitive-shadowing pitfall.
+problemsView.controller('ProblemsTabsController', ($scope) => {
+    $scope.tabs = { selected: 'java' };
+    $scope.switchTab = (id) => $scope.tabs.selected = id;
+});
+
+// "Java" sub-tab — workspace-wide live diagnostics from JDT.LS.
+problemsView.controller('JavaProblemsController', ($scope, $http, $interval, WorkspaceService) => {
+    const Workspace = new WorkspaceHub();
+    const Layout = new LayoutHub();
+
+    const VIRTUAL_FILE_PREFIX = 'file:///workspace';
+    const POLL_INTERVAL_MS = 15000;
+
+    // LSP DiagnosticSeverity: 1 Error, 2 Warning, 3 Information, 4 Hint.
+    const SEVERITY = {
+        1: { icon: 'sap-icon--error', cssClass: 'jp-error', order: 0 },
+        2: { icon: 'sap-icon--alert', cssClass: 'jp-warning', order: 1 },
+        3: { icon: 'sap-icon--information', cssClass: 'jp-info', order: 2 },
+        // Hint is merged into Information (JDT.LS rarely emits it for Java); render it like Info.
+        4: { icon: 'sap-icon--information', cssClass: 'jp-info', order: 3 },
+    };
+    const severityMeta = (sev) => SEVERITY[sev] || SEVERITY[3];
+
+    $scope.scope = 'all';                       // 'all' | 'current'
+    $scope.filter = { 1: true, 2: true, 3: true, 4: true };
+    $scope.counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    $scope.rows = [];
+    $scope.loading = false;
+    $scope.error = '';
+    $scope.selectedUid = -1;
+
+    let allRows = [];                            // every diagnostic, unfiltered
+    let activeFilePath = null;                   // /<ws>/<proj>/File.java of the focused editor
+    let uidSeq = 0;
+    let loadedOnce = false;                      // show the busy indicator only on the first load
+
+    const toWorkspacePath = (uri) => {
+        if (!uri || !uri.startsWith(VIRTUAL_FILE_PREFIX)) return uri;
+        try { return decodeURIComponent(uri.substring(VIRTUAL_FILE_PREFIX.length)); }
+        catch (e) { return uri.substring(VIRTUAL_FILE_PREFIX.length); }
+    };
+
+    const applyView = () => {
+        const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+        const inScope = allRows.filter((r) => $scope.scope === 'all' || r.path === activeFilePath);
+        for (const r of inScope) counts[r.severity] = (counts[r.severity] || 0) + 1;
+        $scope.counts = counts;
+        $scope.rows = inScope.filter((r) => $scope.filter[r.severity])
+                             .sort((a, b) => a.order - b.order || a.path.localeCompare(b.path) || a.line - b.line);
+    };
+
+    $scope.refresh = () => {
+        const workspace = WorkspaceService.getCurrentWorkspace();
+        // Show the busy indicator only on the very first load; background refreshes (the poll and the
+        // push signal) update silently so the spinner doesn't flash periodically while idle.
+        if (!loadedOnce) $scope.loading = true;
+        $http.post('/services/ide/java-lsp/diagnostics', { workspace }).then((response) => {
+            loadedOnce = true;
+            $scope.loading = false;
+            $scope.error = '';
+            const files = Array.isArray(response.data) ? response.data : [];
+            const rows = [];
+            for (const file of files) {
+                const path = toWorkspacePath(file.uri || '');
+                const fileName = path ? path.substring(path.lastIndexOf('/') + 1) : '';
+                for (const d of (file.diagnostics || [])) {
+                    const start = (d.range && d.range.start) || { line: 0, character: 0 };
+                    const meta = severityMeta(d.severity);
+                    rows.push({
+                        uid: ++uidSeq,
+                        severity: d.severity || 3,
+                        order: meta.order,
+                        icon: meta.icon,
+                        cssClass: meta.cssClass,
+                        message: d.message,
+                        path,
+                        file: fileName,
+                        line: (start.line || 0) + 1,
+                        column: (start.character || 0) + 1,
+                    });
+                }
+            }
+            allRows = rows;
+            applyView();
+        }, (response) => {
+            loadedOnce = true;
+            $scope.loading = false;
+            if (response.status === 503) {
+                $scope.error = 'Java language server is still starting — try again in a moment';
+            } else {
+                console.error(response);
+                $scope.error = 'Could not load Java problems';
+            }
+        });
+    };
+
+    $scope.setScope = (scope) => {
+        if ($scope.scope === scope) return;
+        $scope.scope = scope;
+        applyView();
+    };
+
+    $scope.toggleSeverity = (sev) => {
+        // The single Info chip controls both Information (3) and Hint (4).
+        if (sev === 3) {
+            const next = !$scope.filter[3];
+            $scope.filter[3] = next;
+            $scope.filter[4] = next;
+        } else {
+            $scope.filter[sev] = !$scope.filter[sev];
+        }
+        applyView();
+    };
+
+    $scope.select = (row) => $scope.selectedUid = row.uid;
+
+    $scope.open = (row) => {
+        if (!row.path) return;
+        Layout.openEditor({ path: row.path });
+        const data = { filePath: row.path, line: row.line, column: row.column };
+        Layout.postMessage({ topic: 'editor.reveal.line', data });
+        setTimeout(() => Layout.postMessage({ topic: 'editor.reveal.line', data }), 1200);
+    };
+
+    // Track the focused editor so the "Current file" scope can filter to it.
+    const focusListener = Layout.onFocusEditor((data) => {
+        if (data && data.path) {
+            activeFilePath = data.path;
+            if ($scope.scope === 'current') $scope.$evalAsync(applyView);
+        }
+    });
+
+    const reload = () => $scope.$evalAsync($scope.refresh);
+    const workspaceChangedListener = Workspace.onWorkspaceChanged(reload);
+
+    // Near-instant updates: the editor posts 'java.problems.changed' (debounced) whenever JDT.LS
+    // publishes diagnostics, so we refresh right away instead of waiting for the poll. Coalesce signals
+    // within a short window, and only refresh while the Java sub-tab is selected.
+    let changedTimer = null;
+    const changedListener = Layout.addMessageListener({
+        topic: 'java.problems.changed',
+        handler: () => {
+            if (!$scope.tabs || $scope.tabs.selected !== 'java') return;
+            if (changedTimer) return;
+            changedTimer = setTimeout(() => { changedTimer = null; $scope.$evalAsync($scope.refresh); }, 250);
+        },
+    });
+
+    // Poll only while the Java sub-tab is selected (the endpoint is a cheap in-memory read, but a poll
+    // also starts JDT.LS — no need to do that while the user is on the Synchronization tab). With the
+    // push signal above this is just a fallback. The watch fires immediately with the initial selection.
+    let poll = null;
+    const startPolling = () => {
+        if (poll) return;
+        $scope.refresh();
+        poll = $interval($scope.refresh, POLL_INTERVAL_MS);
+    };
+    const stopPolling = () => {
+        if (poll) { $interval.cancel(poll); poll = null; }
+    };
+    $scope.$watch(() => $scope.tabs && $scope.tabs.selected, (selected) => {
+        if (selected === 'java') startPolling(); else stopPolling();
+    });
+
+    $scope.$on('$destroy', () => {
+        stopPolling();
+        if (changedTimer) clearTimeout(changedTimer);
+        Layout.removeMessageListener(focusListener);
+        Layout.removeMessageListener(changedListener);
+        Workspace.removeMessageListener(workspaceChangedListener);
+    });
+});
+
+// "Synchronization" sub-tab — publish-time problems persisted in DIRIGIBLE_PROBLEMS.
 problemsView.controller('ProblemsController', ($scope, $http, $timeout) => {
     const dialogHub = new DialogHub();
     const messageHub = new MessageHubApi();

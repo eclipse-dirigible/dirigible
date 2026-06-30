@@ -1,0 +1,5 @@
+{
+    "module": "template-application-ui-harmonia-java/template/template-report-file.js",
+    "extensionPoint": "platform-templates",
+    "description": "Application Template - Report - Table - Harmonia"
+}

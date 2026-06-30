@@ -131,7 +131,7 @@ public class JavaEndpoint extends BaseEndpoint {
         try {
             Thread.currentThread()
                   .setContextClassLoader(loaded.getLoader());
-            JavaHandler handler = loaded.newInstance();
+            JavaHandler handler = loaded.instance();
             handler.handle(request, response);
         } catch (ResponseStatusException e) {
             throw e;

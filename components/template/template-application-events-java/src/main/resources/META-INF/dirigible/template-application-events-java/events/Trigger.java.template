@@ -1,7 +1,7 @@
 package gen.events;
 
 import org.eclipse.dirigible.sdk.bpm.Process;
-import org.eclipse.dirigible.sdk.messaging.Listener;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -15,11 +15,28 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Generated from the intent process trigger - do not edit; it is re-generated with the application.
  * The ${entity} repository publishes the event to the topic this listener binds to; the started
  * process-instance id is written back to ProcessId (so the process is started at most once).
+ *
+ * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
+ * interface, not an annotation; @Component makes it a managed bean with constructor injection.
  */
-@Listener(name = "${projectName}-${perspective}-${entity}${topicSuffix}", kind = ListenerKind.TOPIC)
+@Component
 public class ${process}Trigger implements MessageHandler {
 
-    private final ${entity}Repository repository = new ${entity}Repository();
+    private final ${entity}Repository repository;
+
+    public ${process}Trigger(${entity}Repository repository) {
+        this.repository = repository;
+    }
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
 
     @Override
     public void onMessage(String message) {
@@ -28,7 +45,10 @@ public class ${process}Trigger implements MessageHandler {
             return;
         }
         ${entity}Entity entity = repository.findById(created.${keyProperty});
-        if (entity == null || entity.ProcessId != null) {
+        // Start at most once. Treat a blank ProcessId as "not started yet": some clients send an
+        // empty string for an untouched system field rather than null, and "" != null would
+        // otherwise trip this guard and the process would never start.
+        if (entity == null || (entity.ProcessId != null && !entity.ProcessId.isBlank())) {
             return;
         }
 #if(${guardExpression} != "true")
@@ -42,8 +62,27 @@ public class ${process}Trigger implements MessageHandler {
         }
 #end
         String businessKey = String.valueOf(entity.${businessKeyProperty});
-        String processId = Process.start("${process}", businessKey, message);
+        // Clear-D context: start the process with ONLY the entity id, not a snapshot of its fields.
+        // Everything else is fetched dynamically when needed - the task form loads the live entity and
+        // decision resolvers load it by this id - so the process never carries the entity's data and can
+        // never present it stale.
+        String processId = Process.start("${process}", businessKey, "{\"${keyProperty}\": " + entity.${keyProperty} + "}");
         entity.ProcessId = processId;
-        repository.update(entity);
+        // Clear-D context: publish only a LOCATOR for the entity - its REST controller URL + id - so the
+        // task form fetches the LIVE entity dynamically when it is opened, rather than relying on the
+        // start-time snapshot in `message` (which is stale once the entity is edited after the process
+        // starts - e.g. a document whose line items, and therefore its total, are added after creation).
+        Process.setVariable(processId, "__entityUrl",
+                "/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspective}/${entity}Controller");
+        Process.setVariable(processId, "__entityId", entity.${keyProperty});
+#foreach($rl in $relationLinks)
+        // FK locator: the task form fetches __${rl.fkProperty}EntityUrl/<fk id> and shows its
+        // __${rl.fkProperty}EntityLabel field, so a foreign key renders as a name (falls back to the id).
+        Process.setVariable(processId, "__${rl.fkProperty}EntityUrl", "${rl.url}");
+        Process.setVariable(processId, "__${rl.fkProperty}EntityLabel", "${rl.labelField}");
+#end
+        // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
+        // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
+        repository.updateWithoutEvent(entity);
     }
 }

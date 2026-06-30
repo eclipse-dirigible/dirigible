@@ -155,6 +155,7 @@ export function generateFiles(model, parameters, templateSources) {
     const models = model.entities.filter(e => e.type !== "REPORT" && e.type !== "FILTER");
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
     const daoModels = model.entities.filter(e => e.type !== "PROJECTION");
+    annotateDocumentModels(model.entities);
     const feedModels = model.entities.filter(e => e.feedUrl);
 
     const generateReportModels = model.entities.filter(e => e.generateReport === "true");
@@ -182,6 +183,12 @@ export function generateFiles(model, parameters, templateSources) {
     const uiListMasterModels = model.entities.filter(e => e.layoutType === "LIST_MASTER" && e.type === "PRIMARY");
     const uiManageDetailsModels = model.entities.filter(e => e.layoutType === "MANAGE_DETAILS" && e.type === "DEPENDENT");
     const uiListDetailsModels = model.entities.filter(e => e.layoutType === "LIST_DETAILS" && e.type === "DEPENDENT");
+
+    // UI Document (header-items): a master owning a composition child whose name ends in "Item"
+    // (set by EdmIntentGenerator as layoutType MANAGE_DOCUMENT) — header form + inline items table +
+    // totals footer. The items child stays a DEPENDENT detail (its inline columns + controller come
+    // from its registration); other composition children render as ordinary detail panels.
+    const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
 
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
@@ -244,6 +251,9 @@ export function generateFiles(model, parameters, templateSources) {
                 case "uiListDetailsModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiListDetailsModels, parameters));
                     break;
+                case "uiDocumentModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiDocumentModels, parameters));
+                    break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
                     break;
@@ -290,7 +300,21 @@ export function generateFiles(model, parameters, templateSources) {
                                 businessKeyProperty: model.triggers[t].businessKeyProperty,
                                 generateBusinessKey: model.triggers[t].generateBusinessKey,
                                 topicSuffix: model.triggers[t].topicSuffix,
-                                guardExpression: model.triggers[t].guardExpression
+                                guardExpression: model.triggers[t].guardExpression,
+                                // Per to-one relation: assemble the target controller URL here (the
+                                // template engine knows the path layout; the intent glue carried only
+                                // logical names). A cross-model link uses the target project + sanitized
+                                // model alias as the gen folder; a same-model one uses the owner's.
+                                relationLinks: (model.triggers[t].relationLinks || []).map(function (rl) {
+                                    const targetGenFolder = rl.crossModel ? sanitizeJavaIdentifier(rl.targetModel) : parameters.javaGenFolderName;
+                                    const targetProject = rl.crossModel ? rl.targetProject : parameters.projectName;
+                                    return {
+                                        fkProperty: rl.fkProperty,
+                                        labelField: rl.labelField,
+                                        url: '/services/java/' + targetProject + '/gen/' + targetGenFolder + '/api/'
+                                            + sanitizeJavaIdentifier(rl.targetPerspective) + '/' + rl.targetEntity + 'Controller'
+                                    };
+                                })
                             };
                             const cleanTriggerParameters = cleanData(triggerParameters);
                             generatedFiles.push({
@@ -317,13 +341,101 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaTargetPerspective: sanitizeJavaIdentifier(model.resolvers[r].targetPerspective),
                                 targetField: model.resolvers[r].targetField,
                                 targetIdAccessor: model.resolvers[r].targetIdAccessor,
-                                variable: model.resolvers[r].variable
+                                variable: model.resolvers[r].variable,
+                                ownerEntity: model.resolvers[r].ownerEntity,
+                                ownerPerspective: model.resolvers[r].ownerPerspective,
+                                javaOwnerPerspective: sanitizeJavaIdentifier(model.resolvers[r].ownerPerspective),
+                                ownerKeyProperty: model.resolvers[r].ownerKeyProperty,
+                                ownerKeyAccessor: model.resolvers[r].ownerKeyAccessor
                             };
                             const cleanResolverParameters = cleanData(resolverParameters);
                             generatedFiles.push({
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanResolverParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanResolverParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "fieldLoaders":
+                    // Own-field decision loaders (intent layer): one JavaDelegate per decision that
+                    // branches on the trigger entity's own field. Loads the owner by id and publishes
+                    // the referenced fields before the gateway (clear-D id-only context). Like resolvers,
+                    // not entity-shaped; the Java package segment is the owner's lowercased perspective.
+                    if (model.fieldLoaders) {
+                        for (let f = 0; f < model.fieldLoaders.length; f++) {
+                            const fieldLoaderParameters = {
+                                ...parameters,
+                                process: model.fieldLoaders[f].process,
+                                handler: model.fieldLoaders[f].handler,
+                                ownerEntity: model.fieldLoaders[f].ownerEntity,
+                                ownerPerspective: model.fieldLoaders[f].ownerPerspective,
+                                javaOwnerPerspective: sanitizeJavaIdentifier(model.fieldLoaders[f].ownerPerspective),
+                                ownerKeyProperty: model.fieldLoaders[f].ownerKeyProperty,
+                                ownerKeyAccessor: model.fieldLoaders[f].ownerKeyAccessor,
+                                fields: model.fieldLoaders[f].fields
+                            };
+                            const cleanFieldLoaderParameters = cleanData(fieldLoaderParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanFieldLoaderParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanFieldLoaderParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "setters":
+                    // Field setters (intent layer): one JavaDelegate per serviceTask that declares a
+                    // setField, setting a field of the process's trigger entity to a literal value. Like
+                    // resolvers, not entity-shaped, so it gets its own loop; the Java package segment of
+                    // the entity is its lowercased perspective.
+                    if (model.setters) {
+                        for (let s = 0; s < model.setters.length; s++) {
+                            const setterParameters = {
+                                ...parameters,
+                                process: model.setters[s].process,
+                                className: model.setters[s].className,
+                                entity: model.setters[s].entity,
+                                perspective: model.setters[s].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.setters[s].perspective),
+                                keyProperty: model.setters[s].keyProperty,
+                                keyAccessor: model.setters[s].keyAccessor,
+                                field: model.setters[s].field,
+                                value: model.setters[s].value
+                            };
+                            const cleanSetterParameters = cleanData(setterParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSetterParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSetterParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "writers":
+                    // Writers (intent layer): one JavaDelegate per user task with editable fields.
+                    // Inserted after the user task, it writes the reviewer's edits from the process
+                    // variables back onto the trigger entity (updateWithoutEvent). Not entity-shaped, so
+                    // it gets its own loop; the Java package segment is the lowercased perspective.
+                    if (model.writers) {
+                        for (let w = 0; w < model.writers.length; w++) {
+                            const writerParameters = {
+                                ...parameters,
+                                process: model.writers[w].process,
+                                userTask: model.writers[w].userTask,
+                                className: model.writers[w].className,
+                                entity: model.writers[w].entity,
+                                perspective: model.writers[w].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.writers[w].perspective),
+                                keyProperty: model.writers[w].keyProperty,
+                                keyAccessor: model.writers[w].keyAccessor,
+                                fields: model.writers[w].fields
+                            };
+                            const cleanWriterParameters = cleanData(writerParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanWriterParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanWriterParameters)
                             });
                         }
                     }
@@ -457,6 +569,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaParentPerspective: sanitizeJavaIdentifier(model.rollups[r].parentPerspective),
                                 fkProperty: model.rollups[r].fkProperty,
                                 countField: model.rollups[r].countField,
+                                op: model.rollups[r].op,
+                                sumField: model.rollups[r].sumField,
                                 topicSuffix: model.rollups[r].topicSuffix,
                                 criteriaExpression: model.rollups[r].criteriaExpression
                             };
@@ -621,6 +735,50 @@ function getGenerationEngine(template) {
         generationEngine.setEm(template.em);
     }
     return generationEngine;
+}
+
+/**
+ * Annotate a document master + its line-items child with the metadata their DAOs need to keep the
+ * document totals consistent SYNCHRONOUSLY (in the same request), instead of via async roll-up
+ * listeners. A master (layoutType MANAGE_DOCUMENT) gets `documentMaster` = the child entity, its Java
+ * package, the FK column, the master PK, and the aggregate fields the child also carries by name; the
+ * child gets `documentItem` = its parent entity, package and FK. The DAO template reads these.
+ */
+function annotateDocumentModels(entities) {
+    const byName = {};
+    for (const e of entities) {
+        byName[e.name] = e;
+    }
+    for (const master of entities) {
+        if (master.layoutType !== "MANAGE_DOCUMENT" || !master.documentItemsEntity) {
+            continue;
+        }
+        const child = byName[master.documentItemsEntity];
+        if (!child) {
+            continue;
+        }
+        const fkProperty = child.masterEntityId; // FK property on the child pointing at the master
+        const masterPk = (master.primaryKeys && master.primaryKeys[0]) || "Id";
+        const childFieldNames = new Set((child.properties || []).map(p => p.name));
+        const fields = (master.properties || [])
+            .filter(p => p.aggregate === "true" && childFieldNames.has(p.name))
+            .map(p => ({ field: p.name }));
+        if (fields.length === 0 || !fkProperty) {
+            continue;
+        }
+        master.documentMaster = {
+            childEntity: child.name,
+            javaChildPerspective: sanitizeJavaIdentifier(child.perspectiveName),
+            fkProperty: fkProperty,
+            masterPk: masterPk,
+            fields: fields
+        };
+        child.documentItem = {
+            parentEntity: master.name,
+            javaParentPerspective: sanitizeJavaIdentifier(master.perspectiveName),
+            fkProperty: fkProperty
+        };
+    }
 }
 
 function cleanData(data) {

@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -25,8 +27,13 @@ import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.WriterSupport;
+import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
+import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -78,11 +85,12 @@ import org.springframework.stereotype.Component;
  * relative to the registry root; it should reference a hand-authored handler under {@code custom/}.
  *
  * <p>
- * A {@code decision} whose condition references a {@code relation.field} of the trigger entity
- * (e.g. {@code customer.creditLimit > 10000}) gets a {@code JavaTask} resolver service task
- * inserted immediately before the gateway, and the condition is rewritten to test the resolved
- * variable ({@code customer_creditLimit}); the resolver handler itself is generated from the
- * {@code .glue} file (see
+ * A {@code relation.field} of the trigger entity referenced by a {@code decision} condition (e.g.
+ * {@code customer.creditLimit > 10000}) <b>or by a user-task form</b> (a {@code book.price} field
+ * on an approval form) gets a {@code JavaTask} resolver service task inserted before the earliest
+ * step that needs it; decision conditions are rewritten to test the resolved variable
+ * ({@code customer_creditLimit}) and form controls bind to it. The resolver handler itself is
+ * generated from the {@code .glue} file (see
  * {@link org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport}). The trigger
  * {@code onCreate} block similarly drives the {@code .glue} file - the BPMN keeps a plain
  * none-start event; the generated {@code @Listener} starts the process on the entity's create
@@ -122,6 +130,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // decision that loads the related entity and a condition rewritten to test the resolved
         // variable (book_price). The handler itself is generated from the .glue file, not here.
         List<Resolver> allResolvers = ProcessResolverSupport.resolvers(model);
+        // Field loaders: a decision on the trigger entity's own field gets a JavaDelegate inserted before
+        // the gateway that loads the owner by id and publishes the referenced fields (clear-D id-only).
+        List<FieldLoad> allFieldLoads = ProcessFieldLoadSupport.fieldLoads(model);
+        // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
+        // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
+        // it right after the matching user task.
+        Map<String, String> writerByProcessTask = new HashMap<>();
+        for (Writer writer : WriterSupport.writers(model)) {
+            writerByProcessTask.put(writer.process() + "/" + writer.userTask(), writer.className());
+        }
         Map<String, EntityIntent> byName = IntentEntities.byName(model);
         // Extra candidate groups from the .settings (defaults to ADMINISTRATOR) appended to every user
         // task, so an administrator can always claim a task in addition to the task's own role.
@@ -153,8 +171,25 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processResolvers.add(resolver);
                 }
             }
+            List<FieldLoad> processFieldLoads = new ArrayList<>();
+            for (FieldLoad load : allFieldLoads) {
+                if (process.getName()
+                           .equals(load.process())) {
+                    processFieldLoads.add(load);
+                }
+            }
+            Map<String, String> writerByTask = new HashMap<>();
+            String writerPrefix = process.getName() + "/";
+            for (Map.Entry<String, String> entry : writerByProcessTask.entrySet()) {
+                if (entry.getKey()
+                         .startsWith(writerPrefix)) {
+                    writerByTask.put(entry.getKey()
+                                          .substring(writerPrefix.length()),
+                            entry.getValue());
+                }
+            }
             context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    ownFieldPascalCase(process, byName), candidateGroupsExtra));
+                    processFieldLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask));
         }
     }
 
@@ -207,11 +242,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase, String candidateGroupsExtra) {
-        // Insert a resolver service task before each decision that needs one and rewrite that
-        // decision's condition - on a COPY of the step list, never mutating the shared model (the glue
-        // generator runs after this one and must still see the original relation.field condition).
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, ownFieldPascalCase);
+            List<FieldLoad> fieldLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
+            Map<String, String> writerByTask) {
+        // Insert each resolver service task before its anchor step (the earliest decision or user-task
+        // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
+        // mutating the shared model (the glue generator runs after this one and must still see the
+        // original relation.field condition). Also insert a field-loader service task before an
+        // own-field decision, and a writer service task after a user task with editable fields.
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, ownFieldPascalCase, writerByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         String processId = process.getName();
@@ -240,7 +278,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, candidateGroupsExtra);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, candidateGroupsExtra);
         }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
@@ -253,33 +291,63 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Produce a render-only step list: before each decision that references a {@code relation.field}, a
-     * Java service task (the resolver) is inserted, and the decision is replaced by a copy whose
-     * condition is rewritten to test the resolved variable. Original steps pass through untouched.
+     * Produce a render-only step list: before each step that anchors a {@code relation.field} resolver
+     * (a decision condition or a user-task form referencing the path), the Java service task (the
+     * resolver) is inserted; every decision is replaced by a copy whose condition is rewritten to test
+     * the resolved variables. A resolver is inserted once - at its anchor step - and the variable it
+     * sets persists, so a decision downstream of the inserting step still resolves correctly even
+     * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
-    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers,
-            Map<String, String> ownFieldPascalCase) {
+    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers, List<FieldLoad> fieldLoads,
+            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
-            if (!"decision".equals(step.getKind())) {
-                result.add(step);
-                continue;
-            }
-            List<Resolver> stepResolvers = new ArrayList<>();
             for (Resolver resolver : resolvers) {
                 if (step.getName() != null && step.getName()
-                                                  .equals(resolver.decisionStep())) {
-                    stepResolvers.add(resolver);
+                                                  .equals(resolver.beforeStep())) {
+                    // The task id is the lower-camel form of the handler so it matches the casing of the
+                    // authored step ids; the delegate still resolves the PascalCase handler class.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
                 }
             }
-            for (Resolver resolver : stepResolvers) {
-                // The task id is the lower-camel form of the handler so it matches the casing of the
-                // authored step ids; the delegate still resolves the PascalCase handler class.
-                result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
+            for (FieldLoad load : fieldLoads) {
+                if (step.getName() != null && step.getName()
+                                                  .equals(load.beforeStep())) {
+                    // Load the trigger entity's own fields the decision tests, right before the gateway.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
+                }
             }
-            result.add(rewriteDecision(step, stepResolvers, ownFieldPascalCase));
+            String writerClass = "userTask".equals(step.getKind()) && step.getName() != null ? writerByTask.get(step.getName()) : null;
+            if (writerClass != null) {
+                // The writer runs right after the user task: persist the user task linearly into the
+                // writer (stripping any `next` so it cannot bypass it), then carry the original `next`
+                // onto the writer so downstream routing (e.g. converging branches) is preserved.
+                String next = stringArg(step, "next");
+                result.add(next == null ? step : withoutNext(step));
+                StepIntent writerStep = javaServiceTaskStep(IntentNaming.camelCase(writerClass), "gen.events." + writerClass);
+                if (next != null && !next.isBlank()) {
+                    writerStep.getArgs()
+                              .put("next", next);
+                }
+                result.add(writerStep);
+                continue;
+            }
+            // Rewrite a decision against ALL process resolvers (the variables are process-global), not
+            // just those anchored at this step - the path may have been resolved by an earlier step.
+            result.add("decision".equals(step.getKind()) ? rewriteDecision(step, resolvers, ownFieldPascalCase) : step);
         }
         return result;
+    }
+
+    /** A copy of a user-task step with its {@code next} routing removed (transferred to the writer). */
+    private static StepIntent withoutNext(StepIntent step) {
+        StepIntent copy = new StepIntent();
+        copy.setName(step.getName());
+        copy.setKind(step.getKind());
+        Map<String, Object> args = new LinkedHashMap<>(step.getArgs());
+        args.remove("next");
+        copy.setArgs(args);
+        return copy;
     }
 
     /**
@@ -374,7 +442,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String candidateGroupsExtra) {
+            String processName, String candidateGroupsExtra) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
@@ -382,7 +450,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName);
+                appendServiceTask(sb, step, projectName, processName);
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -422,20 +490,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("></userTask>\n");
     }
 
-    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName) {
-        // Three service-task shapes:
+    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName) {
+        // Four service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
+        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the gen.events.<Handler>
+        // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
         // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
         // with the project name (the JSTask delegate resolves relative to the registry root);
-        // - an author-declared serviceTask with NO call -> JavaTask bound to a custom.<Step> Java handler
-        // that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer to implement.
+        // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
+        // handler that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer.
         String javaHandler = stringArg(step, "javaHandler");
+        String setField = stringArg(step, "setField");
         String call = stringArg(step, "call");
         boolean java;
         String handlerValue;
         if (javaHandler != null && !javaHandler.isBlank()) {
             java = true;
             handlerValue = javaHandler;
+        } else if (setField != null && !setField.isBlank()) {
+            java = true;
+            handlerValue = "gen.events." + SetFieldSupport.className(processName, step.getName());
         } else if (call != null && !call.isBlank()) {
             java = false;
             handlerValue = qualifyHandlerPath(projectName, call);
@@ -496,7 +570,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * Build the sequence flows. The default is a linear chain through {@link #buildEffectiveStepIds}.
      * Decision steps emit a conditioned flow to {@code args.then} and route their gateway-default flow
      * to {@code args.else} when declared (so the conditioned branch can actually be skipped); without
-     * an {@code else} the default falls through to the next step in the chain.
+     * an {@code else} the default falls through to the next step in the chain. A non-decision step with
+     * an explicit {@code args.next} routes its outgoing flow to that step (or {@code end}) instead of
+     * the next in the chain - this is how two branch steps of a decision converge on a common successor
+     * (e.g. {@code activate} and {@code reject} both flowing to {@code done}) without the first
+     * silently falling through into the second.
      */
     private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds) {
         List<SequenceFlow> flows = new ArrayList<>();
@@ -512,6 +590,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     target = effectiveTarget(elseTarget, steps);
                 }
             } else {
+                StepIntent sourceStep = stepByName(source, steps);
+                String next = sourceStep == null ? null : stringArg(sourceStep, "next");
+                if (next != null && !next.isBlank()) {
+                    target = effectiveTarget(next, steps);
+                }
                 flowId = "flow_" + source + "_" + target;
             }
             flows.add(new SequenceFlow(flowId, source, target, null));
@@ -578,18 +661,28 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     // ----- BPMN diagram interchange (bpmndi) ---------------------------------------------------
 
     private static final int LANE_Y = 140;
+    /**
+     * The lane a decision's secondary (default / {@code else}) branch target sits on, dropped below the
+     * main lane so the gateway's two outgoing flows diverge visibly instead of overlapping on one line.
+     */
+    private static final int SECONDARY_LANE_Y = 300;
     private static final int NODE_SPACING = 160;
     private static final int FIRST_NODE_CENTER_X = 100;
 
     /**
      * Append the {@code bpmndi:BPMNDiagram} block. The Flowable/Oryx modeler renders the canvas
      * <b>only</b> from this diagram interchange (a process with no {@code BPMNShape}s opens empty), so
-     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane; edges
-     * connect the right edge of the source to the left edge of the target. The layout is deterministic
-     * so re-generation is byte-stable; the modeler re-routes on first manual edit.
+     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane, except
+     * a decision's secondary ({@code else}) branch target, which drops to a lower lane so the gateway's
+     * two outgoing flows are visibly distinct rather than overlapping on one line; edges connect the
+     * right edge of the source to the left edge of the target. The layout is deterministic so
+     * re-generation is byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
             List<StepIntent> steps) {
+        // A decision's secondary branch target (the default / `else` flow's target) is dropped to a lower
+        // lane so the gateway's two outgoing flows are visibly distinct instead of running along one line.
+        Set<String> secondaryNodes = secondaryBranchTargets(flows);
         Map<String, int[]> bounds = new java.util.LinkedHashMap<>();
         for (int i = 0; i < effectiveIds.size(); i++) {
             String id = effectiveIds.get(i);
@@ -598,8 +691,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             int[] size = nodeSize(id, steps);
             int centerX = FIRST_NODE_CENTER_X + i * NODE_SPACING;
+            int laneY = secondaryNodes.contains(id) ? SECONDARY_LANE_Y : LANE_Y;
             int x = centerX - size[0] / 2;
-            int y = LANE_Y - size[1] / 2;
+            int y = laneY - size[1] / 2;
             bounds.put(id, new int[] {x, y, size[0], size[1]});
         }
 
@@ -653,6 +747,55 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         sb.append("    </bpmndi:BPMNPlane>\n");
         sb.append("  </bpmndi:BPMNDiagram>\n");
+    }
+
+    /**
+     * The nodes of each decision's default ({@code else}) branch - its "second option" - placed on the
+     * lower lane so the gateway's flows diverge and a later main-lane edge (e.g. a {@code next: end}
+     * jump) does not visually cross them. Starts from each default-flow target and walks the branch
+     * forward along the sequence flows, collecting every node until it reaches {@code end} or rejoins
+     * the main path (a node entered by a conditioned {@code then} flow). The end event is never
+     * dropped.
+     * <p>
+     * Without the full walk, only the immediate target dropped: a multi-node reject branch (e.g.
+     * {@code else -> cancel} followed by more steps) left those steps on the main lane between
+     * {@code send} and {@code end}, so the {@code send -> end} edge ran straight through them and
+     * looked like {@code send -> cancel}.
+     */
+    private static Set<String> secondaryBranchTargets(List<SequenceFlow> flows) {
+        Map<String, List<String>> adjacency = new HashMap<>();
+        Set<String> thenTargets = new HashSet<>();
+        Deque<String> frontier = new ArrayDeque<>();
+        for (SequenceFlow flow : flows) {
+            adjacency.computeIfAbsent(flow.source(), k -> new ArrayList<>())
+                     .add(flow.target());
+            if (flow.id() == null) {
+                continue;
+            }
+            if (flow.id()
+                    .endsWith("_then")) {
+                thenTargets.add(flow.target());
+            } else if (flow.id()
+                           .endsWith("_default")
+                    && !END_ID.equals(flow.target())) {
+                frontier.add(flow.target());
+            }
+        }
+        // Forward walk of the else branch(es). Stop at the end event and where the branch rejoins the
+        // main path (a `then` target), so a shared convergence/end node stays on the main lane.
+        Set<String> secondary = new HashSet<>();
+        while (!frontier.isEmpty()) {
+            String node = frontier.poll();
+            if (node == null || END_ID.equals(node) || thenTargets.contains(node) || !secondary.add(node)) {
+                continue;
+            }
+            for (String next : adjacency.getOrDefault(node, List.of())) {
+                if (!END_ID.equals(next) && !thenTargets.contains(next)) {
+                    frontier.add(next);
+                }
+            }
+        }
+        return secondary;
     }
 
     /** Width/height of a node's shape by its element id / step kind. */

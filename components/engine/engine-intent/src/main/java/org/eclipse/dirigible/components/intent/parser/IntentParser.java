@@ -10,9 +10,11 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -141,7 +143,8 @@ public final class IntentParser {
      */
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
-        Set<String> entityNames = validateEntities(model, issues);
+        Set<String> usesAliases = validateUses(model, issues);
+        Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
@@ -377,7 +380,26 @@ public final class IntentParser {
         }
     }
 
-    private static Set<String> validateEntities(IntentModel model, List<String> issues) {
+    /**
+     * Each {@code uses[]} entry must name a non-blank, unique model alias. Returns the set of declared
+     * aliases so {@link #validateEntities} can resolve cross-model relation targets against it.
+     */
+    private static Set<String> validateUses(IntentModel model, List<String> issues) {
+        Set<String> aliases = new HashSet<>();
+        for (org.eclipse.dirigible.components.intent.model.UsesIntent uses : model.getUses()) {
+            String alias = uses.getModel();
+            if (alias == null || alias.isBlank()) {
+                issues.add("uses entry has no model");
+                continue;
+            }
+            if (!aliases.add(alias)) {
+                issues.add("duplicate uses model [" + alias + "]");
+            }
+        }
+        return aliases;
+    }
+
+    private static Set<String> validateEntities(IntentModel model, Set<String> usesAliases, List<String> issues) {
         Set<String> entityNames = new HashSet<>();
         for (EntityIntent entity : model.getEntities()) {
             String name = entity.getName();
@@ -437,8 +459,30 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
                             + "] is marked composition but only a manyToOne/oneToOne relation can be a composition");
                 }
-                if (relation.getTo() == null || relation.getTo()
-                                                        .isBlank()) {
+                boolean crossModel = relation.isCrossModel();
+                if (crossModel) {
+                    // A cross-model relation references an entity owned by another intent model declared in
+                    // uses:. It can only be a to-one association (the FK + dropdown live on this side); it
+                    // cannot compose a detail that lives in another model, and its target is validated
+                    // against the referenced .model at generation time, not here.
+                    if (!usesAliases.contains(relation.getModel())) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] references undeclared model ["
+                                + relation.getModel() + "] - add it to uses:");
+                    }
+                    if (!"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] is cross-model (model: "
+                                + relation.getModel() + ") so it must be a manyToOne/oneToOne association");
+                    }
+                    if (relation.isComposition()) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
+                                + "] is cross-model so it cannot be a composition - a detail cannot be owned across models");
+                    }
+                    if (relation.getTo() == null || relation.getTo()
+                                                            .isBlank()) {
+                        issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has no target");
+                    }
+                } else if (relation.getTo() == null || relation.getTo()
+                                                               .isBlank()) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has no target");
                 } else if (!entityNames.contains(relation.getTo())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["
@@ -532,6 +576,124 @@ public final class IntentParser {
                 }
             }
             validateDecisionTargets(process, issues);
+            validateSetFieldSteps(process, triggerEntity, byName, issues);
+            validateTaskFormActions(process, model, issues);
+        }
+    }
+
+    /**
+     * A user task is a <b>decision point</b> exactly when its form offers more than one completing
+     * action (e.g. Approve / Reject - the auto-added {@code close} button never completes the task). In
+     * that case the task must be <b>immediately followed by a decision</b> that branches on the chosen
+     * {@code action}, or the extra buttons would all funnel into the same linear successor and do
+     * nothing different - almost always an authoring mistake. A single-action task (e.g. {@code issue})
+     * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
+     * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
+     */
+    private static void validateTaskFormActions(ProcessIntent process, IntentModel model, List<String> issues) {
+        Map<String, FormIntent> formsByName = new HashMap<>();
+        for (FormIntent form : model.getForms()) {
+            if (form.getName() != null) {
+                formsByName.put(form.getName(), form);
+            }
+        }
+        List<StepIntent> steps = process.getSteps();
+        for (int i = 0; i < steps.size(); i++) {
+            StepIntent step = steps.get(i);
+            if (!"userTask".equals(step.getKind()) || step.getArgs() == null) {
+                continue;
+            }
+            Object formArg = step.getArgs()
+                                 .get("form");
+            FormIntent form = formArg == null ? null : formsByName.get(formArg.toString());
+            if (form == null) {
+                continue;
+            }
+            List<String> completing = new ArrayList<>();
+            for (String action : form.getActions()) {
+                if (action != null && !action.isBlank() && !"close".equalsIgnoreCase(action)) {
+                    completing.add(action);
+                }
+            }
+            if (completing.size() <= 1) {
+                continue; // single (or no) completing action -> linear flow, no decision required
+            }
+            StepIntent successor = successorStep(step, steps, i);
+            if (successor == null || !"decision".equals(successor.getKind())) {
+                issues.add("user task [" + step.getName() + "] in process [" + process.getName() + "] uses form [" + form.getName()
+                        + "] with multiple actions " + completing + " but is not immediately followed by a decision - a multi-option"
+                        + " task must branch on the chosen action via a decision (e.g. `kind: decision, args: { if: \"action == '"
+                        + completing.get(0) + "'\", then: ..., else: ... }`), or reduce the form to a single action");
+            }
+        }
+    }
+
+    /**
+     * The step a user task flows to: its {@code next} arg when set, otherwise the next declared step.
+     */
+    private static StepIntent successorStep(StepIntent step, List<StepIntent> steps, int index) {
+        Object next = step.getArgs() == null ? null
+                : step.getArgs()
+                      .get("next");
+        if (next != null && !next.toString()
+                                 .isBlank()) {
+            for (StepIntent candidate : steps) {
+                if (next.toString()
+                        .equals(candidate.getName())) {
+                    return candidate;
+                }
+            }
+            return null; // next names `end` or an unknown step (the latter is reported elsewhere)
+        }
+        return index + 1 < steps.size() ? steps.get(index + 1) : null;
+    }
+
+    /**
+     * A {@code serviceTask} declaring {@code setField} must name a {@code string}/{@code text} field of
+     * the process's trigger entity and carry a {@code value} (the literal to assign). Any step may
+     * carry a {@code next} that routes its outgoing flow to a declared step or {@code end} (used to
+     * make two decision branches converge). Without these checks a typo would surface only at runtime.
+     */
+    private static void validateSetFieldSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null) {
+                continue;
+            }
+            String setField = stepArg(step, "setField");
+            if (setField != null && !setField.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses setField but is not a serviceTask");
+                } else if (trigger == null) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] uses setField but the process has no trigger entity to set it on");
+                } else {
+                    FieldIntent field = fieldByName(trigger, setField);
+                    if (field == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] is not a field of [" + triggerEntity + "]");
+                    } else if (field.getType() != null && !"string".equals(field.getType()) && !"text".equals(field.getType())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must be a string/text field (only literal string values are supported)");
+                    }
+                    if (stepArg(step, "value") == null || stepArg(step, "value").isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setField [" + setField
+                                + "] must declare a value");
+                    }
+                }
+            }
+            String next = stepArg(step, "next");
+            if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
+                issues.add(
+                        "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            }
         }
     }
 
@@ -582,6 +744,12 @@ public final class IntentParser {
     }
 
     private static void validateForms(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         Set<String> formNames = new HashSet<>();
         for (FormIntent form : model.getForms()) {
             if (form.getName() == null || form.getName()
@@ -592,12 +760,106 @@ public final class IntentParser {
             if (!formNames.add(form.getName())) {
                 issues.add("duplicate form [" + form.getName() + "]");
             }
+            EntityIntent bound = null;
             if (form.getForEntity() != null && !form.getForEntity()
-                                                    .isBlank()
-                    && !entityNames.contains(form.getForEntity())) {
-                issues.add("form [" + form.getName() + "] references unknown entity [" + form.getForEntity() + "]");
+                                                    .isBlank()) {
+                if (!entityNames.contains(form.getForEntity())) {
+                    issues.add("form [" + form.getName() + "] references unknown entity [" + form.getForEntity() + "]");
+                } else {
+                    bound = byName.get(form.getForEntity());
+                }
+            }
+            validateFormRelationFields(form, bound, byName, issues);
+            validateFormEditable(form, bound, issues);
+        }
+    }
+
+    /**
+     * An {@code editable} field (the per-field opt-out of a BPM task form's read-only default) must be
+     * a plain, displayed field of the bound entity. v1 write-back supports {@code string}/{@code text}
+     * fields only - the reviewer's edit flows straight from the process variable onto the entity with
+     * no type coercion; {@code date}/{@code number}/{@code boolean} editable fields are a documented
+     * follow-up. A {@code relation.field} can never be editable (editing it would not write back).
+     */
+    private static void validateFormEditable(FormIntent form, EntityIntent bound, List<String> issues) {
+        Set<String> displayed = new HashSet<>(form.getFields());
+        for (String field : form.getEditable()) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            if (field.indexOf('.') >= 0) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is a relation.field, which cannot be edited");
+                continue;
+            }
+            if (!displayed.contains(field)) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not in the form's fields - only a displayed field"
+                        + " can be made editable");
+                continue;
+            }
+            if (bound == null) {
+                continue; // the unknown-forEntity issue is already reported above
+            }
+            FieldIntent bf = fieldByName(bound, field);
+            if (bf == null) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is not a field of [" + form.getForEntity() + "]");
+                continue;
+            }
+            String type = bf.getType() == null ? "string"
+                    : bf.getType()
+                        .toLowerCase(Locale.ROOT);
+            if (!"string".equals(type) && !"text".equals(type) && !"uuid".equals(type)) {
+                issues.add("form [" + form.getName() + "] editable [" + field + "] is [" + type
+                        + "]; v1 write-back supports string/text only (date/number/boolean editable fields are not yet supported)");
             }
         }
+    }
+
+    /**
+     * A {@code relation.field} form field must be a one-hop to-one relation of the form's bound entity
+     * with the field present on the target - so it can be resolved into a process variable at runtime
+     * (the same one-hop scope as decision conditions). Multi-hop paths are not supported.
+     */
+    private static void validateFormRelationFields(FormIntent form, EntityIntent bound, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        for (String field : form.getFields()) {
+            if (field == null || field.indexOf('.') < 0) {
+                continue;
+            }
+            if (bound == null) {
+                issues.add("form [" + form.getName() + "] field [" + field
+                        + "] uses a relation.field path but the form has no (valid) forEntity to resolve it against");
+                continue;
+            }
+            int dot = field.indexOf('.');
+            String relationName = field.substring(0, dot);
+            String fieldName = field.substring(dot + 1);
+            if (fieldName.indexOf('.') >= 0) {
+                issues.add("form [" + form.getName() + "] field [" + field
+                        + "] uses a multi-hop path, which is not supported - use a direct field or a one-hop relation.field");
+                continue;
+            }
+            RelationIntent relation = toOneRelation(bound, relationName);
+            if (relation == null) {
+                issues.add("form [" + form.getName() + "] field [" + field + "] is not a to-one relation.field of [" + form.getForEntity()
+                        + "]");
+                continue;
+            }
+            EntityIntent target = byName.get(relation.getTo());
+            if (target == null || fieldByName(target, fieldName) == null) {
+                issues.add("form [" + form.getName() + "] field [" + field + "] references unknown field [" + fieldName + "] on ["
+                        + relation.getTo() + "]");
+            }
+        }
+    }
+
+    private static RelationIntent toOneRelation(EntityIntent owner, String name) {
+        for (RelationIntent relation : owner.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     private static void validateReports(IntentModel model, Set<String> entityNames, List<String> issues) {

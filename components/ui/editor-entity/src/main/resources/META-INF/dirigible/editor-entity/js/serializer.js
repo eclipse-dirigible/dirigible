@@ -148,6 +148,12 @@ function createModel(graph) {
 					if (property.calculatedPropertyExpressionUpdate != null) {
 						model.push(' calculatedPropertyExpressionUpdate="' + _.escape(property.calculatedPropertyExpressionUpdate) + '"');
 					}
+					if (property.calculatedActionOnCreate != null) {
+						model.push(' calculatedActionOnCreate="' + _.escape(property.calculatedActionOnCreate) + '"');
+					}
+					if (property.calculatedActionOnUpdate != null) {
+						model.push(' calculatedActionOnUpdate="' + _.escape(property.calculatedActionOnUpdate) + '"');
+					}
 					if (property.auditType) {
 						model.push(' auditType="' + _.escape(property.auditType) + '"');
 					}

@@ -86,6 +86,11 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
             });
         }, (response) => {
             console.error(response);
+            if (response && response.status === 404) {
+                // The file no longer exists (e.g. the workspace was cleaned by a rebuild) - close the stale editor.
+                layoutHub.closeEditor({ path: $scope.dataParameters.filePath });
+                return;
+            }
             $scope.$evalAsync(() => {
                 $scope.state.error = true;
                 $scope.errorMessage = 'Error while loading the intent file. Please look at the console for more information.';
@@ -449,6 +454,12 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                         graph.insertEdge(parent, null, String(args['if']), source, vertexFor(args['then']), edgeStyle(false));
                     }
                 } else {
+                    // A non-decision step with an explicit `next` routes to that step (or `end`) instead of
+                    // the next in the linear chain - mirrors BpmnIntentGenerator, so e.g. `send: { next: end }`
+                    // draws send -> end, not send -> the following declared step.
+                    const step = steps.find(s => byName[s.name] === source);
+                    const nextArg = step && step.args && step.args['next'];
+                    if (nextArg) target = vertexFor(nextArg);
                     graph.insertEdge(parent, null, '', source, target, edgeStyle(false));
                 }
             }

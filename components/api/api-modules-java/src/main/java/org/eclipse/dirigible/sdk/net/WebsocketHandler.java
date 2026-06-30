@@ -10,27 +10,40 @@
 package org.eclipse.dirigible.sdk.net;
 
 /**
- * Optional typed contract for a {@link Websocket @Websocket} class. Implementing this interface is
- * not required — the runtime still accepts any class that exposes the lifecycle methods by name —
- * but implementations gain compile-time signature checking and only need to override the callbacks
- * they care about; the rest inherit empty default behaviour.
+ * Self-describing contract for a WebSocket handler — the strong-interface style. A
+ * {@link org.eclipse.dirigible.sdk.component.Component @Component} bean that implements this
+ * interface IS a WebSocket handler: it supplies its own endpoint via {@link #endpoint()} and
+ * overrides only the lifecycle callbacks it needs (the rest inherit empty defaults), with no
+ * {@code @Websocket} annotation. This mirrors extending {@code TextWebSocketHandler} in Spring —
+ * the implementation carries everything.
  *
  * <p>
- * The {@code @Websocket} annotation remains the marker that registers the class for an endpoint;
- * this interface only describes the lifecycle callback shapes.
+ * The alternative, annotation style is a {@code @Websocket(endpoint = …)} class with
+ * {@code @OnOpen}/{@code @OnMessage}/{@code @OnError}/{@code @OnClose} methods (the endpoint has no
+ * method-level home, so the class annotation carries it — like Jakarta {@code @ServerEndpoint}). A
+ * single class uses one style or the other, never both.
  *
  * <p>
  * Example:
  *
  * <pre>
- * {@literal @}Websocket(name = "Java Chat", endpoint = "java-chat")
+ * {@literal @}Component
  * public class ChatHandler implements WebsocketHandler {
+ *     public String endpoint() { return "java-chat"; }
  *     {@literal @}Override public void onMessage(String message, String from) { ... }
  *     // onOpen, onError, onClose inherit the no-op default
  * }
  * </pre>
  */
 public interface WebsocketHandler {
+
+    /**
+     * The endpoint suffix this handler binds to, e.g. {@code "java-chat"} maps to
+     * {@code /websockets/stomp/java-chat}.
+     *
+     * @return the endpoint suffix
+     */
+    String endpoint();
 
     /** Fires once when a client opens the WebSocket. */
     default void onOpen() {

@@ -65,6 +65,11 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 					});
 				}, (response) => {
 					console.error(response);
+					if (response && response.status === 404) {
+						// The file no longer exists (e.g. the workspace was cleaned by a rebuild) - close the stale editor.
+						layoutHub.closeEditor({ path: $scope.dataParameters.filePath });
+						return;
+					}
 					$scope.$evalAsync(() => {
 						$scope.state.error = true;
 						$scope.errorMessage = 'Error while loading file. Please look at the console for more information.';
@@ -327,6 +332,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 				cell.value.isCalculatedProperty = data.isCalculatedProperty;
 				cell.value.calculatedPropertyExpressionCreate = data.calculatedPropertyExpressionCreate;
 				cell.value.calculatedPropertyExpressionUpdate = data.calculatedPropertyExpressionUpdate;
+				cell.value.calculatedActionOnCreate = data.calculatedActionOnCreate;
+				cell.value.calculatedActionOnUpdate = data.calculatedActionOnUpdate;
 				cell.value.auditType = data.auditType;
 				cell.value.isReadOnlyProperty = data.isReadOnlyProperty;
 				cell.value.dataName = data.dataName;
@@ -962,6 +969,8 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 									isCalculatedProperty: cell.value.isCalculatedProperty,
 									calculatedPropertyExpressionCreate: cell.value.calculatedPropertyExpressionCreate,
 									calculatedPropertyExpressionUpdate: cell.value.calculatedPropertyExpressionUpdate,
+									calculatedActionOnCreate: cell.value.calculatedActionOnCreate,
+									calculatedActionOnUpdate: cell.value.calculatedActionOnUpdate,
 									auditType: cell.value.auditType,
 									isReadOnlyProperty: cell.value.isReadOnlyProperty,
 									dataName: cell.value.dataName,

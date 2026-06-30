@@ -54,7 +54,6 @@
                             <url>${jdtls.download.url}</url>
                             <outputDirectory>${project.build.directory}/jdtls-download</outputDirectory>
                             <outputFileName>jdtls.tar.gz</outputFileName>
-                            <sha256>${jdtls.sha256}</sha256>
                             <cacheDirectory>${settings.localRepository}/jdtls-cache</cacheDirectory>
                             <readTimeOut>300000</readTimeOut>
                         </configuration>

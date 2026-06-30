@@ -53,8 +53,8 @@ public class WebsocketProcessor {
     /** {@code contains(String)} method on the registry, cached to avoid repeated reflection. */
     private Method registryContainsMethod;
 
-    /** {@code get(String)} method on the registry, cached to avoid repeated reflection. */
-    private Method registryGetMethod;
+    /** {@code dispatch(String, String, String, String, String)} method on the registry, cached. */
+    private Method registryDispatchMethod;
 
     /**
      * Instantiates a new websocket handler.
@@ -82,7 +82,8 @@ public class WebsocketProcessor {
             Class<?> registryClass = Class.forName(JAVA_REGISTRY_CLASS);
             javaWebsocketRegistry = applicationContext.getBean(registryClass);
             registryContainsMethod = registryClass.getMethod("contains", String.class);
-            registryGetMethod = registryClass.getMethod("get", String.class);
+            registryDispatchMethod =
+                    registryClass.getMethod("dispatch", String.class, String.class, String.class, String.class, String.class);
         } catch (ReflectiveOperationException e) {
             // engine-java not on classpath — Java websocket support disabled.
         } catch (org.springframework.beans.BeansException e) {
@@ -144,49 +145,24 @@ public class WebsocketProcessor {
     }
 
     /**
-     * Dispatch a WebSocket event to a Java handler retrieved from the optional
-     * {@code JavaWebsocketRegistry}. Missing handler methods are silently skipped.
+     * Dispatch a WebSocket event to the Java handler registered in the optional
+     * {@code JavaWebsocketRegistry}. The registry itself resolves the callback shape (typed interface,
+     * {@code @OnX} annotations, or reflective method names), so this module needs no
+     * {@code engine-java} dependency.
      */
     private Object dispatchToJava(String endpoint, Map<Object, Object> context) {
-        Object handler = getJavaHandler(endpoint);
-        if (handler == null) {
+        if (javaWebsocketRegistry == null || registryDispatchMethod == null) {
             return null;
         }
         String method = (String) context.get("method");
         try {
-            switch (method == null ? "" : method) {
-                case "onmessage" -> {
-                    Method m = findMethod(handler.getClass(), "onMessage", String.class, String.class);
-                    if (m != null) {
-                        Object result = m.invoke(handler, context.get("message"), context.get("from"));
-                        return result != null ? result.toString() : "";
-                    }
-                }
-                case "onopen" -> {
-                    Method m = findMethod(handler.getClass(), "onOpen");
-                    if (m != null) {
-                        m.invoke(handler);
-                    }
-                }
-                case "onclose" -> {
-                    Method m = findMethod(handler.getClass(), "onClose");
-                    if (m != null) {
-                        m.invoke(handler);
-                    }
-                }
-                case "onerror" -> {
-                    Method m = findMethod(handler.getClass(), "onError", String.class);
-                    if (m != null) {
-                        m.invoke(handler, context.get("error"));
-                    }
-                }
-                default -> LOGGER.warn("Unknown websocket method [{}] for endpoint [{}]", method, endpoint);
-            }
+            return registryDispatchMethod.invoke(javaWebsocketRegistry, endpoint, method, asString(context.get("message")),
+                    asString(context.get("from")), asString(context.get("error")));
         } catch (ReflectiveOperationException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             LOGGER.error("Java @Websocket handler [{}] threw on [{}]: {}", endpoint, method, cause.getMessage(), cause);
+            return null;
         }
-        return null;
     }
 
     private boolean hasJavaHandler(String endpoint) {
@@ -200,23 +176,8 @@ public class WebsocketProcessor {
         }
     }
 
-    private Object getJavaHandler(String endpoint) {
-        if (javaWebsocketRegistry == null || registryGetMethod == null) {
-            return null;
-        }
-        try {
-            return registryGetMethod.invoke(javaWebsocketRegistry, endpoint);
-        } catch (ReflectiveOperationException e) {
-            return null;
-        }
-    }
-
-    private static Method findMethod(Class<?> type, String name, Class<?>... params) {
-        try {
-            return type.getMethod(name, params);
-        } catch (NoSuchMethodException e) {
-            return null;
-        }
+    private static String asString(Object value) {
+        return value == null ? null : value.toString();
     }
 
     private String executeOnMessageHandler(String path, Map<Object, Object> context) {

@@ -9,7 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator.edm;
 
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -21,12 +23,14 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -93,9 +97,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             return;
         }
         String baseName = IntentNaming.baseName(context);
-        EdmDocument document = buildDocument(model, baseName);
+        IntentSettings.Branding branding = context.getSettings() != null ? context.getSettings()
+                                                                                  .getBranding()
+                : new IntentSettings.Branding();
+        EdmDocument document = buildDocument(context, model, baseName, branding);
         context.writeModelFile(baseName + ".model", JsonHelper.toJson(document.modelJson));
         context.writeModelFile(baseName + ".edm", renderEdmXml(document));
+    }
+
+    /**
+     * Test seam: build the {@code .model} JSON for the given model without a repository. With a null
+     * context, cross-model targets resolve via {@link CrossModelSupport} convention fallbacks (the
+     * owner-model-reading path is exercised by the integration test). Never use in production code.
+     */
+    static Map<String, Object> buildModelJsonForTest(IntentModel model, String intentName) {
+        return buildDocument(null, model, intentName, new IntentSettings.Branding()).modelJson;
     }
 
     /** The two views over one model tree: the {@code .model} JSON root and the XML extras. */
@@ -106,17 +122,32 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         final Map<String, List<Map<String, Object>>> relationsByEntity = new LinkedHashMap<>();
     }
 
-    private static EdmDocument buildDocument(IntentModel model, String intentName) {
+    private static EdmDocument buildDocument(IntentGenerationContext context, IntentModel model, String intentName,
+            IntentSettings.Branding branding) {
         List<EntityIntent> entities = model.getEntities();
         Map<String, EntityIntent> byName = indexEntities(entities);
         Map<String, String> compositionParents = computeCompositionParents(entities);
         Set<String> settingEntities = settingEntities(entities);
         Set<String> triggerTargets = TriggerSupport.triggerTargetEntities(model);
+        Map<String, UsesIntent> usesByAlias = new LinkedHashMap<>();
+        for (UsesIntent uses : model.getUses()) {
+            if (uses.getModel() != null) {
+                usesByAlias.put(uses.getModel(), uses);
+            }
+        }
+        String workspaceName = context != null && notBlank(context.getWorkspaceName()) ? context.getWorkspaceName() : "workspace";
+        // Cross-model targets become read-only PROJECTION entities (dedup by target name; parameterUtils
+        // links a consuming FK to its projection by matching relationshipEntityName == projection name).
+        Map<String, Map<String, Object>> projectionEntities = new LinkedHashMap<>();
 
         EdmDocument document = new EdmDocument();
         List<Map<String, Object>> entityList = new ArrayList<>();
         List<Map<String, Object>> perspectiveList = new ArrayList<>();
         String tablePrefix = IntentNaming.upperSnake(intentName);
+        // Document (header-items) layout: a master that owns a composition child whose name ends in
+        // "Item" (SalesInvoice -> SalesInvoiceItem) renders as a document - header form, inline items
+        // table, totals footer - rather than the default master-detail. Maps master -> its items entity.
+        Map<String, String> documentItems = documentMasters(entities, compositionParents);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -130,10 +161,40 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
-            Map<String, Object> entityMap =
-                    entityDefaults(name, entity.getDescription(), dependent, setting, perspective, tablePrefix, perspectiveOrder);
+            Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
+                    tablePrefix, perspectiveOrder);
+            // A navigation-group id makes the generated perspective nest under that group in the shared
+            // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
+            if (notBlank(entity.getGroup())) {
+                entityMap.put("perspectiveNavId", entity.getGroup());
+            }
+            // A document master keeps its own perspective/nav but swaps the master-detail layout for the
+            // document layout; it names its line-items entity so the document page renders that child as
+            // the inline table (and any other composition children as ordinary detail panels).
+            if (documentItems.containsKey(name)) {
+                String itemsEntity = documentItems.get(name);
+                entityMap.put("layoutType", "MANAGE_DOCUMENT");
+                entityMap.put("documentItemsEntity", itemsEntity);
+                // Humanized labels for the document editor: the master's singular ("Sales Invoice") and
+                // the line-items' humanized + pluralized label ("Sales Invoice Items").
+                entityMap.put("documentLabel", IntentNaming.humanize(name));
+                entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
+            }
+            // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
+            // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
+            if (entity.isDashboardExcluded()) {
+                entityMap.put("dashboardWidget", "false");
+            }
+            // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
+            // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
+            // DAO template's parameterUtils decodes before emitting them into the import block.
+            if (notBlank(entity.getImports())) {
+                entityMap.put("importsCode", Base64.getEncoder()
+                                                   .encodeToString(entity.getImports()
+                                                                         .getBytes(StandardCharsets.UTF_8)));
+            }
             if (!dependent && !setting) {
-                perspectiveList.add(perspectiveEntry(name, perspectiveOrder));
+                perspectiveList.add(perspectiveEntry(name, perspectiveOrder, iconUrl(entity.getIcon())));
                 perspectiveOrder++;
             }
 
@@ -150,6 +211,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
             }
+            // The four standard audit columns, populated by the platform's audit annotations downstream.
+            if (entity.isAudited()) {
+                properties.addAll(auditProperties(name));
+            }
             List<Map<String, Object>> relations = new ArrayList<>();
             boolean compositionAssigned = false;
             for (RelationIntent relation : entity.getRelations()) {
@@ -157,6 +222,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 if (relation.getName() == null || relation.getTo() == null) {
+                    continue;
+                }
+                // A cross-model relation references an entity owned by another intent model: emit a
+                // PROJECTION to that model plus a local integer FK + dropdown, and no <relation> link (the
+                // target is not an entity in this model's XML). The owner owns the table / DAO / controller.
+                if (relation.isCrossModel()) {
+                    UsesIntent uses = usesByAlias.get(relation.getModel());
+                    if (uses == null) {
+                        LOGGER.warn("Skipping cross-model relation [{}] of [{}] - model [{}] is not in uses:", relation.getName(), name,
+                                relation.getModel());
+                        continue;
+                    }
+                    CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, relation.getTo());
+                    properties.add(crossModelRelationProperty(name, relation, info));
+                    projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
                 }
                 boolean composition = !compositionAssigned && relation.isComposition();
@@ -172,8 +252,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 document.relationsByEntity.put(name, relations);
             }
         }
+        // Append the synthesized PROJECTION entities (read-only cross-model references). They carry no
+        // perspective so they stay out of this app's navigation, and downstream filters skip them for
+        // table / DAO / controller / role generation.
+        entityList.addAll(projectionEntities.values());
 
         Map<String, Object> body = new LinkedHashMap<>();
+        // Model-level caption for the generated app (the Harmonia shell title / sidebar header). The
+        // intent's `name` (humanised) is more meaningful than the raw project name; the `description`
+        // rides along as a subtitle/tooltip. Both are ignored by tooling that only reads entities.
+        // Branding precedence: .settings branding (developer-owned, per-deployment) wins over the
+        // intent's own name/description/icon, which win over the defaults. So one model can be
+        // rebranded per deployment by editing .settings, without touching the intent.
+        String title = notBlank(branding.getTitle()) ? branding.getTitle() : IntentNaming.humanize(model.getName());
+        body.put("title", title);
+        String description = notBlank(branding.getDescription()) ? branding.getDescription() : model.getDescription();
+        if (notBlank(description)) {
+            body.put("description", description);
+        }
+        // Optional brand icon (Lucide name or image URL) for the shell header; the UI template
+        // defaults it when absent.
+        String icon = notBlank(branding.getIcon()) ? branding.getIcon() : model.getIcon();
+        if (notBlank(icon)) {
+            body.put("icon", icon);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -217,6 +319,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Document masters: each entity that is the composition parent of a child whose name ends in
+     * {@code Item} maps to that child (the line-items entity). Iterated in entity-declaration order so
+     * the first {@code *Item} child wins deterministically when a master has several. Such a master
+     * renders with the document (header-items) layout instead of master-detail.
+     */
+    private static Map<String, String> documentMasters(List<EntityIntent> entities, Map<String, String> compositionParents) {
+        Map<String, String> masters = new LinkedHashMap<>();
+        for (EntityIntent entity : entities) {
+            String child = entity.getName();
+            if (child == null || !child.endsWith("Item")) {
+                continue;
+            }
+            String parent = compositionParents.get(child);
+            if (parent != null && !masters.containsKey(parent)) {
+                masters.put(parent, child);
+            }
+        }
+        return masters;
+    }
+
+    /**
      * Map each entity to its composition parent: the target of its first {@code composition: true}
      * {@code manyToOne} / {@code oneToOne} relation. Entities present as keys are DEPENDENT; their
      * perspective is the parent's, resolved transitively by {@link #resolvePerspective}.
@@ -256,16 +379,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return current;
     }
 
-    private static Map<String, Object> perspectiveEntry(String name, int order) {
+    private static final String UNICONS_BASE = "/services/web/resources/unicons/";
+
+    /**
+     * Resolve an intent icon name to a unicons SVG URL (for the AngularJS perspective); blank →
+     * default.
+     */
+    private static String iconUrl(String icon) {
+        if (icon == null || icon.isBlank()) {
+            return DEFAULT_ICON;
+        }
+        String n = icon.trim();
+        return (n.startsWith("/") || n.startsWith("http")) ? n : UNICONS_BASE + n + ".svg";
+    }
+
+    /** The raw icon name (a Lucide icon name for the Harmonia sidebar); blank → a neutral default. */
+    private static String iconName(String icon) {
+        return (icon == null || icon.isBlank()) ? "list" : icon.trim();
+    }
+
+    private static boolean notBlank(String value) {
+        return value != null && !value.isBlank();
+    }
+
+    private static Map<String, Object> perspectiveEntry(String name, int order, String icon) {
         Map<String, Object> perspective = new LinkedHashMap<>();
         perspective.put("name", name);
         perspective.put("label", name);
-        perspective.put("icon", DEFAULT_ICON);
+        perspective.put("icon", icon);
         perspective.put("order", Integer.toString(order));
         return perspective;
     }
 
-    private static Map<String, Object> entityDefaults(String name, String description, boolean dependent, boolean setting,
+    private static Map<String, Object> entityDefaults(String name, String description, String icon, boolean dependent, boolean setting,
             String perspective, String tablePrefix, int order) {
         String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
@@ -278,15 +424,21 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("caption", "Manage entity " + name);
         entity.put("description", description != null && !description.isBlank() ? description : "Manage entity " + name);
         entity.put("tooltip", name);
-        entity.put("icon", DEFAULT_ICON);
+        entity.put("icon", iconUrl(icon));
+        // Raw icon name for the Harmonia sidebar (Lucide). Defaults to "list" when unset.
+        entity.put("iconName", iconName(icon));
         entity.put("menuKey", name.toLowerCase(Locale.ROOT));
-        entity.put("menuLabel", name);
+        // Navigation label: humanized + pluralized so the menu reads naturally
+        // (SalesInvoice -> "Sales Invoices", Book -> "Books").
+        entity.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(name)));
+        // Singular humanized label for in-page UI text (titles, "New X", "Delete X", "X #id").
+        entity.put("entityLabel", IntentNaming.humanize(name));
         entity.put("menuIndex", "100");
         entity.put("layoutType", dependent ? "MANAGE_DETAILS" : "MANAGE_MASTER");
         entity.put("perspectiveName", perspective);
         entity.put("perspectiveLabel", perspective);
         entity.put("perspectiveHeader", "");
-        entity.put("perspectiveIcon", DEFAULT_ICON);
+        entity.put("perspectiveIcon", iconUrl(icon));
         entity.put("perspectiveOrder", Integer.toString(order));
         entity.put("perspectiveNavId", "");
         entity.put("perspectiveRole", "");
@@ -326,12 +478,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             p.put("dataLength", length.toString());
         }
         if ("DECIMAL".equals(dataType)) {
-            p.put("dataPrecision", "16");
-            p.put("dataScale", "2");
+            p.put("dataPrecision", field.getPrecision() != null ? field.getPrecision()
+                                                                       .toString()
+                    : "16");
+            p.put("dataScale", field.getScale() != null ? field.getScale()
+                                                               .toString()
+                    : "2");
+        }
+        if (field.isUnique()) {
+            p.put("dataUnique", "true");
         }
         if (field.getDefaultValue() != null && !field.getDefaultValue()
                                                      .isBlank()) {
             p.put("dataDefaultValue", field.getDefaultValue());
+        }
+        // A calculated property is assigned by the generated repository on insert/update - either from
+        // the authored expression (emitted verbatim into the chosen runtime) or, when an action class is
+        // given, by a server-side call-out to that CalculatedField implementation (which the DAO template
+        // gives precedence over the expression).
+        if (field.isCalculated()) {
+            p.put("isCalculatedProperty", "true");
+            if (notBlank(field.getCalculatedOnCreate())) {
+                p.put("calculatedPropertyExpressionCreate", field.getCalculatedOnCreate());
+            }
+            if (notBlank(field.getCalculatedOnUpdate())) {
+                p.put("calculatedPropertyExpressionUpdate", field.getCalculatedOnUpdate());
+            }
+            if (notBlank(field.getCalculatedActionOnCreate())) {
+                p.put("calculatedActionOnCreate", field.getCalculatedActionOnCreate());
+            }
+            if (notBlank(field.getCalculatedActionOnUpdate())) {
+                p.put("calculatedActionOnUpdate", field.getCalculatedActionOnUpdate());
+            }
+        }
+        // Render hint for the document (header-items) layout: show this property in the totals footer
+        // under the items table rather than in the header form. Presentational only.
+        if (field.isAggregate()) {
+            p.put("aggregate", "true");
         }
         p.put("auditType", "NONE");
         p.put("widgetType", widgetForType(dataType));
@@ -414,6 +597,148 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", "true");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        return p;
+    }
+
+    /**
+     * FK property for a cross-model {@code manyToOne}/{@code oneToOne} relation. Like
+     * {@link #relationProperty} but the target lives in another model: the dropdown is sourced from the
+     * owner's REST service (via the sibling {@code PROJECTION} entity, matched by
+     * {@code relationshipEntityName}), the FK type / key / label / perspective come from the resolved
+     * owner model, and there is never a composition (the parser forbids cross-model ownership).
+     */
+    private static Map<String, Object> crossModelRelationProperty(String ownerEntity, RelationIntent relation,
+            CrossModelSupport.TargetInfo info) {
+        String column = IntentNaming.upperSnake(ownerEntity) + "_" + IntentNaming.upperSnake(relation.getName());
+        boolean oneToOne = "oneToOne".equals(relation.getKind());
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", IntentNaming.pascalCase(relation.getName()));
+        p.put("description", relation.getDescription() == null ? "" : relation.getDescription());
+        p.put("tooltip", "");
+        p.put("dataName", column);
+        p.put("dataType", info.fkType());
+        boolean notNull = relation.isRequired();
+        p.put("dataNullable", notNull ? "false" : "true");
+        if (notNull) {
+            p.put("isRequiredProperty", "true");
+        }
+        p.put("auditType", "NONE");
+        p.put("relationshipType", "ASSOCIATION");
+        p.put("relationshipCardinality", oneToOne ? "1_1" : "n_1");
+        p.put("relationshipName", ownerEntity + "_" + relation.getTo());
+        p.put("relationshipEntityName", relation.getTo());
+        // The owner's perspective for the target drives the dropdown's REST URL
+        // (api/<perspective>/<Entity>Controller). Settings live under "Settings", primaries under their
+        // own name - resolved from the owner model when present.
+        p.put("relationshipEntityPerspectiveName", info.perspectiveName());
+        p.put("relationshipEntityPerspectiveLabel", "Entities");
+        p.put("widgetType", "DROPDOWN");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "20");
+        p.put("widgetIsMajor", "true");
+        p.put("widgetDropDownKey", info.keyField());
+        p.put("widgetDropDownValue", info.labelField());
+        return p;
+    }
+
+    /**
+     * A read-only {@code PROJECTION} entity standing in for a cross-model target. It generates no table
+     * / DAO / controller (downstream filters skip {@code type=PROJECTION}); it carries the owner's
+     * table name and primary-key column so the {@code .schema} foreign key resolves to the owner's
+     * table, and a blank {@code perspectiveName} so it never shows up in this app's navigation. The
+     * {@code projectionReferencedModel} path {@code /<workspace>/<project>/<model>.model} is the format
+     * the template's {@code parameterUtils} splits to find the owner project + gen folder.
+     */
+    private static Map<String, Object> projectionEntity(UsesIntent uses, String targetEntity, CrossModelSupport.TargetInfo info,
+            String workspaceName) {
+        String project = uses.resolveProject();
+        String alias = uses.getModel();
+        Map<String, Object> e = new LinkedHashMap<>();
+        e.put("name", targetEntity);
+        e.put("dataName", info.tableDataName());
+        e.put("dataCount", "");
+        e.put("dataQuery", "");
+        e.put("type", "PROJECTION");
+        e.put("title", targetEntity);
+        e.put("caption", "Projection of " + targetEntity);
+        e.put("description", "Cross-model reference to " + targetEntity + " owned by " + project);
+        e.put("tooltip", targetEntity);
+        e.put("icon", DEFAULT_ICON);
+        e.put("iconName", "list");
+        e.put("menuKey", targetEntity.toLowerCase(Locale.ROOT));
+        e.put("menuLabel", IntentNaming.pluralize(IntentNaming.humanize(targetEntity)));
+        e.put("menuIndex", "100");
+        e.put("layoutType", "");
+        // No perspective: keeps the projection out of parameterUtils' perspective/navigation building.
+        e.put("perspectiveName", "");
+        e.put("perspectiveLabel", "");
+        e.put("perspectiveHeader", "");
+        e.put("perspectiveIcon", DEFAULT_ICON);
+        e.put("perspectiveOrder", "0");
+        e.put("perspectiveNavId", "");
+        e.put("perspectiveRole", "");
+        e.put("generateReport", "false");
+        e.put("generateDefaultRoles", "false");
+        e.put("projectionReferencedModel", "/" + workspaceName + "/" + project + "/" + alias + ".model");
+        e.put("projectionReferencedEntity", targetEntity);
+        List<Map<String, Object>> properties = new ArrayList<>();
+        Map<String, Object> key = new LinkedHashMap<>();
+        key.put("name", info.keyField());
+        key.put("description", "");
+        key.put("tooltip", "");
+        key.put("dataName", info.keyColumn());
+        key.put("dataType", info.fkType());
+        key.put("dataNullable", "false");
+        key.put("dataPrimaryKey", "true");
+        key.put("auditType", "NONE");
+        key.put("widgetType", widgetForType(info.fkType()));
+        key.put("widgetIsMajor", "false");
+        properties.add(key);
+        Map<String, Object> label = new LinkedHashMap<>();
+        label.put("name", info.labelField());
+        label.put("description", "");
+        label.put("tooltip", "");
+        label.put("dataName", IntentNaming.upperSnake(targetEntity) + "_" + IntentNaming.upperSnake(info.labelField()));
+        label.put("dataType", "VARCHAR");
+        label.put("dataNullable", "true");
+        label.put("auditType", "NONE");
+        label.put("widgetType", "TEXTBOX");
+        label.put("widgetIsMajor", "true");
+        properties.add(label);
+        e.put("properties", properties);
+        return e;
+    }
+
+    /**
+     * The four standard audit columns (populated downstream by the {@code @CreatedAt}/etc.
+     * annotations).
+     */
+    private static List<Map<String, Object>> auditProperties(String entityName) {
+        List<Map<String, Object>> audit = new ArrayList<>();
+        audit.add(auditProperty(entityName, "CreatedAt", "TIMESTAMP", "CREATED_AT", 0));
+        audit.add(auditProperty(entityName, "CreatedBy", "VARCHAR", "CREATED_BY", 128));
+        audit.add(auditProperty(entityName, "UpdatedAt", "TIMESTAMP", "UPDATED_AT", 0));
+        audit.add(auditProperty(entityName, "UpdatedBy", "VARCHAR", "UPDATED_BY", 128));
+        return audit;
+    }
+
+    private static Map<String, Object> auditProperty(String entityName, String fieldName, String dataType, String auditType, int length) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", fieldName);
+        p.put("description", "");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(fieldName));
+        p.put("dataType", dataType);
+        p.put("dataNullable", "true");
+        if (length > 0) {
+            p.put("dataLength", Integer.toString(length));
+        }
+        p.put("auditType", auditType);
+        p.put("widgetType", widgetForType(dataType));
+        p.put("widgetSize", "");
+        p.put("widgetLength", length > 0 ? Integer.toString(length) : "20");
+        // Audit values are system-managed, not user input.
+        p.put("widgetIsMajor", "false");
         return p;
     }
 
@@ -765,7 +1090,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             appendAttribute(sb, "entityType", entityType);
         }
         for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName"}) {
+                "menuLabel", "layoutType", "perspectiveName", "importsCode"}) {
             if (entity.get(key) != null) {
                 appendAttribute(sb, key, entity.get(key));
             }

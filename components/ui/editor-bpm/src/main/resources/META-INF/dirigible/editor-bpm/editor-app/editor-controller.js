@@ -421,6 +421,10 @@ angular.module('flowableModeler')
 		editorManager.bootEditor();
 	}).catch(function (error) {
 		console.error("BPM", error);
+		if (error && error.status === 404) {
+			// The file no longer exists (e.g. the workspace was cleaned by a rebuild) - close the stale editor.
+			new LayoutHub().closeEditor({ path: '/' + modelId });
+		}
 	});
  
  	//minihack to make sure mousebind events are processed if the modeler is used in an iframe.

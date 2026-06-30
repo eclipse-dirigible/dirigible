@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.engine.java.handler;
 
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.runtime.JavaClassRegistry;
 import org.eclipse.dirigible.engine.java.runtime.LoadedHandler;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
@@ -29,10 +30,12 @@ import org.springframework.stereotype.Component;
 public class HandlerClassConsumer implements JavaClassConsumer {
 
     private final JavaClassRegistry registry;
+    private final ComponentContainer componentContainer;
 
     @Autowired
-    public HandlerClassConsumer(JavaClassRegistry registry) {
+    public HandlerClassConsumer(JavaClassRegistry registry, ComponentContainer componentContainer) {
         this.registry = registry;
+        this.componentContainer = componentContainer;
     }
 
     @Override
@@ -44,7 +47,12 @@ public class HandlerClassConsumer implements JavaClassConsumer {
     public void onClassLoaded(LoadedClass info) {
         @SuppressWarnings("unchecked")
         Class<? extends JavaHandler> handlerClass = (Class<? extends JavaHandler>) info.type();
-        registry.register(new LoadedHandler(info.project(), info.fqn(), info.loader(), handlerClass));
+        // When the handler is also a @Component, dispatch the container-built (injected) singleton;
+        // a plain JavaHandler with no @Component is instantiated per request via its no-arg constructor.
+        JavaHandler beanInstance = componentContainer.instanceOf(info.type())
+                                                     .map(JavaHandler.class::cast)
+                                                     .orElse(null);
+        registry.register(new LoadedHandler(info.project(), info.fqn(), info.loader(), handlerClass, beanInstance));
     }
 
     @Override

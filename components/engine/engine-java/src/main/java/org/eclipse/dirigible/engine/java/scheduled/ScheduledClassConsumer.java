@@ -10,17 +10,22 @@
 package org.eclipse.dirigible.engine.java.scheduled;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ScheduledFuture;
 
-import org.eclipse.dirigible.sdk.job.JobHandler;
-import org.eclipse.dirigible.sdk.job.Scheduled;
+import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
+import org.eclipse.dirigible.sdk.job.JobHandler;
+import org.eclipse.dirigible.sdk.job.Scheduled;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
@@ -28,19 +33,21 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link JavaClassConsumer} that registers client classes annotated with {@link Scheduled} as
- * cron-triggered tasks.
+ * {@link JavaClassConsumer} that schedules client jobs on a cron trigger. Two styles, never mixed
+ * on one class:
+ * <ul>
+ * <li><b>self-describing interface</b> — a {@code @Component} bean implementing {@link JobHandler},
+ * which supplies its own {@code cron()} and {@code run()};</li>
+ * <li><b>method level</b> — public no-arg methods annotated {@link Scheduled @Scheduled} on a
+ * client bean, Spring's {@code @Scheduled}-on-a-method style.</li>
+ * </ul>
+ * The bean instance is built (with constructor + field injection) by the
+ * {@link ComponentContainer}; this consumer only fetches it and wires the cron schedule. Hot-reload
+ * cancels the old schedule(s) and re-registers from the updated class.
  *
  * <p>
- * The annotated class must expose a public no-arg {@code run()} method. Implementing the optional
- * {@link JobHandler} interface gives compile-time signature checking and a direct, non-reflective
- * dispatch path; classes that don't implement it still work — the consumer falls back to looking up
- * {@code run()} by name and invoking it reflectively. The class is instantiated once per load
- * cycle; hot-reload cancels the old schedule and re-schedules with the updated class.
- *
- * <p>
- * A dedicated {@link ThreadPoolTaskScheduler} is created and owned by this consumer so that
- * {@code @Scheduled} support does not require {@code @EnableScheduling} in the host application.
+ * A dedicated {@link ThreadPoolTaskScheduler} is owned by this consumer so {@code @Scheduled}
+ * support does not require {@code @EnableScheduling} in the host application.
  */
 @Component
 @Order(400)
@@ -48,12 +55,16 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ScheduledClassConsumer.class);
 
+    private final ComponentContainer componentContainer;
+
     private final TaskScheduler taskScheduler;
 
-    /** fqn → active ScheduledFuture, for cancellation on unload. */
-    private final ConcurrentMap<String, ScheduledFuture<?>> futures = new ConcurrentHashMap<>();
+    /** fqn → active ScheduledFutures (one class may register several method-level schedules). */
+    private final ConcurrentMap<String, List<ScheduledFuture<?>>> futures = new ConcurrentHashMap<>();
 
-    public ScheduledClassConsumer() {
+    @Autowired
+    public ScheduledClassConsumer(ComponentContainer componentContainer) {
+        this.componentContainer = componentContainer;
         ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
         scheduler.setPoolSize(2);
         scheduler.setThreadNamePrefix("java-scheduled-");
@@ -63,61 +74,55 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     @Override
     public boolean accepts(Class<?> clazz) {
-        return clazz.isAnnotationPresent(Scheduled.class);
+        return JobHandler.class.isAssignableFrom(clazz) || hasScheduledMethod(clazz);
     }
 
     @Override
     public void onClassLoaded(LoadedClass info) {
-        Scheduled ann = info.type()
-                            .getAnnotation(Scheduled.class);
-
-        Object instance;
-        try {
-            instance = info.type()
-                           .getDeclaredConstructor()
-                           .newInstance();
-        } catch (ReflectiveOperationException e) {
-            LOGGER.error("Failed to instantiate @Scheduled class [{}]: {}", info.fqn(), e.getMessage(), e);
+        Class<?> type = info.type();
+        Object instance = componentContainer.instanceOf(type)
+                                            .orElse(null);
+        if (instance == null) {
+            LOGGER.error("Scheduled job [{}] was not instantiated as a bean — a JobHandler and a @Scheduled method both require "
+                    + "the class to be a @Component; skipped.", info.fqn());
             return;
         }
 
-        // Typed path: skip reflection entirely when the class opted into the JobHandler contract.
-        Runnable task;
-        if (instance instanceof JobHandler typed) {
-            task = () -> {
-                try {
-                    typed.run();
-                } catch (RuntimeException ex) {
-                    LOGGER.error("@Scheduled class [{}] run() threw: {}", info.fqn(), ex.getMessage(), ex);
-                }
-            };
-        } else {
-            Method runMethod;
-            try {
-                runMethod = info.type()
-                                .getMethod("run");
-            } catch (NoSuchMethodException e) {
-                LOGGER.error("@Scheduled class [{}] must implement JobHandler or expose a public no-arg run() method; skipped.",
-                        info.fqn());
-                return;
-            }
-            task = () -> invoke(runMethod, instance, info.fqn());
+        boolean jobHandler = instance instanceof JobHandler;
+        boolean methodLevel = hasScheduledMethod(type);
+        if (jobHandler && methodLevel) {
+            LOGGER.error("[{}] mixes scheduling styles — it implements JobHandler and also declares @Scheduled methods. "
+                    + "Use one style or the other; skipped.", info.fqn());
+            return;
         }
 
         cancelExisting(info.fqn());
+        List<ScheduledFuture<?>> scheduled = new ArrayList<>();
 
-        CronTrigger trigger;
-        try {
-            trigger = new CronTrigger(ann.expression());
-        } catch (IllegalArgumentException e) {
-            LOGGER.error("@Scheduled class [{}] has invalid cron expression '{}': {}", info.fqn(), ann.expression(), e.getMessage());
-            return;
+        if (jobHandler) {
+            JobHandler job = (JobHandler) instance;
+            schedule(scheduled, () -> runJob(job, info.fqn()), job.cron(), info.fqn());
+        } else {
+            for (Method method : type.getDeclaredMethods()) {
+                Scheduled annotation = method.getAnnotation(Scheduled.class);
+                if (annotation == null) {
+                    continue;
+                }
+                if (!isEligibleMethod(method)) {
+                    LOGGER.error("@Scheduled method [{}#{}] must be public and take no parameters; skipped.", info.fqn(), method.getName());
+                    continue;
+                }
+                method.setAccessible(true);
+                String label = info.fqn() + "#" + method.getName();
+                schedule(scheduled, () -> invoke(method, instance, label), annotation.expression(), label);
+            }
         }
 
-        ScheduledFuture<?> future = taskScheduler.schedule(task, trigger);
-        futures.put(info.fqn(), future);
-        LOGGER.info("Scheduled Java class [{}] with cron '{}' ({} dispatch).", info.fqn(), ann.expression(),
-                instance instanceof JobHandler ? "typed" : "reflective");
+        if (scheduled.isEmpty()) {
+            LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
+            return;
+        }
+        futures.put(info.fqn(), scheduled);
     }
 
     @Override
@@ -129,25 +134,61 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     @Override
     public void destroy() {
         futures.values()
-               .forEach(f -> f.cancel(false));
+               .forEach(list -> list.forEach(f -> f.cancel(false)));
         futures.clear();
         if (taskScheduler instanceof ThreadPoolTaskScheduler tpts) {
             tpts.shutdown();
         }
     }
 
-    private void cancelExisting(String fqn) {
-        ScheduledFuture<?> old = futures.remove(fqn);
-        if (old != null) {
-            old.cancel(false);
+    private static void runJob(JobHandler job, String fqn) {
+        try {
+            job.run();
+        } catch (RuntimeException ex) {
+            LOGGER.error("Job [{}] run() threw: {}", fqn, ex.getMessage(), ex);
         }
     }
 
-    private static void invoke(Method run, Object instance, String fqn) {
+    private void schedule(List<ScheduledFuture<?>> sink, Runnable task, String expression, String label) {
+        CronTrigger trigger;
         try {
-            run.invoke(instance);
+            trigger = new CronTrigger(expression);
+        } catch (IllegalArgumentException e) {
+            LOGGER.error("@Scheduled [{}] has invalid cron expression '{}': {}", label, expression, e.getMessage(), e);
+            return;
+        }
+        sink.add(taskScheduler.schedule(task, trigger));
+        LOGGER.info("Scheduled Java task [{}] with cron '{}'.", label, expression);
+    }
+
+    private void cancelExisting(String fqn) {
+        List<ScheduledFuture<?>> old = futures.remove(fqn);
+        if (old != null) {
+            old.forEach(f -> f.cancel(false));
+        }
+    }
+
+    private static boolean hasScheduledMethod(Class<?> clazz) {
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(Scheduled.class)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isEligibleMethod(Method method) {
+        return Modifier.isPublic(method.getModifiers()) && method.getParameterCount() == 0 && !method.isSynthetic();
+    }
+
+    private static void invoke(Method method, Object instance, String label) {
+        try {
+            method.invoke(instance);
         } catch (ReflectiveOperationException e) {
-            LOGGER.error("@Scheduled class [{}] run() threw: {}", fqn, e.getMessage(), e);
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            LOGGER.error("@Scheduled [{}] threw: {}", label, cause.getMessage(), cause);
+        } catch (RuntimeException e) {
+            LOGGER.error("@Scheduled [{}] threw: {}", label, e.getMessage(), e);
         }
     }
 }
