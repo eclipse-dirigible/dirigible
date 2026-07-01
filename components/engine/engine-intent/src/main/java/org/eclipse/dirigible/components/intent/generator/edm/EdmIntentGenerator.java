@@ -526,7 +526,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForType(dataType));
         p.put("widgetSize", "");
         p.put("widgetLength", length == null ? "20" : length.toString());
-        p.put("widgetIsMajor", "true");
+        // Whether the field is a column in the entity list table; `major: false` keeps it off the list
+        // (still shown in forms + the details pane). Defaults to true when unset.
+        p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
         return p;
     }
 

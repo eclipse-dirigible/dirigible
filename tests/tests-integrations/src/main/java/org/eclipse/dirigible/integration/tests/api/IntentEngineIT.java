@@ -560,6 +560,30 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void field_major_false_is_kept_off_the_list_via_widget_is_major() {
+        // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
+        // omits that column (the field is still shown in forms + the details pane). Default is true.
+        String yaml = """
+                name: catalog
+                entities:
+                  - name: Product
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: name,  type: string,  required: true, length: 100 }
+                      - { name: notes, type: text,    major: false }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        String model = contentOf("catalog.model");
+        assertTrue(model.contains("\"widgetIsMajor\": \"false\""),
+                "a field with major: false should emit widgetIsMajor=false so it is excluded from the list table");
+        assertTrue(model.contains("\"widgetIsMajor\": \"true\""), "fields default to major (widgetIsMajor=true)");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping
