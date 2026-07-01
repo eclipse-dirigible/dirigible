@@ -560,6 +560,54 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void delegate_service_task_binds_a_client_java_delegate_via_flowable_class_with_injected_fields() {
+        // A serviceTask with a `delegate` names an author-provided client JavaDelegate FQN. Unlike
+        // setField/setRelationField (bound to a generated gen.events delegate through ${JavaTask}) or a
+        // bare serviceTask (bound to a scaffolded custom.<Step> stub), a delegate is bound via
+        // flowable:class so Flowable injects the declared `fields` into it. The delegate lives in the
+        // document's OWN project (it manages the entity through its generated repository).
+        String yaml = """
+                name: invoicing
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100 }
+                processes:
+                  - name: IssueInvoice
+                    trigger: { onCreate: Invoice }
+                    steps:
+                      - { name: review, kind: userTask, args: { assignee: clerk, form: ReviewInvoice } }
+                      - name: generateNumber
+                        kind: serviceTask
+                        args:
+                          delegate: custom.invoicing.DocumentNumberGeneratorDelegate
+                          fields: { type: "Sales Invoice" }
+                          next: done
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewInvoice, forEntity: Invoice, fields: [number], actions: [submit] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: the delegate step binds flowable:class (NOT ${JavaTask}) and injects each field.
+        String bpmn = contentOf("IssueInvoice.bpmn");
+        assertTrue(
+                bpmn.contains("<serviceTask id=\"generateNumber\" name=\"Generate Number\"")
+                        && bpmn.contains("flowable:class=\"custom.invoicing.DocumentNumberGeneratorDelegate\""),
+                "a delegate service task should bind flowable:class to the author-named client delegate");
+        assertFalse(bpmn.contains("id=\"generateNumber\"") && bpmn.contains("flowable:delegateExpression=\"${JavaTask}\""),
+                "a delegate service task must not fall back to the ${JavaTask} dispatcher");
+        assertTrue(bpmn.contains("<flowable:field name=\"type\">") && bpmn.contains("<![CDATA[Sales Invoice]]>"),
+                "each delegate field should be emitted as an injectable flowable:field");
+        assertFalse(bpmn.contains("custom.GenerateNumber"), "a delegate service task must not scaffold a custom/ stub");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping

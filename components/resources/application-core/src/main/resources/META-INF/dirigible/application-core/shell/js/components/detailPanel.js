@@ -47,7 +47,9 @@ function detailPanel(def, masterId) {
       for (const col of (this.def.columns || [])) {
         if (!col.lookup) continue;
         try {
-          const rows = await App.services.api.get(col.lookup.url, { baseUrl: '' });
+          // getAll (paged), NOT get: get returns only the controller's first page (default 20), so a
+          // referenced row beyond it would leave the FK unresolved and the cell would show the raw id.
+          const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           const m = {};
           (rows || []).forEach(e => { m[e[col.lookup.key]] = e[col.lookup.text]; });
           all[col.name] = m;

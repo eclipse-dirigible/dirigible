@@ -713,6 +713,31 @@ public final class IntentParser {
                     }
                 }
             }
+            String delegate = stepArg(step, "delegate");
+            if (delegate != null && !delegate.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses delegate but is not a serviceTask");
+                }
+                boolean hasCall = stepArg(step, "call") != null && !stepArg(step, "call").isBlank();
+                if ((setField != null && !setField.isBlank()) || (setRelationField != null && !setRelationField.isBlank()) || hasCall) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] delegate cannot be combined with setField/setRelationField/call");
+                }
+                Object fields = step.getArgs() == null ? null
+                        : step.getArgs()
+                              .get("fields");
+                if (fields != null && !(fields instanceof Map)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] delegate `fields` must be a map of name: value pairs");
+                } else if (fields instanceof Map<?, ?> map) {
+                    for (Map.Entry<?, ?> entry : map.entrySet()) {
+                        if (entry.getValue() instanceof Map || entry.getValue() instanceof List) {
+                            issues.add("process [" + process.getName() + "] step [" + step.getName() + "] delegate field [" + entry.getKey()
+                                    + "] must be a scalar value");
+                        }
+                    }
+                }
+            }
             String next = stepArg(step, "next");
             if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
                 issues.add(

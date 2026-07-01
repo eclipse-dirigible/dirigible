@@ -111,6 +111,8 @@ lazily). `EntityBeanMapper` does bean↔map; `JavaEntityToHbmMapper` reflects an
 (shares `HbmXmlDescriptor` with `data-store` — audit both if you change either). SessionFactory roots at
 the default user-data datasource, not SystemDB.
 
+**Manage entities ONLY through their generated `<Entity>Repository` — NEVER the generic `Store`/`Database` for entity CRUD.** The generated repository (`@Repository extends JavaRepository<T>`) is the *only* sanctioned way to load/save/update/delete a managed entity, because it carries validations, **event publishing** (`Producer.sendToTopic` on the create/`-updated`/`-deleted` topics that intent triggers/reactions/rollups/notifications listen on), multi-language support, and other per-entity behaviour. The generic `org.eclipse.dirigible.sdk.db.Store` (name-keyed dynamic map) and raw `Database` SQL **bypass all of that silently** and MUST NOT be used to read or mutate a managed entity. (`updateWithoutEvent` is fine — it's a deliberate repository method that keeps `super.update`'s validations/i18n and only omits the event, for workflow-driven system writes: intent SetField/Writer/trigger delegates.) Consequence for a *reusable* delegate/service: it can't statically import a foreign `<Entity>Entity`, so the code that touches a specific entity must live **in that entity's project** (where it imports that project's repository); keep only entity-agnostic helpers (e.g. a number generator over its own `NumberRepository`) in a shared project. Don't make code "general" by reaching into arbitrary entities through `Store`.
+
 ## Errors are surfaced to developers
 
 Both **compile errors** (per line/column) and **bean-wiring errors** (unsatisfied/ambiguous dependency,

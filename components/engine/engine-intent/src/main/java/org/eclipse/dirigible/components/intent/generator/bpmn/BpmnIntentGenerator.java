@@ -540,6 +540,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // with the project name (the JSTask delegate resolves relative to the registry root);
         // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
         // handler that ServiceTaskHandlerGenerator scaffolds once under custom/ for the developer.
+        // - an author-declared serviceTask with a `delegate` -> a client JavaDelegate FQN bound via
+        // flowable:class (NOT ${JavaTask}), so Flowable injects the author's `fields` as delegate fields;
+        // this is how a reusable, parameterized delegate (e.g. a document number generator) is invoked.
+        String delegate = stringArg(step, "delegate");
+        if (delegate != null && !delegate.isBlank()) {
+            appendDelegateServiceTask(sb, step, delegate.trim());
+            return;
+        }
         String javaHandler = stringArg(step, "javaHandler");
         String setField = stringArg(step, "setField");
         String setRelationField = stringArg(step, "setRelationField");
@@ -576,6 +584,63 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             sb.append("      </extensionElements>\n");
         }
         sb.append("    </serviceTask>\n");
+    }
+
+    /**
+     * Emit a service task bound to an author-named client
+     * {@link org.flowable.engine.delegate.JavaDelegate} via {@code flowable:class} (resolved through
+     * the client class loader by {@code BpmFlowableConfig}'s {@code ClientAwareClassLoader}). Unlike
+     * the {@code ${JavaTask}} dispatcher - which only forwards the {@code handler} field and
+     * instantiates the target with a no-arg constructor - {@code flowable:class} lets Flowable inject
+     * the declared {@code fields} into the delegate, so a reusable, parameterized delegate can be
+     * configured per step.
+     */
+    private static void appendDelegateServiceTask(StringBuilder sb, StepIntent step, String delegateClass) {
+        sb.append("    <serviceTask id=\"")
+          .append(escapeXmlAttribute(step.getName()))
+          .append("\" name=\"")
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
+          .append("\" flowable:async=\"true\" flowable:class=\"")
+          .append(escapeXmlAttribute(delegateClass))
+          .append("\">\n");
+        Map<String, String> fields = delegateFields(step);
+        if (!fields.isEmpty()) {
+            sb.append("      <extensionElements>\n");
+            for (Map.Entry<String, String> field : fields.entrySet()) {
+                sb.append("        <flowable:field name=\"")
+                  .append(escapeXmlAttribute(field.getKey()))
+                  .append("\">\n");
+                sb.append("          <flowable:string><![CDATA[")
+                  .append(field.getValue())
+                  .append("]]></flowable:string>\n");
+                sb.append("        </flowable:field>\n");
+            }
+            sb.append("      </extensionElements>\n");
+        }
+        sb.append("    </serviceTask>\n");
+    }
+
+    /**
+     * The delegate {@code fields} map (name -> literal string value) an author declared on a
+     * {@code delegate} service task, preserving declaration order. A non-map {@code fields} arg
+     * (already rejected by the parser) yields an empty map.
+     */
+    private static Map<String, String> delegateFields(StepIntent step) {
+        Map<String, String> fields = new LinkedHashMap<>();
+        Object raw = step.getArgs() == null ? null
+                : step.getArgs()
+                      .get("fields");
+        if (raw instanceof Map<?, ?> map) {
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null && entry.getValue() != null) {
+                    fields.put(entry.getKey()
+                                    .toString(),
+                            entry.getValue()
+                                 .toString());
+                }
+            }
+        }
+        return fields;
     }
 
     /**

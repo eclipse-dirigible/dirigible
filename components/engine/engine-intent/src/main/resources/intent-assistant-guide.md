@@ -274,6 +274,35 @@ trigger entity. `setRelationField` works on a `serviceTask` (like `setField`) **
   The same rule applies to `setField`: branch-then-set on a serviceTask when a decision follows; set
   on the task only when nothing branches on its outcome.
 
+**Calling a custom (reusable) delegate: `delegate`.** For a service task whose work is real logic
+that cannot be modelled (call a number generator, post to an external system, run a computation),
+name a hand-written client `JavaDelegate` with `delegate: <fully.qualified.ClassName>` and pass it
+parameters with `fields: { <name>: <value>, ... }`:
+
+```yaml
+  # After Issue, stamp the document number. The delegate lives in THIS document's own project
+  # (custom/) because it must load & save the record through the generated <Entity>Repository.
+  # Flowable injects each `fields` entry into the delegate (here just the number-series `type`).
+  - name: generateNumber
+    kind: serviceTask
+    args:
+      delegate: custom.sales_invoices.DocumentNumberGeneratorDelegate
+      fields: { type: "Sales Invoice" }
+      next: send
+```
+
+The delegate is bound via `flowable:class` (not the `${JavaTask}` dispatcher the `setField` /
+scaffolded-stub paths use), because only `flowable:class` lets Flowable inject the declared `fields`
+as delegate fields. Contrast the three "custom code" service-task shapes: `setField` /
+`setRelationField` bind a **generated** `gen.events` delegate; a **bare** serviceTask (no
+`delegate` / `call`) binds `custom.<Step>` and scaffolds a one-time stub under `custom/`; a
+`delegate` binds **your** named class and scaffolds nothing (you write it). **A delegate that touches
+an entity must live in that entity's project** and manage it through the generated
+`<Entity>Repository` (validations, events, i18n) — never the generic `Store`. Only truly
+entity-agnostic helpers (e.g. a number generator over its own repository) belong in a shared project
+and are called from the delegate (client Java compiles across all published projects). `delegate`
+cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process
