@@ -190,15 +190,15 @@
 #end
 
     <div x-h-toolbar.footer>
-      <div x-h-toolbar-spacer></div>
 #if($hasProcess)
-      <!-- Actionable BPM user-task buttons (edit only), in the same lane as Save. -->
+      <!-- Actionable BPM user-task buttons (edit only), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" @click="$store.processTasks.openTask(task)">
           <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
         </button>
       </template>
 #end
+      <div x-h-toolbar-spacer></div>
       <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'">Cancel</button>
       <button type="submit" x-h-button data-variant="primary" :disabled="state === 'saving'">
         <span x-show="state === 'saving'" x-h-spinner></span>
