@@ -251,21 +251,16 @@
     </div>
 #end
 
-#if($hasProcess)
-    <!-- Actionable BPM user tasks for this document, shown just above the save lane (edit only). -->
-    <div x-show="isEdit && $store.processTasks.getTasks(form).length" x-h-toolbar data-variant="transparent">
+    <!-- ===== Document footer: BPM user-task buttons (edit only) + Save/Create, in one lane ===== -->
+    <div x-h-toolbar.footer>
       <div x-h-toolbar-spacer></div>
+#if($hasProcess)
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
-        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+        <button type="button" x-h-button data-variant="primary" @click="$store.processTasks.openTask(task)">
           <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
         </button>
       </template>
-    </div>
 #end
-
-    <!-- ===== Document footer: Save / Create at the very bottom (under the items + totals) ===== -->
-    <div x-h-toolbar.footer>
-      <div x-h-toolbar-spacer></div>
       <button type="button" x-h-button data-variant="primary" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
         <span x-text="isEdit ? 'Save' : 'Create'"></span>
