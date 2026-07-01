@@ -572,6 +572,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 countField: model.rollups[r].countField,
                                 op: model.rollups[r].op,
                                 sumField: model.rollups[r].sumField,
+                                capacityField: model.rollups[r].capacityField,
+                                balanceField: model.rollups[r].balanceField,
+                                statusField: model.rollups[r].statusField,
+                                statusWhenFull: model.rollups[r].statusWhenFull,
+                                statusWhenPartial: model.rollups[r].statusWhenPartial,
                                 topicSuffix: model.rollups[r].topicSuffix,
                                 criteriaExpression: model.rollups[r].criteriaExpression
                             };

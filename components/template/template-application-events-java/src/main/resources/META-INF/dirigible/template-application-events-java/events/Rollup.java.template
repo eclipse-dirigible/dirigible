@@ -53,6 +53,19 @@ public class ${className} implements MessageHandler {
             }
         }
         parent.${countField} = sum;
+#if($capacityField != "")
+        BigDecimal capacity = parent.${capacityField} == null ? BigDecimal.ZERO : parent.${capacityField};
+#if($balanceField != "")
+        // Outstanding balance = capacity - sum.
+        parent.${balanceField} = capacity.subtract(sum);
+#end
+#if($statusField != "")
+        // Derive status: fully consumed -> whenFull, partially -> whenPartial (unchanged at zero).
+        if (sum.signum() > 0) {
+            parent.${statusField} = sum.compareTo(capacity) >= 0 ? ${statusWhenFull} : ${statusWhenPartial};
+        }
+#end
+#end
         // System-managed denormalization - persist without re-publishing the parent "-updated" event.
         parents.updateWithoutEvent(parent);
 #else

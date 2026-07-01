@@ -36,6 +36,28 @@ public class RollupIntent {
     private String op;
     /** The child field summed onto {@link #field} when {@link #op} is {@code sum}. */
     private String of;
+    /**
+     * Optional (sum roll-ups only): a numeric "capacity" field on the parent the sum is measured
+     * against - e.g. an invoice's {@code total} against which the paid sum is compared. Enables
+     * {@link #balance} and {@link #status} derivation.
+     */
+    private String capacity;
+    /**
+     * Optional (sum roll-ups only, requires {@link #capacity}): a parent field kept equal to
+     * {@code capacity - sum} (e.g. an invoice's outstanding {@code balance}).
+     */
+    private String balance;
+    /**
+     * Optional (sum roll-ups only, requires {@link #capacity}): a parent to-one relation set to
+     * {@link #statusWhenFull} when {@code sum >= capacity}, or {@link #statusWhenPartial} when
+     * {@code 0 < sum < capacity} (left unchanged at zero). E.g. an invoice's {@code Status} → PAID /
+     * PARTIAL as payments accumulate.
+     */
+    private String status;
+    /** Seed id set on {@link #status} when the sum reaches the capacity (fully consumed). */
+    private Integer statusWhenFull;
+    /** Seed id set on {@link #status} when the sum is positive but below the capacity. */
+    private Integer statusWhenPartial;
 
     public String getName() {
         return name;
@@ -83,5 +105,45 @@ public class RollupIntent {
 
     public void setOf(String of) {
         this.of = of;
+    }
+
+    public String getCapacity() {
+        return capacity;
+    }
+
+    public void setCapacity(String capacity) {
+        this.capacity = capacity;
+    }
+
+    public String getBalance() {
+        return balance;
+    }
+
+    public void setBalance(String balance) {
+        this.balance = balance;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
+
+    public Integer getStatusWhenFull() {
+        return statusWhenFull;
+    }
+
+    public void setStatusWhenFull(Integer statusWhenFull) {
+        this.statusWhenFull = statusWhenFull;
+    }
+
+    public Integer getStatusWhenPartial() {
+        return statusWhenPartial;
+    }
+
+    public void setStatusWhenPartial(Integer statusWhenPartial) {
+        this.statusWhenPartial = statusWhenPartial;
     }
 }

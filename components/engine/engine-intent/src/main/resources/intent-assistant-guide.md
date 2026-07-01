@@ -431,8 +431,22 @@ rollups:
 `entity` is the child being counted, `via` is the child's to-one relation pointing at the parent, and
 `field` is the integer field on the **parent** that holds the count.
 
+**Sum + balance + status (payment settlement).** With `op: sum` the roll-up keeps `field` equal to the
+sum of the children's `of` field. Add `capacity` (a numeric parent field the sum is measured against)
+to also maintain a `balance` field (= `capacity − sum`) and set a `status` relation to `statusWhenFull`
+(when `sum >= capacity`) or `statusWhenPartial` (when `0 < sum < capacity`; unchanged at zero):
+```yaml
+rollups:
+  # Invoice.paid = sum of its payment allocations; balance = total − paid; Status -> PAID / PARTIAL.
+  - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+      op: sum, of: amount,
+      capacity: total, balance: balance, status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
+```
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
-must be an existing **integer** field on the parent entity.
+must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
+extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
+`statusWhenFull`/`statusWhenPartial` its target seed ids.
 
 ## Allowed values
 
