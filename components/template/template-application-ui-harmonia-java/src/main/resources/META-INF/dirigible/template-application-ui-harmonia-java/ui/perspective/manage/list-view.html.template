@@ -109,7 +109,7 @@
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
                   <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                   <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
@@ -188,7 +188,7 @@
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
           <div class="vbox gap-0">
             <span x-h-text.muted class="text-xs">${plabel}</span>
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
             <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
             <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
