@@ -48,7 +48,9 @@
 
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
 
-  <div x-show="state !== 'loading' && state !== 'load-failure'" class="vbox gap-6 py-6 px-8 w-full max-w-4xl">
+  <div x-show="state !== 'loading' && state !== 'load-failure'" class="hbox gap-6 py-6 px-8 w-full items-start">
+    <!-- Main content column -->
+    <div class="vbox gap-6 grow min-w-0" style="max-width: 56rem;">
 
     <!-- ===== Header form (the aggregate totals are excluded here — shown in the footer) ===== -->
     <form @submit.prevent="save()" class="vbox gap-4 w-full">
@@ -223,34 +225,6 @@
       </div>
     </template>
 
-    <!-- Read-only details: system / read-only fields (audit, ProcessId, uuid, any field marked
-         read-only) shown as Label: Value at the very bottom (under items + payments), only when populated. -->
-#set($hasReadOnly = false)
-#foreach($property in $properties)
-#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
-#end
-#if($hasReadOnly)
-    <div x-h-card x-show="isEdit">
-      <div x-h-card-content>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
-#foreach($property in $properties)
-#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
-#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
-          <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
-            <span class="text-xs text-muted-foreground">${rolabel}</span>
-#if($property.widgetType == "DROPDOWN")
-            <span class="text-sm" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
-#else
-            <span class="text-sm" x-text="form.${property.name}"></span>
-#end
-          </div>
-#end
-#end
-        </div>
-      </div>
-    </div>
-#end
-
     <!-- ===== Document footer: BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT ===== -->
     <div x-h-toolbar.footer>
 #if($hasProcess)
@@ -268,6 +242,38 @@
         <span x-text="isEdit ? 'Save' : 'Create'"></span>
       </button>
     </div>
+    </div>
+
+    <!-- Right sidebar: read-only / audit fields (audit, ProcessId, uuid, read-only), single column,
+         top-to-bottom (edit only). -->
+#set($hasReadOnly = false)
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
+#end
+#if($hasReadOnly)
+    <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit">
+      <div x-h-card>
+        <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+        <div x-h-card-content>
+          <div class="grid grid-cols-1 gap-y-3">
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
+#if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
+            <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+              <span class="text-xs text-muted-foreground">${rolabel}</span>
+#if($property.widgetType == "DROPDOWN")
+              <span class="text-sm break-all" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
+#else
+              <span class="text-sm break-all" x-text="form.${property.name}"></span>
+#end
+            </div>
+#end
+#end
+          </div>
+        </div>
+      </div>
+    </div>
+#end
 
   </div>
 
