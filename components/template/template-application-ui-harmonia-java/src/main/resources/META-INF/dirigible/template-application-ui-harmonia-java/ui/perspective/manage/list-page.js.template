@@ -22,6 +22,18 @@ document.addEventListener('alpine:init', () => {
     pageSize: 10,
     selected: null,   // the row shown in the right-hand details pane
 
+    // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ.
+    // FK columns render a dropdown from the same lookup maps the list loads. Order + `number` mirror
+    // the table header (major, non-auto-increment properties).
+    columnFilters: {},
+    filterColumns: [
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+      { name: '${property.name}', type: '#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")fk#elseif($property.isDateType)date#elseif($property.isNumberType)number#{else}string#end'#if($property.isNumberType), number: true#end },
+#end
+#end
+    ],
+
     // Delete confirmation.
     deleteOpen: false,
     deleteTarget: null,
@@ -106,7 +118,7 @@ document.addEventListener('alpine:init', () => {
     async loadLookups() {
       const all = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};
@@ -130,9 +142,64 @@ document.addEventListener('alpine:init', () => {
     get displayState() {
       if (this.state === 'loading') return 'loading';
       if (this.state === 'error')   return 'error';
-      if (this.items.length === 0)  return 'empty';
+      // With an active column filter, keep the table (and its filter row) visible even with 0 rows,
+      // so the user can adjust/clear it — don't fall back to the "create your first record" empty state.
+      if (this.items.length === 0)  return (this.hasActiveColumnFilters || this.searchTerm) ? 'no-results' : 'empty';
       if (this.searchTerm && this.filteredItems.length === 0) return 'no-results';
       return 'default';
+    },
+
+    // ----- Per-column server-side filter row ------------------------------------------------------
+    // Build POST /search conditions from the non-empty column filters (string -> LIKE, else EQ).
+    buildConditions() {
+      const conds = [];
+      for (const col of this.filterColumns) {
+        const raw = this.columnFilters[col.name];
+        if (raw === undefined || raw === null || String(raw).trim() === '') continue;
+        if (col.type === 'string') {
+          conds.push({ propertyName: col.name, operator: 'LIKE', value: '%' + String(raw).trim() + '%' });
+        } else if (col.type === 'number' || col.type === 'fk') {
+          const n = Number(raw);
+          conds.push({ propertyName: col.name, operator: 'EQ', value: isNaN(n) ? raw : n });
+        } else if (col.type === 'date') {
+          conds.push({ propertyName: col.name, operator: 'EQ', value: raw });
+        }
+      }
+      return conds;
+    },
+
+    // Reload the list from the backend: POST /search when any filter is set, else the full getAll.
+    async applyServerFilter() {
+      const conditions = this.buildConditions();
+      this.state = 'loading';
+      this.error = null;
+      try {
+        this.items = conditions.length
+          ? await App.services.api.post(this.apiPath + '/search', { conditions })
+          : await App.services.api.getAll(this.apiPath);
+        this.currentPage = 1;
+        this.state = this.items.length === 0 ? 'empty' : 'default';
+        if (this.selected) this.selected = this.items.find(it => it.${primaryKeysString} === this.selected.${primaryKeysString}) || null;
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Could not filter ${name}.');
+        this.state = 'error';
+      }
+      this.refreshIcons();
+    },
+
+    get hasActiveColumnFilters() {
+      return this.filterColumns.some(c => {
+        const v = this.columnFilters[c.name];
+        return v !== undefined && v !== null && String(v).trim() !== '';
+      });
+    },
+
+    clearColumnFilters() { this.columnFilters = {}; this.applyServerFilter(); },
+
+    // FK filter dropdown options ({value,text}) from the already-loaded lookup map.
+    optionsForFilter(name) {
+      const m = this.lookups[name] || {};
+      return Object.keys(m).map(k => ({ value: k, text: m[k] }));
     },
 
     get filteredItems() {

@@ -170,7 +170,7 @@ public class ${name}Controller {
                 String field = requireKnownField(String.valueOf(entry.getKey()));
                 String paramName = "p" + params.size();
                 hql.append(first ? " where e." : " and e.").append(field).append(" = :").append(paramName);
-                params.put(paramName, entry.getValue());
+                params.put(paramName, coerceValue(field, entry.getValue()));
                 first = false;
             }
         }
@@ -195,7 +195,7 @@ public class ${name}Controller {
                     default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unsupported operator: " + operator);
                 };
                 hql.append(first ? " where " : " and ").append(clause);
-                params.put(paramName, value);
+                params.put(paramName, operator.equals("IN") ? value : coerceValue(field, value));
                 first = false;
             }
         }
@@ -207,6 +207,45 @@ public class ${name}Controller {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Unknown filter field: " + field);
         }
         return field;
+    }
+
+    // Coerce a JSON-sourced filter value to the entity property's Java type so Hibernate can bind it.
+    // Date/timestamp filters arrive as ISO strings and must become LocalDate/LocalDateTime/Instant,
+    // else binding fails with "argument [2026-07-01] is not assignable to java.time.LocalDate". Reflects
+    // the entity field type (the field is already validated against FILTER_FIELDS). LIKE/string values
+    // and already-typed numbers pass through unchanged.
+    private static Object coerceValue(String field, Object value) {
+        if (!(value instanceof String s) || s.isBlank()) {
+            return value;
+        }
+        try {
+            Class<?> type = ${name}Entity.class.getField(field)
+                                                    .getType();
+            if (type == java.time.LocalDate.class) {
+                return java.time.LocalDate.parse(s);
+            }
+            if (type == java.time.LocalDateTime.class) {
+                return java.time.LocalDateTime.parse(s);
+            }
+            if (type == java.time.Instant.class) {
+                return java.time.Instant.parse(s);
+            }
+            if (type == Integer.class) {
+                return Integer.valueOf(s);
+            }
+            if (type == Long.class) {
+                return Long.valueOf(s);
+            }
+            if (type == java.math.BigDecimal.class) {
+                return new java.math.BigDecimal(s);
+            }
+            if (type == Double.class) {
+                return Double.valueOf(s);
+            }
+        } catch (ReflectiveOperationException | RuntimeException e) {
+            // Unknown field or unparseable value: leave as-is and let Hibernate's validator report it.
+        }
+        return value;
     }
 #if($needsRoles)
 

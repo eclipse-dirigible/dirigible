@@ -74,6 +74,32 @@
 #end
                 <th x-h-table-head scope="col"></th>
               </tr>
+              <!-- Per-column filter row: server-side (POST /search). String columns match LIKE,
+                   FK columns are a dropdown (EQ by id), numbers/dates match EQ. -->
+              <tr x-h-table-row>
+                <template x-for="col in filterColumns" :key="col.name">
+                  <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''">
+                    <select x-show="col.type === 'fk'" x-model="columnFilters[col.name]" @change="applyServerFilter()"
+                            class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1">
+                      <option value="">All</option>
+                      <template x-for="opt in optionsForFilter(col.name)" :key="opt.value">
+                        <option :value="opt.value" x-text="opt.text"></option>
+                      </template>
+                    </select>
+                    <input x-show="col.type !== 'fk'" x-model="columnFilters[col.name]"
+                           :type="col.type === 'date' ? 'date' : 'text'"
+                           @input.debounce.400ms="applyServerFilter()"
+                           placeholder="Filter…"
+                           class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1" />
+                  </th>
+                </template>
+                <th x-h-table-head scope="col" class="text-center">
+                  <button type="button" x-show="hasActiveColumnFilters" @click="clearColumnFilters()"
+                          title="Clear filters" class="text-muted-foreground hover:text-foreground">
+                    <i role="img" data-lucide="filter-x" class="size-4"></i>
+                  </button>
+                </th>
+              </tr>
             </thead>
             <tbody x-h-table-body>
               <tr x-show="displayState === 'no-results'" x-h-table-row>
