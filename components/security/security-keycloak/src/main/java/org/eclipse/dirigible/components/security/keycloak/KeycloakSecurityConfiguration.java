@@ -73,8 +73,8 @@ public class KeycloakSecurityConfiguration {
      */
     @Bean
     SecurityFilterChain configure(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
-            HttpSecurityURIConfigurator httpSecurityURIConfigurator, ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter)
-            throws Exception {
+            HttpSecurityURIConfigurator httpSecurityURIConfigurator, ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter,
+            KeycloakLogoutSuccessHandler keycloakLogoutSuccessHandler) throws Exception {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
@@ -88,6 +88,10 @@ public class KeycloakSecurityConfiguration {
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())
                                                                  .jwtAuthenticationConverter(
                                                                          jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
+            .logout(logout -> logout.deleteCookies("JSESSIONID")
+                                    .invalidateHttpSession(true)
+                                    .clearAuthentication(true)
+                                    .logoutSuccessHandler(keycloakLogoutSuccessHandler))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);
