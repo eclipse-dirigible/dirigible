@@ -707,6 +707,53 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void sum_rollup_with_capacity_maintains_balance_and_sets_status() {
+        // A sum roll-up with `capacity` also keeps a `balance` field (= capacity - sum) and derives a
+        // `status` relation: whenFull (>= capacity) / whenPartial (0 < sum < capacity). This is the
+        // payment-settlement engine: Bill.paid = sum of its payments, Bill.balance = total - paid,
+        // Bill.Status -> PAID / PARTIAL.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Bill
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: total,   type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,    type: decimal, precision: 18, scale: 2 }
+                      - { name: balance, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: BillStatus }
+                  - name: BillStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 50 }
+                  - name: BillPayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                rollups:
+                  - { name: billPaid, entity: BillPayment, via: Bill, field: paid, op: sum, of: amount,
+                      capacity: total, balance: balance, status: Status, statusWhenFull: 2, statusWhenPartial: 1 }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String onCreate = contentOf("gen/events/BillPaidRollupOnCreate.java");
+        assertTrue(onCreate.contains("parent.Paid = sum"), "the sum roll-up should write the summed field");
+        assertTrue(onCreate.contains("parent.Balance = capacity.subtract(sum)"),
+                "with a capacity + balance, it should keep balance = capacity - sum");
+        assertTrue(onCreate.contains("parent.Status = sum.compareTo(capacity) >= 0 ? 2 : 1"),
+                "with a capacity + status, it should set the status relation to whenFull/whenPartial at the thresholds");
+    }
+
+    @Test
     void process_trigger_business_key_uses_the_flagged_field_not_the_primary_key() {
         // The trigger flags `orderNumber` as the business key; the listener must still LOAD the entity
         // by its primary key (findById), but start the process with the flagged field as the BPM

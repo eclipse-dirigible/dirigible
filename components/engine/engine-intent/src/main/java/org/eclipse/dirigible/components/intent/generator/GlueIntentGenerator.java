@@ -298,6 +298,25 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("countField", IntentNaming.pascalCase(rollup.getField()));
             base.put("op", op);
             base.put("sumField", sum ? IntentNaming.pascalCase(rollup.getOf()) : "");
+            // Optional (sum) capacity/balance/status: keep a `balance` field = capacity - sum, and set a
+            // `status` relation to whenFull/whenPartial at the thresholds. Empty string / -1 = not set.
+            boolean withCapacity = sum && rollup.getCapacity() != null && !rollup.getCapacity()
+                                                                                 .isBlank();
+            base.put("capacityField", withCapacity ? IntentNaming.pascalCase(rollup.getCapacity()) : "");
+            base.put("balanceField", withCapacity && rollup.getBalance() != null && !rollup.getBalance()
+                                                                                           .isBlank()
+                                                                                                   ? IntentNaming.pascalCase(
+                                                                                                           rollup.getBalance())
+                                                                                                   : "");
+            boolean withStatus = withCapacity && rollup.getStatus() != null && !rollup.getStatus()
+                                                                                      .isBlank();
+            base.put("statusField", withStatus ? IntentNaming.pascalCase(rollup.getStatus()) : "");
+            base.put("statusWhenFull", withStatus && rollup.getStatusWhenFull() != null ? rollup.getStatusWhenFull()
+                                                                                                .toString()
+                    : "");
+            base.put("statusWhenPartial", withStatus && rollup.getStatusWhenPartial() != null ? rollup.getStatusWhenPartial()
+                                                                                                      .toString()
+                    : "");
             // Recompute the value for the affected parent from the store on each child event.
             base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
             String className = IntentNaming.pascalCase(rollup.getName());
