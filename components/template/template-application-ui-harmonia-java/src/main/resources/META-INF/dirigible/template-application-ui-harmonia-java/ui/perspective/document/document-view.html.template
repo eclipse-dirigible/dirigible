@@ -231,7 +231,7 @@
               <thead x-h-table-header>
                 <tr x-h-table-row>
                   <template x-for="col in def.columns" :key="col.name">
-                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.name"></th>
+                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label || col.name"></th>
                   </template>
                 </tr>
               </thead>
