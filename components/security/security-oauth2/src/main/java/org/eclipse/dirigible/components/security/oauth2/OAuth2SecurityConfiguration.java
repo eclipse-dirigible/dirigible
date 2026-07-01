@@ -52,6 +52,12 @@ public class OAuth2SecurityConfiguration {
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(Customizer.withDefaults())
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())))
+            // GitHub OAuth exposes no RP-initiated logout (no end-session endpoint), so only the local
+            // session can be cleared here; an active github.com session may still re-authenticate silently.
+            .logout(logout -> logout.deleteCookies("JSESSIONID")
+                                    .invalidateHttpSession(true)
+                                    .clearAuthentication(true)
+                                    .logoutSuccessUrl("/"))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);

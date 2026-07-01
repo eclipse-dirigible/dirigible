@@ -66,7 +66,8 @@ public class CognitoSecurityConfiguration {
      */
     @Bean
     SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
-            ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter) throws Exception {
+            ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter, CognitoLogoutSuccessHandler cognitoLogoutSuccessHandler)
+            throws Exception {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
@@ -78,6 +79,10 @@ public class CognitoSecurityConfiguration {
             .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(jwtDecoder())
                                                                  .jwtAuthenticationConverter(
                                                                          jwtAuthenticationConverter(scopeRoleJwtAuthoritiesConverter))))
+            .logout(logout -> logout.deleteCookies("JSESSIONID")
+                                    .invalidateHttpSession(true)
+                                    .clearAuthentication(true)
+                                    .logoutSuccessHandler(cognitoLogoutSuccessHandler))
             .sessionManagement(sessionManagement -> sessionManagement.sessionCreationPolicy(SessionCreationPolicy.ALWAYS));
 
         httpSecurityURIConfigurator.configure(http);
