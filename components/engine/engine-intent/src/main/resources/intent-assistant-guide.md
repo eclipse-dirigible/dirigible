@@ -94,6 +94,9 @@ composition is opt-in.
 `defaultValue`, a field may declare:
 
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
+  record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
+  of wide/secondary fields (e.g. `uuid`, long notes).
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
