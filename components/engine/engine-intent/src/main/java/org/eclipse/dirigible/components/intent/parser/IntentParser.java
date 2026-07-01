@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
+import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
@@ -154,9 +155,99 @@ public final class IntentParser {
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateRollups(model, issues);
+        validateSettlements(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * Each settlement must reference declared junction / invoice / payment entities; the junction must
+     * have a to-one relation to each of them; the named amount / total / paid / pot / order fields must
+     * exist; and each {@code match} must be a to-one relation of both the invoice and the payment.
+     */
+    private static void validateSettlements(IntentModel model, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (SettlementIntent s : model.getSettlements()) {
+            String label = s.getName() == null ? "<unnamed>" : s.getName();
+            if (s.getName() == null || s.getName()
+                                        .isBlank()) {
+                issues.add("settlement has no name");
+                continue;
+            }
+            if (!names.add(s.getName())) {
+                issues.add("duplicate settlement [" + s.getName() + "]");
+            }
+            EntityIntent junction = byName.get(s.getJunction());
+            EntityIntent invoice = byName.get(s.getInvoice());
+            if (junction == null) {
+                issues.add("settlement [" + label + "] references unknown junction entity [" + s.getJunction() + "]");
+            }
+            if (invoice == null) {
+                issues.add("settlement [" + label + "] references unknown invoice entity [" + s.getInvoice() + "]");
+            }
+            if (s.getPayment() == null || s.getPayment()
+                                           .isBlank()) {
+                issues.add("settlement [" + label + "] must name a payment entity");
+            }
+            if (junction != null) {
+                if (toOneRelationTo(junction, s.getInvoice()) == null) {
+                    issues.add("settlement [" + label + "] junction [" + s.getJunction() + "] has no to-one relation to [" + s.getInvoice()
+                            + "]");
+                }
+                if (toOneRelationTo(junction, s.getPayment()) == null) {
+                    issues.add("settlement [" + label + "] junction [" + s.getJunction() + "] has no to-one relation to [" + s.getPayment()
+                            + "]");
+                }
+                if (s.getAmount() == null || fieldByName(junction, s.getAmount()) == null) {
+                    issues.add("settlement [" + label + "] amount [" + s.getAmount() + "] is not a field of the junction ["
+                            + s.getJunction() + "]");
+                }
+            }
+            if (invoice != null) {
+                requireField(invoice, s.getTotal(), label, "total", issues);
+                requireField(invoice, s.getPaid(), label, "paid", issues);
+                requireField(invoice, s.getOrder(), label, "order", issues);
+                if (s.getStatus() != null && !s.getStatus()
+                                               .isBlank()
+                        && toOneRelationByName(invoice, s.getStatus()) == null) {
+                    issues.add("settlement [" + label + "] status [" + s.getStatus() + "] is not a to-one relation of [" + s.getInvoice()
+                            + "]");
+                }
+                for (String m : s.getMatch()) {
+                    if (toOneRelationByName(invoice, m) == null) {
+                        issues.add("settlement [" + label + "] match [" + m + "] is not a to-one relation of the invoice [" + s.getInvoice()
+                                + "]");
+                    }
+                }
+            }
+        }
+    }
+
+    private static void requireField(EntityIntent entity, String field, String label, String role, List<String> issues) {
+        if (field == null || fieldByName(entity, field) == null) {
+            issues.add("settlement [" + label + "] " + role + " [" + field + "] is not a field of [" + entity.getName() + "]");
+        }
+    }
+
+    /** The entity's to-one relation whose target is {@code targetEntity}, or null. */
+    private static RelationIntent toOneRelationTo(EntityIntent entity, String targetEntity) {
+        if (entity.getRelations() == null || targetEntity == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (targetEntity.equals(relation.getTo())
+                    && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**

@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
+import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -86,9 +87,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
+        List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
-                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()) {
+                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
+                && settlements.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -104,6 +107,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("integrations", integrations);
         glue.put("inbound", inbound);
         glue.put("rollups", rollups);
+        glue.put("settlements", settlements);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
                 "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] writer(s), [{}] setter(s),"
@@ -328,6 +332,117 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
         }
         return rollups;
+    }
+
+    /**
+     * One glue entry per {@link SettlementIntent}: resolves the junction's two FK properties, the
+     * invoice open-amount fields, and the cross-model payment's project/perspective/topic (via
+     * {@link CrossModelSupport}) so the two settlement templates (onPayment listener + onInvoice
+     * delegate) can be rendered. Java-package sanitization happens in the {@code settlements} case of
+     * {@code generateUtils.js} (same as triggers), keeping this generator at logical names.
+     */
+    private static List<Map<String, Object>> buildSettlements(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (SettlementIntent s : model.getSettlements()) {
+            if (s.getName() == null || s.getName()
+                                        .isBlank()) {
+                continue;
+            }
+            EntityIntent junction = byName.get(s.getJunction());
+            EntityIntent invoice = byName.get(s.getInvoice());
+            if (junction == null || invoice == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("settlements", s.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing settlement [{}] (not generated)", s.getName());
+                continue;
+            }
+            RelationIntent fkInvoice = relationTo(junction, s.getInvoice());
+            RelationIntent fkPayment = relationTo(junction, s.getPayment());
+            if (fkInvoice == null || fkPayment == null) {
+                continue; // parser already reported the missing junction relation
+            }
+            boolean crossModel = fkPayment.getModel() != null && !fkPayment.getModel()
+                                                                           .isBlank();
+            UsesIntent uses = crossModel ? findUses(model, fkPayment.getModel()) : null;
+            CrossModelSupport.TargetInfo payTarget = uses == null ? null : CrossModelSupport.resolve(context, uses, s.getPayment());
+            String paymentProject = crossModel ? (uses == null ? fkPayment.getModel() : uses.resolveProject()) : context.getProjectName();
+            String paymentPerspective = payTarget != null ? payTarget.perspectiveName() : s.getPayment();
+
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", IntentNaming.pascalCase(s.getName()));
+            e.put("match", pascalList(s.getMatch()));
+            // invoice (this project)
+            e.put("invoiceEntity", s.getInvoice());
+            e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents));
+            e.put("invoicePk", IntentEntities.keyFieldName(invoice));
+            e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
+            e.put("invoicePaid", IntentNaming.pascalCase(s.getPaid()));
+            e.put("order", IntentNaming.pascalCase(s.getOrder()));
+            e.put("invoiceStatus", s.getStatus() == null ? "" : IntentNaming.pascalCase(s.getStatus()));
+            e.put("payableCondition", payableCondition(s.getPayableStatuses()));
+            // junction (this project)
+            e.put("junctionEntity", s.getJunction());
+            e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents));
+            e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
+            e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
+            e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
+            // payment (possibly cross-model)
+            e.put("crossModel", crossModel);
+            e.put("paymentEntity", s.getPayment());
+            e.put("paymentProject", paymentProject);
+            e.put("paymentModel", crossModel ? fkPayment.getModel() : "");
+            e.put("paymentPerspective", paymentPerspective);
+            e.put("paymentPk", payTarget != null ? payTarget.keyField() : "Id");
+            e.put("paymentPot", IntentNaming.pascalCase(s.getPot()));
+            e.put("paymentTopic", paymentProject + "-" + paymentPerspective + "-" + s.getPayment());
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** The junction's to-one relation whose target is the given entity, or null. */
+    private static RelationIntent relationTo(EntityIntent junction, String targetEntity) {
+        if (junction.getRelations() == null || targetEntity == null) {
+            return null;
+        }
+        for (RelationIntent relation : junction.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && targetEntity.equals(relation.getTo())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /** PascalCase each name in the list (the match relations become FK property names). */
+    private static List<String> pascalList(List<String> names) {
+        List<String> out = new ArrayList<>();
+        if (names != null) {
+            for (String n : names) {
+                if (n != null && !n.isBlank()) {
+                    out.add(IntentNaming.pascalCase(n));
+                }
+            }
+        }
+        return out;
+    }
+
+    /** A Java boolean expression testing {@code s} against the payable status ids, or {@code true}. */
+    private static String payableCondition(List<Integer> statuses) {
+        if (statuses == null || statuses.isEmpty()) {
+            return "true";
+        }
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < statuses.size(); i++) {
+            if (i > 0) {
+                sb.append(" || ");
+            }
+            sb.append("s == ")
+              .append(statuses.get(i));
+        }
+        return sb.toString();
     }
 
     private static Map<String, Object> rollupEntry(Map<String, Object> base, String className, String topicSuffix) {

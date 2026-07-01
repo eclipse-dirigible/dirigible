@@ -47,6 +47,15 @@ public class IntentModel {
     private List<IntegrationIntent> integrations = new ArrayList<>();
     private List<InboundIntent> inbound = new ArrayList<>();
     private List<RollupIntent> rollups = new ArrayList<>();
+    private List<SettlementIntent> settlements = new ArrayList<>();
+
+    public List<SettlementIntent> getSettlements() {
+        return settlements;
+    }
+
+    public void setSettlements(List<SettlementIntent> settlements) {
+        this.settlements = settlements;
+    }
 
     public String getName() {
         return name;

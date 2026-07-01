@@ -754,6 +754,75 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void settlement_generates_on_payment_listener_and_on_invoice_delegate() {
+        // A settlement auto-allocates a Payment across a Customer's open Invoices (oldest first) via the
+        // InvoicePayment junction: an onPayment MessageHandler (payment create) + an onInvoice
+        // JavaDelegate (wired as a delegate: service task once the invoice is payable).
+        String yaml = """
+                name: settle
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: date,  type: date }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,  type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                      - { name: Status,   kind: manyToOne, to: InvoiceStatus }
+                  - name: Payment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: date,   type: date }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: Customer
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 100 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 50 }
+                  - name: InvoicePayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Payment, kind: manyToOne, to: Payment, required: true }
+                settlements:
+                  - { name: autoSettle, junction: InvoicePayment, invoice: Invoice, payment: Payment,
+                      amount: amount, total: total, paid: paid, pot: amount, order: date,
+                      match: [Customer], status: Status, payableStatuses: [3, 4, 6] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "settle.glue");
+
+        String onPayment = contentOf("gen/events/AutoSettleOnPayment.java");
+        assertTrue(onPayment.contains("class AutoSettleOnPayment implements MessageHandler"),
+                "the onPayment settlement listener should be generated");
+        assertTrue(onPayment.contains("PaymentEntity payment = Json.parse(message, PaymentEntity.class)"),
+                "it should deserialize the created payment from the event");
+        assertTrue(onPayment.contains(".eq(\"Customer\", payment.Customer)"), "it should match invoices on the shared Customer");
+        assertTrue(onPayment.contains("s == 3 || s == 4 || s == 6"), "it should only allocate to invoices in a payable status");
+        assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
+                "it should create allocation rows through the junction repository (never the generic Store)");
+
+        String onInvoice = contentOf("gen/events/AutoSettleOnInvoice.java");
+        assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
+                "the onInvoice settlement delegate should be generated");
+        assertTrue(onInvoice.contains("new PaymentRepository().findAll") && onInvoice.contains(".eq(\"Customer\", invoice.Customer)"),
+                "it should pull the customer's payments matching on the shared Customer");
+    }
+
+    @Test
     void process_trigger_business_key_uses_the_flagged_field_not_the_primary_key() {
         // The trigger flags `orderNumber` as the business key; the listener must still LOAD the entity
         // by its primary key (findById), but start the process with the flagged field as the BPM

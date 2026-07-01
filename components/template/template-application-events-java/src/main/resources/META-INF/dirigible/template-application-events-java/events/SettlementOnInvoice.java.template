@@ -1,0 +1,88 @@
+package gen.events;
+
+import java.math.BigDecimal;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}Entity;
+import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}Repository;
+import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Entity;
+import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Repository;
+import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Entity;
+import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Repository;
+
+/**
+ * Auto-settlement (on ${invoiceEntity} payable): pulls the customer's unallocated ${paymentEntity}
+ * balance onto this ${invoiceEntity} - oldest payment first, matching ${match} - creating
+ * ${junctionEntity} rows until the invoice is settled or the balance runs out. Wired as a
+ * {@code delegate:} service task after the invoice becomes payable (e.g. right after Issue).
+ *
+ * Generated from the intent settlements block - do not edit; it is re-generated with the application.
+ * Entity access goes ONLY through the generated repositories (validations / events / i18n).
+ */
+public class ${name}OnInvoice implements JavaDelegate {
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${invoicePk}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        ${invoiceEntity}Repository invoices = new ${invoiceEntity}Repository();
+        ${invoiceEntity}Entity invoice = invoices.findById(((Number) key).intValue());
+        if (invoice == null) {
+            return;
+        }
+        BigDecimal remaining = open(invoice);
+        if (remaining.signum() <= 0) {
+            return;
+        }
+        Criteria criteria = Criteria.create()#foreach($m in $match)
+                                    .eq("${m}", invoice.${m})#end
+                                    .orderByAsc("${order}");
+        for (${paymentEntity}Entity payment : new ${paymentEntity}Repository().findAll(criteria)) {
+            if (remaining.signum() <= 0) {
+                break;
+            }
+            if (payment.${paymentPot} == null) {
+                continue;
+            }
+            BigDecimal unallocated = payment.${paymentPot}.subtract(allocated(payment.${paymentPk}))
+                                                          .max(BigDecimal.ZERO);
+            if (unallocated.signum() <= 0) {
+                continue;
+            }
+            BigDecimal alloc = remaining.min(unallocated);
+            create(invoice.${invoicePk}, payment.${paymentPk}, alloc);
+            remaining = remaining.subtract(alloc);
+        }
+    }
+
+    private static BigDecimal open(${invoiceEntity}Entity invoice) {
+        BigDecimal total = invoice.${invoiceTotal} == null ? BigDecimal.ZERO : invoice.${invoiceTotal};
+        BigDecimal paid = invoice.${invoicePaid} == null ? BigDecimal.ZERO : invoice.${invoicePaid};
+        return total.subtract(paid)
+                    .max(BigDecimal.ZERO);
+    }
+
+    private static BigDecimal allocated(Integer paymentId) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (${junctionEntity}Entity row : new ${junctionEntity}Repository().findAll(Criteria.create()
+                                                                                            .eq("${junctionFkPayment}", paymentId))) {
+            if (row.${junctionAmount} != null) {
+                sum = sum.add(row.${junctionAmount});
+            }
+        }
+        return sum;
+    }
+
+    private static void create(Integer invoiceId, Integer paymentId, BigDecimal amount) {
+        ${junctionEntity}Entity row = new ${junctionEntity}Entity();
+        row.${junctionFkInvoice} = invoiceId;
+        row.${junctionFkPayment} = paymentId;
+        row.${junctionAmount} = amount;
+        new ${junctionEntity}Repository().save(row);
+    }
+}

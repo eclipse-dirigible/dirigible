@@ -589,6 +589,47 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "settlements":
+                    // Auto-settlement (intent layer): per settlement, an onPayment listener + an
+                    // onInvoice delegate. The junction + invoice live in this project; the payment may be
+                    // cross-model (its gen folder = sanitized model alias, its topic keeps the raw
+                    // perspective). Java package segments are the lowercased (sanitized) perspectives.
+                    if (model.settlements) {
+                        for (let i = 0; i < model.settlements.length; i++) {
+                            const st = model.settlements[i];
+                            const settlementParameters = {
+                                ...parameters,
+                                name: st.name,
+                                match: st.match,
+                                order: st.order,
+                                invoiceEntity: st.invoiceEntity,
+                                invoiceJavaPerspective: sanitizeJavaIdentifier(st.invoicePerspective),
+                                invoicePk: st.invoicePk,
+                                invoiceTotal: st.invoiceTotal,
+                                invoicePaid: st.invoicePaid,
+                                invoiceStatus: st.invoiceStatus,
+                                payableCondition: st.payableCondition,
+                                junctionEntity: st.junctionEntity,
+                                junctionJavaPerspective: sanitizeJavaIdentifier(st.junctionPerspective),
+                                junctionFkInvoice: st.junctionFkInvoice,
+                                junctionFkPayment: st.junctionFkPayment,
+                                junctionAmount: st.junctionAmount,
+                                paymentEntity: st.paymentEntity,
+                                paymentGenFolder: st.crossModel ? sanitizeJavaIdentifier(st.paymentModel) : parameters.javaGenFolderName,
+                                paymentJavaPerspective: sanitizeJavaIdentifier(st.paymentPerspective),
+                                paymentPk: st.paymentPk,
+                                paymentPot: st.paymentPot,
+                                paymentTopic: st.paymentTopic
+                            };
+                            const cleanSettlementParameters = cleanData(settlementParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSettlementParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSettlementParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
