@@ -67,6 +67,8 @@ public final class IntentParser {
      * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
      */
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
+    /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
+    private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
@@ -338,11 +340,47 @@ public final class IntentParser {
             }
             EntityIntent parent = byName.get(via.getTo());
             FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
+            boolean sum = "sum".equals(rollup.getOp());
             if (counter == null) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
-            } else if (!INTEGER_PK_TYPES.contains(counter.getType())) {
+            } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be a numeric type to hold a sum");
+            } else if (!sum && !INTEGER_PK_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
             }
+            if (sum) {
+                // sum needs a numeric child field to add up; capacity / balance (optional) are numeric parent
+                // fields and status (optional) a to-one relation of the parent - see the balance/status roll-up.
+                FieldIntent of = fieldByName(child, rollup.getOf());
+                if (rollup.getOf() == null || rollup.getOf()
+                                                    .isBlank()) {
+                    issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
+                } else if (of == null) {
+                    issues.add("rollup [" + name + "] of [" + rollup.getOf() + "] is not a field of [" + rollup.getEntity() + "]");
+                } else if (!NUMERIC_TYPES.contains(of.getType())) {
+                    issues.add("rollup [" + name + "] of [" + rollup.getOf() + "] must be a numeric field to sum");
+                }
+                requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", via.getTo(), issues);
+                requireNumericParentField(parent, rollup.getBalance(), name, "balance", via.getTo(), issues);
+                if (rollup.getStatus() != null && !rollup.getStatus()
+                                                         .isBlank()
+                        && (parent == null || toOneRelationByName(parent, rollup.getStatus()) == null)) {
+                    issues.add(
+                            "rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + via.getTo() + "]");
+                }
+            }
+        }
+    }
+
+    /** Validate an optional numeric parent field named on a roll-up (capacity / balance). */
+    private static void requireNumericParentField(EntityIntent parent, String field, String rollup, String role, String parentName,
+            List<String> issues) {
+        if (field == null || field.isBlank()) {
+            return;
+        }
+        FieldIntent f = parent == null ? null : fieldByName(parent, field);
+        if (f == null || !NUMERIC_TYPES.contains(f.getType())) {
+            issues.add("rollup [" + rollup + "] " + role + " [" + field + "] must be a numeric field of [" + parentName + "]");
         }
     }
 
