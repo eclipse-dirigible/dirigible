@@ -217,9 +217,37 @@
       </div>
     </div>
 
-    <!-- ===== Secondary detail panels (any other composition children) ===== -->
-    <template x-for="d in secondaryDetails" :key="d.entity">
-      <div x-data="detailPanel(d, id)" x-h-card class="w-full"></div>
+    <!-- ===== Secondary detail panels (any other composition children, e.g. payment allocations) —
+         read-only on the document: the rows are shown for reference, edited elsewhere. ===== -->
+    <template x-for="d in secondaryDetails" :key="d.entity + ':' + id">
+      <div x-data="detailPanel(d, id)" x-h-card class="w-full">
+        <div x-h-card-header><h3 x-h-card-title x-text="d.label"></h3></div>
+        <div x-h-card-content>
+          <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+          <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+          <div x-show="state === 'empty'" x-h-text.muted>No records.</div>
+          <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+            <table x-h-table data-borders="rows">
+              <thead x-h-table-header>
+                <tr x-h-table-row>
+                  <template x-for="col in def.columns" :key="col.name">
+                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.name"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="row in rows" :key="row[def.primaryKey]">
+                  <tr x-h-table-row>
+                    <template x-for="col in def.columns" :key="col.name">
+                      <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </template>
 
 #if($hasProcess)
