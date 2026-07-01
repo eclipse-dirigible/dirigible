@@ -189,6 +189,18 @@
     </div>
 #end
 
+#if($hasProcess)
+    <!-- Actionable BPM user tasks for this record, shown just above the save lane (edit only). -->
+    <div x-show="isEdit && $store.processTasks.getTasks(form).length" x-h-toolbar data-variant="transparent">
+      <div x-h-toolbar-spacer></div>
+      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
+        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+          <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+        </button>
+      </template>
+    </div>
+#end
+
     <div x-h-toolbar.footer>
       <div x-h-toolbar-spacer></div>
       <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'">Cancel</button>

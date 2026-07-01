@@ -222,6 +222,18 @@
       <div x-data="detailPanel(d, id)" x-h-card class="w-full"></div>
     </template>
 
+#if($hasProcess)
+    <!-- Actionable BPM user tasks for this document, shown just above the save lane (edit only). -->
+    <div x-show="isEdit && $store.processTasks.getTasks(form).length" x-h-toolbar data-variant="transparent">
+      <div x-h-toolbar-spacer></div>
+      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
+        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
+          <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+        </button>
+      </template>
+    </div>
+#end
+
     <!-- ===== Document footer: Save / Create at the very bottom (under the items + totals) ===== -->
     <div x-h-toolbar.footer>
       <div x-h-toolbar-spacer></div>
