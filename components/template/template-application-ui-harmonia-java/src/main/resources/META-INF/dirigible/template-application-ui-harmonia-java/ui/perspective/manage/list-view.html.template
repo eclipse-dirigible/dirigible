@@ -62,7 +62,7 @@
               <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType) class="text-right"#end @click="cycleSort('${property.name}')">
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     ${property.name}
                     <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>

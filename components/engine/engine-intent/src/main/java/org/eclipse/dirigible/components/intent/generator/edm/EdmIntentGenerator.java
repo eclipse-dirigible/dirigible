@@ -180,6 +180,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("documentLabel", IntentNaming.humanize(name));
                 entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
             }
+            // A plain PRIMARY entity with NO composition children of its own is standalone, not a
+            // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
+            // humanized title) rather than the default MANAGE_MASTER, which is meant for entities that
+            // actually own detail children (a value in compositionParents).
+            else if (!dependent && !setting && !compositionParents.containsValue(name)) {
+                entityMap.put("layoutType", "MANAGE");
+            }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
             if (entity.isDashboardExcluded()) {
