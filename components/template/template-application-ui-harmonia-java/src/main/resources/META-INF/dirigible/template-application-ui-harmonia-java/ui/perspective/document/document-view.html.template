@@ -267,7 +267,7 @@
       <button type="button" x-h-button data-variant="transparent" @click="backToList()" :disabled="state === 'saving'">Cancel</button>
       <button type="button" x-h-button data-variant="primary" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <span x-text="isEdit ? 'Save' : 'Create'"></span>
+        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? 'Save' : 'Create'"></span>
       </button>
     </div>
     </div>
