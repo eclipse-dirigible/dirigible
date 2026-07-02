@@ -1052,13 +1052,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
 
         // Frontend: the generated report page carries typed column metadata and the filter machinery.
-        String page = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/report.js");
+        // NB the case split: the UI files use the RAW genFolderName (the report file name,
+        // "OrdersByCustomer"), while the Java files use the sanitized javaGenFolderName
+        // ("ordersbycustomer") - two distinct folders on a case-sensitive filesystem.
+        String page = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/report.js");
         assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
         assertTrue(page.contains("{ key: 'Customer', kind: 'text' }"), "the joined dimension should be a text column");
         assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
         assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
                 "the page should build range and contains conditions");
-        String view = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/index.html");
+        String view = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/index.html");
         assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
                 "the report view should carry the filter panel and toolbar toggle");
     }
