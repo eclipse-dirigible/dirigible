@@ -9,8 +9,12 @@
  */
 package org.eclipse.dirigible.parsers.document.binding;
 
+import java.math.BigDecimal;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 
@@ -172,10 +176,24 @@ public final class DataBinder {
             Object resolved = scope.resolve(value.substring(open + 2, close)
                                                  .trim());
             if (resolved != null) {
-                result.append(resolved);
+                result.append(stringify(resolved));
             }
             cursor = close + 2;
         }
+    }
+
+    /**
+     * Floating-point values print in the generated forms' money pattern ({@code ### ### ### ##0.00} —
+     * thousands grouped by a space, two decimals), locale-independent for deterministic output; every
+     * other value prints via {@code toString}.
+     */
+    private static String stringify(Object resolved) {
+        if (resolved instanceof Double || resolved instanceof Float || resolved instanceof BigDecimal) {
+            DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.ROOT);
+            symbols.setGroupingSeparator(' ');
+            return new DecimalFormat("###,###,###,##0.00", symbols).format(resolved);
+        }
+        return String.valueOf(resolved);
     }
 
     private static boolean isTruthy(Object value) {

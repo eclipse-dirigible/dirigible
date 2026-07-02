@@ -176,6 +176,20 @@ public class DataBinderTest {
     }
 
     @Test
+    public void floatingPointValuesPrintInTheFormMoneyPattern() {
+        Node root = parser.parse("<document><total align=\"right\">{{total}}</total><text>{{qty}} x {{price}}</text></document>");
+        Node bound = binder.bind(root, Map.of("total", 1234567.5d, "qty", 2L, "price", new java.math.BigDecimal("100.00")));
+        // doubles/BigDecimals: space-grouped thousands + two decimals (the generated forms' pattern);
+        // integral numbers stay unformatted
+        assertEquals("1 234 567.50", bound.children()
+                                          .get(0)
+                                          .text());
+        assertEquals("2 x 100.00", bound.children()
+                                        .get(1)
+                                        .text());
+    }
+
+    @Test
     public void bindingIsRepeatableOnTheSameTemplate() {
         Node root = parser.parse("<document><text>{{n}}</text></document>");
         assertEquals("1", binder.bind(root, Map.of("n", 1))
