@@ -34,14 +34,15 @@ function detailPanel(def, masterId) {
     deleteTarget: null,
     deleteBusy: false,
 
-    lookups: {},   // relationship column name -> { fkValue: label }
+    lookups: {},   // relationship column name -> { fkValue: referencedRow }
 
     async init() {
       await this.load();
       this.loadLookups();
     },
 
-    // Fetch the referenced rows for each relationship column once, mapping FK -> display label.
+    // Fetch the referenced rows for each relationship column once, keyed by FK -> the whole row (so both
+    // the display label AND any `via` extra columns resolve off the same fetched record).
     async loadLookups() {
       const all = {};
       for (const col of (this.def.columns || [])) {
@@ -51,7 +52,7 @@ function detailPanel(def, masterId) {
           // referenced row beyond it would leave the FK unresolved and the cell would show the raw id.
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           const m = {};
-          (rows || []).forEach(e => { m[e[col.lookup.key]] = e[col.lookup.text]; });
+          (rows || []).forEach(e => { m[e[col.lookup.key]] = e; });
           all[col.name] = m;
         } catch (e) {
           console.error('detailPanel: failed to load lookup for ' + col.name, e);
@@ -61,12 +62,20 @@ function detailPanel(def, masterId) {
       this.refreshIcons();
     },
 
-    // Resolve a cell: a relationship column shows its referenced label; a date column is formatted.
+    // Resolve a cell: a relationship column shows its referenced label; a `via` column shows a field of
+    // that same referenced row (relation `show`); a date column is formatted.
     cellValue(col, row) {
+      // A `via` column reads a field off another (lookup) column's referenced row.
+      if (col.via) {
+        const src = this.lookups[col.via.column];
+        const ref = src ? src[row[col.via.column]] : undefined;
+        return this.displayValue(ref ? ref[col.via.field] : undefined, col.date);
+      }
       const v = row[col.name];
       if (col.lookup) {
         const m = this.lookups[col.name];
-        const t = m ? m[v] : undefined;
+        const ref = m ? m[v] : undefined;
+        const t = ref ? ref[col.lookup.text] : undefined;
         if (t !== undefined && t !== null && t !== '') return t;
       }
       if (col.float) return this.formatNumber(v, col.pattern);

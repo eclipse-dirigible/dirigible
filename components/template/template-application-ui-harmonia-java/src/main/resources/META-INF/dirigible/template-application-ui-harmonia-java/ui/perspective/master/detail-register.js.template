@@ -25,6 +25,11 @@ App.registerDetail('${masterEntity}', {
 #if($property.widgetLabel)#set($clabel = $property.widgetLabel)#else#set($clabel = $property.name)#end
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
     { name: '${property.name}', label: '${clabel}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' } },
+## Extra read-only columns pulled from the SAME lookup row (relation `show`): the FK's referenced record
+## is already fetched to resolve the label, so these render its extra fields with no further request.
+#if($property.lookupColumns)#foreach($lc in $property.lookupColumns)
+    { name: '${property.name}_${lc.name}', label: '${lc.label}', via: { column: '${property.name}', field: '${lc.name}' } },
+#end#end
 #elseif($property.isDateType)
     { name: '${property.name}', label: '${clabel}', date: true },
 #elseif($property.isFloatType)

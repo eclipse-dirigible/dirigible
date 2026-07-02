@@ -626,6 +626,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", "true");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        putLookupColumns(p, relation);
         return p;
     }
 
@@ -674,7 +675,33 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", "true");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
+        putLookupColumns(p, relation);
         return p;
+    }
+
+    /**
+     * Emit the relation's {@code show} target fields as {@code lookupColumns} (PascalCase name +
+     * humanized label) so the Harmonia detail table renders them as extra read-only columns resolved
+     * from the already-fetched lookup row. Nothing is emitted when {@code show} is absent/empty.
+     */
+    private static void putLookupColumns(Map<String, Object> p, RelationIntent relation) {
+        if (relation.getShow() == null || relation.getShow()
+                                                  .isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (String field : relation.getShow()) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            Map<String, Object> column = new LinkedHashMap<>();
+            column.put("name", IntentNaming.pascalCase(field));
+            column.put("label", IntentNaming.humanize(field));
+            columns.add(column);
+        }
+        if (!columns.isEmpty()) {
+            p.put("lookupColumns", columns);
+        }
     }
 
     /**
@@ -1136,10 +1163,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         sb.append(" as=\"value\"/>\n");
     }
 
-    /** The {@code <Property>} cell value - the property's attributes verbatim. */
+    /** The {@code <Property>} cell value - the property's scalar attributes verbatim. */
     private static void appendPropertyValue(StringBuilder sb, Map<String, Object> property) {
         sb.append("    <Property");
         for (Map.Entry<String, Object> attr : property.entrySet()) {
+            // EDM attributes are scalar; a structured value (e.g. lookupColumns, .model-JSON-only) is not
+            // an EDM attribute and would render as a junk string - it belongs only in the .model twin.
+            if (attr.getValue() instanceof Iterable || attr.getValue() instanceof Map) {
+                continue;
+            }
             appendAttribute(sb, attr.getKey(), attr.getValue());
         }
         sb.append(" as=\"value\"/>\n");

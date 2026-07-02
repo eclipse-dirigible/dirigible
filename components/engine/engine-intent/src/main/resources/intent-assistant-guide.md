@@ -111,6 +111,11 @@ composition is opt-in.
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
   omitted, a control falls back to half width. Use a small span to pack several short controls onto one
   row, e.g. `{ name: Currency, kind: manyToOne, to: Currency, size: 4 }` for three dropdowns on a line.
+- `show` (on a to-one relation) - a list of the target entity's field names to surface as extra
+  **read-only** columns wherever the relation appears as a lookup column (the master-detail / document
+  allocation tables), e.g. `{ name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model:
+  customer-payments, show: [date, number] }`. The FK lookup already fetches the referenced row to
+  resolve its label, so these columns cost no extra request and work for a cross-model target.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
