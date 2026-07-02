@@ -24,6 +24,25 @@ document.addEventListener('alpine:init', () => {
     content: '',      // the selected entity's manage-list fragment HTML (rendered via x-html)
     loading: false,
     error: null,
+    // Region & Language: the app's single language flag, mirrored from the locale store so the
+    // picker's x-model has a plain component property; changes persist through the store (and take
+    // effect on the next data load - the fetch client sends the value as Accept-Language).
+    language: 'en',
+
+    init() {
+      const locale = Alpine.store('locale');
+      if (locale) {
+        this.language = locale.value;
+        this.$watch('language', (v) => locale.set(v));
+      }
+    },
+
+    // The offered data-language codes and their display names (delegates to the locale store).
+    languageOptions() {
+      const locale = Alpine.store('locale');
+      if (!locale) return [];
+      return locale.languages().map((code) => ({ value: code, text: locale.displayName(code) }));
+    },
 
     async select(name, url) {
       if (this.selected === name) return;

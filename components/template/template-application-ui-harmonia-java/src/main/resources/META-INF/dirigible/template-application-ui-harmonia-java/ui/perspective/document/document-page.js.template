@@ -176,7 +176,12 @@ document.addEventListener('alpine:init', () => {
         console.error('Print languages lookup failed', e);
       }
       this.printBusy = false;
-      if (languages.length > 1) {
+      // The Region & Language setting wins when a template exists for it - print directly in the
+      // user's configured language instead of asking.
+      const configured = (Alpine.store('locale') || {}).value;
+      if (configured && languages.some(l => l.code === configured)) {
+        await this.printDoc(configured);
+      } else if (languages.length > 1) {
         this.printLanguages = languages;
         this.printLangOpen = true;
       } else {

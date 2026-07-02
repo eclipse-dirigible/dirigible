@@ -60,6 +60,17 @@ public class EntityIntent {
      * {@code importsCode} the DAO template emits. Absent → no custom imports.
      */
     private String imports;
+    /**
+     * Marks the entity as <b>multilingual</b>: its translatable (string-typed) properties may carry
+     * per-language values in a sibling {@code
+     *
+    <TABLE>
+     * _LANG} table (the codbex convention). Emitted as the EDM entity attribute
+     * {@code multilingual="true"}; the schema template then generates the language table and the Java
+     * DAO template overlays translated values on every read for the caller's {@code Accept-Language}.
+     * Translation rows are authored as {@code seeds} with a {@code language:} code.
+     */
+    private Boolean multilingual;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -159,5 +170,18 @@ public class EntityIntent {
 
     public void setRelations(List<RelationIntent> relations) {
         this.relations = relations == null ? new ArrayList<>() : relations;
+    }
+
+    /** Whether this entity keeps per-language values in a sibling language table. */
+    public boolean isMultilingual() {
+        return multilingual != null && multilingual;
+    }
+
+    public Boolean getMultilingual() {
+        return multilingual;
+    }
+
+    public void setMultilingual(Boolean multilingual) {
+        this.multilingual = multilingual;
     }
 }

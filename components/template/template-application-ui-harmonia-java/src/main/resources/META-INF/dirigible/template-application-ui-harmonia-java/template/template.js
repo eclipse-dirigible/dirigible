@@ -22,6 +22,9 @@ export function generate(model, parameters) {
     // else the model-level icon (the intent's `icon`), else a neutral default.
     parameters.appIcon = (parameters.appIcon && String(parameters.appIcon).trim()) ? String(parameters.appIcon).trim()
         : ((model.icon && String(model.icon).trim()) ? String(model.icon).trim() : 'blocks');
+    // Data-language codes the app offers (the intent's `languages:`, carried on the .model root).
+    // Rendered into config.js as a JSON array; the shell's Region & Language setting lists them.
+    parameters.appLanguages = JSON.stringify(Array.isArray(model.languages) && model.languages.length ? model.languages : ['en']);
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 
