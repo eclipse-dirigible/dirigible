@@ -141,7 +141,7 @@
       <div x-h-toolbar data-variant="transparent">
         <span x-h-toolbar-title class="shrink-0">${documentItemsLabel}</span>
         <div x-h-toolbar-spacer></div>
-        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span>Add line</span></button>
+        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span>Add</span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
