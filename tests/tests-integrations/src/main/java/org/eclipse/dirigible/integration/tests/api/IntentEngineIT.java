@@ -80,8 +80,12 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: id,        type: integer, primaryKey: true, generated: true }
                   - { name: orderDate, type: date,    required: true }
                   - { name: total,     type: decimal }
+                  # Depends-On auto-populate: copied from the chosen customer's creditLimit.
+                  - { name: creditSnapshot, type: decimal, dependsOn: { relation: customer, valueFrom: creditLimit } }
                 relations:
                   - { name: customer, kind: manyToOne, to: Customer }
+                  # Depends-On cascade: narrowed to the chosen customer's country (filterBy defaults to the PK).
+                  - { name: country,  kind: manyToOne, to: Country, dependsOn: { relation: customer, valueFrom: country } }
                   - { name: items,    kind: oneToMany, to: OrderItem }
 
               - name: OrderItem
@@ -948,6 +952,30 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void harmonia_form_page_generates_the_depends_on_runtime() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // The Harmonia full-stack template renders the dependsOn attributes into Order's document page
+        // (Order has the header-items layout): an Alpine watcher on the trigger plus one
+        // applyDependsOn method per dependent header property.
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+        String documentPage = contentOf("gen/orders/js/components/pages/Order/OrderDocumentPage.js");
+        assertTrue(documentPage.contains("$watch('form.Customer'"), "the document page should watch the trigger property");
+        assertTrue(documentPage.contains("applyDependsOnCountry"), "the Country dropdown should get a dependsOn refresh method");
+        assertTrue(documentPage.contains("applyDependsOnCreditSnapshot"), "the creditSnapshot scalar should get an auto-populate method");
+        assertTrue(documentPage.contains("conditions: [{ propertyName: 'Id', operator: 'EQ'"),
+                "the dropdown refresh should POST the /search EQ filter on the defaulted filterBy");
+        assertTrue(documentPage.contains("CustomerController/' + encodeURIComponent(value)"),
+                "the trigger's selected record should be loaded from its own controller URL");
+        // The generic item-dialog machinery is model-independent but must be present for line items.
+        assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
+                "the item dialog should carry the metadata-driven dependsOn machinery");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1160,6 +1188,21 @@ class IntentEngineIT extends IntegrationTest {
         // A relation that targets a setting entity points its dropdown at the global Settings perspective.
         assertTrue(modelBody.contains("\"relationshipEntityPerspectiveName\": \"Settings\""),
                 "a relation targeting a setting entity should resolve to the Settings perspective");
+
+        // Depends-On: Order.Country reacts to Order.Customer (valueFrom the customer's Country FK,
+        // filterBy defaulting to the target's PK), and the creditSnapshot scalar auto-populates from
+        // the customer's creditLimit (no filterBy on a scalar).
+        assertTrue(edmXml.contains("widgetDependsOnProperty=\"Customer\""), "a dependsOn dependent should carry the trigger property name");
+        assertTrue(edmXml.contains("widgetDependsOnEntity=\"Customer\""), "a dependsOn dependent should carry the trigger's target entity");
+        assertTrue(edmXml.contains("widgetDependsOnValueFrom=\"Country\""),
+                "the cascade should read the customer's Country FK (PascalCased from valueFrom: country)");
+        assertTrue(edmXml.contains("widgetDependsOnFilterBy=\"Id\""), "filterBy should default to the dependent's own target primary key");
+        assertTrue(edmXml.contains("widgetDependsOnValueFrom=\"CreditLimit\""),
+                "the scalar auto-populate should read the customer's creditLimit");
+        assertTrue(
+                modelBody.contains("\"widgetDependsOnProperty\": \"Customer\"")
+                        && modelBody.contains("\"widgetDependsOnValueFrom\": \"CreditLimit\""),
+                "the .model JSON twin should carry the widgetDependsOn* attributes");
     }
 
     private void assertGlue() {

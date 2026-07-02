@@ -33,7 +33,8 @@
 #elseif($el.controlId == "input-number")
         <div x-h-field>
           <label x-h-label for="$el.id">$!el.label</label>
-          <div x-h-input-number><input type="number" id="$el.id" x-model.number="model.$el.model"#if($el.readonly) readonly#end /></div>
+          <!-- step="any": without it the browser default step=1 rejects fractional input on number fields. -->
+          <div x-h-input-number><input type="number" step="any" id="$el.id" x-model.number="model.$el.model"#if($el.readonly) readonly#end /></div>
         </div>
 #elseif($el.controlId == "input-checkbox")
         <div x-h-field data-orientation="horizontal">

@@ -64,6 +64,14 @@ public class RelationIntent {
      */
     private List<String> show;
 
+    /**
+     * Optional Depends-On declaration: this dropdown reacts to a sibling to-one relation - its option
+     * list is re-filtered (and a single match auto-selected) when the trigger's selection changes.
+     * Emitted as the {@code widgetDependsOn*} attributes on the FK property. See
+     * {@link DependsOnIntent}.
+     */
+    private DependsOnIntent dependsOn;
+
     public String getName() {
         return name;
     }
@@ -155,5 +163,13 @@ public class RelationIntent {
 
     public void setShow(List<String> show) {
         this.show = show;
+    }
+
+    public DependsOnIntent getDependsOn() {
+        return dependsOn;
+    }
+
+    public void setDependsOn(DependsOnIntent dependsOn) {
+        this.dependsOn = dependsOn;
     }
 }

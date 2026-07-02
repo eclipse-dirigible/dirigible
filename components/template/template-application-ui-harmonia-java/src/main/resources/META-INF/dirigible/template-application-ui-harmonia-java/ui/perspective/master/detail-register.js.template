@@ -12,6 +12,10 @@
 ## A calculated column carries its neutral arithmetic expression + scale so the item dialog can preview
 ## the value live (the same expression the server-side Calc evaluator persists). Emits nothing otherwise.
 #macro(calcMeta $property)#if($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate)), calc: '#if($property.calculatedPropertyExpressionCreate)${property.calculatedPropertyExpressionCreate}#{else}${property.calculatedPropertyExpressionUpdate}#end', scale: #if($property.dataScale)${property.dataScale}#{else}2#end#end#end
+## Depends-On metadata: the item dialog watches the trigger column (`property`), loads its selected
+## record from `url`, reads `valueFrom`, and either re-filters this dropdown's options by `filterBy`
+## or copies the value into this column. Emits nothing for an independent column.
+#macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', valueFrom: '${property.widgetDependsOnValueFrom}', #if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
 App.registerDetail('${masterEntity}', {
   entity: '${name}',
   label: '${menuLabel}',
@@ -52,9 +56,9 @@ App.registerDetail('${masterEntity}', {
 #if($property.widgetLabel)#set($elabel = $property.widgetLabel)#else#set($elabel = $property.name)#end
 #set($ereadonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true"))
 #if($property.widgetType == "DROPDOWN")
-    { name: '${property.name}', label: '${elabel}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end } },
+    { name: '${property.name}', label: '${elabel}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property) },
 #else
-    { name: '${property.name}', label: '${elabel}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property) },
+    { name: '${property.name}', label: '${elabel}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property) },
 #end
 #end
 #end

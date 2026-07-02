@@ -179,6 +179,21 @@ export function process(model, parameters) {
         });
     });
 
+    // A dependsOn dependent widget needs its TRIGGER property's controller URL at runtime (the
+    // generated form loads the trigger's selected record to read widgetDependsOnValueFrom). Resolved
+    // in a second pass so it works regardless of property order, sparing the templates a sibling
+    // lookup. The trigger is always a dropdown FK, so its controller URL was built above.
+    model.entities.forEach(e => {
+        e.properties.forEach(p => {
+            if (p.widgetDependsOnProperty) {
+                const trigger = e.properties.find(t => t.name === p.widgetDependsOnProperty);
+                if (trigger && trigger.widgetDropdownControllerUrl) {
+                    p.widgetDependsOnControllerUrl = trigger.widgetDropdownControllerUrl;
+                }
+            }
+        });
+    });
+
     parameters.perspectives = {};
 
     model.entities.forEach(e => {
