@@ -6,8 +6,9 @@ Philosophically a widget tree (think Flutter / Jetpack Compose) targeted at pape
 screens: templates are a tiny XML-like DSL with **only business-oriented tags** — no HTML,
 no CSS, no scripting, no programming language of any kind inside templates.
 
-The scope of this module is **parsing + document model + layout primitives**. Rendering
-backends (PDF via XSL-FO) plug into the `renderer` seam and live elsewhere.
+The module covers the full template-side pipeline: **parsing → document model → data binding →
+layout → XSL-FO**. The PDF bytes themselves come from the platform's FOP-based `PDFFacade`
+(`engine-document` wires the two together).
 
 ```xml
 <document>
@@ -28,8 +29,8 @@ backends (PDF via XSL-FO) plug into the `renderer` seam and live elsewhere.
 </document>
 ```
 
-Mustache placeholders (`{{...}}`) are **not evaluated** by the parser — they survive
-verbatim in text and attribute values; a later data-binding layer replaces them.
+Mustache placeholders (`{{...}}`) are **not evaluated** by the parser — they survive verbatim
+in text and attribute values; the `DataBinder` (below) is the layer that replaces them.
 
 ## Usage
 
@@ -37,9 +38,16 @@ verbatim in text and attribute values; a later data-binding layer replaces them.
 DocumentParser parser = new DocumentParser();
 DocumentNode document = parser.parseDocument(source);   // requires a <document> root
 
-LayoutEngine engine = new LayoutEngine();
-LayoutNode layout = engine.layout(document);            // typed measurements + alignment
+// data binding: {{path}} substitution + table/for/if expansion against a Map context
+Node bound = new DataBinder().bind(document, data);
+
+// layout normalization + XSL-FO for the platform's FOP PDFFacade
+String xslFo = new XslFoRenderer().renderBound(bound);
+byte[] pdf = PDFFacade.generate(xslFo, "<data/>");      // PDFFacade lives in api-pdf
 ```
+
+Or stop at any stage: `new LayoutEngine().layout(node)` gives the typed layout tree
+(measurements + alignment, no geometry) for a custom `DocumentRenderer<T>`.
 
 Every AST node carries its tag name, attributes (raw strings — validation happens later),
 children in document order, normalized text content, and its source line/column. The
@@ -142,6 +150,27 @@ table column widths (`LayoutEngine.resolveColumnWidths` + `fractionShares`). It 
 **no geometry** — coordinates, pagination, text measurement and `{{...}}` merging belong
 to the data-binding layer and the concrete `DocumentRenderer` (e.g. the XSL-FO/PDF
 backend).
+
+## Data binding (`binding.DataBinder`)
+
+The context is plain `Map<String, Object>` / `List<Object>` data (e.g. a JSON-decoded entity).
+Paths walk nested maps (`customer.name`); a `table`/`for` node's `source` list expands into one
+row per element, and inside a row a bare path (`quantity`) resolves against the row first, then
+the enclosing document context; `if` keeps or drops its children by the truthiness of `source`.
+Unresolved placeholders render as **empty strings** — a printout never shows raw braces.
+**Floating-point values** (`Double`/`Float`/`BigDecimal`) print in the generated forms' money
+pattern `### ### ### ##0.00` (space-grouped thousands, two decimals, locale-independent);
+integral numbers print unformatted.
+
+## XSL-FO rendering (`renderer.XslFoRenderer`)
+
+`renderBound(boundAst)` emits a self-contained XSLT/XSL-FO stylesheet (all data already merged,
+so it transforms any XML input, e.g. `<data/>`) — the exact input of the platform's FOP-based
+`PDFFacade`. Tables get proportional/percent/px column widths and a bold header row when any
+column carries a `label`; fields render as **Label:** value; `text` styles map `title`/`subtitle`/
+`caption` to font presets. v1 limits (deliberate, documented in the class): header/footer render
+once in-flow, `repeatHeader`/`pageBreak` are ignored, 1 px = 1 pt, and a table with no data rows
+is skipped (FOP rejects an empty table body).
 
 ## Example templates
 

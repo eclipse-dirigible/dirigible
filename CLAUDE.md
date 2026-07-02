@@ -77,7 +77,7 @@ Eclipse Dirigible — a high-productivity application platform (hpaPaaS). The ru
 
 ## Build
 
-The whole project is a multi-module Maven build at the root. The Maven coordinates are `org.eclipse.dirigible:dirigible-parent` (currently `13.0.0-SNAPSHOT`).
+The whole project is a multi-module Maven build at the root. The Maven coordinates are `org.eclipse.dirigible:dirigible-parent` (currently `14.0.0-SNAPSHOT`).
 
 | Goal                                | Command                                                            |
 | ----------------------------------- | ------------------------------------------------------------------ |
@@ -163,7 +163,7 @@ Each artefact type has three collaborating pieces:
 2. A **Synchronizer** (`extends BaseSynchronizer<A, ID>` or `MultitenantBaseSynchronizer`) — registered as a Spring bean, scans the repository for a specific file extension/pattern, parses it, upserts the artefact, and reacts to lifecycle phases (`CREATE`, `UPDATE`, `DELETE`, `START`, `STOP`). Ordering across synchronizer types is fixed in `SynchronizersOrder`.
 3. An optional **engine/service/endpoint** that consumes the live artefact (e.g. Quartz scheduler for jobs, Flowable for `.bpmn`, Camel for routes, Spring MVC endpoints for `expose` declarations).
 
-Existing synchronizer implementations (grep `extends BaseSynchronizer` / `extends MultitenantBaseSynchronizer`) give a complete inventory of supported artefact types: `Job`, `Bpmn`, `Camel`, `Listener`, `Csvim`, `DataSource`, `Table`, `View`, `Access` (security), `Expose` (URL routing), `ExtensionPoint` / `Extension`, `Markdown`, `Proxy`, etc. Adding a new artefact type means producing a new synchronizer + entity + (usually) a service, then registering it in the relevant `group-*` aggregator.
+Existing synchronizer implementations (grep `extends BaseSynchronizer` / `extends MultitenantBaseSynchronizer`) give a complete inventory of supported artefact types: `Job`, `Bpmn`, `Camel`, `Listener`, `Csvim`, `DataSource`, `Table`, `View`, `Access` (security), `Expose` (URL routing), `ExtensionPoint` / `Extension`, `Markdown`, `Proxy`, `PrintTemplate` (`.print` → CMS seeding), etc. Adding a new artefact type means producing a new synchronizer + entity + (usually) a service, then registering it in the relevant `group-*` aggregator.
 
 JS/TS user code is **not** synchronized — it is loaded on demand by `engine-javascript` (`JavascriptEndpoint` at `/services/js/...`, `/public/js/...`) via `DirigibleJavascriptCodeRunner` backed by Graalium/GraalVM polyglot. The `api-*` Java modules under `components/api/` register the JS-callable APIs (`@dirigible/db`, `@dirigible/http`, etc.) into the GraalJS context — pre-built TS/JS bundles for those APIs live in `components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/`.
 
@@ -224,6 +224,17 @@ A second runtime UI stack, parallel to the AngularJS/BlimpKit one: generated app
 ### Application shell (`resources-application`) — the pure-Harmonia app launchpad
 
 `components/resources/resources-application` (`dirigible-components-resources-application`), served at **`/services/web/application/`**, is the Harmonia counterpart to the AngularJS dashboard **for the application layer** — the IDE stays AngularJS + BlimpKit, but the app layer is going pure Java + Harmonia. It reuses the shared runtime for the built-in Dashboard/Inbox/Documents/Reports pages (Pinecone routes into `#app`) and aggregates the **`application-perspectives`** extension point for the domain apps, hosting each one's generated SPA in an embedded iframe (`?embedded`). It shows **named perspective groups only**, so the platform's AngularJS *utility* perspectives (e.g. `platformSettings` → `/services/web/perspective-settings/settings.html`, `ng-app="settings"`) are excluded — **never iframe an AngularJS perspective into the Harmonia shell, it won't bootstrap standalone**. Each generated app contributes one per-entity perspective to `application-perspectives` whose `groupId` is the intent entity's `group:`; the groups are defined once in a dedicated navigation-groups project (the codbex pattern). Wired into `components/pom.xml` (modules + dependencyManagement) and `group-ui`.
+
+## Document templates (`parsers/document` + `engine-document`) — print to PDF
+
+A lightweight declarative document-template engine for printable business documents (invoice, order, receipt, ...), merged 2026-07-02 via PRs [#6118](https://github.com/eclipse-dirigible/dirigible/pull/6118) (parser library) and [#6119](https://github.com/eclipse-dirigible/dirigible/pull/6119) (platform arc). Four cooperating layers:
+
+- **`modules/parsers/document`** (`dirigible-parsers-document`, pure library, zero deps) — the XML-like DSL: hand-written parser (business-user lenient: raw `&` is literal, Mustache `{{...}}` survives verbatim, exact line/column errors), sealed `Node` AST (one record per tag + `CustomNode`/`TagRegistry.register` extension), layout primitives (`Measurement` `100/100px/50%/*/2*/auto`, `Alignment`), `DataBinder` (map-context `{{path}}` merge; `table`/`for` `source` lists expand to rows with row-scoped fallback; `if` truthiness; unresolved → empty; **floats print as `### ### ### ##0.00`** — the form pages' money pattern), and `XslFoRenderer` (bound layout tree → self-contained XSLT/XSL-FO stylesheet for the FOP `PDFFacade` — the platform's only PDF path). Grammar/EBNF + gotchas in the module README.
+- **`engine-intent`'s `PrintIntentGenerator`** (@Order(800)) — Generate emits a standard `<Entity>.print` per document (header-items) master at the project root; `.print` is an intent-owned (scrubbed) extension. Data contract: `{{document.<PascalProp>}}` + `<table source="items">` with `{{<PascalProp>}}` cells.
+- **`components/engine/engine-document`** — the runtime: `PrintTemplateSynchronizer` (multitenant) seeds the published template into the CMS at `Templates/<Entity>/Print/en/standard.print` **create-if-absent** — user customizations uploaded via the Documents perspective are never overwritten, and deleting the artefact never touches the CMS; `PrintEndpoint` — `GET /services/print/{entity}/languages` (CMS language folders, `Locale` display names) and `POST /services/print/{entity}?lang=` (`{document, items}` JSON → parse → bind → XSL-FO → `application/pdf`). The **client supplies the data** it already loaded (no server-side entity fetching/auth forwarding); dropdown FKs arrive as display labels.
+- **Harmonia document view** — a Print button (edit-only, footer toolbar): one CMS language prints directly, several open a language dialog ("English" → en). Multilanguage = upload templates under more `Templates/<Entity>/Print/<lang>/` folders.
+
+**Detailed guide:** [`components/engine/engine-document/CLAUDE.md`](components/engine/engine-document/CLAUDE.md). Renderer v1 limits (documented, deliberate): header/footer render once in-flow (not repeated page regions), `repeatHeader`/`pageBreak` ignored, 1px = 1pt, a data-less table is skipped (FOP rejects empty table bodies).
 
 ## Native applications (`engine-native-apps`)
 
