@@ -324,7 +324,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("written",
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report", "orders.roles", "orders.glue",
-                                                                 "countries.csvim", "countries.csv"))
+                                                                 "countries.csvim", "countries.csv", "Order.print"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
                                                  // recipe in .settings, naming the template + parameters.

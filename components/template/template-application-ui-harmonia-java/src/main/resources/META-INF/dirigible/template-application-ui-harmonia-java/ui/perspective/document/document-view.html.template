@@ -264,6 +264,12 @@
       </template>
 #end
       <div x-h-toolbar-spacer></div>
+      <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
+      <!-- Print: renders the CMS template (Templates/${name}/Print/<lang>/) to PDF; asks for the language when several exist -->
+      <button type="button" x-h-button data-variant="outline" x-show="isEdit" :disabled="printBusy" @click="openPrint()">
+        <span x-show="printBusy" x-h-spinner></span>
+        <i role="img" data-lucide="printer" x-show="!printBusy"></i><span>Print</span>
+      </button>
       <button type="button" x-h-button data-variant="transparent" @click="backToList()" :disabled="state === 'saving'">Cancel</button>
       <button type="button" x-h-button data-variant="primary" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
@@ -375,6 +381,27 @@
       <div x-h-dialog-footer>
         <button x-h-button data-variant="transparent" @click="deleteOpen = false">Cancel</button>
         <button x-h-button data-variant="negative" @click="confirmDeleteRow()">Delete</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Print language picker: shown when more than one template language exists under
+       Templates/${name}/Print/ in the CMS ("English" -> en, "Bulgarian" -> bg, ...) -->
+  <div x-h-dialog-overlay :data-open="printLangOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title>Print</h2>
+        <p x-h-dialog-description>Choose the template language.</p>
+        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"></button>
+      </div>
+      <div x-h-dialog-content>
+        <div class="vbox gap-2">
+          <template x-for="lang in printLanguages" :key="lang.code">
+            <button type="button" x-h-button data-variant="outline" @click="printLangOpen = false; printDoc(lang.code)">
+              <i role="img" data-lucide="printer"></i><span x-text="lang.name"></span>
+            </button>
+          </template>
+        </div>
       </div>
     </div>
   </div>

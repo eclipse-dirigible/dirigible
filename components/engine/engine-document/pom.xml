@@ -9,8 +9,8 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - Engine - Intent</name>
-	<artifactId>dirigible-components-engine-intent</artifactId>
+	<name>Components - Engine - Document</name>
+	<artifactId>dirigible-components-engine-document</artifactId>
 	<modelVersion>4.0.0</modelVersion>
 
 	<dependencies>
@@ -21,21 +21,16 @@
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-core-database</artifactId>
+			<artifactId>dirigible-components-engine-cms</artifactId>
 		</dependency>
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-core-repository</artifactId>
+			<artifactId>dirigible-components-api-pdf</artifactId>
 		</dependency>
-		<dependency>
-			<groupId>org.eclipse.dirigible</groupId>
-			<artifactId>dirigible-components-ide-workspace</artifactId>
-		</dependency>
-		<!-- Test: parse-validate the generated .print templates with the document-template parser -->
+		<!-- The .print template pipeline: parse, data-bind, render to XSL-FO -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-parsers-document</artifactId>
-			<scope>test</scope>
 		</dependency>
 	</dependencies>
 

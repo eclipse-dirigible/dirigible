@@ -12,9 +12,11 @@ package org.eclipse.dirigible.sdk.pdf;
 import org.eclipse.dirigible.components.api.pdf.PDFFacade;
 
 /**
- * Renders a Mustache-style template against a JSON data document and returns the resulting PDF
- * bytes. The platform handles font loading, page sizing, and basic CSS — useful for invoice,
- * report, and certificate generation without spinning up a full reporting engine.
+ * Transforms an XML data document through an XSLT/XSL-FO stylesheet with Apache FOP and returns the
+ * resulting PDF bytes — useful for invoice, report, and certificate generation without spinning up
+ * a full reporting engine. Placeholder substitution is NOT performed here: expand the stylesheet
+ * with a template engine (Mustache/Velocity) first, or use the document-template DSL pipeline
+ * ({@code dirigible-parsers-document}), which produces a ready XSL-FO stylesheet.
  * <p>
  * Write the returned bytes straight into an HTTP response with
  * {@code Content-Type: application/pdf}, or into the repository / filesystem via
@@ -25,7 +27,14 @@ public final class Pdf {
 
     private Pdf() {}
 
-    public static byte[] generate(String template, String dataJson) {
-        return PDFFacade.generate(template, dataJson);
+    /**
+     * Generates a PDF.
+     *
+     * @param template the XSLT/XSL-FO stylesheet ({@code xmlns:fo="http://www.w3.org/1999/XSL/Format"})
+     * @param dataXml the XML data document the stylesheet transforms
+     * @return the PDF bytes
+     */
+    public static byte[] generate(String template, String dataXml) {
+        return PDFFacade.generate(template, dataXml);
     }
 }
