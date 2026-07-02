@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.api.pdf;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.commons.io.IOUtils;
 import org.junit.jupiter.api.Test;
@@ -51,6 +52,29 @@ public class PDFFacadeTest {
 
         assertNotNull(pdf);
         assertTrue(pdf.length > 0);
+    }
+
+    /**
+     * Generate pdf with Cyrillic content test. The base-14 fonts have no Cyrillic glyphs (FOP renders
+     * them as '#'), so the bundled DejaVu Sans must be registered and embedded (as a subset) instead.
+     *
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    @Test
+    public void generateCyrillicPdfTest() throws IOException {
+        String template = IOUtils.toString(getClass().getClassLoader()
+                                                     .getResourceAsStream("template-cyrillic.xsl"),
+                StandardCharsets.UTF_8);
+        String data = IOUtils.toString(getClass().getClassLoader()
+                                                 .getResourceAsStream("data.xml"),
+                Charset.defaultCharset());
+
+        byte[] pdf = PDFFacade.generate(template, data);
+
+        assertNotNull(pdf);
+        assertTrue(pdf.length > 0);
+        String content = new String(pdf, StandardCharsets.ISO_8859_1);
+        assertTrue(content.contains("DejaVuSans"), "The bundled DejaVu Sans font should be embedded in the PDF");
     }
 
     /**
