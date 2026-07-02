@@ -193,10 +193,19 @@
     </div>
 
     <!-- ===== Secondary detail panels (any other composition children, e.g. payment allocations) —
-         read-only on the document: the rows are shown for reference, edited elsewhere. ===== -->
+         Add/Delete are the manual corrective override when the auto-settlement (rollup) got it wrong:
+         creating or deleting a junction row fires the child create/-deleted event the paid/balance/
+         status rollup listens to, so the document totals self-heal. Edit is intentionally omitted (a
+         correction is remove-the-wrong-row + add-the-right-one). Add/create returns to THIS document
+         (returnTo override) rather than the detail's default list. Only once the document exists. ===== -->
     <template x-for="d in secondaryDetails" :key="d.entity + ':' + id">
-      <div x-data="detailPanel(d, id)" x-h-card class="w-full">
-        <div x-h-card-header><h3 x-h-card-title x-text="d.label"></h3></div>
+      <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + '/edit'}, id)" x-h-card class="w-full">
+        <div x-h-card-header>
+          <h3 x-h-card-title x-text="d.label"></h3>
+          <div x-h-card-action x-show="masterId">
+            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span>Add</span></button>
+          </div>
+        </div>
         <div x-h-card-content>
           <div x-show="state === 'loading'"><div x-h-spinner></div></div>
           <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
@@ -208,18 +217,37 @@
                   <template x-for="col in def.columns" :key="col.name">
                     <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label || col.name"></th>
                   </template>
+                  <th x-h-table-head scope="col"></th>
                 </tr>
               </thead>
               <tbody x-h-table-body>
                 <template x-for="row in rows" :key="row[def.primaryKey]">
-                  <tr x-h-table-row>
+                  <tr x-h-table-row data-hoverable="true">
                     <template x-for="col in def.columns" :key="col.name">
                       <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
                     </template>
+                    <td x-h-table-cell data-row-actions>
+                      <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" data-lucide="trash-2"></i></button>
+                    </td>
                   </tr>
                 </template>
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- Delete confirmation (manual corrective removal of a junction row → rollup recomputes). -->
+        <div x-h-dialog-overlay :data-open="deleteOpen">
+          <div x-h-dialog>
+            <div x-h-dialog-header>
+              <h2 x-h-dialog-title x-text="'Delete ' + def.label"></h2>
+              <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+            </div>
+            <div x-h-dialog-content><p>Are you sure? This cannot be undone. The document totals will be recalculated.</p></div>
+            <div x-h-dialog-footer>
+              <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy">Cancel</button>
+              <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span>Delete</span></button>
+            </div>
           </div>
         </div>
       </div>
