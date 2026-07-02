@@ -244,7 +244,7 @@
         <harmonia.version>1.24.2</harmonia.version>
         <opensans.version>5.2.7</opensans.version>
         <lucide.version>1.8.0</lucide.version>
-        <pinecone-router.version>7.5.2</pinecone-router.version>
+        <pinecone-router.version>7.6.0</pinecone-router.version>
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.16.2</selenide.version>
