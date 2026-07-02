@@ -92,6 +92,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> KNOWN_AGGREGATES = Set.of("COUNT", "SUM", "AVG", "MIN", "MAX");
     private static final Pattern DOTTED_REF = Pattern.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
     private static final Pattern SIMPLE_CONDITION = Pattern.compile("^\\s*(\\S+)\\s*(<=|>=|<>|!=|=|<|>)\\s*(.+?)\\s*$");
+    /**
+     * {@code month(field)} / {@code year(field)} dimension - the bucket function in group 1, field in
+     * group 2.
+     */
+    private static final Pattern DATE_BUCKET = Pattern.compile("\\s*(month|year)\\s*\\(\\s*([^)]+?)\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
 
     @Override
     public String name() {
@@ -139,6 +144,29 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
         for (String dimension : report.getDimensions()) {
             if (dimension == null || dimension.isBlank()) {
+                continue;
+            }
+            // A month(field)/year(field) dimension buckets a date for aggregation: month emits the
+            // sortable YYYYMM integer (EXTRACT(YEAR) * 100 + EXTRACT(MONTH) - e.g. 202607), year the
+            // plain year. EXTRACT is standard SQL (H2, PostgreSQL); SQL Server does not support it -
+            // date-bucketed reports are an H2/PostgreSQL feature for now.
+            Matcher bucket = DATE_BUCKET.matcher(dimension.trim());
+            if (bucket.matches()) {
+                String function = bucket.group(1)
+                                        .toLowerCase(Locale.ROOT);
+                String fieldReference = bucket.group(2)
+                                              .trim();
+                ColumnRef ref = resolve(context, model, source, baseAlias, fieldReference);
+                registerJoin(joins, ref);
+                String expression = "month".equals(function)
+                        ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
+                        : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
+                String alias = humanize(function + " " + fieldReference.replace('.', ' '));
+                columns.add(column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated));
+                selectParts.add(expression + " as \"" + alias + "\"");
+                if (aggregated) {
+                    groupParts.add(expression);
+                }
                 continue;
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());

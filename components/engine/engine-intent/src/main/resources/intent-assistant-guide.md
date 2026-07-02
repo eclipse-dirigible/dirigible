@@ -397,6 +397,10 @@ reports:
 ```
 
 **Rules:** `source` is a declared entity. A bare to-one relation dimension shows the target's label,
+
+A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM integer, e.g.
+202607) or `year(field)` — e.g. `dimensions: ["month(date)"]` with `measures: ["sum(total)", "sum(vat)"]`
+for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
 ### permissions - roles

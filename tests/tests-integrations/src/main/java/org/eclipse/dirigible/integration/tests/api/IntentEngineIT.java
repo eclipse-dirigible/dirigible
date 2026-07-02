@@ -134,6 +134,11 @@ class IntentEngineIT extends IntegrationTest {
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+              # month(field) buckets a date dimension into a sortable YYYYMM integer.
+              - name: OrdersByMonth
+                source: Order
+                dimensions: ["month(orderDate)"]
+                measures: ["count(*)", "sum(total)"]
               - name: BigOrderItems
                 source: OrderItem
                 description: Order items with quantity over one, with their order date
@@ -219,7 +224,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(2))
+                                                 .body("reports", hasSize(3))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -1496,6 +1501,15 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"table\": \"ORDERS_ORDER\""),
                 "report table should be the same intent-prefixed table name the EDM declares as dataName");
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
+
+        // month(field) buckets the date dimension into a sortable YYYYMM integer, grouped the same way.
+        String monthly = contentOf("OrdersByMonth.report");
+        assertTrue(
+                monthly.contains(
+                        "(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))"),
+                "a month(field) dimension should emit the YYYYMM EXTRACT expression");
+        assertTrue(monthly.contains("as \\\"Month Order Date\\\""), "the bucketed column should carry a humanized alias");
+        assertTrue(monthly.contains("GROUP BY (EXTRACT(YEAR"), "the aggregation should group by the bucket expression");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
         // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
         // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds
