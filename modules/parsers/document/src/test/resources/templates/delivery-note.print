@@ -1,0 +1,30 @@
+<!-- Delivery Note — no monetary total -->
+<document id="delivery-note">
+    <page width="595" height="842" padding="40">
+        <header>
+            <text align="right" style="title">Delivery Note</text>
+            <line/>
+        </header>
+        <section>
+            <field label="Delivery No">{{delivery.number}}</field>
+            <field label="Date">{{delivery.date}}</field>
+            <field label="Order Ref">{{delivery.orderNumber}}</field>
+            <field label="Carrier">{{delivery.carrier}}</field>
+        </section>
+        <table source="delivery.items">
+            <column width="3*">{{description}}</column>
+            <column width="*" align="right">{{ordered}}</column>
+            <column width="*" align="right">{{delivered}}</column>
+        </table>
+        <footer>
+            <row>
+                <column flex="1">
+                    <field label="Received by"></field>
+                </column>
+                <column flex="1" align="right">
+                    <field label="Date"></field>
+                </column>
+            </row>
+        </footer>
+    </page>
+</document>

@@ -1,0 +1,23 @@
+<!-- Statement — iterates transactions with <for> -->
+<document id="statement">
+    <page width="595" height="842" padding="40">
+        <header>
+            <text align="right" style="title">Statement</text>
+            <line/>
+        </header>
+        <section>
+            <field label="Account">{{account.name}}</field>
+            <field label="Period">{{statement.period}}</field>
+            <field label="Opening Balance">{{statement.openingBalance}}</field>
+        </section>
+        <for source="statement.transactions">
+            <row gap="8">
+                <text width="20%">{{date}}</text>
+                <text flex="1">{{description}}</text>
+                <text width="20%" align="right">{{amount}}</text>
+            </row>
+        </for>
+        <line/>
+        <total align="right">{{statement.closingBalance}}</total>
+    </page>
+</document>

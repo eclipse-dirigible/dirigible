@@ -1,0 +1,57 @@
+<!-- Purchase Order -->
+<document id="purchase-order">
+
+    <page width="595" height="842" padding="40">
+
+        <header>
+            <text align="right" style="title">Purchase Order</text>
+            <line/>
+        </header>
+
+        <section>
+            <field label="PO No">{{order.number}}</field>
+            <field label="Date">{{order.date}}</field>
+            <field label="Expected Delivery">{{order.expectedDelivery}}</field>
+        </section>
+
+        <section id="parties">
+            <row gap="20">
+                <column flex="1">
+                    <text style="caption">Supplier</text>
+                    <field label="Name">{{supplier.name}}</field>
+                    <field label="Address">{{supplier.address}}</field>
+                </column>
+                <column flex="1">
+                    <text style="caption">Ship To</text>
+                    <field label="Warehouse">{{shipTo.name}}</field>
+                    <field label="Address">{{shipTo.address}}</field>
+                </column>
+            </row>
+        </section>
+
+        <table source="order.items">
+            <column width="3*">{{item}}</column>
+            <column width="2*" align="center">{{sku}}</column>
+            <column width="*" align="right">{{quantity}}</column>
+            <column width="2*" align="right">{{unitCost}}</column>
+            <column width="2*" align="right">{{total}}</column>
+        </table>
+
+        <section align="right" pageBreak="avoid">
+            <total align="right">{{order.total}}</total>
+        </section>
+
+        <footer>
+            <row>
+                <column flex="1">
+                    <field label="Approved by">{{order.approver}}</field>
+                </column>
+                <column flex="1" align="right">
+                    <field label="Signature"></field>
+                </column>
+            </row>
+        </footer>
+
+    </page>
+
+</document>

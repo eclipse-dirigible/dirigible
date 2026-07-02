@@ -1,0 +1,41 @@
+<!-- Receipt — narrow page, stack-only layout -->
+<document id="receipt">
+
+    <page width="280" padding="10">
+
+        <header>
+            <stack align="center">
+                <text style="title">{{store.name}}</text>
+                <text>{{store.address}}</text>
+            </stack>
+            <line/>
+        </header>
+
+        <section>
+            <field label="Receipt No">{{receipt.number}}</field>
+            <field label="Date">{{receipt.date}}</field>
+            <field label="Cashier">{{receipt.cashier}}</field>
+            <!-- payment method names may contain a raw ampersand -->
+            <field label="Paid via">Cash & Card</field>
+        </section>
+
+        <table source="receipt.items">
+            <column width="3*">{{description}}</column>
+            <column width="*" align="right">{{quantity}}</column>
+            <column width="2*" align="right">{{amount}}</column>
+        </table>
+
+        <total align="right">{{receipt.total}}</total>
+
+        <section>
+            <field label="Tendered">{{receipt.tendered}}</field>
+            <field label="Change">{{receipt.change}}</field>
+        </section>
+
+        <footer>
+            <text align="center">Thank you for shopping with us!</text>
+        </footer>
+
+    </page>
+
+</document>

@@ -1,0 +1,82 @@
+<?xml version="1.0"?>
+<!-- Sales Invoice — the canonical example of the document template DSL -->
+<document id="sales-invoice">
+
+    <page width="595" height="842" padding="40">
+
+        <header>
+            <row gap="10">
+                <image src="{{company.logo}}" width="120" height="60"/>
+                <stack flex="1" align="right">
+                    <text align="right" style="title">
+                        Sales Invoice
+                    </text>
+                    <text style="subtitle">{{company.name}}</text>
+                </stack>
+            </row>
+            <line/>
+        </header>
+
+        <section>
+            <field label="Invoice No">
+                {{invoice.number}}
+            </field>
+            <field label="Date">
+                {{invoice.date}}
+            </field>
+            <field label="Due Date">
+                {{invoice.dueDate}}
+            </field>
+        </section>
+
+        <section id="parties">
+            <row gap="20">
+                <column flex="1">
+                    <text style="caption">Bill To</text>
+                    <field label="Customer">{{customer.name}}</field>
+                    <field label="Address">{{customer.address}}</field>
+                    <field label="VAT No">{{customer.vatNumber}}</field>
+                </column>
+                <column flex="1" align="right">
+                    <text style="caption">From</text>
+                    <field label="Company">{{company.name}}</field>
+                    <field label="Address">{{company.address}}</field>
+                </column>
+            </row>
+        </section>
+
+        <space height="20"/>
+
+        <table source="invoice.items" repeatHeader="true">
+            <column width="45%">
+                {{description}}
+            </column>
+            <column width="15%" align="center">
+                {{quantity}}
+            </column>
+            <column width="20%" align="right">
+                {{price}}
+            </column>
+            <column width="20%" align="right">
+                {{amount}}
+            </column>
+        </table>
+
+        <section id="totals" align="right">
+            <field label="Subtotal">{{invoice.subtotal}}</field>
+            <if source="invoice.hasDiscount">
+                <field label="Discount">{{invoice.discount}}</field>
+            </if>
+            <field label="VAT (20%)">{{invoice.vat}}</field>
+            <total align="right">
+                {{invoice.total}}
+            </total>
+        </section>
+
+        <footer>
+            <text align="center">Terms &amp; Conditions apply — Page {{page}} of {{pages}}</text>
+        </footer>
+
+    </page>
+
+</document>
