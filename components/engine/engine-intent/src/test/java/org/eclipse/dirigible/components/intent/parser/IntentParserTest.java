@@ -160,4 +160,150 @@ class IntentParserTest {
         assertTrue(fields.get(2)
                          .isCalculated());
     }
+
+    /** A shop model with the two canonical Depends-On shapes: a cascade and a scalar auto-populate. */
+    private static final String DEPENDS_ON_HEAD = """
+            name: shop
+            entities:
+              - name: Country
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: City
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: Country, kind: manyToOne, to: Country }
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                relations:
+                  - { name: Country, kind: manyToOne, to: Country }
+            """;
+
+    @Test
+    void dependsOnCascadeAndAutoPopulateParse() {
+        // filterBy/valueFrom reference the target's properties by their AUTHORED names (a field by its
+        // lower-camel name, a relation by its declared name) - City's FK to Country is the relation
+        // named `Country`.
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country } }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        var dependsOn = model.getEntities()
+                             .get(2)
+                             .getRelations()
+                             .get(1)
+                             .getDependsOn();
+        assertEquals("Country", dependsOn.getRelation());
+        assertEquals("Country", dependsOn.getFilterBy());
+    }
+
+    @Test
+    void dependsOnUnknownTriggerRelationIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Region, filterBy: country } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("dependsOn relation [Region] is not a to-one relation")),
+                "expected a dangling-trigger issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnSelfTriggerIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: City, filterBy: country } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("cannot reference itself")),
+                "expected a self-trigger issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnUnknownFilterByOnOwnTargetIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: region } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("filterBy [region] is not a field or to-one relation of [City]")),
+                "expected an unknown-filterBy issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnUnknownValueFromOnTriggerTargetIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country, valueFrom: iso, filterBy: country } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("valueFrom [iso] is not a field or to-one relation of [Country]")),
+                "expected an unknown-valueFrom issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnRelationWithNeitherValueFromNorFilterByIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("requires `valueFrom` and/or `filterBy`")),
+                "expected a missing-valueFrom/filterBy issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnFieldRequiresValueFromAndForbidsFilterBy() {
+        String yaml = """
+                name: shop
+                entities:
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal, dependsOn: { relation: Product, filterBy: price } }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("requires `valueFrom`")),
+                "expected a missing-valueFrom issue, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("`filterBy` applies only to a relation")),
+                "expected a filterBy-on-field issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void dependsOnOnDocumentStatusRelationIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: City, kind: manyToOne, to: City, documentStatus: true, dependsOn: { relation: Country, filterBy: country } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("documentStatus (a read-only pill) so it cannot declare dependsOn")),
+                "expected a documentStatus-dependent issue, got: " + ex.getIssues());
+    }
 }

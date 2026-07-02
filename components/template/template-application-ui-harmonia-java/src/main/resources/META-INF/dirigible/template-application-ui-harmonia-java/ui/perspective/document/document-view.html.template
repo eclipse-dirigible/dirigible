@@ -113,7 +113,8 @@
         </div>
 #end
 #elseif($property.widgetType == "NUMBER")
-        <div x-h-input-number><input type="number" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end /></div>
+        <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
+        <div x-h-input-number><input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end /></div>
 #elseif($property.widgetType == "TEXTAREA")
         <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "DATE")
@@ -330,7 +331,8 @@
                     <input x-h-select-input x-model="draft[col.name]" placeholder="Select..." />
                     <div x-h-select-content>
                       <div x-h-select-search></div>
-                      <template x-for="opt in optionsFor(col.name)" :key="opt.value">
+                      <!-- dialogOptionsFor: the Depends-On-filtered set when active, else the full set. -->
+                      <template x-for="opt in dialogOptionsFor(col.name)" :key="opt.value">
                         <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
                       </template>
                     </div>
@@ -343,7 +345,7 @@
                 </div>
               </template>
               <template x-if="col.widget === 'NUMBER'">
-                <div x-h-input-number><input type="number" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
+                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
               </template>
               <template x-if="col.widget === 'CHECKBOX'">
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>

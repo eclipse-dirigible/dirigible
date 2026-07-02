@@ -95,6 +95,20 @@ document.addEventListener('alpine:init', () => {
         }
         this.state = 'empty-form';
       }
+#foreach($property in $properties)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl)
+#if($property.widgetType == "DROPDOWN")
+      // Depends-On: filter ${property.name}'s options for an already-populated trigger
+      // (edit/prefill) WITHOUT touching the stored value, then watch for user changes.
+      if (this.form.${property.widgetDependsOnProperty} != null && this.form.${property.widgetDependsOnProperty} !== '') {
+        await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, false);
+      }
+#end
+      this.${dollar}watch('form.${property.widgetDependsOnProperty}', (v) => {
+        if (v != null && v !== '') this.applyDependsOn${property.name}(v, true);
+      });
+#end
+#end
       this.refreshIcons();
     },
 
@@ -115,6 +129,14 @@ document.addEventListener('alpine:init', () => {
       }
 #end
 #end
+#foreach($property in $properties)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN")
+      // Re-apply the Depends-On filter after a full reload (Refresh / Add-new keep the cascade).
+      if (this.form.${property.widgetDependsOnProperty} != null && this.form.${property.widgetDependsOnProperty} !== '') {
+        await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, false);
+      }
+#end
+#end
     },
 
     optionText(options, value) {
@@ -130,6 +152,44 @@ document.addEventListener('alpine:init', () => {
         if (id != null) this.form[field] = String(id);
       });
     },
+#end
+#foreach($property in $properties)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl)
+
+    // Depends-On: ${property.name} reacts to ${property.widgetDependsOnProperty} - load the selected
+    // ${property.widgetDependsOnEntity} record and read its ${property.widgetDependsOnValueFrom}.
+#if($property.widgetType == "DROPDOWN")
+    // Re-filters the option list by ${property.widgetDependsOnFilterBy}; on a user change (adjust)
+    // a single remaining option is auto-selected, anything else clears the selection.
+#else
+    // Copies the value into the field (auto-population).
+#end
+    async applyDependsOn${property.name}(value, adjust) {
+      try {
+        const rec = await App.services.api.get('${property.widgetDependsOnControllerUrl}/' + encodeURIComponent(value), { baseUrl: '' });
+        const from = rec == null ? null : rec.${property.widgetDependsOnValueFrom};
+#if($property.widgetType == "DROPDOWN")
+        if (from == null || from === '') return;
+        const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
+          conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }]
+        }, { baseUrl: '' });
+        this.options${property.name} = (rows || []).map(e => ({
+          value: e.${property.widgetDropDownKey},
+          text: e.${property.widgetDropDownValue}
+        }));
+        if (adjust) {
+          this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
+        }
+#elseif($property.isDateType)
+        this.form.${property.name} = from == null ? '' : this.toDateInput(from, '${property.widgetType}');
+#else
+        this.form.${property.name} = from == null ? null : from;
+#end
+      } catch (e) {
+        console.error('[${name}FormPage] dependsOn refresh failed for ${property.name}', e);
+      }
+    },
+#end
 #end
 
     // Client-side schema (mirrors NOT NULL / format constraints). The server remains

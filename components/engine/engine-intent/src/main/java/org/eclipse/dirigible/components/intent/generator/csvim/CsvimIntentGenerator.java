@@ -24,6 +24,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -129,9 +130,20 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         return ordered;
     }
 
+    /**
+     * Test seam: render a seed's CSV body without a generation context. Never use in production code.
+     */
+    static String renderCsvForTest(EntityIntent entity, SeedIntent seed) {
+        return renderCsv(orderedFieldsOf(entity), entity, seed);
+    }
+
     private static String renderCsv(List<FieldIntent> fields, EntityIntent entity, SeedIntent seed) {
         StringBuilder sb = new StringBuilder(256);
         String entityDataName = IntentNaming.upperSnake(entity.getName());
+        // A seed row may also set a to-one relation's FK by the relation's authored name (e.g.
+        // `Country: 34` on a City row). Only relations actually referenced by a row become columns, so
+        // relation-free seeds keep their exact previous shape.
+        List<String> relationColumns = referencedRelationColumns(entity, seed);
         for (int i = 0; i < fields.size(); i++) {
             if (i > 0) {
                 sb.append(FIELD_DELIM);
@@ -140,6 +152,12 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
               .append('_')
               .append(IntentNaming.upperSnake(fields.get(i)
                                                     .getName()));
+        }
+        for (String relation : relationColumns) {
+            sb.append(FIELD_DELIM)
+              .append(entityDataName)
+              .append('_')
+              .append(IntentNaming.upperSnake(relation));
         }
         sb.append('\n');
         for (Map<String, Object> row : seed.getRows()) {
@@ -151,9 +169,36 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
                                              .getName());
                 sb.append(formatCell(value));
             }
+            for (String relation : relationColumns) {
+                sb.append(FIELD_DELIM)
+                  .append(formatCell(row.get(relation)));
+            }
             sb.append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * The entity's to-one relations referenced by at least one seed row (by authored relation name), in
+     * declaration order. Each becomes an FK column {@code <ENTITY>_<RELATION>} - the same
+     * {@code dataName} the EDM generator gives the FK property.
+     */
+    private static List<String> referencedRelationColumns(EntityIntent entity, SeedIntent seed) {
+        List<String> columns = new ArrayList<>();
+        for (RelationIntent relation : entity.getRelations()) {
+            String name = relation.getName();
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (name == null || !toOne) {
+                continue;
+            }
+            for (Map<String, Object> row : seed.getRows()) {
+                if (row.containsKey(name)) {
+                    columns.add(name);
+                    break;
+                }
+            }
+        }
+        return columns;
     }
 
     /**

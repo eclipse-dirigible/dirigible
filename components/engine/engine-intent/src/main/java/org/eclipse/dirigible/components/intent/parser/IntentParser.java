@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -530,6 +531,12 @@ public final class IntentParser {
 
     private static Set<String> validateEntities(IntentModel model, Set<String> usesAliases, List<String> issues) {
         Set<String> entityNames = new HashSet<>();
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         for (EntityIntent entity : model.getEntities()) {
             String name = entity.getName();
             if (name == null || name.isBlank()) {
@@ -568,6 +575,14 @@ public final class IntentParser {
                 if (field.getSize() != null && (field.getSize() < 1 || field.getSize() > 12)) {
                     issues.add("entity [" + name + "] field [" + field.getName() + "] size [" + field.getSize()
                             + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+                }
+                if (field.getDependsOn() != null) {
+                    String subject = "entity [" + name + "] field [" + field.getName() + "]";
+                    if (field.isPrimaryKey()) {
+                        issues.add(subject + " is a primary key so it cannot declare dependsOn");
+                    } else {
+                        validateDependsOn(entity, subject, field.getDependsOn(), null, byName, issues);
+                    }
                 }
             }
             if (idCount > 1) {
@@ -625,9 +640,86 @@ public final class IntentParser {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] points to unknown entity ["
                             + relation.getTo() + "]");
                 }
+                if (relation.getDependsOn() != null) {
+                    String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+                    boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                    if (!toOne) {
+                        issues.add(subject + " declares dependsOn but only a manyToOne/oneToOne relation can depend on another");
+                    } else if (relation.isDocumentStatus()) {
+                        issues.add(subject + " is a documentStatus (a read-only pill) so it cannot declare dependsOn");
+                    } else {
+                        validateDependsOn(entity, subject, relation.getDependsOn(), relation, byName, issues);
+                    }
+                }
             }
         }
         return entityNames;
+    }
+
+    /**
+     * A {@code dependsOn} declaration (on a field or a to-one relation) must name a sibling to-one
+     * relation as its trigger, and its {@code valueFrom}/{@code filterBy} must resolve to properties of
+     * the trigger's / the owning relation's target entity. Cross-model targets are validated against
+     * the referenced {@code .model} at generation time, not here (same contract as the relation target
+     * itself); a same-model target is checked immediately so a typo fails at parse time.
+     */
+    private static void validateDependsOn(EntityIntent entity, String subject, DependsOnIntent dependsOn, RelationIntent ownRelation,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        String triggerName = dependsOn.getRelation();
+        if (triggerName == null || triggerName.isBlank()) {
+            issues.add(subject + " dependsOn requires `relation`: the sibling to-one relation that triggers it");
+            return;
+        }
+        if (ownRelation != null && triggerName.equals(ownRelation.getName())) {
+            issues.add(subject + " dependsOn cannot reference itself as the trigger");
+            return;
+        }
+        RelationIntent trigger = toOneRelationByName(entity, triggerName);
+        if (trigger == null) {
+            issues.add(subject + " dependsOn relation [" + triggerName + "] is not a to-one relation of [" + entity.getName() + "]");
+            return;
+        }
+        if (trigger.isDocumentStatus()) {
+            issues.add(subject + " dependsOn relation [" + triggerName + "] is a documentStatus (a read-only pill) so it cannot trigger");
+        }
+        if (ownRelation == null) {
+            // A scalar field is auto-populated - it needs the source property and has no option list.
+            if (dependsOn.getValueFrom() == null || dependsOn.getValueFrom()
+                                                             .isBlank()) {
+                issues.add(subject + " dependsOn requires `valueFrom`: the trigger target's property to copy the value from");
+            }
+            if (dependsOn.getFilterBy() != null && !dependsOn.getFilterBy()
+                                                             .isBlank()) {
+                issues.add(subject + " dependsOn `filterBy` applies only to a relation (a dropdown) - a field has no option list");
+            }
+        } else if (isBlank(dependsOn.getValueFrom()) && isBlank(dependsOn.getFilterBy())) {
+            issues.add(subject + " dependsOn requires `valueFrom` and/or `filterBy` - with neither, the filter would compare the target's"
+                    + " primary key against the trigger's primary key");
+        }
+        // valueFrom lives on the TRIGGER's target entity; filterBy on the OWNING relation's target.
+        validateDependsOnProperty(subject, "valueFrom", dependsOn.getValueFrom(), trigger, byName, issues);
+        if (ownRelation != null) {
+            validateDependsOnProperty(subject, "filterBy", dependsOn.getFilterBy(), ownRelation, byName, issues);
+        }
+    }
+
+    private static void validateDependsOnProperty(String subject, String attribute, String property, RelationIntent targetRelation,
+            java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        if (property == null || property.isBlank() || targetRelation.isCrossModel()) {
+            return;
+        }
+        EntityIntent target = byName.get(targetRelation.getTo());
+        if (target == null) {
+            return; // the dangling relation target is reported separately
+        }
+        if (fieldByName(target, property) == null && toOneRelationByName(target, property) == null) {
+            issues.add(subject + " dependsOn " + attribute + " [" + property + "] is not a field or to-one relation of ["
+                    + targetRelation.getTo() + "]");
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.isBlank();
     }
 
     private static void validateProcesses(IntentModel model, Set<String> entityNames, List<String> issues) {

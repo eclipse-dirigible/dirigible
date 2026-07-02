@@ -89,6 +89,15 @@ public class FieldIntent {
      */
     private Integer size;
 
+    /**
+     * Optional Depends-On declaration: this scalar field is <b>auto-populated</b> from a property of a
+     * sibling to-one relation's target when that relation's selection changes (e.g. {@code price}
+     * copied from the chosen {@code Product}). Requires {@code valueFrom}; {@code filterBy} is not
+     * applicable to a scalar. Emitted as the {@code widgetDependsOn*} attributes. See
+     * {@link DependsOnIntent}.
+     */
+    private DependsOnIntent dependsOn;
+
     public String getName() {
         return name;
     }
@@ -260,5 +269,13 @@ public class FieldIntent {
 
     public void setSize(Integer size) {
         this.size = size;
+    }
+
+    public DependsOnIntent getDependsOn() {
+        return dependsOn;
+    }
+
+    public void setDependsOn(DependsOnIntent dependsOn) {
+        this.dependsOn = dependsOn;
     }
 }

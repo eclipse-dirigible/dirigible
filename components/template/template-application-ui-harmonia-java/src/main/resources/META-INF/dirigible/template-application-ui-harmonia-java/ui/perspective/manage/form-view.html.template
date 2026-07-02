@@ -114,8 +114,9 @@
         </div>
 #end
 #elseif($property.widgetType == "NUMBER")
+        <!-- step="any": without it the browser default step=1 rejects fractional input on DECIMAL fields. -->
         <div x-h-input-number>
-          <input type="number" id="f_${property.name}" x-model.number="form.${property.name}"
+          <input type="number" step="any" id="f_${property.name}" x-model.number="form.${property.name}"
                  :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
         </div>
 #elseif($property.widgetType == "TEXTAREA")

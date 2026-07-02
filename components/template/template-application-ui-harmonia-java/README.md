@@ -16,7 +16,17 @@ Harmonia SPA: the shell + all core view types (list, manage, setting, master-det
 reports), built-in Process Inbox + Documents sections, and inline process-task
 surfacing. Generation is verified against real models (`DependsOnIT`, `sales-order`,
 `sample-intent-model`) with live CRUD, relationship dropdowns, master→detail filtering
-and form date handling. Remaining items are refinements — see the checklist + the
+and form date handling. The EDM **Depends-On** attributes (`widgetDependsOn*`) are
+implemented (parity with the AngularJS stacks): `form-page.js.template` emits an Alpine
+watcher + an `applyDependsOn<Name>` method per dependent property (cascading dropdown
+re-filter via `POST <controller>/search` with an EQ condition — single match
+auto-selects — or scalar auto-populate), covering manage forms, master-detail detail
+forms and allocation panels (all reuse the FormPage); `document-page.js.template` does
+the same for document headers plus a **metadata-driven** cascade in the line-item
+dialog (`detail-register.js.template` emits `editColumns[].dependsOn`; filtered options
+live in a separate `draftOptions` store so the items table's label resolution keeps the
+full option set). The trigger's controller URL is precomputed as
+`widgetDependsOnControllerUrl` by `service-generate`'s `parameterUtils.js`. Remaining items are refinements — see the checklist + the
 repo-root `HARMONIA_RUNTIME_PLAN.md` "Implementation status" + "Follow-ups".
 
 ## Architecture (how it differs from the Angular module)

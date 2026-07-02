@@ -116,6 +116,22 @@ composition is opt-in.
   allocation tables), e.g. `{ name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model:
   customer-payments, show: [date, number] }`. The FK lookup already fetches the referenced row to
   resolve its label, so these columns cost no extra request and work for a cross-model target.
+- `dependsOn` (on a to-one relation OR a field) - **the Depends-On feature**: the control reacts to a
+  sibling to-one relation (`relation:` - the trigger). When the trigger's selection changes, the form
+  loads the trigger's target record, reads `valueFrom` off it (defaults to that target's primary key),
+  and then: a **relation** re-filters its dropdown where its own target's `filterBy` property equals
+  that value (`filterBy` defaults to the target's primary key; a single remaining option is
+  auto-selected), while a **field** simply copies the value (auto-population; `valueFrom` is mandatory,
+  `filterBy` not allowed). `valueFrom`/`filterBy` use the target's authored property names (a field by
+  its lower-camel name, a relation by its declared name). Cross-model triggers and targets are fine.
+  The canonical shapes:
+  - cascade - City narrowed to the chosen Country:
+    `- { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country } }`
+  - narrow-to-referenced - UoM auto-selected from the product's unit:
+    `- { name: UoM, kind: manyToOne, to: UoM, dependsOn: { relation: Product, valueFrom: UoM } }`
+  - auto-populate - price copied from the chosen product:
+    `- { name: price, type: decimal, dependsOn: { relation: Product, valueFrom: price } }`
+  A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and

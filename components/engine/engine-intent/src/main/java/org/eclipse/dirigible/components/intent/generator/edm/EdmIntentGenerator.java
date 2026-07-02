@@ -26,11 +26,13 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -211,7 +213,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                     .isBlank()) {
                     continue;
                 }
-                properties.add(propertyMap(name, field));
+                Map<String, Object> property = propertyMap(name, field);
+                // A scalar field with dependsOn is auto-populated from the trigger's target record
+                // (no filterBy - there is no option list to narrow).
+                putDependsOn(property, entity, field.getDependsOn(), null, null, byName, usesByAlias, context);
+                properties.add(property);
             }
             // An entity a process starts on create carries a ProcessId back-reference (the runtime
             // listener/handler writes the started process-instance id here). See TriggerSupport.
@@ -242,7 +248,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         continue;
                     }
                     CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, relation.getTo());
-                    properties.add(crossModelRelationProperty(name, relation, info));
+                    Map<String, Object> fkProperty = crossModelRelationProperty(name, relation, info);
+                    putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
+                            context);
+                    properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
                 }
@@ -250,7 +259,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 compositionAssigned |= composition;
                 EntityIntent target = byName.get(relation.getTo());
                 String targetPerspective = perspectiveFor(relation.getTo(), compositionParents, settingEntities);
-                properties.add(relationProperty(name, relation, target, composition, targetPerspective));
+                Map<String, Object> fkProperty = relationProperty(name, relation, target, composition, targetPerspective);
+                putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
+                        usesByAlias, context);
+                properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
             entityMap.put("properties", properties);
@@ -702,6 +714,89 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!columns.isEmpty()) {
             p.put("lookupColumns", columns);
         }
+    }
+
+    /**
+     * Emit the Depends-On widget attributes for a property that declares {@code dependsOn}: the trigger
+     * (a sibling to-one relation), the value source on the trigger's target ({@code valueFrom},
+     * defaulting to its primary key - the cascade case), and for a dropdown the option filter on its
+     * own target ({@code filterBy}, defaulting to that target's primary key - the narrow-to-referenced
+     * case). All four are scalar strings, so they flow into the {@code .edm} XML and the mxGraph
+     * property cells like any other widget attribute. Same-model property references were validated by
+     * the parser; a cross-model reference is validated here against the resolved owner model's property
+     * names ({@code null} when unresolved - convention fallback in unit tests - where the check is
+     * skipped).
+     *
+     * @param ownTargetKeyField the dependent's own target PK property (the {@code filterBy} default);
+     *        {@code null} for a scalar field, which has no option list and gets no {@code filterBy}
+     * @param ownTargetPropertyNames the dependent's own target property names when it is a resolved
+     *        cross-model target (for {@code filterBy} validation), else {@code null}
+     */
+    private static void putDependsOn(Map<String, Object> p, EntityIntent owner, DependsOnIntent dependsOn, String ownTargetKeyField,
+            Set<String> ownTargetPropertyNames, Map<String, EntityIntent> byName, Map<String, UsesIntent> usesByAlias,
+            IntentGenerationContext context) {
+        if (dependsOn == null) {
+            return;
+        }
+        RelationIntent trigger = toOneRelationByName(owner, dependsOn.getRelation());
+        if (trigger == null) {
+            // The parser already reported the dangling trigger; stay lenient here.
+            return;
+        }
+        String triggerKeyField = "Id";
+        Set<String> triggerPropertyNames = null;
+        if (trigger.isCrossModel()) {
+            UsesIntent uses = usesByAlias.get(trigger.getModel());
+            if (uses != null) {
+                // The same resolve the trigger's own FK property performs - no new failure mode.
+                CrossModelSupport.TargetInfo triggerInfo = CrossModelSupport.resolve(context, uses, trigger.getTo());
+                triggerKeyField = triggerInfo.keyField();
+                triggerPropertyNames = triggerInfo.propertyNames();
+            }
+        } else {
+            EntityIntent triggerTarget = byName.get(trigger.getTo());
+            if (triggerTarget != null) {
+                triggerKeyField = keyFieldName(triggerTarget);
+            }
+        }
+        String valueFrom = notBlank(dependsOn.getValueFrom()) ? IntentNaming.pascalCase(dependsOn.getValueFrom()) : triggerKeyField;
+        requireTargetProperty(valueFrom, triggerPropertyNames, "valueFrom", trigger.getTo());
+        p.put("widgetDependsOnProperty", IntentNaming.pascalCase(trigger.getName()));
+        p.put("widgetDependsOnEntity", trigger.getTo());
+        p.put("widgetDependsOnValueFrom", valueFrom);
+        if (ownTargetKeyField != null) {
+            String filterBy = notBlank(dependsOn.getFilterBy()) ? IntentNaming.pascalCase(dependsOn.getFilterBy()) : ownTargetKeyField;
+            requireTargetProperty(filterBy, ownTargetPropertyNames, "filterBy", String.valueOf(p.get("relationshipEntityName")));
+            p.put("widgetDependsOnFilterBy", filterBy);
+        }
+    }
+
+    /** The to-one relation of the entity with the given name, or null. */
+    private static RelationIntent toOneRelationByName(EntityIntent entity, String name) {
+        if (name == null || entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Generation-time check of a {@code dependsOn} property reference against a resolved cross-model
+     * target's property names - the cross-model counterpart of the parser's same-model validation
+     * (which cannot see another model's entities). Skipped when the names are unavailable (convention
+     * fallback).
+     */
+    private static void requireTargetProperty(String property, Set<String> targetPropertyNames, String attribute, String targetEntity) {
+        if (targetPropertyNames == null || targetPropertyNames.contains(property)) {
+            return;
+        }
+        throw new IntentValidationException(List.of(
+                "dependsOn " + attribute + " [" + property + "] is not a property of the cross-model target [" + targetEntity + "]"));
     }
 
     /**

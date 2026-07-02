@@ -117,6 +117,75 @@ class EdmIntentGeneratorTest {
         assertEquals("MANAGE_DETAILS", entityByName(entities, "SalesInvoiceItem").get("layoutType"));
     }
 
+    @Test
+    void dependsOnEmitsWidgetAttributesWithPrimaryKeyDefaults() {
+        String yaml = """
+                name: shop
+                uses:
+                  - { model: uoms }
+                entities:
+                  - name: Country
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: City
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Country, kind: manyToOne, to: Country }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: UoM, kind: manyToOne, to: UoM, model: uoms }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal, dependsOn: { relation: Product, valueFrom: price } }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: UoM, kind: manyToOne, to: UoM, model: uoms, dependsOn: { relation: Product, valueFrom: UoM } }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Country, kind: manyToOne, to: Country }
+                      - { name: City, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country } }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "shop");
+        List<Map<String, Object>> entities = entities(model);
+
+        // Cascade: City filtered by the selected Country; valueFrom defaults to the trigger's PK.
+        Map<String, Object> city = propertyByName(entityByName(entities, "Customer"), "City");
+        assertEquals("Country", city.get("widgetDependsOnProperty"));
+        assertEquals("Country", city.get("widgetDependsOnEntity"));
+        assertEquals("Id", city.get("widgetDependsOnValueFrom"), "valueFrom defaults to the trigger target's primary key");
+        assertEquals("Country", city.get("widgetDependsOnFilterBy"));
+
+        Map<String, Object> orderItem = entityByName(entities, "OrderItem");
+        // Scalar auto-populate: price copied from the chosen Product; a field carries no filterBy.
+        Map<String, Object> price = propertyByName(orderItem, "Price");
+        assertEquals("Product", price.get("widgetDependsOnProperty"));
+        assertEquals("Product", price.get("widgetDependsOnEntity"));
+        assertEquals("Price", price.get("widgetDependsOnValueFrom"));
+        assertNull(price.get("widgetDependsOnFilterBy"), "a scalar field has no option list to filter");
+
+        // Narrow-to-referenced on a cross-model dependent: filterBy defaults to its own target's PK.
+        Map<String, Object> uom = propertyByName(orderItem, "UoM");
+        assertEquals("Product", uom.get("widgetDependsOnProperty"));
+        assertEquals("UoM", uom.get("widgetDependsOnValueFrom"));
+        assertEquals("Id", uom.get("widgetDependsOnFilterBy"), "filterBy defaults to the dependent's own target primary key");
+
+        // An independent property carries none of the attributes.
+        Map<String, Object> countryFk = propertyByName(entityByName(entities, "Customer"), "Country");
+        assertNull(countryFk.get("widgetDependsOnProperty"));
+    }
+
     private static Map<String, Object> buildFromResource(String resource, String intentName) {
         IntentModel parsed = IntentParser.parse(readResource(resource));
         return EdmIntentGenerator.buildModelJsonForTest(parsed, intentName);
