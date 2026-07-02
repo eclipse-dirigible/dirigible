@@ -74,6 +74,20 @@ public class FieldIntent {
      * (e.g. {@code SALES INVOICE 00001231}) instead of as an editable field.
      */
     private boolean documentTitle;
+    /**
+     * Whether the field appears as a column in the entity <b>list</b> table (the model's
+     * {@code widgetIsMajor}). Defaults to {@code true}; set {@code major: false} to keep the field off
+     * the list/table view (it is still shown in forms and the record details pane). {@code Boolean}
+     * (nullable) so an unset value keeps the default-true behaviour.
+     */
+    private Boolean major;
+    /**
+     * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
+     * 12 = full). Emitted as the property's {@code widgetSize}; the Harmonia form maps it to
+     * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
+     * width). Textarea/checkbox widgets always span the full row regardless.
+     */
+    private Integer size;
 
     public String getName() {
         return name;
@@ -211,6 +225,19 @@ public class FieldIntent {
         this.documentTitle = documentTitle;
     }
 
+    public Boolean getMajor() {
+        return major;
+    }
+
+    public void setMajor(Boolean major) {
+        this.major = major;
+    }
+
+    /** Whether this field is a list-table column - defaults to true when {@code major} is unset. */
+    public boolean isMajor() {
+        return major == null || major;
+    }
+
     public String getDefaultValue() {
         return defaultValue;
     }
@@ -225,5 +252,13 @@ public class FieldIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public Integer getSize() {
+        return size;
+    }
+
+    public void setSize(Integer size) {
+        this.size = size;
     }
 }

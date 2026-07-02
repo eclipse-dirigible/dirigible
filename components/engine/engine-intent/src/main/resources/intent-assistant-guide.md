@@ -94,6 +94,9 @@ composition is opt-in.
 `defaultValue`, a field may declare:
 
 - `unique: true` - a UNIQUE constraint (e.g. a `uuid` business key or a code).
+- `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
+  record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
+  of wide/secondary fields (e.g. `uuid`, long notes).
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
@@ -104,6 +107,15 @@ composition is opt-in.
   read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
   field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
+  (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
+  omitted, a control falls back to half width. Use a small span to pack several short controls onto one
+  row, e.g. `{ name: Currency, kind: manyToOne, to: Currency, size: 4 }` for three dropdowns on a line.
+- `show` (on a to-one relation) - a list of the target entity's field names to surface as extra
+  **read-only** columns wherever the relation appears as a lookup column (the master-detail / document
+  allocation tables), e.g. `{ name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model:
+  customer-payments, show: [date, number] }`. The FK lookup already fetches the referenced row to
+  resolve its label, so these columns cost no extra request and work for a cross-model target.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
@@ -274,6 +286,35 @@ trigger entity. `setRelationField` works on a `serviceTask` (like `setField`) **
   The same rule applies to `setField`: branch-then-set on a serviceTask when a decision follows; set
   on the task only when nothing branches on its outcome.
 
+**Calling a custom (reusable) delegate: `delegate`.** For a service task whose work is real logic
+that cannot be modelled (call a number generator, post to an external system, run a computation),
+name a hand-written client `JavaDelegate` with `delegate: <fully.qualified.ClassName>` and pass it
+parameters with `fields: { <name>: <value>, ... }`:
+
+```yaml
+  # After Issue, stamp the document number. The delegate lives in THIS document's own project
+  # (custom/) because it must load & save the record through the generated <Entity>Repository.
+  # Flowable injects each `fields` entry into the delegate (here just the number-series `type`).
+  - name: generateNumber
+    kind: serviceTask
+    args:
+      delegate: custom.sales_invoices.DocumentNumberGeneratorDelegate
+      fields: { type: "Sales Invoice" }
+      next: send
+```
+
+The delegate is bound via `flowable:class` (not the `${JavaTask}` dispatcher the `setField` /
+scaffolded-stub paths use), because only `flowable:class` lets Flowable inject the declared `fields`
+as delegate fields. Contrast the three "custom code" service-task shapes: `setField` /
+`setRelationField` bind a **generated** `gen.events` delegate; a **bare** serviceTask (no
+`delegate` / `call`) binds `custom.<Step>` and scaffolds a one-time stub under `custom/`; a
+`delegate` binds **your** named class and scaffolds nothing (you write it). **A delegate that touches
+an entity must live in that entity's project** and manage it through the generated
+`<Entity>Repository` (validations, events, i18n) — never the generic `Store`. Only truly
+entity-agnostic helpers (e.g. a number generator over its own repository) belong in a shared project
+and are called from the delegate (client Java compiles across all published projects). `delegate`
+cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process
@@ -431,8 +472,57 @@ rollups:
 `entity` is the child being counted, `via` is the child's to-one relation pointing at the parent, and
 `field` is the integer field on the **parent** that holds the count.
 
+**Sum + balance + status (payment settlement).** With `op: sum` the roll-up keeps `field` equal to the
+sum of the children's `of` field. Add `capacity` (a numeric parent field the sum is measured against)
+to also maintain a `balance` field (= `capacity − sum`) and set a `status` relation to `statusWhenFull`
+(when `sum >= capacity`) or `statusWhenPartial` (when `0 < sum < capacity`; unchanged at zero):
+```yaml
+rollups:
+  # Invoice.paid = sum of its payment allocations; balance = total − paid; Status -> PAID / PARTIAL.
+  - { name: invoicePaid, entity: SalesInvoiceCustomerPayment, via: SalesInvoice, field: paid,
+      op: sum, of: amount,
+      capacity: total, balance: balance, status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
+```
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
-must be an existing **integer** field on the parent entity.
+must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
+extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
+`statusWhenFull`/`statusWhenPartial` its target seed ids.
+
+### settlements - auto-allocate payments across invoices
+
+**Use when:** a payment should be automatically applied to a customer's open invoices (partial / full),
+and one payment may cover several invoices (an n:m allocation carried on a junction with an amount).
+
+```yaml
+settlements:
+  - name: autoAllocate
+    junction: SalesInvoiceCustomerPayment   # the link entity (FK to invoice + FK to payment + amount)
+    invoice: SalesInvoice                   # the open-receivable side
+    payment: CustomerPayment                # the pot side (often cross-model)
+    amount: amount                          # the junction's allocated-slice field
+    total: total                            # invoice capacity; open = total - paid
+    paid: paid                              # invoice consumed (kept by the paid roll-up)
+    pot: amount                             # payment pot field (payment.amount)
+    order: date                             # allocate oldest first (FIFO)
+    match: [Customer, Currency]             # only allocate within the same customer + currency
+    status: Status                          # invoice status relation
+    payableStatuses: [3, 4, 6]              # seed ids that are payable (e.g. ISSUED / SENT / PARTIAL)
+```
+
+Generates two client-Java glue classes (bind them with a `rollups` sum entry that keeps `paid` +
+`balance` + status — see rollups above):
+- **`<Name>OnPayment`** - a `MessageHandler` on the payment's create event: spreads the new payment
+  across the payer's open invoices (oldest first), creating junction rows until the pot is used up.
+- **`<Name>OnInvoice`** - a `JavaDelegate` that pulls the customer's unallocated payment balance onto an
+  invoice; wire it as a **`delegate:` service task** on the process step where the invoice becomes
+  payable (e.g. right after Issue), e.g. `args: { delegate: gen.events.AutoAllocateOnInvoice, next: … }`.
+
+**Rules:** `junction` / `invoice` / `payment` are declared entities; the junction must have a to-one
+relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` / `order`
+are invoice fields; `status` a to-one relation of the invoice; `match` are to-one relations of the
+invoice (and same-named on the payment). Allocation is bounded by the invoice open amount and the
+payment's unallocated balance; entity writes go only through the generated repositories.
 
 ## Allowed values
 

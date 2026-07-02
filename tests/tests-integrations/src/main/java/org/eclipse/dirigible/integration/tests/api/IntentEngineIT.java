@@ -560,6 +560,78 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void delegate_service_task_binds_a_client_java_delegate_via_flowable_class_with_injected_fields() {
+        // A serviceTask with a `delegate` names an author-provided client JavaDelegate FQN. Unlike
+        // setField/setRelationField (bound to a generated gen.events delegate through ${JavaTask}) or a
+        // bare serviceTask (bound to a scaffolded custom.<Step> stub), a delegate is bound via
+        // flowable:class so Flowable injects the declared `fields` into it. The delegate lives in the
+        // document's OWN project (it manages the entity through its generated repository).
+        String yaml = """
+                name: invoicing
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 100 }
+                processes:
+                  - name: IssueInvoice
+                    trigger: { onCreate: Invoice }
+                    steps:
+                      - { name: review, kind: userTask, args: { assignee: clerk, form: ReviewInvoice } }
+                      - name: generateNumber
+                        kind: serviceTask
+                        args:
+                          delegate: custom.invoicing.DocumentNumberGeneratorDelegate
+                          fields: { type: "Sales Invoice" }
+                          next: done
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewInvoice, forEntity: Invoice, fields: [number], actions: [submit] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: the delegate step binds flowable:class (NOT ${JavaTask}) and injects each field.
+        String bpmn = contentOf("IssueInvoice.bpmn");
+        assertTrue(
+                bpmn.contains("<serviceTask id=\"generateNumber\" name=\"Generate Number\"")
+                        && bpmn.contains("flowable:class=\"custom.invoicing.DocumentNumberGeneratorDelegate\""),
+                "a delegate service task should bind flowable:class to the author-named client delegate");
+        assertFalse(bpmn.contains("id=\"generateNumber\"") && bpmn.contains("flowable:delegateExpression=\"${JavaTask}\""),
+                "a delegate service task must not fall back to the ${JavaTask} dispatcher");
+        assertTrue(bpmn.contains("<flowable:field name=\"type\">") && bpmn.contains("<![CDATA[Sales Invoice]]>"),
+                "each delegate field should be emitted as an injectable flowable:field");
+        assertFalse(bpmn.contains("custom.GenerateNumber"), "a delegate service task must not scaffold a custom/ stub");
+    }
+
+    @Test
+    void field_major_false_is_kept_off_the_list_via_widget_is_major() {
+        // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
+        // omits that column (the field is still shown in forms + the details pane). Default is true.
+        String yaml = """
+                name: catalog
+                entities:
+                  - name: Product
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: name,  type: string,  required: true, length: 100 }
+                      - { name: notes, type: text,    major: false }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        String model = contentOf("catalog.model");
+        assertTrue(model.contains("\"widgetIsMajor\": \"false\""),
+                "a field with major: false should emit widgetIsMajor=false so it is excluded from the list table");
+        assertTrue(model.contains("\"widgetIsMajor\": \"true\""), "fields default to major (widgetIsMajor=true)");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping
@@ -632,6 +704,122 @@ class IntentEngineIT extends IntegrationTest {
         String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
+    }
+
+    @Test
+    void sum_rollup_with_capacity_maintains_balance_and_sets_status() {
+        // A sum roll-up with `capacity` also keeps a `balance` field (= capacity - sum) and derives a
+        // `status` relation: whenFull (>= capacity) / whenPartial (0 < sum < capacity). This is the
+        // payment-settlement engine: Bill.paid = sum of its payments, Bill.balance = total - paid,
+        // Bill.Status -> PAID / PARTIAL.
+        String yaml = """
+                name: billing
+                entities:
+                  - name: Bill
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: total,   type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,    type: decimal, precision: 18, scale: 2 }
+                      - { name: balance, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: BillStatus }
+                  - name: BillStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 50 }
+                  - name: BillPayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                rollups:
+                  - { name: billPaid, entity: BillPayment, via: Bill, field: paid, op: sum, of: amount,
+                      capacity: total, balance: balance, status: Status, statusWhenFull: 2, statusWhenPartial: 1 }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "billing.glue");
+
+        String onCreate = contentOf("gen/events/BillPaidRollupOnCreate.java");
+        assertTrue(onCreate.contains("parent.Paid = sum"), "the sum roll-up should write the summed field");
+        assertTrue(onCreate.contains("parent.Balance = capacity.subtract(sum)"),
+                "with a capacity + balance, it should keep balance = capacity - sum");
+        assertTrue(onCreate.contains("parent.Status = sum.compareTo(capacity) >= 0 ? 2 : 1"),
+                "with a capacity + status, it should set the status relation to whenFull/whenPartial at the thresholds");
+    }
+
+    @Test
+    void settlement_generates_on_payment_listener_and_on_invoice_delegate() {
+        // A settlement auto-allocates a Payment across a Customer's open Invoices (oldest first) via the
+        // InvoicePayment junction: an onPayment MessageHandler (payment create) + an onInvoice
+        // JavaDelegate (wired as a delegate: service task once the invoice is payable).
+        String yaml = """
+                name: settle
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: date,  type: date }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                      - { name: paid,  type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                      - { name: Status,   kind: manyToOne, to: InvoiceStatus }
+                  - name: Payment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: date,   type: date }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: Customer
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 100 }
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string,  required: true, length: 50 }
+                  - name: InvoicePayment
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2, required: true }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Payment, kind: manyToOne, to: Payment, required: true }
+                settlements:
+                  - { name: autoSettle, junction: InvoicePayment, invoice: Invoice, payment: Payment,
+                      amount: amount, total: total, paid: paid, pot: amount, order: date,
+                      match: [Customer], status: Status, payableStatuses: [3, 4, 6] }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "settle.glue");
+
+        String onPayment = contentOf("gen/events/AutoSettleOnPayment.java");
+        assertTrue(onPayment.contains("class AutoSettleOnPayment implements MessageHandler"),
+                "the onPayment settlement listener should be generated");
+        assertTrue(onPayment.contains("PaymentEntity payment = Json.parse(message, PaymentEntity.class)"),
+                "it should deserialize the created payment from the event");
+        assertTrue(onPayment.contains(".eq(\"Customer\", payment.Customer)"), "it should match invoices on the shared Customer");
+        assertTrue(onPayment.contains("s == 3 || s == 4 || s == 6"), "it should only allocate to invoices in a payable status");
+        assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
+                "it should create allocation rows through the junction repository (never the generic Store)");
+
+        String onInvoice = contentOf("gen/events/AutoSettleOnInvoice.java");
+        assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
+                "the onInvoice settlement delegate should be generated");
+        assertTrue(onInvoice.contains("new PaymentRepository().findAll") && onInvoice.contains(".eq(\"Customer\", invoice.Customer)"),
+                "it should pull the customer's payments matching on the shared Customer");
     }
 
     @Test

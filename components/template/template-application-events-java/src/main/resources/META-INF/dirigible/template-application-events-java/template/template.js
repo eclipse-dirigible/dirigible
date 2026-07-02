@@ -94,6 +94,20 @@ export function getTemplate(parameters) {
                 collection: "rollups"
             },
             {
+                location: "/template-application-events-java/events/SettlementOnPayment.java.template",
+                action: "generate",
+                rename: "gen/events/{{name}}OnPayment.java",
+                engine: "velocity",
+                collection: "settlements"
+            },
+            {
+                location: "/template-application-events-java/events/SettlementOnInvoice.java.template",
+                action: "generate",
+                rename: "gen/events/{{name}}OnInvoice.java",
+                engine: "velocity",
+                collection: "settlements"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

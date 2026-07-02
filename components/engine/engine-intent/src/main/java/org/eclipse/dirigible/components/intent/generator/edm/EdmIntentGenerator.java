@@ -180,6 +180,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("documentLabel", IntentNaming.humanize(name));
                 entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
             }
+            // A plain PRIMARY entity with NO composition children of its own is standalone, not a
+            // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
+            // humanized title) rather than the default MANAGE_MASTER, which is meant for entities that
+            // actually own detail children (a value in compositionParents).
+            else if (!dependent && !setting && !compositionParents.containsValue(name)) {
+                entityMap.put("layoutType", "MANAGE");
+            }
             // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
             // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
             if (entity.isDashboardExcluded()) {
@@ -524,9 +531,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("auditType", "NONE");
         // Document role: the number/title field renders in the document form's title, not as an input.
         p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForType(dataType));
-        p.put("widgetSize", "");
+        p.put("widgetSize", field.getSize() == null ? ""
+                : field.getSize()
+                       .toString());
         p.put("widgetLength", length == null ? "20" : length.toString());
-        p.put("widgetIsMajor", "true");
+        // Whether the field is a column in the entity list table; `major: false` keeps it off the list
+        // (still shown in forms + the details pane). Defaults to true when unset.
+        p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
         return p;
     }
 
@@ -608,11 +619,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
         // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
         p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
-        p.put("widgetSize", "");
+        p.put("widgetSize", relation.getSize() == null ? ""
+                : relation.getSize()
+                          .toString());
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        putLookupColumns(p, relation);
         return p;
     }
 
@@ -654,12 +668,40 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipEntityPerspectiveName", info.perspectiveName());
         p.put("relationshipEntityPerspectiveLabel", "Entities");
         p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
-        p.put("widgetSize", "");
+        p.put("widgetSize", relation.getSize() == null ? ""
+                : relation.getSize()
+                          .toString());
         p.put("widgetLength", "20");
         p.put("widgetIsMajor", "true");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
+        putLookupColumns(p, relation);
         return p;
+    }
+
+    /**
+     * Emit the relation's {@code show} target fields as {@code lookupColumns} (PascalCase name +
+     * humanized label) so the Harmonia detail table renders them as extra read-only columns resolved
+     * from the already-fetched lookup row. Nothing is emitted when {@code show} is absent/empty.
+     */
+    private static void putLookupColumns(Map<String, Object> p, RelationIntent relation) {
+        if (relation.getShow() == null || relation.getShow()
+                                                  .isEmpty()) {
+            return;
+        }
+        List<Map<String, Object>> columns = new ArrayList<>();
+        for (String field : relation.getShow()) {
+            if (field == null || field.isBlank()) {
+                continue;
+            }
+            Map<String, Object> column = new LinkedHashMap<>();
+            column.put("name", IntentNaming.pascalCase(field));
+            column.put("label", IntentNaming.humanize(field));
+            columns.add(column);
+        }
+        if (!columns.isEmpty()) {
+            p.put("lookupColumns", columns);
+        }
     }
 
     /**
@@ -1121,10 +1163,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         sb.append(" as=\"value\"/>\n");
     }
 
-    /** The {@code <Property>} cell value - the property's attributes verbatim. */
+    /** The {@code <Property>} cell value - the property's scalar attributes verbatim. */
     private static void appendPropertyValue(StringBuilder sb, Map<String, Object> property) {
         sb.append("    <Property");
         for (Map.Entry<String, Object> attr : property.entrySet()) {
+            // EDM attributes are scalar; a structured value (e.g. lookupColumns, .model-JSON-only) is not
+            // an EDM attribute and would render as a junk string - it belongs only in the .model twin.
+            if (attr.getValue() instanceof Iterable || attr.getValue() instanceof Map) {
+                continue;
+            }
             appendAttribute(sb, attr.getKey(), attr.getValue());
         }
         sb.append(" as=\"value\"/>\n");

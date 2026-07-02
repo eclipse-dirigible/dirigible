@@ -37,7 +37,9 @@
 
   <!-- Form -->
   <form x-show="state !== 'loading' && state !== 'load-failure'" @submit.prevent="save()"
-        class="vbox gap-4 py-6 px-8 w-full max-w-2xl">
+        class="hbox gap-6 py-6 px-8 w-full items-start">
+    <!-- Main content column -->
+    <div class="vbox gap-4 grow min-w-0" style="max-width: 42rem;">
 
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
@@ -160,43 +162,54 @@
 #end
     </div>
 
-    <!-- Read-only details: system / read-only fields (audit, ProcessId, uuid, any field marked
-         read-only) shown as Label: Value (like the detail card), above the actions. Only on edit, and
-         each row only when its value is populated, so the Create form stays clean. -->
+    <div x-h-toolbar.footer>
+#if($hasProcess)
+      <!-- Actionable BPM user-task buttons (edit only), left-aligned. -->
+      <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
+        <button type="button" x-h-button data-variant="primary" @click="$store.processTasks.openTask(task)">
+          <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+        </button>
+      </template>
+#end
+      <div x-h-toolbar-spacer></div>
+      <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'">Cancel</button>
+      <button type="submit" x-h-button data-variant="primary" :disabled="state === 'saving'">
+        <span x-show="state === 'saving'" x-h-spinner></span>
+        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? 'Save' : 'Create'"></span>
+      </button>
+    </div>
+    </div>
+
+    <!-- Right sidebar: read-only / audit fields (audit, ProcessId, uuid, read-only), single column,
+         top-to-bottom (edit only). -->
 #set($hasReadOnly = false)
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
 #end
 #if($hasReadOnly)
-    <div x-h-card x-show="isEdit">
-      <div x-h-card-content>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+    <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit">
+      <div x-h-card>
+        <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+        <div x-h-card-content>
+          <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
-          <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
-            <span class="text-xs text-muted-foreground">${rolabel}</span>
+            <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
+              <span class="text-xs text-muted-foreground">${rolabel}</span>
 #if($property.widgetType == "DROPDOWN")
-            <span class="text-sm" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
+              <span class="text-sm break-all" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
 #else
-            <span class="text-sm" x-text="form.${property.name}"></span>
+              <span class="text-sm break-all" x-text="form.${property.name}"></span>
+#end
+            </div>
+#end
 #end
           </div>
-#end
-#end
         </div>
       </div>
     </div>
 #end
-
-    <div x-h-toolbar.footer>
-      <div x-h-toolbar-spacer></div>
-      <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'">Cancel</button>
-      <button type="submit" x-h-button data-variant="primary" :disabled="state === 'saving'">
-        <span x-show="state === 'saving'" x-h-spinner></span>
-        <span x-text="isEdit ? 'Save' : 'Create'"></span>
-      </button>
-    </div>
   </form>
 
 </div>

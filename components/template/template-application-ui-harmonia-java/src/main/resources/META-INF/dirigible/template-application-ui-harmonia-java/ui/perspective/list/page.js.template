@@ -79,7 +79,7 @@ document.addEventListener('alpine:init', () => {
     async loadLookups() {
       const all = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};

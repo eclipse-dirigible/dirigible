@@ -29,6 +29,7 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
+import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
@@ -66,6 +67,8 @@ public final class IntentParser {
      * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
      */
     private static final Set<String> INTEGER_PK_TYPES = Set.of("integer", "int", "long");
+    /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
+    private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
@@ -154,9 +157,99 @@ public final class IntentParser {
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateRollups(model, issues);
+        validateSettlements(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * Each settlement must reference declared junction / invoice / payment entities; the junction must
+     * have a to-one relation to each of them; the named amount / total / paid / pot / order fields must
+     * exist; and each {@code match} must be a to-one relation of both the invoice and the payment.
+     */
+    private static void validateSettlements(IntentModel model, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (SettlementIntent s : model.getSettlements()) {
+            String label = s.getName() == null ? "<unnamed>" : s.getName();
+            if (s.getName() == null || s.getName()
+                                        .isBlank()) {
+                issues.add("settlement has no name");
+                continue;
+            }
+            if (!names.add(s.getName())) {
+                issues.add("duplicate settlement [" + s.getName() + "]");
+            }
+            EntityIntent junction = byName.get(s.getJunction());
+            EntityIntent invoice = byName.get(s.getInvoice());
+            if (junction == null) {
+                issues.add("settlement [" + label + "] references unknown junction entity [" + s.getJunction() + "]");
+            }
+            if (invoice == null) {
+                issues.add("settlement [" + label + "] references unknown invoice entity [" + s.getInvoice() + "]");
+            }
+            if (s.getPayment() == null || s.getPayment()
+                                           .isBlank()) {
+                issues.add("settlement [" + label + "] must name a payment entity");
+            }
+            if (junction != null) {
+                if (toOneRelationTo(junction, s.getInvoice()) == null) {
+                    issues.add("settlement [" + label + "] junction [" + s.getJunction() + "] has no to-one relation to [" + s.getInvoice()
+                            + "]");
+                }
+                if (toOneRelationTo(junction, s.getPayment()) == null) {
+                    issues.add("settlement [" + label + "] junction [" + s.getJunction() + "] has no to-one relation to [" + s.getPayment()
+                            + "]");
+                }
+                if (s.getAmount() == null || fieldByName(junction, s.getAmount()) == null) {
+                    issues.add("settlement [" + label + "] amount [" + s.getAmount() + "] is not a field of the junction ["
+                            + s.getJunction() + "]");
+                }
+            }
+            if (invoice != null) {
+                requireField(invoice, s.getTotal(), label, "total", issues);
+                requireField(invoice, s.getPaid(), label, "paid", issues);
+                requireField(invoice, s.getOrder(), label, "order", issues);
+                if (s.getStatus() != null && !s.getStatus()
+                                               .isBlank()
+                        && toOneRelationByName(invoice, s.getStatus()) == null) {
+                    issues.add("settlement [" + label + "] status [" + s.getStatus() + "] is not a to-one relation of [" + s.getInvoice()
+                            + "]");
+                }
+                for (String m : s.getMatch()) {
+                    if (toOneRelationByName(invoice, m) == null) {
+                        issues.add("settlement [" + label + "] match [" + m + "] is not a to-one relation of the invoice [" + s.getInvoice()
+                                + "]");
+                    }
+                }
+            }
+        }
+    }
+
+    private static void requireField(EntityIntent entity, String field, String label, String role, List<String> issues) {
+        if (field == null || fieldByName(entity, field) == null) {
+            issues.add("settlement [" + label + "] " + role + " [" + field + "] is not a field of [" + entity.getName() + "]");
+        }
+    }
+
+    /** The entity's to-one relation whose target is {@code targetEntity}, or null. */
+    private static RelationIntent toOneRelationTo(EntityIntent entity, String targetEntity) {
+        if (entity.getRelations() == null || targetEntity == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (targetEntity.equals(relation.getTo())
+                    && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /**
@@ -247,11 +340,47 @@ public final class IntentParser {
             }
             EntityIntent parent = byName.get(via.getTo());
             FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
+            boolean sum = "sum".equals(rollup.getOp());
             if (counter == null) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
-            } else if (!INTEGER_PK_TYPES.contains(counter.getType())) {
+            } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {
+                issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be a numeric type to hold a sum");
+            } else if (!sum && !INTEGER_PK_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
             }
+            if (sum) {
+                // sum needs a numeric child field to add up; capacity / balance (optional) are numeric parent
+                // fields and status (optional) a to-one relation of the parent - see the balance/status roll-up.
+                FieldIntent of = fieldByName(child, rollup.getOf());
+                if (rollup.getOf() == null || rollup.getOf()
+                                                    .isBlank()) {
+                    issues.add("rollup [" + name + "] with op sum must declare `of` (the child field to sum)");
+                } else if (of == null) {
+                    issues.add("rollup [" + name + "] of [" + rollup.getOf() + "] is not a field of [" + rollup.getEntity() + "]");
+                } else if (!NUMERIC_TYPES.contains(of.getType())) {
+                    issues.add("rollup [" + name + "] of [" + rollup.getOf() + "] must be a numeric field to sum");
+                }
+                requireNumericParentField(parent, rollup.getCapacity(), name, "capacity", via.getTo(), issues);
+                requireNumericParentField(parent, rollup.getBalance(), name, "balance", via.getTo(), issues);
+                if (rollup.getStatus() != null && !rollup.getStatus()
+                                                         .isBlank()
+                        && (parent == null || toOneRelationByName(parent, rollup.getStatus()) == null)) {
+                    issues.add(
+                            "rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + via.getTo() + "]");
+                }
+            }
+        }
+    }
+
+    /** Validate an optional numeric parent field named on a roll-up (capacity / balance). */
+    private static void requireNumericParentField(EntityIntent parent, String field, String rollup, String role, String parentName,
+            List<String> issues) {
+        if (field == null || field.isBlank()) {
+            return;
+        }
+        FieldIntent f = parent == null ? null : fieldByName(parent, field);
+        if (f == null || !NUMERIC_TYPES.contains(f.getType())) {
+            issues.add("rollup [" + rollup + "] " + role + " [" + field + "] must be a numeric field of [" + parentName + "]");
         }
     }
 
@@ -436,6 +565,10 @@ public final class IntentParser {
                                 + (type == null ? "" : ", got [" + field.getType() + "]"));
                     }
                 }
+                if (field.getSize() != null && (field.getSize() < 1 || field.getSize() > 12)) {
+                    issues.add("entity [" + name + "] field [" + field.getName() + "] size [" + field.getSize()
+                            + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+                }
             }
             if (idCount > 1) {
                 issues.add("entity [" + name + "] declares " + idCount + " primary-key fields - exactly one is allowed");
@@ -454,6 +587,10 @@ public final class IntentParser {
                 if (relation.getKind() != null && !RELATION_KINDS.contains(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
+                }
+                if (relation.getSize() != null && (relation.getSize() < 1 || relation.getSize() > 12)) {
+                    issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] size [" + relation.getSize()
+                            + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
                 }
                 if (relation.isComposition() && !"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()
@@ -710,6 +847,31 @@ public final class IntentParser {
                     } else if (!value.matches("-?\\d+")) {
                         issues.add("process [" + process.getName() + "] step [" + step.getName() + "] setRelationField [" + setRelationField
                                 + "] value [" + value + "] must be an integer record id");
+                    }
+                }
+            }
+            String delegate = stepArg(step, "delegate");
+            if (delegate != null && !delegate.isBlank()) {
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] uses delegate but is not a serviceTask");
+                }
+                boolean hasCall = stepArg(step, "call") != null && !stepArg(step, "call").isBlank();
+                if ((setField != null && !setField.isBlank()) || (setRelationField != null && !setRelationField.isBlank()) || hasCall) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] delegate cannot be combined with setField/setRelationField/call");
+                }
+                Object fields = step.getArgs() == null ? null
+                        : step.getArgs()
+                              .get("fields");
+                if (fields != null && !(fields instanceof Map)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] delegate `fields` must be a map of name: value pairs");
+                } else if (fields instanceof Map<?, ?> map) {
+                    for (Map.Entry<?, ?> entry : map.entrySet()) {
+                        if (entry.getValue() instanceof Map || entry.getValue() instanceof List) {
+                            issues.add("process [" + process.getName() + "] step [" + step.getName() + "] delegate field [" + entry.getKey()
+                                    + "] must be a scalar value");
+                        }
                     }
                 }
             }

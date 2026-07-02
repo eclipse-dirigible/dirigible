@@ -1,0 +1,97 @@
+package gen.events;
+
+import java.math.BigDecimal;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}Entity;
+import gen.${javaGenFolderName}.data.${invoiceJavaPerspective}.${invoiceEntity}Repository;
+import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Entity;
+import gen.${javaGenFolderName}.data.${junctionJavaPerspective}.${junctionEntity}Repository;
+import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}Entity;
+
+/**
+ * Auto-settlement (on ${paymentEntity} create): allocates the new payment across the payer's open
+ * ${invoiceEntity}s - oldest first, matching ${match} - creating ${junctionEntity} rows until the
+ * payment is used up. The paid roll-up then updates each invoice's paid / balance / status.
+ *
+ * Generated from the intent settlements block - do not edit; it is re-generated with the application.
+ * Entity access goes ONLY through the generated repositories (validations / events / i18n).
+ */
+@Component
+public class ${name}OnPayment implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${paymentTopic}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${paymentEntity}Entity payment = Json.parse(message, ${paymentEntity}Entity.class);
+        if (payment == null || payment.${paymentPk} == null || payment.${paymentPot} == null) {
+            return;
+        }
+        BigDecimal pot = payment.${paymentPot}.subtract(allocated(payment.${paymentPk}))
+                                              .max(BigDecimal.ZERO);
+        if (pot.signum() <= 0) {
+            return;
+        }
+        Criteria criteria = Criteria.create()#foreach($m in $match)
+                                    .eq("${m}", payment.${m})#end
+                                    .orderByAsc("${order}");
+        for (${invoiceEntity}Entity invoice : new ${invoiceEntity}Repository().findAll(criteria)) {
+            if (pot.signum() <= 0) {
+                break;
+            }
+#if($invoiceStatus != "")
+            Integer s = invoice.${invoiceStatus};
+            if (s == null || !(${payableCondition})) {
+                continue;
+            }
+#end
+            BigDecimal remaining = open(invoice);
+            if (remaining.signum() <= 0) {
+                continue;
+            }
+            BigDecimal alloc = remaining.min(pot);
+            create(invoice.${invoicePk}, payment.${paymentPk}, alloc);
+            pot = pot.subtract(alloc);
+        }
+    }
+
+    private static BigDecimal open(${invoiceEntity}Entity invoice) {
+        BigDecimal total = invoice.${invoiceTotal} == null ? BigDecimal.ZERO : invoice.${invoiceTotal};
+        BigDecimal paid = invoice.${invoicePaid} == null ? BigDecimal.ZERO : invoice.${invoicePaid};
+        return total.subtract(paid)
+                    .max(BigDecimal.ZERO);
+    }
+
+    private static BigDecimal allocated(Integer paymentId) {
+        BigDecimal sum = BigDecimal.ZERO;
+        for (${junctionEntity}Entity row : new ${junctionEntity}Repository().findAll(Criteria.create()
+                                                                                            .eq("${junctionFkPayment}", paymentId))) {
+            if (row.${junctionAmount} != null) {
+                sum = sum.add(row.${junctionAmount});
+            }
+        }
+        return sum;
+    }
+
+    private static void create(Integer invoiceId, Integer paymentId, BigDecimal amount) {
+        ${junctionEntity}Entity row = new ${junctionEntity}Entity();
+        row.${junctionFkInvoice} = invoiceId;
+        row.${junctionFkPayment} = paymentId;
+        row.${junctionAmount} = amount;
+        new ${junctionEntity}Repository().save(row);
+    }
+}

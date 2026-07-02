@@ -9,6 +9,8 @@
  */
 package org.eclipse.dirigible.components.intent.model;
 
+import java.util.List;
+
 /**
  * Relationship between two {@link EntityIntent}s. {@link #kind} is one of {@code oneToMany},
  * {@code manyToOne}, {@code oneToOne}, {@code manyToMany}.
@@ -45,6 +47,22 @@ public class RelationIntent {
      * of a field's {@code defaultValue}).
      */
     private String init;
+    /**
+     * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
+     * 12 = full). Emitted as the FK property's {@code widgetSize}; the Harmonia form maps it to
+     * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
+     * width). Use a small span (e.g. 4) to pack several short dropdowns onto one row.
+     */
+    private Integer size;
+    /**
+     * Optional list of the target entity's field names to surface as extra <b>read-only</b> columns
+     * wherever this to-one relation shows as a lookup column (the master-detail / document allocation
+     * tables). The FK lookup already fetches the referenced rows to resolve the display label, so these
+     * columns are pulled from that same fetched row - no extra request, no URL construction (works for
+     * a cross-model target too). Names are the target's logical field names (e.g.
+     * {@code [date, number]}); the generator PascalCases them to match the REST JSON.
+     */
+    private List<String> show;
 
     public String getName() {
         return name;
@@ -121,5 +139,21 @@ public class RelationIntent {
 
     public void setInit(String init) {
         this.init = init;
+    }
+
+    public Integer getSize() {
+        return size;
+    }
+
+    public void setSize(Integer size) {
+        this.size = size;
+    }
+
+    public List<String> getShow() {
+        return show;
+    }
+
+    public void setShow(List<String> show) {
+        this.show = show;
     }
 }

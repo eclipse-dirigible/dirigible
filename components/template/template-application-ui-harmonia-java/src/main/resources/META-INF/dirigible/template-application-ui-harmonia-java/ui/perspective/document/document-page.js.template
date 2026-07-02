@@ -150,8 +150,9 @@ document.addEventListener('alpine:init', () => {
     get errorCount() { return Object.keys(this.errors).filter(k => this.errors[k]).length; },
     // Items can only be added once the document (header) exists, so we have a master id to bind them to.
     get itemsEnabled() { return this.isEdit && this.id != null; },
-    // Any OTHER composition child of this master (not the line-items entity) renders as a normal panel.
-    get secondaryDetails() { return App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}'); },
+    // Any OTHER composition child of this master (not the line-items entity) renders as a normal panel —
+    // like the line items, only once the document (header) exists (nothing to allocate against on Create).
+    get secondaryDetails() { return this.itemsEnabled ? App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}') : []; },
 
     async init() {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};

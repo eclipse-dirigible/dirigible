@@ -14,7 +14,7 @@
 #macro(calcMeta $property)#if($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate)), calc: '#if($property.calculatedPropertyExpressionCreate)${property.calculatedPropertyExpressionCreate}#{else}${property.calculatedPropertyExpressionUpdate}#end', scale: #if($property.dataScale)${property.dataScale}#{else}2#end#end#end
 App.registerDetail('${masterEntity}', {
   entity: '${name}',
-  label: '${name}',
+  label: '${menuLabel}',
   apiPath: '/${javaPerspectiveName}/${name}Controller',
   masterEntityId: '${masterEntityId}',
   primaryKey: '${primaryKeysString}',
@@ -22,16 +22,22 @@ App.registerDetail('${masterEntity}', {
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)
-#if($property.widgetType == "DROPDOWN")
-    { name: '${property.name}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' } },
+#if($property.widgetLabel)#set($clabel = $property.widgetLabel)#else#set($clabel = $property.name)#end
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
+    { name: '${property.name}', label: '${clabel}', lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}' } },
+## Extra read-only columns pulled from the SAME lookup row (relation `show`): the FK's referenced record
+## is already fetched to resolve the label, so these render its extra fields with no further request.
+#if($property.lookupColumns)#foreach($lc in $property.lookupColumns)
+    { name: '${property.name}_${lc.name}', label: '${lc.label}', via: { column: '${property.name}', field: '${lc.name}' } },
+#end#end
 #elseif($property.isDateType)
-    { name: '${property.name}', date: true },
+    { name: '${property.name}', label: '${clabel}', date: true },
 #elseif($property.isFloatType)
-    { name: '${property.name}', number: true, float: true, pattern: '${property.formatPattern}' },
+    { name: '${property.name}', label: '${clabel}', number: true, float: true, pattern: '${property.formatPattern}' },
 #elseif($property.isNumberType)
-    { name: '${property.name}', number: true },
+    { name: '${property.name}', label: '${clabel}', number: true },
 #else
-    { name: '${property.name}' },
+    { name: '${property.name}', label: '${clabel}' },
 #end
 #end
 #end
