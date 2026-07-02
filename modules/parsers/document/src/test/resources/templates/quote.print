@@ -1,0 +1,24 @@
+<!-- Quote -->
+<document id="quote">
+    <page width="595" height="842" padding="40">
+        <header>
+            <text align="right" style="title">Quote</text>
+            <line/>
+        </header>
+        <section>
+            <field label="Quote No">{{quote.number}}</field>
+            <field label="Date">{{quote.date}}</field>
+            <field label="Customer">{{customer.name}}</field>
+        </section>
+        <table source="quote.items">
+            <column width="45%">{{description}}</column>
+            <column width="15%" align="center">{{quantity}}</column>
+            <column width="20%" align="right">{{price}}</column>
+            <column width="20%" align="right">{{amount}}</column>
+        </table>
+        <total align="right">{{quote.total}}</total>
+        <if source="quote.validUntil">
+            <text>This quote is valid until {{quote.validUntil}}.</text>
+        </if>
+    </page>
+</document>

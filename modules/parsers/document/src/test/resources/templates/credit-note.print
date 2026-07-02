@@ -1,0 +1,22 @@
+<!-- Credit Note — references the original invoice -->
+<document id="credit-note">
+    <page width="595" height="842" padding="40">
+        <header>
+            <text align="right" style="title">Credit Note</text>
+            <line/>
+        </header>
+        <section>
+            <field label="Credit Note No">{{creditNote.number}}</field>
+            <field label="Date">{{creditNote.date}}</field>
+            <field label="Original Invoice">{{creditNote.invoiceNumber}}</field>
+            <field label="Reason">{{creditNote.reason}}</field>
+        </section>
+        <table source="creditNote.items">
+            <column width="45%">{{description}}</column>
+            <column width="15%" align="center">{{quantity}}</column>
+            <column width="20%" align="right">{{price}}</column>
+            <column width="20%" align="right">{{amount}}</column>
+        </table>
+        <total align="right">{{creditNote.total}}</total>
+    </page>
+</document>
