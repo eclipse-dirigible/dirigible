@@ -1024,6 +1024,46 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void report_file_stack_generates_typed_column_filters() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // Replay the Harmonia report-file template like the editor does. The generation service
+        // derives the gen folder from the report file name (each report owns gen/<lowercased name>).
+        String payload = "{\"template\":\"template-application-ui-harmonia-java/template/template-report-file.js\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrdersByCustomer.report")
+                                                 .then()
+                                                 .statusCode(201));
+
+        // Backend: the report repository validates and applies per-column conditions over the wrapped
+        // query, typed from the report's own column metadata.
+        String repository = contentOf("gen/ordersbycustomer/data/reports/OrdersByCustomerRepository.java");
+        assertTrue(repository.contains("FILTER_COLUMNS"), "the report repository should carry the filterable-column allowlist");
+        assertTrue(repository.contains("SELECT * FROM (\").append(QUERY).append(\") AS \\\"REPORT_DATA\\\" WHERE"),
+                "conditions should wrap the report query");
+        assertTrue(repository.contains("\"GTE\", \">=\""), "range operators should be whitelisted");
+        String controller = contentOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
+        assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
+
+        // Frontend: the generated report page carries typed column metadata and the filter machinery.
+        String page = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/report.js");
+        assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
+        assertTrue(page.contains("{ key: 'Customer', kind: 'text' }"), "the joined dimension should be a text column");
+        assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
+        assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
+                "the page should build range and contains conditions");
+        String view = contentOf("gen/ordersbycustomer/reports/OrdersByCustomer/index.html");
+        assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
+                "the report view should carry the filter panel and toolbar toggle");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()

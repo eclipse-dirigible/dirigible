@@ -27,8 +27,58 @@
         <span x-h-toolbar-title class="shrink-0" x-text="displayName"></span>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
         <div x-h-toolbar-spacer></div>
+        <button x-h-button data-variant="outline" data-size="sm" @click="showFilters = !showFilters; refreshIcons()">
+          <i role="img" data-lucide="filter"></i><span>Filters</span>
+          <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
+        </button>
         <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
         <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" data-lucide="download"></i><span>Export</span></button>
+      </div>
+
+      <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
+           boolean -> select, text -> contains. Applied server-side (the query is wrapped with the
+           conditions), so pagination, count and export all reflect them. -->
+      <div x-show="showFilters && !preview" x-h-card class="mx-4">
+        <div x-h-card-content class="vbox gap-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-2">
+            <template x-for="col in reportColumns" :key="col.key">
+              <div class="vbox gap-0">
+                <label class="text-xs text-muted-foreground" x-text="col.key"></label>
+                <template x-if="col.kind === 'date'">
+                  <div class="hbox gap-1 items-center">
+                    <input x-h-input type="date" x-model="filters[col.key].from" @keydown.enter="applyFilters()" />
+                    <span x-h-text.muted>&ndash;</span>
+                    <input x-h-input type="date" x-model="filters[col.key].to" @keydown.enter="applyFilters()" />
+                  </div>
+                </template>
+                <template x-if="col.kind === 'number'">
+                  <div class="hbox gap-1 items-center">
+                    <div x-h-input-number><input type="number" step="any" placeholder="min" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
+                    <span x-h-text.muted>&ndash;</span>
+                    <div x-h-input-number><input type="number" step="any" placeholder="max" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
+                  </div>
+                </template>
+                <template x-if="col.kind === 'boolean'">
+                  <div x-h-select>
+                    <input x-h-select-input x-model="filters[col.key].equals" placeholder="any" />
+                    <div x-h-select-content>
+                      <div x-h-select-option="'any'" data-value=""></div>
+                      <div x-h-select-option="'yes'" data-value="true"></div>
+                      <div x-h-select-option="'no'" data-value="false"></div>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="col.kind === 'text'">
+                  <input x-h-input type="text" placeholder="contains..." x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
+                </template>
+              </div>
+            </template>
+          </div>
+          <div class="hbox gap-2">
+            <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" data-lucide="check"></i><span>Apply</span></button>
+            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><i role="img" data-lucide="x"></i><span>Clear</span></button>
+          </div>
+        </div>
       </div>
 
       <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
