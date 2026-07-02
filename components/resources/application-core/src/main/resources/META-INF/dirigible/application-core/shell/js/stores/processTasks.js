@@ -76,13 +76,16 @@ document.addEventListener('alpine:init', () => {
         const notifications = Alpine.store('notifications');
         if (notifications && notifications.syncTasks) notifications.syncTasks(flat);
       } catch (e) {
-        // Server unreachable (transport failure → httpStatus 0): stop the loop instead of erroring
-        // every 30s against a dead server. A 4xx/5xx means the server DID respond (an app error), so
-        // keep polling for those. The user refreshes the browser to resume once the server is back.
-        if (e && e.isApiError && e.httpStatus === 0) {
+        // Stop the loop when retrying can't help: a transport failure (httpStatus 0 → dead server) or
+        // an auth failure (401 not-authenticated / 403 forbidden → the session expired or lacks the
+        // role). Polling every 30s in those cases just spams the console/network. A browser refresh
+        // recreates this store (serverUnavailable back to false) and resumes; a 401 typically means the
+        // user must re-login. Other 4xx/5xx are transient app errors, so keep polling for those.
+        if (e && e.isApiError && (e.httpStatus === 0 || e.httpStatus === 401 || e.httpStatus === 403)) {
           this.serverUnavailable = true;
           if (this._poll) { clearInterval(this._poll); this._poll = null; }
-          console.warn('processTasks: server unavailable — stopped polling for tasks; refresh the page to resume');
+          console.warn('processTasks: ' + (e.httpStatus === 0 ? 'server unavailable' : 'not authenticated (' + e.httpStatus + ')')
+            + ' — stopped polling for tasks; refresh the page to resume');
           return;
         }
         this.byProcessId = {};
