@@ -382,6 +382,7 @@
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/related.js" defer></script>
     <script src="./js/components/pages/dashboardPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>

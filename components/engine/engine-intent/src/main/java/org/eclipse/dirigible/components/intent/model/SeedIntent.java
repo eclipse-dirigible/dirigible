@@ -32,6 +32,25 @@ public class SeedIntent {
     private String schema;
     private String description;
     private List<Map<String, Object>> rows = new ArrayList<>();
+    /**
+     * Optional language code (e.g. {@code bg}): the seed carries <b>translations</b> for a multilingual
+     * entity instead of base rows. Rows are keyed by {@code id} (the translated base row) plus the
+     * entity's translatable field names; the generator writes them into the entity's {@code
+     * <TABLE>
+     * _LANG} table ({@code GUID} auto-numbered, {@code Language} constant).
+     */
+    private String language;
+    /**
+     * Optional project-relative path to an <b>authored</b> CSV file carrying the seed data (e.g.
+     * {@code data/countries.csv}) - the alternative to inline {@link #rows} for large data sets
+     * (countries, currencies, ...) that would bloat the intent. Exactly one of {@code rows}/{@code
+     * file} is allowed. The generator then emits only the {@code .csvim} pointing at the file; the CSV
+     * itself is developer-owned. Its header must carry the physical column names (the
+     * {@code <ENTITY>_<FIELD>} shape a generated seed CSV uses; {@code GUID,Id,...,Language} for a
+     * language seed). The file must live in a subfolder - root-level {@code .csv} files are owned and
+     * scrubbed by the intent regeneration.
+     */
+    private String file;
 
     public String getName() {
         return name;
@@ -83,5 +102,31 @@ public class SeedIntent {
      */
     public void addRow(Map<String, Object> row) {
         this.rows.add(row == null ? new LinkedHashMap<>() : row);
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    /** Whether this seed carries translations (has a {@code language:} code) rather than base rows. */
+    public boolean isLanguageSeed() {
+        return language != null && !language.isBlank();
+    }
+
+    public String getFile() {
+        return file;
+    }
+
+    public void setFile(String file) {
+        this.file = file;
+    }
+
+    /** Whether this seed references an authored CSV file instead of inline rows. */
+    public boolean isFileSeed() {
+        return file != null && !file.isBlank();
     }
 }

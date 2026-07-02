@@ -11,6 +11,48 @@
 {
     "schema": {
         "structures": [
+## A multilingual entity gets a sibling <TABLE>_LANG translation table (the codbex convention):
+## GUID pk, Id -> the base row, one column per translatable (string-typed, non-PK, non-FK,
+## non-calculated, non-audit) property NAMED AFTER THE PROPERTY (that is what the runtime
+## Translator matches on), and the Language code. Emitted before the base tables so each entry
+## is always comma-terminated (at least the base table itself follows).
+#foreach ($model in $models)
+#if($model.multilingual == "true" && $model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
+            {
+                "name": "${tablePrefix}${model.dataName}_LANG",
+                "type": "TABLE",
+                "columns": [
+                    {
+                        "type": "INTEGER",
+                        "primaryKey": true,
+                        "identity": true,
+                        "name": "GUID"
+                    },
+                    {
+                        "type": "INTEGER",
+                        "name": "Id"
+                    },
+#foreach ($property in $model.properties)
+#if(($property.dataType == "VARCHAR" || $property.dataType == "CHAR" || $property.dataType == "CLOB") && !$property.dataPrimaryKey && !$property.relationshipEntityName && $property.isCalculatedProperty != "true" && (!$property.auditType || $property.auditType == "NONE"))
+                    {
+                        "type": "${property.dataType}",
+#if($property.dataLength)
+                        "length": ${property.dataLength},
+#end
+                        "nullable": true,
+                        "name": "${property.name}"
+                    },
+#end
+#end
+                    {
+                        "type": "VARCHAR",
+                        "length": 2,
+                        "name": "Language"
+                    }
+                ]
+            },
+#end
+#end
 #foreach ($model in $models)
 #if($model.type != "REPORT" && $model.type != "FILTER" && $model.type != "PROJECTION")
             {

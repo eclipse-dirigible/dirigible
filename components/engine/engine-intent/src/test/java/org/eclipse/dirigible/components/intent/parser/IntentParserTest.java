@@ -294,6 +294,122 @@ class IntentParserTest {
                 "expected a filterBy-on-field issue, got: " + ex.getIssues());
     }
 
+    /** A multilingual UoM setting with a Bulgarian translation seed. */
+    private static final String MULTILINGUAL_HEAD = """
+            name: uoms
+            languages: [en, bg]
+            entities:
+              - name: UoM
+                kind: setting
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                  - { name: numerator, type: decimal }
+            seeds:
+              - name: uoms-bg
+                entity: UoM
+                language: bg
+                rows:
+                  - { id: 1, name: "Килограм" }
+            """;
+
+    @Test
+    void multilingualEntityAndLanguageSeedParse() {
+        IntentModel model = IntentParser.parse(MULTILINGUAL_HEAD);
+        assertTrue(model.getEntities()
+                        .get(0)
+                        .isMultilingual());
+        assertEquals("bg", model.getSeeds()
+                                .get(0)
+                                .getLanguage());
+        assertEquals(java.util.List.of("en", "bg"), model.getLanguages());
+    }
+
+    @Test
+    void languageSeedOnNonMultilingualEntityIsRejected() {
+        String yaml = MULTILINGUAL_HEAD.replace("    multilingual: true\n", "");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("is not multilingual - add `multilingual: true`")),
+                "expected a not-multilingual issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void languageSeedWithNonTranslatableRowKeyIsRejected() {
+        String yaml = MULTILINGUAL_HEAD.replace("name: \"Килограм\"", "name: \"Килограм\", numerator: 5");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("[numerator] which is not the id or a translatable")),
+                "expected a non-translatable row-key issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void malformedLanguageCodesAreRejected() {
+        String yaml = MULTILINGUAL_HEAD.replace("languages: [en, bg]", "languages: [en, Bulgarian]")
+                                       .replace("language: bg", "language: BG");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("languages entry [Bulgarian]")),
+                "expected a languages-entry issue, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("language [BG] must be a short lowercase language code")),
+                "expected a seed-language issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void fileSeedParsesAndRootLevelOrAbsolutePathsAreRejected() {
+        String head = """
+                name: countries
+                entities:
+                  - name: Country
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true }
+                seeds:
+                  - name: countries
+                    entity: Country
+                """;
+        // A subfolder path with no inline rows is the valid shape for a large authored data set.
+        IntentModel model = IntentParser.parse(head.stripTrailing() + "\n    file: data/countries.csv\n");
+        assertEquals("data/countries.csv", model.getSeeds()
+                                                .get(0)
+                                                .getFile());
+
+        // A root-level file would be scrubbed by the intent regeneration - rejected with guidance.
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(head.stripTrailing() + "\n    file: countries.csv\n"));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must live in a subfolder")),
+                "expected a subfolder issue, got: " + ex.getIssues());
+
+        // Absolute / escaping paths are rejected.
+        ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(head.stripTrailing() + "\n    file: /countries/data.csv\n"));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must be a project-relative path")),
+                "expected a relative-path issue, got: " + ex.getIssues());
+
+        // file and inline rows are mutually exclusive.
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head.stripTrailing() + """
+
+                    file: data/countries.csv
+                    rows:
+                      - { id: 1, name: Afghanistan }
+                """));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares both `file` and inline `rows`")),
+                "expected a mutual-exclusion issue, got: " + ex.getIssues());
+    }
+
     @Test
     void dependsOnOnDocumentStatusRelationIsRejected() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """

@@ -23,5 +23,10 @@ App.config = {
   // GET (list, $limit/$offset), GET /{id}, POST, PUT /{id}, DELETE /{id}.
   // NB: uses javaGenFolderName (the Java-sanitised gen folder, e.g. sales-order -> sales_order),
   // matching the package the DAO/REST templates emit — NOT the raw genFolderName.
-  restBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api'
+  restBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api',
+
+  // Data-language codes this app offers (the intent's `languages:`). The shell's Region & Language
+  // setting lists them; the chosen code is sent as Accept-Language on every API call, which the
+  // generated multilingual repositories translate by. A single entry hides the picker.
+  languages: ${appLanguages}
 };

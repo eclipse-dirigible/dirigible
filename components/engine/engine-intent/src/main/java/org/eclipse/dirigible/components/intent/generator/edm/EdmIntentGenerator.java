@@ -194,6 +194,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (entity.isDashboardExcluded()) {
                 entityMap.put("dashboardWidget", "false");
             }
+            // multilingual: the entity keeps per-language values in a sibling <TABLE>_LANG table. The
+            // schema template generates that table and the Java DAO template overlays translated values
+            // on every read for the caller's Accept-Language (same attribute the EDM editor writes).
+            if (entity.isMultilingual()) {
+                entityMap.put("multilingual", "true");
+            }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
             // DAO template's parameterUtils decodes before emitting them into the import block.
@@ -294,6 +300,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String icon = notBlank(branding.getIcon()) ? branding.getIcon() : model.getIcon();
         if (notBlank(icon)) {
             body.put("icon", icon);
+        }
+        // Data-language codes the app offers (intent `languages:`). Carried on the .model root (JSON
+        // only - the XML root renders no attributes); the Harmonia shell's Region & Language setting
+        // lists them and sends the choice as Accept-Language on every request.
+        if (!model.getLanguages()
+                  .isEmpty()) {
+            body.put("languages", new ArrayList<>(model.getLanguages()));
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);

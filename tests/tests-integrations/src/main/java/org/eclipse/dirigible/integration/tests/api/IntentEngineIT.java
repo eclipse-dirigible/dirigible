@@ -54,10 +54,14 @@ class IntentEngineIT extends IntegrationTest {
             name: orders
             description: Order management with approval workflow
             version: 1
+            # Data languages the app offers: the Harmonia Region & Language setting lists them and the
+            # multilingual entities translate by the chosen one.
+            languages: [en, bg]
 
             entities:
               - name: Country
                 kind: setting
+                multilingual: true
                 description: ISO 3166-1 country reference data
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
@@ -146,6 +150,18 @@ class IntentEngineIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Afghanistan, code2: AF }
                   - { id: 2, name: Albania,     code2: AL }
+              # Translations for the multilingual Country - land in ORDERS_COUNTRY_LANG.
+              - name: countries-bg
+                entity: Country
+                language: bg
+                rows:
+                  - { id: 1, name: "Афганистан" }
+                  - { id: 2, name: "Албания" }
+              # Large data sets stay OUT of the intent: an authored CSV in a subfolder, referenced
+              # by path - only the .csvim is generated.
+              - name: countries-extra
+                entity: Country
+                file: data/countries-extra.csv
 
             notifications:
               - name: orderUpdated
@@ -976,6 +992,38 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void multilingual_entity_generates_the_translation_stack() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+
+        // Schema: the multilingual Country gets its sibling language table with the codbex shape.
+        String schema = contentOf("gen/orders/schema/" + PROJECT + ".schema");
+        assertTrue(schema.contains("ORDERS_COUNTRY_LANG"), "the schema should declare the <TABLE>_LANG table");
+        assertTrue(schema.contains("\"name\": \"Language\""), "the language table should carry the Language column");
+        assertTrue(schema.contains("\"name\": \"GUID\""), "the language table should carry the GUID primary key");
+        assertFalse(schema.contains("ORDERS_CUSTOMER_LANG"), "a non-multilingual entity must not get a language table");
+
+        // Java DAO: every read overlays the translations for the caller's Accept-Language.
+        String repository = contentOf("gen/orders/data/settings/CountryRepository.java");
+        assertTrue(repository.contains("Translator.translateList(super.findAll(), User.getLanguage(), \"ORDERS_COUNTRY\")"),
+                "the multilingual repository should overlay translations on findAll");
+        assertTrue(repository.contains("Translator.translateEntity(super.findById(id)"),
+                "the multilingual repository should overlay translations on findById");
+        assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
+                "the multilingual repository must also override findOne - the generated controller reads single records through it");
+        String customerRepository = contentOf("gen/orders/data/customer/CustomerRepository.java");
+        assertFalse(customerRepository.contains("Translator."), "a non-multilingual repository must stay untouched");
+
+        // Shell config: the offered data languages feed the Region & Language setting.
+        String config = contentOf("gen/orders/js/config.js");
+        assertTrue(config.contains("languages: [\"en\",\"bg\"]"), "config.js should carry the app's data languages");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1203,6 +1251,13 @@ class IntentEngineIT extends IntegrationTest {
                 modelBody.contains("\"widgetDependsOnProperty\": \"Customer\"")
                         && modelBody.contains("\"widgetDependsOnValueFrom\": \"CreditLimit\""),
                 "the .model JSON twin should carry the widgetDependsOn* attributes");
+
+        // Multilingual: Country carries the EDM multilingual attribute (its translations live in
+        // ORDERS_COUNTRY_LANG) and the intent's data languages land on the .model root.
+        assertTrue(edmXml.contains("multilingual=\"true\""), "a multilingual entity should carry the EDM multilingual attribute");
+        assertTrue(modelBody.contains("\"multilingual\": \"true\""), "the .model twin should carry the multilingual attribute");
+        assertTrue(modelBody.contains("\"languages\"") && modelBody.contains("\"bg\""),
+                "the intent's languages should land on the .model root");
     }
 
     private void assertGlue() {
@@ -1443,6 +1498,22 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(csvBody.startsWith("COUNTRY_ID,COUNTRY_NAME,COUNTRY_CODE2"),
                 "csv header should carry the upper-snake column names in entity-field order");
         assertTrue(csvBody.contains("1,Afghanistan,AF"), "csv should include the Afghanistan row with an integral id");
+
+        // The bg translation seed lands in the language table with the codbex _LANG shape.
+        String langCsvim = contentOf("countries-bg.csvim");
+        assertTrue(langCsvim.contains("\"table\": \"ORDERS_COUNTRY_LANG\""), "a language seed should target the <TABLE>_LANG table");
+        String langCsv = contentOf("countries-bg.csv");
+        assertTrue(langCsv.startsWith("GUID,Id,Name,Language"),
+                "the language csv should carry GUID + Id + the referenced PascalCase translatable columns + Language");
+        assertTrue(langCsv.contains("1,1,Афганистан,bg"), "the language csv should carry the translation rows with auto-numbered GUIDs");
+
+        // A file seed (large authored data set) generates ONLY the .csvim, pointing at the
+        // developer-owned CSV in its subfolder; no CSV body is generated (and none is scrubbed).
+        String fileCsvim = contentOf("countries-extra.csvim");
+        assertTrue(fileCsvim.contains("\"file\": \"/" + PROJECT + "/data/countries-extra.csv\""),
+                "a file seed's csvim should point at the authored CSV");
+        assertTrue(fileCsvim.contains("\"table\": \"ORDERS_COUNTRY\""), "a file seed still targets the entity's table");
+        assertFalse(resource("countries-extra.csv").exists(), "a file seed must not generate a CSV body");
     }
 
     @AfterEach

@@ -46,6 +46,15 @@ import org.eclipse.dirigible.components.data.store.java.repository.JavaRepositor
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
+#if($multilingual == "true")
+#if(!$documentMaster)
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
+import org.eclipse.dirigible.sdk.db.Translator;
+import org.eclipse.dirigible.sdk.security.User;
+import java.util.List;
+import java.util.Map;
+#end
 #if($haveCalculatedPropertyExpression)
 import org.eclipse.dirigible.sdk.utils.Calc;
 #end
@@ -154,6 +163,45 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         }
     }
+#if($multilingual == "true")
+
+    // ${name} is multilingual: every read overlays the translated property values from the
+    // ${tablePrefix}${dataName}_LANG table for the caller's language (the Accept-Language request
+    // header - the Harmonia shell sends the Settings language there). Outside a request scope, or
+    // with no translations for the language, the base values pass through unchanged.
+
+    @Override
+    public ${name}Entity findById(Object id) {
+        return Translator.translateEntity(super.findById(id), id, User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public java.util.Optional<${name}Entity> findOne(Object id) {
+        // The generated controller reads single records through findOne - translate that path too.
+        return super.findOne(id)
+                    .map(entity -> Translator.translateEntity(entity, id, User.getLanguage(), "${tablePrefix}${dataName}"));
+    }
+
+    @Override
+    public List<${name}Entity> findAll() {
+        return Translator.translateList(super.findAll(), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> findAll(int limit, int offset) {
+        return Translator.translateList(super.findAll(limit, offset), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> findAll(Criteria criteria) {
+        return Translator.translateList(super.findAll(criteria), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+
+    @Override
+    public List<${name}Entity> query(String hql, Map<String, Object> parameters) {
+        return Translator.translateList(super.query(hql, parameters), User.getLanguage(), "${tablePrefix}${dataName}");
+    }
+#end
 #if($documentMaster)
 
     /**

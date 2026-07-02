@@ -73,16 +73,31 @@ App.services.api = {
     }
   },
 
+  // The app's single language flag (the Region & Language setting, an Alpine store). Sent as
+  // Accept-Language on every call so the SAME flag drives the backend: generated multilingual
+  // repositories overlay <TABLE>_LANG values for it. Absent store (standalone pages) -> no header
+  // override (the browser's own Accept-Language applies).
+  language() {
+    try {
+      const locale = window.Alpine && Alpine.store('locale');
+      return (locale && locale.value) || null;
+    } catch (e) { return null; }
+  },
+
   // request(method, url, body, opts?) — opts selects the base URL for this call:
   //   { baseUrl } explicit override, or { base } named entry in baseUrls.
   async request(method, url, body, opts = {}) {
     const baseUrl = this.resolveBaseUrl(opts);
 
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    const language = this.language();
+    if (language) headers['Accept-Language'] = language;
+
     let r;
     try {
       r = await fetch(`${baseUrl}${url}`, {
         method,
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        headers,
         body: body ? JSON.stringify(body) : undefined,
         credentials: 'same-origin'
       });
