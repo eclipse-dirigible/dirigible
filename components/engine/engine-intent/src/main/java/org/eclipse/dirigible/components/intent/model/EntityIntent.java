@@ -63,7 +63,8 @@ public class EntityIntent {
     /**
      * Marks the entity as <b>multilingual</b>: its translatable (string-typed) properties may carry
      * per-language values in a sibling {@code
-     * <TABLE>
+     *
+    <TABLE>
      * _LANG} table (the codbex convention). Emitted as the EDM entity attribute
      * {@code multilingual="true"}; the schema template then generates the language table and the Java
      * DAO template overlays translated values on every read for the caller's {@code Accept-Language}.

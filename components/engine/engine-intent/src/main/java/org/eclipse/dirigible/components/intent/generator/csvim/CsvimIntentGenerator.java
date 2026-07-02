@@ -229,7 +229,8 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
     /**
      * CSV body of a translation seed: {@code GUID,Id,<referenced translatable PascalCase columns>,
      * Language} - the shape of the schema-generated {@code
-     * <TABLE>
+     *
+    <TABLE>
      * _LANG} table. {@code GUID} is auto-numbered by row order, {@code Id} references the translated
      * base row, {@code Language} is the seed's constant code. Only translatable (string-typed, non-PK)
      * fields referenced by at least one row become columns.

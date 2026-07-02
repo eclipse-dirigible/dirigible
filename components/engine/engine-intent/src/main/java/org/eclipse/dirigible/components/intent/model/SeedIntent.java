@@ -36,7 +36,8 @@ public class SeedIntent {
      * Optional language code (e.g. {@code bg}): the seed carries <b>translations</b> for a multilingual
      * entity instead of base rows. Rows are keyed by {@code id} (the translated base row) plus the
      * entity's translatable field names; the generator writes them into the entity's {@code
-     * <TABLE>
+     *
+    <TABLE>
      * _LANG} table ({@code GUID} auto-numbered, {@code Language} constant).
      */
     private String language;
