@@ -21,7 +21,7 @@
         <thead x-h-table-header>
           <tr x-h-table-row>
 #foreach($property in $properties)
-            <th x-h-table-head scope="col">#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end</th>
+            <th x-h-table-head scope="col"#if($property.isNumberType) class="text-right"#end>#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end</th>
 #end
           </tr>
         </thead>
@@ -29,7 +29,13 @@
           <template x-for="(row, i) in rows" :key="i">
             <tr x-h-table-row data-hoverable="true">
 #foreach($property in $properties)
+#if($property.isFloatType)
+              <td x-h-table-cell class="text-right" x-text="displayNumber(row.${property.name}, '${property.formatPattern}')"></td>
+#elseif($property.isNumberType)
+              <td x-h-table-cell class="text-right" x-text="row.${property.name}"></td>
+#else
               <td x-h-table-cell x-text="row.${property.name}"></td>
+#end
 #end
             </tr>
           </template>

@@ -29,6 +29,24 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
+    // Format a float using a DecimalFormat-style pattern (decimals from the part after '.', grouping
+    // from the pattern's separator) - same formatter the document totals use.
+    displayNumber(v, pattern) {
+      if (v === null || v === undefined || v === '') return '';
+      const n = Number(v);
+      if (isNaN(n)) return v;
+      let decimals = 2;
+      let groupSep = ' ';
+      if (pattern) {
+        const dot = pattern.lastIndexOf('.');
+        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
+        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
+      }
+      const parts = n.toFixed(decimals).split('.');
+      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+    },
+
     async exportCsv() {
       try {
         const data = await App.services.api.post(this.apiPath + '/export', {});

@@ -24,6 +24,14 @@ export function generate(model, parameters) {
         if (e.typeTypescript === "Date") {
             model.hasDates = true;
         }
+        // Rendering defaults for .report files that predate the align/pattern column metadata:
+        // numeric columns right-align, decimals get the platform money pattern.
+        if (!e.align) {
+            e.align = e.typeTypescript === 'number' ? 'right' : 'left';
+        }
+        if (!e.pattern && (String(e.type).toUpperCase() === 'DECIMAL' || String(e.type).toUpperCase() === 'DOUBLE')) {
+            e.pattern = '### ### ### ##0.00';
+        }
     });
     model?.parameters?.forEach(e => {
         const parsedDataType = parameterUtils.parseDataTypes(e.type);

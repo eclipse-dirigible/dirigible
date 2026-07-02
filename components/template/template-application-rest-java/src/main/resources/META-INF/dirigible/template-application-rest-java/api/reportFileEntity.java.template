@@ -66,7 +66,11 @@ public class ${name}Controller {
 #if($needsRoles)
         checkPermissions("read");
 #end
-        return Map.of("count", repository.count(filter));
+        try {
+            return Map.of("count", repository.count(filter));
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     @Post("/search")
@@ -75,16 +79,26 @@ public class ${name}Controller {
 #if($needsRoles)
         checkPermissions("read");
 #end
-        return repository.findAll(intValue(filter, "$limit"), intValue(filter, "$offset"), filter);
+        try {
+            return repository.findAll(intValue(filter, "$limit"), intValue(filter, "$offset"), filter);
+        } catch (IllegalArgumentException e) {
+            // An unknown filter column/operator is a client error, not a server failure.
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     @Post("/export")
     @Documentation("Export ${name}")
-    public List<Map<String, Object>> exportCsv() {
+    public List<Map<String, Object>> exportCsv(@Body Map<String, Object> filter) {
 #if($needsRoles)
         checkPermissions("read");
 #end
-        return repository.exportCsv();
+        try {
+            // Exports honor the same per-column conditions the table shows.
+            return repository.exportCsv(filter);
+        } catch (IllegalArgumentException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage(), e);
+        }
     }
 
     private static Integer intValue(Map<String, Object> filter, String key) {
