@@ -1062,13 +1062,18 @@ class IntentEngineIT extends IntegrationTest {
         // ("ordersbycustomer") - two distinct folders on a case-sensitive filesystem.
         String page = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/report.js");
         assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
-        assertTrue(page.contains("{ key: 'Customer', kind: 'text' }"), "the joined dimension should be a text column");
+        assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left' }"),
+                "the joined dimension should be a left-aligned text column");
         assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
         assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
                 "the page should build range and contains conditions");
         String view = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/index.html");
         assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
                 "the report view should carry the filter panel and toolbar toggle");
+        assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
+                "the report table should align and format cells from the column metadata");
+        assertTrue(page.contains("align: 'right', pattern: '### ### ### ##0.00'"),
+                "the page metadata should carry alignment + the money pattern for decimal columns");
     }
 
     @Test
@@ -1510,6 +1515,10 @@ class IntentEngineIT extends IntegrationTest {
                 "a month(field) dimension should emit the YYYYMM EXTRACT expression");
         assertTrue(monthly.contains("as \\\"Month Order Date\\\""), "the bucketed column should carry a humanized alias");
         assertTrue(monthly.contains("GROUP BY (EXTRACT(YEAR"), "the aggregation should group by the bucket expression");
+
+        // Rendering metadata on the model: numeric columns right-align, decimals carry the money pattern.
+        assertTrue(body.contains("\"align\": \"right\""), "numeric report columns should carry align: right");
+        assertTrue(body.contains("\"pattern\": \"### ### ### ##0.00\""), "decimal report columns should carry the money pattern");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
         // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
         // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds

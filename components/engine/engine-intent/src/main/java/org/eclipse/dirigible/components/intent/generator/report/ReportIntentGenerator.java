@@ -486,6 +486,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         column.put("grouping", grouping && "NONE".equals(aggregate));
         column.put("tId", translationId(alias));
         column.put("label", alias);
+        // Rendering metadata carried on the model so every report UI aligns and formats consistently:
+        // numeric columns right-align; decimals carry the platform money pattern.
+        boolean numeric = "INTEGER".equals(reportType) || "BIGINT".equals(reportType) || "DECIMAL".equals(reportType);
+        column.put("align", numeric ? "right" : "left");
+        if ("DECIMAL".equals(reportType)) {
+            column.put("pattern", "### ### ### ##0.00");
+        }
         return column;
     }
 

@@ -96,13 +96,13 @@
           <table x-h-table data-borders="both">
             <thead x-h-table-header>
               <tr x-h-table-row>
-                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" x-text="col"></th></template>
+                <template x-for="(col, i) in columns" :key="i"><th x-h-table-head scope="col" :class="alignClass(col)" x-text="col"></th></template>
               </tr>
             </thead>
             <tbody x-h-table-body>
               <template x-for="(row, ri) in rows" :key="ri">
                 <tr x-h-table-row data-hoverable="true">
-                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell x-text="row[col]"></td></template>
+                  <template x-for="(col, ci) in columns" :key="ci"><td x-h-table-cell :class="alignClass(col)" x-text="cellText(col, row)"></td></template>
                 </tr>
               </template>
             </tbody>
