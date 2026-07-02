@@ -83,4 +83,7 @@ public interface SynchronizersOrder {
     /** The openapi. */
     int OPENAPI = 510;
 
+    /** The print template. */
+    int PRINT = 520;
+
 }
