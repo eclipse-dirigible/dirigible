@@ -45,6 +45,13 @@ public class RelationIntent {
      * of a field's {@code defaultValue}).
      */
     private String init;
+    /**
+     * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
+     * 12 = full). Emitted as the FK property's {@code widgetSize}; the Harmonia form maps it to
+     * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
+     * width). Use a small span (e.g. 4) to pack several short dropdowns onto one row.
+     */
+    private Integer size;
 
     public String getName() {
         return name;
@@ -121,5 +128,13 @@ public class RelationIntent {
 
     public void setInit(String init) {
         this.init = init;
+    }
+
+    public Integer getSize() {
+        return size;
+    }
+
+    public void setSize(Integer size) {
+        this.size = size;
     }
 }

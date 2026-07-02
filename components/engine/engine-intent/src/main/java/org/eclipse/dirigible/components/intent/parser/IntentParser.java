@@ -565,6 +565,10 @@ public final class IntentParser {
                                 + (type == null ? "" : ", got [" + field.getType() + "]"));
                     }
                 }
+                if (field.getSize() != null && (field.getSize() < 1 || field.getSize() > 12)) {
+                    issues.add("entity [" + name + "] field [" + field.getName() + "] size [" + field.getSize()
+                            + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
+                }
             }
             if (idCount > 1) {
                 issues.add("entity [" + name + "] declares " + idCount + " primary-key fields - exactly one is allowed");
@@ -583,6 +587,10 @@ public final class IntentParser {
                 if (relation.getKind() != null && !RELATION_KINDS.contains(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] has unknown kind ["
                             + relation.getKind() + "]");
+                }
+                if (relation.getSize() != null && (relation.getSize() < 1 || relation.getSize() > 12)) {
+                    issues.add("entity [" + entity.getName() + "] relation [" + relation.getName() + "] size [" + relation.getSize()
+                            + "] must be a 12-column grid span between 1 and 12 (typically 3/4/6/12)");
                 }
                 if (relation.isComposition() && !"manyToOne".equals(relation.getKind()) && !"oneToOne".equals(relation.getKind())) {
                     issues.add("entity [" + entity.getName() + "] relation [" + relation.getName()

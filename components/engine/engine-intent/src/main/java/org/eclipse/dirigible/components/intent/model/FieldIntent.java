@@ -81,6 +81,13 @@ public class FieldIntent {
      * (nullable) so an unset value keeps the default-true behaviour.
      */
     private Boolean major;
+    /**
+     * Optional form-control width as a 12-column grid span (3/4/6/12: 3 = quarter, 4 = third, 6 = half,
+     * 12 = full). Emitted as the property's {@code widgetSize}; the Harmonia form maps it to
+     * {@code grid-column: span N}. Absent (the default) leaves it unset (the form falls back to half
+     * width). Textarea/checkbox widgets always span the full row regardless.
+     */
+    private Integer size;
 
     public String getName() {
         return name;
@@ -245,5 +252,13 @@ public class FieldIntent {
 
     public void setDescription(String description) {
         this.description = description;
+    }
+
+    public Integer getSize() {
+        return size;
+    }
+
+    public void setSize(Integer size) {
+        this.size = size;
     }
 }

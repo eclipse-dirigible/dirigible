@@ -107,6 +107,10 @@ composition is opt-in.
   read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
   field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
+- `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
+  (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
+  omitted, a control falls back to half width. Use a small span to pack several short controls onto one
+  row, e.g. `{ name: Currency, kind: manyToOne, to: Currency, size: 4 }` for three dropdowns on a line.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
