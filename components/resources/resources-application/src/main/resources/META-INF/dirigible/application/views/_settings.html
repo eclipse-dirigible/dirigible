@@ -9,14 +9,14 @@
 <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
-      <span x-h-text.muted class="text-sm">Configuration &amp; nomenclature across all applications.</span>
+      <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
       <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
            data-language preference. Selecting it renders the local detail page on the right. -->
       <button x-h-button data-variant="outline" class="justify-start"
               :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
               @click="selectSetting({ id: 'region-language' })">
         <i role="img" data-lucide="globe"></i>
-        <span>Region &amp; Language</span>
+        <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
       </button>
       <template x-for="item in settingsItems" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
@@ -31,8 +31,8 @@
     <div x-show="!settingsUrl && settingsSelected !== 'region-language'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-        <div x-h-info-page-title>Select a setting</div>
-        <div x-h-info-page-description>Choose a configuration entity on the left to manage it here.</div>
+        <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
+        <div x-h-info-page-description x-text="T('application-core:shell.settings.selectSettingHint', 'Choose a configuration entity on the left to manage it here.')"></div>
       </div>
     </div>
     <!-- Region & Language detail: rendered locally (no iframe) - the platform-wide language
@@ -43,14 +43,11 @@
     <div x-show="settingsSelected === 'region-language'" class="size-full overflow-auto">
       <div class="vbox gap-4 p-4" style="max-width: 40rem;">
         <div class="vbox gap-1">
-          <span class="text-lg font-medium">Region &amp; Language</span>
-          <span x-h-text.muted class="text-sm">One preference for the whole stack: the user interface,
-            the data (multilingual entities translate on read) and document printing all follow the
-            selected language. Content a module has not translated yet falls back to the default
-            language.</span>
+          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.')"></span>
         </div>
         <div class="vbox gap-1">
-          <span x-h-text.muted class="text-sm">Language</span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.language', 'Language')"></span>
           <div x-h-select>
             <input x-h-select-input x-model="language" placeholder="Language" />
             <div x-h-select-content>
@@ -62,11 +59,11 @@
         </div>
         <template x-if="languageWarnings().length > 0">
           <div class="vbox gap-2">
-            <span x-h-text.muted class="text-sm">Missing translations</span>
+            <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Missing translations')"></span>
             <template x-for="warn in languageWarnings()" :key="warn.app">
               <div x-h-alert data-variant="warning" role="alert">
                 <div x-h-alert-description
-                     x-text="warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.'"></div>
+                     x-text="T('application-core:shell.settings.missingWarning', warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.', { app: warn.app, missing: warn.missing.join(', ') })"></div>
               </div>
             </template>
           </div>

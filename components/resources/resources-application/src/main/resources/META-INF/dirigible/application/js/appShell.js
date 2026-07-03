@@ -130,7 +130,7 @@ document.addEventListener('alpine:init', () => {
           if (ungrouped.length) {
             ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0)
               || (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase()));
-            appGroups.push({ id: 'other', label: 'Other', items: ungrouped });
+            appGroups.push({ id: 'other', label: 'Other', tkey: 'application-core:shell.nav.other', items: ungrouped });
           }
           this.groups = appGroups;
           this.settingsItems = settings;

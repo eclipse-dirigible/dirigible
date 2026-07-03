@@ -4,12 +4,12 @@
      KPI-tile style adopted from the codbex dashboards. Reached via the Home icon ('/' and /dashboard). -->
 <div x-data="dashboardPage" class="vbox size-full overflow-auto">
   <div class="vbox gap-6 p-5">
-    <h3 x-h-text.h3>Dashboard</h3>
+    <h3 x-h-text.h3 x-text="T('application-core:shell.nav.dashboard', 'Dashboard')"></h3>
 
     <!-- Entities -->
     <div class="vbox gap-3">
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="layout-grid" class="size-4"></i><span>Entities</span>
+        <i role="img" data-lucide="layout-grid" class="size-4"></i><span x-text="T('application-core:shell.nav.entities', 'Entities')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <template x-for="e in entities" :key="e.name">
@@ -33,7 +33,7 @@
     <!-- Reports -->
     <div class="vbox gap-3" x-show="reports.length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span>Reports</span>
+        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in reports" :key="r.url">

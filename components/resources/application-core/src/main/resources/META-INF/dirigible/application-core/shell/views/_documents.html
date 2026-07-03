@@ -39,8 +39,8 @@
     <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><i role="img" data-lucide="folder-down"></i></a>
     <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><i role="img" data-lucide="upload"></i></button>
     <ul x-h-menu data-align="bottom-end">
-      <li x-h-menu-item @click="triggerUpload(false)">Upload files</li>
-      <li x-h-menu-item @click="triggerUpload(true)">Upload zip contents</li>
+      <li x-h-menu-item @click="triggerUpload(false)" x-text="T('application-core:shell.documents.uploadFiles', 'Upload files')"></li>
+      <li x-h-menu-item @click="triggerUpload(true)" x-text="T('application-core:shell.documents.uploadZip', 'Upload zip contents')"></li>
     </ul>
     <input type="file" x-ref="fileInput" class="hidden" multiple @change="onFilesPicked($event)" />
   </div>
@@ -49,7 +49,7 @@
   <div x-show="search.show" class="px-4 pb-2">
     <div x-h-input-group data-size="sm">
       <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
-      <input x-h-input.group type="search" placeholder="Find in folder" x-model="search.filterBy" @input="clearSelection(); refreshIcons()" />
+      <input x-h-input.group type="search" :placeholder="T('application-core:shell.documents.findInFolder', 'Find in folder')" x-model="search.filterBy" @input="clearSelection(); refreshIcons()" />
     </div>
   </div>
 
@@ -63,7 +63,7 @@
         <div x-show="showDropZone" x-h-info-page class="size-full" style="position:absolute; inset:0; z-index:5; background:var(--background); opacity:0.96;">
           <div x-h-info-page-header>
             <div x-h-info-page-media.icon><svg x-h-icon.upload role="img" aria-label="upload"></svg></div>
-            <div x-h-info-page-title>Drop files here</div>
+            <div x-h-info-page-title x-text="T('application-core:shell.documents.dropFiles', 'Drop files here')"></div>
           </div>
         </div>
 
@@ -76,7 +76,7 @@
                 <th x-h-table-head scope="col" style="width:2.5rem;">
                   <span x-h-checkbox><input type="checkbox" aria-label="Select all" x-model="selection.allSelected" @change="selectAllChanged()" /></span>
                 </th>
-                <th x-h-table-head scope="col">Name</th>
+                <th x-h-table-head scope="col" x-text="T('application-core:shell.documents.name', 'Name')"></th>
                 <th x-h-table-head scope="col"></th>
               </tr>
             </thead>
@@ -97,11 +97,11 @@
                   <td x-h-table-cell data-row-actions>
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><i role="img" data-lucide="ellipsis"></i></button>
                     <ul x-h-menu data-align="bottom-end">
-                      <li x-show="isDocument(item)" x-h-menu-item @click="copyLink(item)">Copy link</li>
-                      <li x-h-menu-item @click="askRename(item)">Rename</li>
-                      <li x-show="isDocument(item)" x-h-menu-item @click="window.open(downloadUrl(item), '_blank')">Download</li>
+                      <li x-show="isDocument(item)" x-h-menu-item @click="copyLink(item)" x-text="T('application-core:shell.documents.copyLink', 'Copy link')"></li>
+                      <li x-h-menu-item @click="askRename(item)" x-text="T('application-core:shell.documents.rename', 'Rename')"></li>
+                      <li x-show="isDocument(item)" x-h-menu-item @click="window.open(downloadUrl(item), '_blank')" x-text="T('application-core:shell.documents.download', 'Download')"></li>
                       <li x-h-menu-separator></li>
-                      <li x-h-menu-item data-variant="negative" @click="askDeleteSingle(item)">Delete</li>
+                      <li x-h-menu-item data-variant="negative" @click="askDeleteSingle(item)" x-text="T('application-core:shell.documents.delete', 'Delete')"></li>
                     </ul>
                   </td>
                 </tr>
@@ -141,7 +141,7 @@
         <div x-show="!selectedFile || !canPreview" x-h-info-page class="p-4">
           <div x-h-info-page-header>
             <div x-h-info-page-media.icon><svg x-h-icon.eye role="img" aria-label="preview"></svg></div>
-            <div x-h-info-page-title>File Preview</div>
+            <div x-h-info-page-title x-text="T('application-core:shell.documents.filePreview', 'File Preview')"></div>
             <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? 'This file cannot be previewed.' : 'Click on a file to see its preview.'"></div>
           </div>
         </div>
@@ -152,17 +152,17 @@
   <!-- New folder dialog -->
   <div x-h-dialog-overlay :data-open="newFolderOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title>New folder</h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.newFolder', 'New folder')"></h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
-          <label x-h-label for="nf">Folder name</label>
-          <input x-h-input id="nf" type="text" x-model="newFolderName" @keydown.enter="createFolder()" placeholder="Enter folder name..." />
+          <label x-h-label for="nf" x-text="T('application-core:shell.documents.folderName', 'Folder name')"></label>
+          <input x-h-input id="nf" type="text" x-model="newFolderName" @keydown.enter="createFolder()" :placeholder="T('application-core:shell.documents.enterFolderName', 'Enter folder name...')" />
         </div>
         <div x-show="newFolderError" x-h-alert data-variant="negative" role="alert" class="mt-2"><div x-h-alert-description x-text="newFolderError"></div></div>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="outline" @click="newFolderOpen = false" :disabled="busy">Cancel</button>
-        <button x-h-button data-variant="primary" @click="createFolder()" :disabled="busy">Create</button>
+        <button x-h-button data-variant="outline" @click="newFolderOpen = false" :disabled="busy" x-text="T('application-core:shell.documents.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" @click="createFolder()" :disabled="busy" x-text="T('application-core:shell.documents.create', 'Create')"></button>
       </div>
     </div>
   </div>
@@ -170,17 +170,17 @@
   <!-- Rename dialog -->
   <div x-h-dialog-overlay :data-open="renameOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title>Rename</h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.rename', 'Rename')"></h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
-          <label x-h-label for="rn">New name</label>
+          <label x-h-label for="rn" x-text="T('application-core:shell.documents.newName', 'New name')"></label>
           <input x-h-input id="rn" type="text" x-model="renameName" @keydown.enter="doRename()" />
         </div>
         <div x-show="renameError" x-h-alert data-variant="negative" role="alert" class="mt-2"><div x-h-alert-description x-text="renameError"></div></div>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="outline" @click="renameOpen = false" :disabled="busy">Cancel</button>
-        <button x-h-button data-variant="primary" @click="doRename()" :disabled="busy">Rename</button>
+        <button x-h-button data-variant="outline" @click="renameOpen = false" :disabled="busy" x-text="T('application-core:shell.documents.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" @click="doRename()" :disabled="busy" x-text="T('application-core:shell.documents.rename', 'Rename')"></button>
       </div>
     </div>
   </div>
@@ -188,14 +188,14 @@
   <!-- Delete dialog -->
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title>Delete</h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.delete', 'Delete')"></h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button></div>
       <div x-h-dialog-content>
         <p x-show="deleteTargets.length === 1">Delete <strong x-text="deleteTargets[0] && deleteTargets[0].name"></strong>? This cannot be undone.</p>
         <p x-show="deleteTargets.length > 1">Delete <strong x-text="deleteTargets.length"></strong> items? This cannot be undone.</p>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="busy">Cancel</button>
-        <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="busy">Delete</button>
+        <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="busy" x-text="T('application-core:shell.documents.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="busy" x-text="T('application-core:shell.documents.delete', 'Delete')"></button>
       </div>
     </div>
   </div>

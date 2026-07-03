@@ -107,7 +107,9 @@ document.addEventListener('alpine:init', () => {
       crumbs.push({ label: window.T ? T(navKeys[top], this.navLabel(this.navLabels[top] || top)) : this.navLabel(this.navLabels[top] || top), route: isList ? null : '/' + top });
       if (!isList) {
         const last = segments[segments.length - 1];
-        const action = last === 'create' ? 'Create' : last === 'edit' ? 'Edit' : this.navLabel(last);
+        const action = last === 'create' ? (window.T ? T('application-core:shell.nav.create', 'Create') : 'Create')
+                : last === 'edit' ? (window.T ? T('application-core:shell.nav.edit', 'Edit') : 'Edit')
+                : this.navLabel(last);
         crumbs.push({ label: action, route: null });
       }
       return crumbs;

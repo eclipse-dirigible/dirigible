@@ -69,9 +69,11 @@
     document.head.appendChild(script);
   });
 
-  // The catalogs to request: the hosting app's own project namespace ('common' always included by
-  // the service). The shared application shell has no project - it uses only 'common' keys.
-  const namespace = (window.App && App.config && App.config.projectName) || 'shell';
+  // The catalogs to request: the platform shell chrome ('application-core', shipped with the shared
+  // runtime) plus the hosting app's own project namespace ('common' is always included by the
+  // service). The shared application shell has no project and uses only the shell catalog.
+  const project = window.App && App.config && App.config.projectName;
+  const namespaces = project ? ['application-core', project] : ['application-core'];
 
   const init = async () => {
     try {
@@ -80,8 +82,8 @@
       })();
       // The default language renders entirely from the baked-in literals - no catalogs needed.
       if (DEFAULT_LOCALE.indexOf(code + '-') === 0) return;
-      const params = 'extensionPoints=platform-locales&extensionPoints=application-locales&namespaces='
-          + encodeURIComponent(namespace);
+      const params = 'extensionPoints=platform-locales&extensionPoints=application-locales'
+          + namespaces.map(ns => '&namespaces=' + encodeURIComponent(ns)).join('');
       const [response] = await Promise.all([
         fetch(LOCALES_SERVICE + '?' + params, {
           credentials: 'same-origin',
