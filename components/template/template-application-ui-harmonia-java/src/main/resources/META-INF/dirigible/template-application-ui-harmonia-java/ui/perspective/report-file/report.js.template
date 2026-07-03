@@ -150,8 +150,10 @@ document.addEventListener('alpine:init', () => {
       const meta = this.columnMeta(key);
       if (meta && meta.pattern) return this.displayNumber(v, meta.pattern);
       // Pattern-less numeric columns (counts, year/month buckets) still render as clean integers -
-      // the DB returns them as decimals (1.0, 202607.0).
-      if (meta && meta.kind === 'number') return this.displayNumber(v, '##0');
+      // the DB returns them as decimals (1.0, 202607.0). NB: the pattern must stay '0' - never a
+      // hash-style DecimalFormat literal, because two hashes start a Velocity line comment and
+      // swallow the rest of the line (unterminated string in the generated file).
+      if (meta && meta.kind === 'number') return this.displayNumber(v, '0');
       return v;
     },
 
