@@ -325,8 +325,12 @@ document.addEventListener('alpine:init', () => {
 
     isSettingActive(item) { return this.settingsMode && this.settingsSelected === item.id; },
 
-    /** Find a setting entity (perspective) by id. */
-    findSettingItem(id) { return (this.settingsItems || []).find(i => i.id === id) || null; },
+    /** Find a setting entity (perspective) by id. 'region-language' is the built-in shell entry
+     *  (the platform language preference) - it has no app path; its detail renders locally. */
+    findSettingItem(id) {
+      if (id === 'region-language') return { id: 'region-language' };
+      return (this.settingsItems || []).find(i => i.id === id) || null;
+    },
 
     /** Open the task behind a (task-derived) notification, and mark it read. */
     openNotification(n) {

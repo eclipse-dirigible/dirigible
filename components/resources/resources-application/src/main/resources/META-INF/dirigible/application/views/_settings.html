@@ -9,30 +9,15 @@
 <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
-      <!-- Region & Language: the platform-wide data-language flag (localStorage codbex.harmonia.language,
-           sent as Accept-Language by every app's fetch client). The offered codes are the PLATFORM's
-           supported set (DIRIGIBLE_APPLICATION_LANGUAGES, default en,bg) - never per-module; hidden
-           only when the platform configures a single language. -->
-      <div class="vbox gap-1" x-show="languageOptions().length > 1">
-        <span x-h-text.muted class="text-sm">Region &amp; Language</span>
-        <div x-h-select>
-          <input x-h-select-input x-model="language" placeholder="Language" />
-          <div x-h-select-content>
-            <template x-for="opt in languageOptions()" :key="opt.value">
-              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
-            </template>
-          </div>
-        </div>
-        <!-- Modules not yet providing every platform language: the developers' translation to-do
-             list. Their data still works - untranslated content falls back to the default language. -->
-        <template x-for="warn in languageWarnings()" :key="warn.app">
-          <div x-h-alert data-variant="warning" role="alert">
-            <div x-h-alert-description
-                 x-text="warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.'"></div>
-          </div>
-        </template>
-      </div>
       <span x-h-text.muted class="text-sm">Configuration &amp; nomenclature across all applications.</span>
+      <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
+           data-language preference. Selecting it renders the local detail page on the right. -->
+      <button x-h-button data-variant="outline" class="justify-start"
+              :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
+              @click="selectSetting({ id: 'region-language' })">
+        <i role="img" data-lucide="globe"></i>
+        <span>Region &amp; Language</span>
+      </button>
       <template x-for="item in settingsItems" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
@@ -43,11 +28,49 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title>Select a setting</div>
         <div x-h-info-page-description>Choose a configuration entity on the left to manage it here.</div>
+      </div>
+    </div>
+    <!-- Region & Language detail: rendered locally (no iframe) - the platform-wide language
+         preference (localStorage codbex.harmonia.language, sent as Accept-Language by every app's
+         fetch client). Offered codes are the PLATFORM's set (DIRIGIBLE_APPLICATION_LANGUAGES,
+         default en,bg) - never per-module; modules missing a platform language are listed as
+         warnings (their untranslated content falls back to the default language). -->
+    <div x-show="settingsSelected === 'region-language'" class="size-full overflow-auto">
+      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+        <div class="vbox gap-1">
+          <span class="text-lg font-medium">Region &amp; Language</span>
+          <span x-h-text.muted class="text-sm">One preference for the whole stack: the user interface,
+            the data (multilingual entities translate on read) and document printing all follow the
+            selected language. Content a module has not translated yet falls back to the default
+            language.</span>
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm">Language</span>
+          <div x-h-select>
+            <input x-h-select-input x-model="language" placeholder="Language" />
+            <div x-h-select-content>
+              <template x-for="opt in languageOptions()" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
+          </div>
+        </div>
+        <template x-if="languageWarnings().length > 0">
+          <div class="vbox gap-2">
+            <span x-h-text.muted class="text-sm">Missing translations</span>
+            <template x-for="warn in languageWarnings()" :key="warn.app">
+              <div x-h-alert data-variant="warning" role="alert">
+                <div x-h-alert-description
+                     x-text="warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.'"></div>
+              </div>
+            </template>
+          </div>
+        </template>
       </div>
     </div>
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
