@@ -129,6 +129,11 @@ function detailPanel(def, masterId) {
       const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
       window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/edit' + q);
     },
+    // Read-only view of the detail record (the routed form page in preview mode).
+    previewRow(row) {
+      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
+      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/preview' + q);
+    },
 
     askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },
     async confirmDelete() {

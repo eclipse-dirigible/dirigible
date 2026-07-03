@@ -306,6 +306,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
@@ -315,6 +316,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
@@ -324,6 +326,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
 #end
 #end
@@ -333,6 +336,7 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
+    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
@@ -341,6 +345,7 @@
 #if(($entity.layoutType == "MANAGE_DETAILS" || $entity.layoutType == "LIST_DETAILS") && $entity.type == "DEPENDENT")
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
+    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
 #end
 #end
     <!-- REPORT entities: a table or chart page. -->
