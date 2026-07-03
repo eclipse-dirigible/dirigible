@@ -61,6 +61,9 @@ document.addEventListener('alpine:init', () => {
       if (!lang || lang === this.value) return;
       this.value = lang;
       try { localStorage.setItem(STORAGE_KEY, lang); } catch (e) { /* storage unavailable */ }
+      // Reload so everything follows at once: the i18n label catalogs re-init in the new language
+      // and every list/form re-fetches its data with the new Accept-Language.
+      window.location.reload();
     },
   });
 }, { once: true });

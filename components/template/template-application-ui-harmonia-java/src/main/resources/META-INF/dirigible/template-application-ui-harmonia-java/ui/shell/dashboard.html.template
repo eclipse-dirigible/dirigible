@@ -17,7 +17,7 @@
                @click="openEntity(e.route)" @keydown.enter.prevent="openEntity(e.route)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" :data-lucide="e.icon" class="size-4"></i><span x-text="e.label"></span>
+                <i role="img" :data-lucide="e.icon" class="size-4"></i><span x-text="T(e.tkey, e.label)"></span>
               </div>
             </div>
             <div x-h-card-content>

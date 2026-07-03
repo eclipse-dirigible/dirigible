@@ -13,9 +13,9 @@
     <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
          text-2xl normal weight - matches the document header look. This caption is intentionally only
          on the create/edit form, NOT on the list/master browse views. -->
-    <span class="text-2xl font-normal tracking-tight shrink-0" x-text="'${entityLabel}'.toUpperCase()"></span>
+    <span class="text-2xl font-normal tracking-tight shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}').toUpperCase()"></span>
     <div x-h-toolbar-spacer></div>
-    <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')">Back to list</button>
+    <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
   <!-- Load failure (edit) -->
@@ -24,11 +24,11 @@
       <div x-h-info-page-media.icon>
         <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
       </div>
-      <div x-h-info-page-title>Could not load</div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="loadFailureMessage"></div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="outline" @click="cancel()">Back</button>
+      <button x-h-button data-variant="outline" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
     </div>
   </div>
 
@@ -44,7 +44,7 @@
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
       <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
-      <div x-h-alert-title>Could not save</div>
+      <div x-h-alert-title x-text="T('$projectName:${tprefix}.messages.error.saving', 'Could not save')"></div>
       <div x-h-alert-description>
         <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>
         <span x-show="errors.__summary" x-text="errors.__summary"></span>
@@ -75,10 +75,10 @@
           <span x-h-checkbox>
             <input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#end />
           </span>
-          <label x-h-label for="f_${property.name}">${label}#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
         </div>
 #else
-        <label x-h-label for="f_${property.name}">${label}#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+        <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
         <!-- Combobox per the Harmonia select contract (see codbex-athena-app forms): x-model on the
              x-h-select-input holds the VALUE (the option data-value), a string; the input shows the
@@ -89,7 +89,7 @@
 #if($lookup)
         <div class="hbox gap-1 items-center">
           <div x-h-select data-filter="contains" class="grow">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
               <template x-for="opt in options${property.name}" :key="opt.value">
@@ -97,14 +97,14 @@
               </template>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>&nbsp;<span x-text="T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"></span></button>
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#end>
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
                  :aria-invalid="!!errors.${property.name}"
-                 placeholder="Select ${label}..." />
+                 :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
             <template x-for="opt in options${property.name}" :key="opt.value">
@@ -173,10 +173,10 @@
       </template>
 #end
       <div x-h-toolbar-spacer></div>
-      <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'">Cancel</button>
+      <button type="button" x-h-button data-variant="transparent" @click="cancel()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <button type="submit" x-h-button data-variant="primary" :disabled="state === 'saving'">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? 'Save' : 'Create'"></span>
+        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
     </div>
     </div>
@@ -190,14 +190,14 @@
 #if($hasReadOnly)
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit">
       <div x-h-card>
-        <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
         <div x-h-card-content>
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
             <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
-              <span class="text-xs text-muted-foreground">${rolabel}</span>
+              <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
               <span class="text-sm break-all" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
 #else

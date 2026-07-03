@@ -22,28 +22,28 @@
          (e.g. SALES INVOICE 00001231). The label is a plain span on purpose - the x-h-text.h3
          directive injects font-semibold, which the label must NOT have; only the number is bold. -->
     <div class="hbox items-baseline gap-2 shrink-0">
-      <span class="text-2xl font-normal tracking-tight" x-text="'${documentLabel}'.toUpperCase()"></span>
+      <span class="text-2xl font-normal tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}').toUpperCase()"></span>
       <span class="text-2xl font-bold tracking-tight" x-show="isEdit && form.${docNumberProp}" x-text="form.${docNumberProp}"></span>
     </div>
 #else
-    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? 'Edit ${documentLabel}' : 'New ${documentLabel}'"></span>
+    <span x-h-toolbar-title class="shrink-0" x-text="isEdit ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Edit ${documentLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') }) : T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${documentLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') })"></span>
 #end
     <div x-h-toolbar-spacer></div>
 #if($docStatusProp != "")
     <!-- Status pill is right-aligned: the spacer above pushes it (and the Back button) to the far end. -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="isEdit && statusText()" x-text="statusText()"></span>
 #end
-    <button type="button" x-h-button data-variant="transparent" @click="backToList()">Back to list</button>
+    <button type="button" x-h-button data-variant="transparent" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
   <!-- Load failure (edit) -->
   <div x-show="state === 'load-failure'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg x-h-icon.circle-error role="img" aria-label="error"></svg></div>
-      <div x-h-info-page-title>Could not load</div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="loadFailureMessage"></div>
     </div>
-    <div x-h-info-page-content><button x-h-button data-variant="outline" @click="backToList()">Back</button></div>
+    <div x-h-info-page-content><button x-h-button data-variant="outline" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button></div>
   </div>
 
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
@@ -56,7 +56,7 @@
     <form @submit.prevent="save()" class="vbox gap-4 w-full">
       <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
         <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
-        <div x-h-alert-title>Could not save</div>
+        <div x-h-alert-title x-text="T('$projectName:${tprefix}.messages.error.saving', 'Could not save')"></div>
         <div x-h-alert-description>
           <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>
           <span x-show="errors.__summary" x-text="errors.__summary"></span>
@@ -80,17 +80,17 @@
 #if($property.widgetType == "CHECKBOX")
         <div class="hbox items-center gap-3">
           <span x-h-checkbox><input type="checkbox" id="f_${property.name}" x-model="form.${property.name}"#if($readonly) disabled#end /></span>
-          <label x-h-label for="f_${property.name}">${label}#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+          <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
         </div>
 #else
-        <label x-h-label for="f_${property.name}">${label}#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
+        <label x-h-label for="f_${property.name}"><span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${label}')"></span>#if($property.isRequiredProperty == "true") <span class="text-negative">*</span>#end</label>
 #if($property.widgetType == "DROPDOWN")
 #if($lookup)
         <!-- Non-setting association: combobox + Add new (opens the target's own create page in an iframe
              dialog) + Refresh, all on one full-width row. -->
         <div class="hbox gap-1 items-center">
           <div x-h-select data-filter="contains" class="grow">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
               <template x-for="opt in options${property.name}" :key="opt.value">
@@ -103,7 +103,7 @@
         </div>
 #else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#end>
-          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" placeholder="Select ${label}..." />
+          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
             <template x-for="opt in options${property.name}" :key="opt.value">
@@ -142,14 +142,14 @@
       <div x-h-toolbar data-variant="transparent">
         <span x-h-toolbar-title class="shrink-0">${documentItemsLabel}</span>
         <div x-h-toolbar-spacer></div>
-        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span>Add</span></button>
+        <button type="button" x-h-button data-variant="primary" data-size="sm" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
-            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label"></th></template>
+            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
             <th x-h-table-head scope="col"></th>
           </tr>
         </thead>
@@ -164,15 +164,15 @@
                   <i role="img" data-lucide="ellipsis"></i>
                 </button>
                 <ul x-h-menu data-align="bottom-end">
-                  <li x-h-menu-item @click="openRowDialog(row)">Edit</li>
+                  <li x-h-menu-item @click="openRowDialog(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
                   <li x-h-menu-separator></li>
-                  <li x-h-menu-item data-variant="negative" @click="askDeleteRow(row)">Delete</li>
+                  <li x-h-menu-item data-variant="negative" @click="askDeleteRow(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                 </ul>
               </td>
             </tr>
           </template>
           <tr x-show="items.length === 0">
-            <td x-h-table-cell :colspan="editColumns.length + 1" class="text-center">No line items yet.</td>
+            <td x-h-table-cell :colspan="editColumns.length + 1" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
           </tr>
         </tbody>
       </table>
@@ -185,7 +185,7 @@
 #if($property.aggregate == "true")
 #if($property.widgetLabel)#set($alabel = $property.widgetLabel)#else#set($alabel = $property.name)#end
         <div class="hbox justify-between gap-8">
-          <span class="text-secondary-foreground">${alabel}</span>
+          <span class="text-secondary-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${alabel}')"></span>
           <span class="font-semibold tabular-nums" x-text="totalValue('${property.name}', '${property.formatPattern}')"></span>
         </div>
 #end
@@ -202,21 +202,21 @@
     <template x-for="d in secondaryDetails" :key="d.entity + ':' + id">
       <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + '/edit'}, id)" x-h-card class="w-full">
         <div x-h-card-header>
-          <h3 x-h-card-title x-text="d.label"></h3>
+          <h3 x-h-card-title x-text="T(d.tkey, d.label)"></h3>
           <div x-h-card-action x-show="masterId">
-            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span>Add</span></button>
+            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
           </div>
         </div>
         <div x-h-card-content>
           <div x-show="state === 'loading'"><div x-h-spinner></div></div>
           <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
-          <div x-show="state === 'empty'" x-h-text.muted>No records.</div>
+          <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records.')"></div>
           <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
             <table x-h-table data-borders="rows">
               <thead x-h-table-header>
                 <tr x-h-table-row>
                   <template x-for="col in def.columns" :key="col.name">
-                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label || col.name"></th>
+                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
                   </template>
                   <th x-h-table-head scope="col"></th>
                 </tr>
@@ -241,13 +241,13 @@
         <div x-h-dialog-overlay :data-open="deleteOpen">
           <div x-h-dialog>
             <div x-h-dialog-header>
-              <h2 x-h-dialog-title x-text="'Delete ' + def.label"></h2>
+              <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
               <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
             </div>
             <div x-h-dialog-content><p>Are you sure? This cannot be undone. The document totals will be recalculated.</p></div>
             <div x-h-dialog-footer>
-              <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy">Cancel</button>
-              <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span>Delete</span></button>
+              <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+              <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
             </div>
           </div>
         </div>
@@ -269,12 +269,12 @@
       <!-- Print: renders the CMS template (Templates/${name}/Print/<lang>/) to PDF; asks for the language when several exist -->
       <button type="button" x-h-button data-variant="outline" x-show="isEdit" :disabled="printBusy" @click="openPrint()">
         <span x-show="printBusy" x-h-spinner></span>
-        <i role="img" data-lucide="printer" x-show="!printBusy"></i><span>Print</span>
+        <i role="img" data-lucide="printer" x-show="!printBusy"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
       </button>
-      <button type="button" x-h-button data-variant="transparent" @click="backToList()" :disabled="state === 'saving'">Cancel</button>
+      <button type="button" x-h-button data-variant="transparent" @click="backToList()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <button type="button" x-h-button data-variant="primary" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? 'Save' : 'Create'"></span>
+        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
     </div>
     </div>
@@ -288,14 +288,14 @@
 #if($hasReadOnly)
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit">
       <div x-h-card>
-        <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
         <div x-h-card-content>
           <div class="grid grid-cols-1 gap-y-3">
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
 #if($property.widgetLabel)#set($rolabel = $property.widgetLabel)#else#set($rolabel = $property.name)#end
             <div class="vbox gap-0" x-show="form.${property.name} !== null && form.${property.name} !== undefined && form.${property.name} !== ''">
-              <span class="text-xs text-muted-foreground">${rolabel}</span>
+              <span class="text-xs text-muted-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${rolabel}')"></span>
 #if($property.widgetType == "DROPDOWN")
               <span class="text-sm break-all" x-text="(options${property.name}.find(o => String(o.value) === String(form.${property.name})) || {}).text || form.${property.name}"></span>
 #else
@@ -316,7 +316,7 @@
   <div x-h-dialog-overlay :data-open="rowDialogOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? 'Edit line' : 'Add line'"></h2>
+        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : T('$projectName:${tprefix}.defaults.add', 'Add line')"></h2>
         <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"></button>
       </div>
       <div x-h-dialog-content>
@@ -324,11 +324,11 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <template x-for="col in editColumns" :key="col.name">
             <div x-h-field>
-              <label x-h-label x-text="col.label"></label>
+              <label x-h-label x-text="T(col.tkey, col.label)"></label>
               <template x-if="col.widget === 'DROPDOWN'">
                 <div>
                   <div x-h-select data-filter="contains" :data-disabled="col.readonly">
-                    <input x-h-select-input x-model="draft[col.name]" placeholder="Select..." />
+                    <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                     <div x-h-select-content>
                       <div x-h-select-search></div>
                       <!-- dialogOptionsFor: the Depends-On-filtered set when active, else the full set. -->
@@ -364,9 +364,9 @@
         </div>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="transparent" @click="closeRowDialog()" :disabled="draftSaving">Cancel</button>
+        <button x-h-button data-variant="transparent" @click="closeRowDialog()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="primary" @click="saveDraft()" :disabled="draftSaving">
-          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? 'Save' : 'Add'"></span>
+          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
         </button>
       </div>
     </div>

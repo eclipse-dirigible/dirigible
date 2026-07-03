@@ -20,6 +20,7 @@ document.addEventListener('alpine:init', () => {
       {
         name: '${entity.name}',
         label: '#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end',
+        tkey: '$projectName:${tprefix}.t.${entity.dataName}',
         icon: '#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end',
         route: '/${entity.name}',
         apiPath: '/${entity.javaPerspectiveName}/${entity.name}Controller',
