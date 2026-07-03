@@ -138,6 +138,9 @@ public class StoreAPISampleProjectIT extends SampleProjectRepositoryIT {
 
     @Override
     protected void verifyProject() {
+        // Retry-on-AssertionError: if a late sync cycle re-registers the Customer entity and
+        // rebuilds its table between the init and the list (dropping the just-inserted rows and
+        // resetting the identity counter), the next attempt re-inits and converges.
         restAssuredExecutor.execute( //
                 () -> {
                     given().when()
@@ -156,7 +159,7 @@ public class StoreAPISampleProjectIT extends SampleProjectRepositoryIT {
                            .then()
                            .statusCode(200)
                            .body(equalToCompressingWhiteSpace(COMPLEX_CUSTOMERS_RESPONSE_BODY));
-                });
+                }, 90);
     }
 
     @Override
