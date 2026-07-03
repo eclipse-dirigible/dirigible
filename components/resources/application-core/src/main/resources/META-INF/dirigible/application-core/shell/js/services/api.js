@@ -89,7 +89,10 @@ App.services.api = {
   async request(method, url, body, opts = {}) {
     const baseUrl = this.resolveBaseUrl(opts);
 
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json' };
+    // X-Requested-With marks the call as programmatic for browsers without Sec-Fetch-Mode: the
+    // server then answers an expired session with a PLAIN 401 (no Basic challenge), so the
+    // browser's native login dialog never pops over a background poll.
+    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
     const language = this.language();
     if (language) headers['Accept-Language'] = language;
 
