@@ -58,6 +58,14 @@
                                     </bk-input>
                                 </bk-form-input-message>
                             </bk-form-item>
+                            <bk-form-item horizontal="false">
+                                <bk-form-label for="idDescription" colon="true">Description</bk-form-label>
+                                <bk-textarea id="idDescription" name="description" ng-model="report.description" ng-maxlength="1024" placeholder="Enter description (shown on the dashboard tile)"></bk-textarea>
+                            </bk-form-item>
+                            <bk-form-item horizontal="false">
+                                <bk-checkbox id="idDashboard" ng-model="report.dashboard"></bk-checkbox>
+                                <bk-checkbox-label for="idDashboard">Show on the home dashboard</bk-checkbox-label>
+                            </bk-form-item>
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End General Section-->
@@ -377,6 +385,96 @@
                         </bk-panel-content>
                     </bk-panel>
                     <!-- End Security -->
+                    <!-- Begin Dashboard Widget -->
+                    <bk-panel expanded="false">
+                        <bk-panel-header>
+                            <bk-panel-expand hint="expand dashboard widget section"></bk-panel-expand>
+                            <h4 bk-panel-title>Dashboard Widget</h4>
+                        </bk-panel-header>
+                        <bk-panel-content aria-label="Dashboard Widget">
+                            <bk-form-group class="fd-container fd-form-layout-grid-container">
+                                <bk-form-item class="fd-row">
+                                    <bk-checkbox id="widgetEnabled" ng-model="widgetEnabled" ng-change="toggleWidget()"></bk-checkbox>
+                                    <bk-checkbox-label for="widgetEnabled">Show as a dashboard KPI tile (replaces the report's preview tile)</bk-checkbox-label>
+                                </bk-form-item>
+                                <div ng-if="report.widget" class="bk-full-width">
+                                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetKind" colon="true">Kind</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-select id="widgetKind" ng-model="report.widget.kind" ng-change="widgetKindChanged()" dropdown-fixed="true">
+                                                <bk-option ng-repeat="k in widgetKinds" text="{{k.label}}" value="k.value"></bk-option>
+                                            </bk-select>
+                                        </div>
+                                    </bk-form-item>
+                                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetLabel" colon="true">Label</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-input id="widgetLabel" type="text" ng-model="report.widget.label" ng-maxlength="255" placeholder="Tile label"></bk-input>
+                                        </div>
+                                    </bk-form-item>
+                                    <bk-form-item class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetIcon" colon="true">Icon</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-input id="widgetIcon" type="text" ng-model="report.widget.icon" ng-maxlength="255" placeholder="Lucide icon name, e.g. gauge"></bk-input>
+                                        </div>
+                                    </bk-form-item>
+                                    <bk-form-item ng-if="report.widget.kind === 'value'" class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetValue" colon="true">Value column</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-select id="widgetValue" ng-model="report.widget.valueColumn" ng-change="widgetValueChanged()" dropdown-fixed="true">
+                                                <bk-option ng-repeat="c in widgetMeasureColumns()" text="{{c.alias}} ({{c.aggregate}})" value="c.alias"></bk-option>
+                                            </bk-select>
+                                        </div>
+                                    </bk-form-item>
+                                    <bk-form-item ng-if="report.widget.kind === 'list'" class="fd-row fd-margin-top--tiny">
+                                        <div class="fd-col fd-col-md--2">
+                                            <bk-form-label for="widgetLimit" colon="true">Rows</bk-form-label>
+                                        </div>
+                                        <div class="fd-col fd-col-md--4 fd-col-lg--3">
+                                            <bk-input id="widgetLimit" type="number" ng-model="report.widget.limit" min="1" max="50" placeholder="5"></bk-input>
+                                        </div>
+                                    </bk-form-item>
+                                    <div ng-if="report.widget.kind !== 'list'" class="fd-margin-top--tiny">
+                                        <div class="bk-hbox bk-full-width bk-padding-bottom--tiny bk-flex-end bk-box--gap">
+                                            <bk-button compact="true" glyph="sap-icon--add" label="Add pin" ng-click="addWidgetPin()"></bk-button>
+                                        </div>
+                                        <bk-table-fixed>
+                                            <table bk-table outer-borders="all">
+                                                <thead bk-table-header>
+                                                    <tr bk-table-row>
+                                                        <th bk-table-header-cell>Pinned Column</th>
+                                                        <th bk-table-header-cell>Pinned To</th>
+                                                        <th bk-table-header-cell></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody bk-table-body>
+                                                    <tr ng-if="!report.widget.at || report.widget.at.length === 0" bk-table-row>
+                                                        <td bk-table-cell no-data="true">No pins - the tile uses the whole report result</td>
+                                                    </tr>
+                                                    <tr bk-table-row hoverable="false" activable="false" ng-repeat="pin in report.widget.at track by $index">
+                                                        <td bk-table-cell>{{pin.column}}</td>
+                                                        <td bk-table-cell>{{pin.token ? 'now' : pin.value}}</td>
+                                                        <td bk-table-cell fit-content="true">
+                                                            <bk-button compact="true" glyph="sap-icon--delete" status="transparent" aria-label="Delete" ng-click="deleteWidgetPin($index)"></bk-button>
+                                                        </td>
+                                                    </tr>
+                                                </tbody>
+                                            </table>
+                                        </bk-table-fixed>
+                                    </div>
+                                </div>
+                            </bk-form-group>
+                        </bk-panel-content>
+                    </bk-panel>
+                    <!-- End Dashboard Widget -->
                 </bk-form-group>
             </bk-fieldset>
         </bk-scrollbar>

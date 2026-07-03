@@ -23,7 +23,8 @@
     },
     "dashboard": {
       "title": "Dashboard",
-      "overview": "Overview of your published applications."
+      "overview": "Overview of your published applications.",
+      "kpis": "Key Indicators"
     },
     "inbox": {
       "refresh": "Refresh",

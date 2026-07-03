@@ -47,6 +47,8 @@ public class IntentModel {
     private List<ProcessIntent> processes = new ArrayList<>();
     private List<FormIntent> forms = new ArrayList<>();
     private List<ReportIntent> reports = new ArrayList<>();
+    /** Custom dashboard widgets — developer-supplied REST KPIs and embedded pages. */
+    private List<CustomWidgetIntent> widgets = new ArrayList<>();
     private List<PermissionIntent> permissions = new ArrayList<>();
     private List<SeedIntent> seeds = new ArrayList<>();
     private List<NotificationIntent> notifications = new ArrayList<>();
@@ -134,6 +136,14 @@ public class IntentModel {
 
     public void setReports(List<ReportIntent> reports) {
         this.reports = reports == null ? new ArrayList<>() : reports;
+    }
+
+    public List<CustomWidgetIntent> getWidgets() {
+        return widgets;
+    }
+
+    public void setWidgets(List<CustomWidgetIntent> widgets) {
+        this.widgets = widgets == null ? new ArrayList<>() : widgets;
     }
 
     public List<PermissionIntent> getPermissions() {

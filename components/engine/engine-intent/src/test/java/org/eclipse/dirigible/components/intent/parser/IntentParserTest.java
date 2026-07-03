@@ -422,4 +422,146 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("documentStatus (a read-only pill) so it cannot declare dependsOn")),
                 "expected a documentStatus-dependent issue, got: " + ex.getIssues());
     }
+
+    private static final String WIDGET_HEAD = """
+            name: sales
+            entities:
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: issuedOn, type: date }
+                  - { name: total, type: decimal }
+            reports:
+              - name: RevenueByMonth
+                source: Invoice
+                dimensions: ["month(issuedOn)"]
+                measures: ["sum(total)"]
+                widget:
+                  value: "sum(total)"
+                  at: { "month(issuedOn)": now }
+            """;
+
+    @Test
+    void reportWidgetParses() {
+        IntentModel model = IntentParser.parse(WIDGET_HEAD);
+        assertEquals("sum(total)", model.getReports()
+                                        .get(0)
+                                        .getWidget()
+                                        .getValue());
+        assertEquals("now", model.getReports()
+                                 .get(0)
+                                 .getWidget()
+                                 .getAt()
+                                 .get("month(issuedOn)"));
+    }
+
+    @Test
+    void widgetValueMustNameADeclaredMeasure() {
+        String yaml = WIDGET_HEAD.replace("value: \"sum(total)\"", "value: \"avg(total)\"");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not name a declared measure")),
+                "expected an unknown-measure issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetPinMustNameADeclaredDimension() {
+        String yaml = WIDGET_HEAD.replace("at: { \"month(issuedOn)\": now }", "at: { \"year(issuedOn)\": now }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("pins unknown dimension [year(issuedOn)]")),
+                "expected an unknown-dimension issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetUnknownKindIsRejected() {
+        String yaml = WIDGET_HEAD.replace("value: \"sum(total)\"", "kind: chart");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("unknown kind [chart]")),
+                "expected an unknown-kind issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetLimitIsListOnly() {
+        String yaml = WIDGET_HEAD.stripTrailing() + "\n      limit: 5\n";
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must not declare `limit`")),
+                "expected a limit-misuse issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void widgetValueOnCountKindIsRejected() {
+        String yaml = WIDGET_HEAD.replace("widget:", "widget:\n      kind: count");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must not declare `value`")),
+                "expected a value-on-count issue, got: " + ex.getIssues());
+    }
+
+    private static final String CUSTOM_WIDGET_HEAD = """
+            name: sales
+            entities:
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+            widgets:
+              - name: SystemHealth
+                kind: kpi
+                url: /services/js/sales/custom/health.js
+                label: System Health
+                icon: activity
+              - name: SalesFunnel
+                kind: page
+                url: /services/web/sales/custom/funnel/index.html
+            """;
+
+    @Test
+    void customWidgetsParse() {
+        IntentModel model = IntentParser.parse(CUSTOM_WIDGET_HEAD);
+        assertEquals(2, model.getWidgets()
+                             .size());
+        assertEquals("kpi", model.getWidgets()
+                                 .get(0)
+                                 .getKind());
+        assertEquals("/services/web/sales/custom/funnel/index.html", model.getWidgets()
+                                                                          .get(1)
+                                                                          .getUrl());
+    }
+
+    @Test
+    void customWidgetWithoutUrlIsRejected() {
+        String yaml = CUSTOM_WIDGET_HEAD.replace("    url: /services/js/sales/custom/health.js\n", "");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("widget [SystemHealth] has no url")),
+                "expected a missing-url issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void customWidgetWithCrossOriginUrlIsRejected() {
+        String yaml = CUSTOM_WIDGET_HEAD.replace("/services/js/sales/custom/health.js", "https://example.com/kpi");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("url must be a same-origin path")),
+                "expected a same-origin issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void customWidgetWithUnknownKindIsRejected() {
+        String yaml = CUSTOM_WIDGET_HEAD.replace("kind: kpi", "kind: chart");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has unknown kind [chart]")),
+                "expected an unknown-kind issue, got: " + ex.getIssues());
+    }
 }

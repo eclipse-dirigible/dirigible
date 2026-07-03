@@ -216,6 +216,69 @@ class EdmIntentGeneratorTest {
         assertEquals(List.of("en", "bg"), languages, "the intent's languages should land on the .model root");
     }
 
+    @Test
+    void dashboardWidgetsFlowIntoTheModelRoot() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                reports:
+                  - name: OverdueInvoices
+                    source: Invoice
+                    widget: { kind: count, label: Overdue Invoices }
+                widgets:
+                  - name: SystemHealth
+                    url: /services/js/sales/custom/health.js
+                  - name: SalesFunnel
+                    kind: page
+                    url: /services/web/sales/custom/funnel/index.html
+                    label: Sales Funnel
+                    icon: chart-column
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "sales");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> root = (Map<String, Object>) model.get("model");
+
+        assertEquals(Boolean.TRUE, root.get("dashboardKpis"), "declared widgets should flip the .model root flag");
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> widgets = (List<Map<String, Object>>) root.get("widgets");
+        assertEquals(2, widgets.size(), "both custom widgets should land on the .model root");
+        Map<String, Object> health = widgets.get(0);
+        assertEquals("kpi", health.get("kind"), "kind should default to kpi");
+        assertEquals("System Health", health.get("label"), "label should default to the humanized name");
+        assertEquals("widgetSystemHealth", health.get("tId"));
+        assertEquals("gauge", health.get("icon"), "icon should default to gauge");
+        Map<String, Object> funnel = widgets.get(1);
+        assertEquals("page", funnel.get("kind"));
+        assertEquals("/services/web/sales/custom/funnel/index.html", funnel.get("url"));
+    }
+
+    @Test
+    void reportWidgetAloneFlipsTheDashboardKpisFlagWithoutCustomWidgets() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                reports:
+                  - name: OverdueInvoices
+                    source: Invoice
+                    widget: { kind: count }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> root = (Map<String, Object>) EdmIntentGenerator.buildModelJsonForTest(parsed, "sales")
+                                                                           .get("model");
+        assertEquals(Boolean.TRUE, root.get("dashboardKpis"));
+        assertNull(root.get("widgets"), "no custom widgets - the .model root must not carry an empty array");
+    }
+
     private static Map<String, Object> buildFromResource(String resource, String intentName) {
         IntentModel parsed = IntentParser.parse(readResource(resource));
         return EdmIntentGenerator.buildModelJsonForTest(parsed, intentName);

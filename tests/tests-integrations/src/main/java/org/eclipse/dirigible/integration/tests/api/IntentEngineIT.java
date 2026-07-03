@@ -134,16 +134,35 @@ class IntentEngineIT extends IntegrationTest {
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
-              # month(field) buckets a date dimension into a sortable YYYYMM integer.
+              # month(field) buckets a date dimension into a sortable YYYYMM integer. The widget
+              # turns the report into a dashboard KPI: one aggregate cell, the month pinned to now.
               - name: OrdersByMonth
                 source: Order
                 dimensions: ["month(orderDate)"]
                 measures: ["count(*)", "sum(total)"]
+                widget:
+                  value: "sum(total)"
+                  at: { "month(orderDate)": now }
+                  label: Revenue (this month)
+                  icon: banknote
               - name: BigOrderItems
                 source: OrderItem
                 description: Order items with quantity over one, with their order date
                 dimensions: [order.orderDate, quantity]
                 filter: "quantity > 1"
+                widget: { kind: count, label: Big Order Items, icon: alert-triangle }
+
+            # Custom dashboard widgets - developer-supplied content: a REST KPI (the url returns
+            # {value, description?}) and an embedded page tile.
+            widgets:
+              - name: SystemHealth
+                kind: kpi
+                url: /services/js/orders/custom/health.js
+                label: System Health
+                icon: activity
+              - name: SalesFunnel
+                kind: page
+                url: /services/web/orders/custom/funnel.html
 
             permissions:
               - { role: Sales,   description: Sales staff,   can: [Customer:read, Order:create] }
@@ -994,6 +1013,70 @@ class IntentEngineIT extends IntegrationTest {
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
                 "the item dialog should carry the metadata-driven dependsOn machinery");
+    }
+
+    @Test
+    void report_widget_generates_the_kpi_block_and_replaces_entity_tiles() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // The .report carries the resolved widget block: authored expressions became column aliases,
+        // the `now` token stays symbolic (resolved client-side, type-aware via the bucket).
+        String monthly = contentOf("OrdersByMonth.report");
+        assertTrue(monthly.contains("\"kind\": \"value\""), "the value widget should carry its kind");
+        assertTrue(monthly.contains("\"valueColumn\": \"Sum Total\""), "value should resolve to the measure column's alias");
+        assertTrue(monthly.contains("\"valueType\": \"DECIMAL\""), "the value column type should ride along");
+        assertTrue(monthly.contains("\"label\": \"Revenue (this month)\""), "the widget label should be carried");
+        assertTrue(monthly.contains("\"bucket\": \"month\""), "a month(x) pin should carry its bucket kind");
+        assertTrue(monthly.contains("\"token\": \"now\""), "the now pin should stay a symbolic token");
+        assertTrue(monthly.contains("\"column\": \"Month Order Date\""), "the pin should resolve to the dimension column's alias");
+        String bigItems = contentOf("BigOrderItems.report");
+        assertTrue(bigItems.contains("\"kind\": \"count\""), "the count widget should carry its kind");
+        assertTrue(bigItems.contains("\"icon\": \"alert-triangle\""), "the widget icon should be carried");
+
+        // The .model root flags the declared KPIs so the shell template suppresses the raw
+        // per-entity count tiles (declared widgets replace them), and carries the custom widgets.
+        String model = contentOf("orders.model");
+        assertTrue(model.contains("\"dashboardKpis\": true"), "the .model root should flag the declared KPI widgets");
+        assertTrue(model.contains("\"widgetSystemHealth\""), "the custom kpi widget should land on the .model root with its tId");
+        assertTrue(model.contains("\"kind\": \"page\""), "the custom page widget should carry its kind");
+
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+        String dashboard = contentOf("gen/orders/js/components/pages/dashboardPage.js");
+        assertTrue(dashboard.contains("entities: [],"), "the entity tile list should be baked empty when widgets are declared");
+        assertFalse(dashboard.contains("apiPath: '/"), "no entity count tile should be baked when widgets are declared");
+        assertTrue(dashboard.contains("loadKpis"), "the dashboard should carry the KPI loading machinery");
+        assertTrue(dashboard.contains("loadWidgetValue"), "the KPI tiles should delegate to the reports store's widget fetch");
+        // Custom widgets are baked into the page: the kpi fetches its endpoint, the page is iframed.
+        assertTrue(dashboard.contains("url: '/services/js/orders/custom/health.js'"),
+                "the custom kpi widget's endpoint should be baked into the dashboard");
+        assertTrue(dashboard.contains("kind: 'page'") && dashboard.contains("url: '/services/web/orders/custom/funnel.html'"),
+                "the custom page widget should be baked with its url");
+        assertTrue(dashboard.contains("tkey: '" + PROJECT + ":orders-model.t.widgetSystemHealth'"),
+                "the custom widget label should carry the model-catalog translation key");
+        // ... and its label lands in the model translation catalog.
+        String modelCatalog = contentOf("translations/en-US/orders.model.json");
+        assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
+                "the custom widget's label should land in the model catalog");
+
+        // The report-file template also emits the report's label catalog (report + columns + the
+        // widget's tile label) under the '<Name>-report' translation prefix.
+        String reportPayload =
+                "{\"template\":\"template-application-ui-harmonia-java/template/template-report-file.js\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(reportPayload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrdersByMonth.report")
+                                                 .then()
+                                                 .statusCode(201));
+        String catalog = contentOf("translations/en-US/OrdersByMonth.report.json");
+        assertTrue(catalog.contains("\"OrdersByMonth-report\""), "the catalog should be keyed by the report translation prefix");
+        assertTrue(catalog.contains("\"widgetOrdersByMonth\": \"Revenue (this month)\""),
+                "the KPI widget's tile label should land in the report catalog");
+        assertTrue(catalog.contains("\"OrdersByMonth\": \"Orders By Month\""), "the report label should land in the catalog");
     }
 
     @Test

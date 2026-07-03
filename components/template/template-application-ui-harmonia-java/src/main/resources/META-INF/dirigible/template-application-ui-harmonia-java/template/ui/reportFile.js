@@ -13,6 +13,13 @@
  */
 export function getSources() {
     return [
+        // The report's label catalog: the report tId/label, one entry per column, and the KPI
+        // widget's tile label when present — under the '<Name>-report' translation prefix, consumed
+        // by the shell's i18n service (sidebar entry, dashboard tiles, breadcrumb).
+        {
+            location: "/template-application-ui-harmonia-java/ui/translations-report.json.template",
+            action: "translate",
+        },
         // --- Framework-neutral Java backend (same as the AngularJS report-file template) ---
         {
             location: "/template-application-dao-java/data/reportFileEntity.java.template",
