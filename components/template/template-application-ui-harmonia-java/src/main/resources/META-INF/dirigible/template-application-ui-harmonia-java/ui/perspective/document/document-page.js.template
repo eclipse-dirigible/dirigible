@@ -176,13 +176,13 @@ document.addEventListener('alpine:init', () => {
         console.error('Print languages lookup failed', e);
       }
       this.printBusy = false;
-      // The Region & Language setting wins when a template exists for it - print directly in the
-      // user's configured language instead of asking.
-      const configured = (Alpine.store('locale') || {}).value;
-      if (configured && languages.some(l => l.code === configured)) {
-        await this.printDoc(configured);
-      } else if (languages.length > 1) {
-        this.printLanguages = languages;
+      if (languages.length > 1) {
+        // Several templates: ALWAYS ask (auto-printing the configured language here suppressed the
+        // dialog entirely, since the locale store always resolves to a value - a shipped regression).
+        // The Region & Language setting only pre-sorts its language first as the suggested default.
+        const configured = (Alpine.store('locale') || {}).value;
+        this.printLanguages = languages.slice().sort((a, b) =>
+          (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
         this.printLangOpen = true;
       } else {
         // zero languages still attempts the default: the server answers with a clear 404
