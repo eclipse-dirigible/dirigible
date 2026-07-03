@@ -28,7 +28,11 @@ public class SynchronizationUtil {
 
         LOGGER.debug("Waiting until the synchronization is not needed...");
 
-        await().atMost(30, TimeUnit.SECONDS)
+        // 120s, not 30: right after a publishAll the synchronizer chews through the freshly copied
+        // projects, and on loaded CI runners (PostgreSQL/MSSQL matrices) a full cycle over cloned
+        // sample projects exceeds 30s - DependsOnIT timed out here while the sync was simply busy.
+        // An at-most bound only affects failing runs; passing runs return as soon as the sync idles.
+        await().atMost(120, TimeUnit.SECONDS)
                .pollDelay(1, TimeUnit.SECONDS)
                .pollInterval(500, TimeUnit.MILLISECONDS)
                .until(() -> {
