@@ -62,6 +62,42 @@ class CsvimIntentGeneratorTest {
                 """, csv, "a row's relation-name key should become the FK column");
     }
 
+    private static final String MULTILINGUAL_YAML = """
+            name: uoms
+            languages: [en, bg]
+            entities:
+              - name: UoM
+                kind: setting
+                multilingual: true
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                  - { name: iso, type: string, length: 10 }
+                  - { name: numerator, type: decimal }
+            seeds:
+              - name: uoms-bg
+                entity: UoM
+                language: bg
+                rows:
+                  - { id: 1, name: "Килограм" }
+                  - { id: 2, name: "Литър", iso: "Л" }
+            """;
+
+    @Test
+    void languageSeedRendersTheLangTableShape() {
+        IntentModel model = IntentParser.parse(MULTILINGUAL_YAML);
+        String csv = CsvimIntentGenerator.renderCsvForTest(model.getEntities()
+                                                                .get(0),
+                model.getSeeds()
+                     .get(0));
+        assertEquals("""
+                GUID,Id,Name,Iso,Language
+                1,1,Килограм,,bg
+                2,2,Литър,Л,bg
+                """, csv,
+                "a language seed should render GUID (auto-numbered) + Id + the referenced translatable columns + the Language code");
+    }
+
     @Test
     void relationFreeSeedsKeepTheirShape() {
         IntentModel model = IntentParser.parse(YAML);

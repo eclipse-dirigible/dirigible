@@ -99,7 +99,14 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
                         IntentNaming.baseName(context));
                 continue;
             }
-            context.writeModelFile(fileName + ".csv", renderCsv(orderedFieldsOf(entity), entity, seed));
+            // A file seed references an AUTHORED CSV (large data sets - countries, currencies, ...):
+            // only the .csvim is generated, pointing at the developer-owned file. Otherwise the CSV
+            // body is generated from the inline rows - into the sibling <TABLE>_LANG table for a
+            // language seed (`language: bg`, translations for a multilingual entity), else the base.
+            if (!seed.isFileSeed()) {
+                String csv = seed.isLanguageSeed() ? renderLanguageCsv(entity, seed) : renderCsv(orderedFieldsOf(entity), entity, seed);
+                context.writeModelFile(fileName + ".csv", csv);
+            }
             context.writeModelFile(fileName + ".csvim", renderCsvim(context, seed, entity, fileName));
         }
     }
@@ -131,10 +138,11 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Test seam: render a seed's CSV body without a generation context. Never use in production code.
+     * Test seam: render a seed's CSV body without a generation context - dispatching between the base
+     * and the language-table shape exactly like {@link #generate}. Never use in production code.
      */
     static String renderCsvForTest(EntityIntent entity, SeedIntent seed) {
-        return renderCsv(orderedFieldsOf(entity), entity, seed);
+        return seed.isLanguageSeed() ? renderLanguageCsv(entity, seed) : renderCsv(orderedFieldsOf(entity), entity, seed);
     }
 
     private static String renderCsv(List<FieldIntent> fields, EntityIntent entity, SeedIntent seed) {
@@ -218,12 +226,83 @@ public class CsvimIntentGenerator implements IntentTargetGenerator {
         return QUOTE_DELIM + s.replace(QUOTE_DELIM, QUOTE_DELIM + QUOTE_DELIM) + QUOTE_DELIM;
     }
 
+    /**
+     * CSV body of a translation seed: {@code GUID,Id,<referenced translatable PascalCase columns>,
+     * Language} - the shape of the schema-generated {@code
+     *
+    <TABLE>
+     * _LANG} table. {@code GUID} is auto-numbered by row order, {@code Id} references the translated
+     * base row, {@code Language} is the seed's constant code. Only translatable (string-typed, non-PK)
+     * fields referenced by at least one row become columns.
+     */
+    private static String renderLanguageCsv(EntityIntent entity, SeedIntent seed) {
+        List<FieldIntent> translatable = new ArrayList<>();
+        for (FieldIntent field : orderedFieldsOf(entity)) {
+            if (field.isPrimaryKey() || !isTranslatableType(field)) {
+                continue;
+            }
+            for (Map<String, Object> row : seed.getRows()) {
+                if (row.containsKey(field.getName())) {
+                    translatable.add(field);
+                    break;
+                }
+            }
+        }
+        String idField = primaryKeyName(entity);
+        StringBuilder sb = new StringBuilder(256);
+        sb.append("GUID")
+          .append(FIELD_DELIM)
+          .append("Id");
+        for (FieldIntent field : translatable) {
+            sb.append(FIELD_DELIM)
+              .append(IntentNaming.pascalCase(field.getName()));
+        }
+        sb.append(FIELD_DELIM)
+          .append("Language")
+          .append('\n');
+        int guid = 1;
+        for (Map<String, Object> row : seed.getRows()) {
+            sb.append(guid++)
+              .append(FIELD_DELIM)
+              .append(formatCell(row.get(idField)));
+            for (FieldIntent field : translatable) {
+                sb.append(FIELD_DELIM)
+                  .append(formatCell(row.get(field.getName())));
+            }
+            sb.append(FIELD_DELIM)
+              .append(formatCell(seed.getLanguage()))
+              .append('\n');
+        }
+        return sb.toString();
+    }
+
+    /** Whether the field's logical type maps to a translatable (string) column. */
+    private static boolean isTranslatableType(FieldIntent field) {
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(java.util.Locale.ROOT);
+        return "string".equals(type) || "text".equals(type);
+    }
+
+    /** The entity's primary-key field name ({@code id} by convention). */
+    private static String primaryKeyName(EntityIntent entity) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.isPrimaryKey() && field.getName() != null) {
+                return field.getName();
+            }
+        }
+        return "id";
+    }
+
     private static String renderCsvim(IntentGenerationContext context, SeedIntent seed, EntityIntent entity, String fileName) {
         Map<String, Object> entry = new LinkedHashMap<>();
-        entry.put("table", IntentNaming.tableName(context, entity.getName()));
+        entry.put("table", IntentNaming.tableName(context, entity.getName()) + (seed.isLanguageSeed() ? "_LANG" : ""));
         entry.put("schema", seed.getSchema() == null || seed.getSchema()
                                                             .isBlank() ? DEFAULT_SCHEMA : seed.getSchema());
-        entry.put("file", "/" + context.getProjectName() + "/" + fileName + ".csv");
+        String csvPath = seed.isFileSeed() ? seed.getFile()
+                                                 .trim()
+                : fileName + ".csv";
+        entry.put("file", "/" + context.getProjectName() + "/" + csvPath);
         entry.put("header", true);
         entry.put("useHeaderNames", true);
         entry.put("delimField", FIELD_DELIM);

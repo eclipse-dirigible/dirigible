@@ -153,6 +153,7 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
         validateSeeds(model, entityNames, issues);
+        validateLanguages(model, issues);
         validateNotifications(model, entityNames, issues);
         validateSchedules(model, entityNames, issues);
         validateIntegrations(model, entityNames, issues);
@@ -1173,6 +1174,12 @@ public final class IntentParser {
     }
 
     private static void validateSeeds(IntentModel model, Set<String> entityNames, List<String> issues) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         Set<String> seedNames = new HashSet<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
@@ -1189,9 +1196,77 @@ public final class IntentParser {
             } else if (!entityNames.contains(seed.getEntity())) {
                 issues.add("seed [" + seed.getName() + "] targets unknown entity [" + seed.getEntity() + "]");
             }
-            if (seed.getRows()
-                    .isEmpty()) {
+            if (seed.isFileSeed()) {
+                // The seed data lives in an authored CSV: inline rows are mutually exclusive, and the
+                // file must sit in a subfolder - root-level .csv files are owned and scrubbed by the
+                // intent regeneration, which would delete the authored data.
+                if (!seed.getRows()
+                         .isEmpty()) {
+                    issues.add("seed [" + seed.getName() + "] declares both `file` and inline `rows` - use exactly one");
+                }
+                String file = seed.getFile()
+                                  .trim();
+                if (file.startsWith("/") || file.contains("..")) {
+                    issues.add("seed [" + seed.getName() + "] file [" + file + "] must be a project-relative path");
+                } else if (!file.contains("/")) {
+                    issues.add("seed [" + seed.getName() + "] file [" + file + "] must live in a subfolder (e.g. data/" + file
+                            + ") - root-level .csv files are owned and scrubbed by the intent regeneration");
+                }
+            } else if (seed.getRows()
+                           .isEmpty()) {
                 issues.add("seed [" + seed.getName() + "] has no rows");
+            }
+            if (seed.isLanguageSeed()) {
+                validateLanguageSeed(seed, byName.get(seed.getEntity()), issues);
+            }
+        }
+    }
+
+    /**
+     * A translation seed ({@code language: bg}) targets a multilingual entity's language table: the
+     * code is a short lowercase language code, and its rows carry only the base row's {@code id} plus
+     * translatable (string/text, non-PK) fields of the entity.
+     */
+    private static void validateLanguageSeed(SeedIntent seed, EntityIntent entity, List<String> issues) {
+        if (!seed.getLanguage()
+                 .matches("[a-z]{2,3}")) {
+            issues.add("seed [" + seed.getName() + "] language [" + seed.getLanguage()
+                    + "] must be a short lowercase language code (e.g. bg)");
+        }
+        if (entity == null) {
+            return; // the unknown entity is reported separately
+        }
+        if (!entity.isMultilingual()) {
+            issues.add("seed [" + seed.getName() + "] carries translations but entity [" + entity.getName()
+                    + "] is not multilingual - add `multilingual: true` to the entity");
+            return;
+        }
+        Set<String> allowed = new HashSet<>();
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() == null) {
+                continue;
+            }
+            String type = field.getType() == null ? "string"
+                    : field.getType()
+                           .toLowerCase(Locale.ROOT);
+            if (field.isPrimaryKey() || "string".equals(type) || "text".equals(type)) {
+                allowed.add(field.getName());
+            }
+        }
+        for (java.util.Map<String, Object> row : seed.getRows()) {
+            for (String key : row.keySet()) {
+                if (!allowed.contains(key)) {
+                    issues.add("seed [" + seed.getName() + "] row references [" + key
+                            + "] which is not the id or a translatable (string/text) field of [" + entity.getName() + "]");
+                }
+            }
+        }
+    }
+
+    private static void validateLanguages(IntentModel model, List<String> issues) {
+        for (String language : model.getLanguages()) {
+            if (language == null || !language.matches("[a-z]{2,3}")) {
+                issues.add("languages entry [" + language + "] must be a short lowercase language code (e.g. en, bg)");
             }
         }
     }

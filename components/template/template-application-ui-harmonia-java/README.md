@@ -26,7 +26,21 @@ the same for document headers plus a **metadata-driven** cascade in the line-ite
 dialog (`detail-register.js.template` emits `editColumns[].dependsOn`; filtered options
 live in a separate `draftOptions` store so the items table's label resolution keeps the
 full option set). The trigger's controller URL is precomputed as
-`widgetDependsOnControllerUrl` by `service-generate`'s `parameterUtils.js`. Remaining items are refinements — see the checklist + the
+`widgetDependsOnControllerUrl` by `service-generate`'s `parameterUtils.js`.
+**Multi-language data** is wired through a single per-user flag: the Settings page's
+**Region & Language** picker (rendered from the generated `config.js` `languages`, hidden
+for a single language) writes the shared `locale` Alpine store
+(`application-core/.../shell/js/stores/locale.js`, localStorage
+`codbex.harmonia.language`); the shared fetch client sends the value as
+`Accept-Language` on every call, which the generated multilingual Java repositories
+translate by (`<TABLE>_LANG` overlay), and the document Print flow prefers the same
+language when a template for it exists. The standalone **report page** offers **typed per-column filters** (date ranges,
+number ranges, boolean, text contains) from generation-time column metadata, applied
+**server-side** over the wrapped report query — pagination, count and CSV export all
+reflect the active filters. UI **labels** remain untranslated — the Harmonia
+framework itself has no i18n API (verified against 1.24.2: only breakpoint +
+colour-scheme helpers), so label i18n is a documented follow-up on top of the locale
+store; the generated `translations/en-US/*.json` catalogs already exist for it. Remaining items are refinements — see the checklist + the
 repo-root `HARMONIA_RUNTIME_PLAN.md` "Implementation status" + "Follow-ups".
 
 ## Architecture (how it differs from the Angular module)

@@ -35,6 +35,13 @@ public class IntentModel {
 
     /** Other intent models this one references cross-model (see {@link UsesIntent}). */
     private List<UsesIntent> uses = new ArrayList<>();
+    /**
+     * Optional data-language codes the app offers (e.g. {@code [en, bg]}, short lowercase codes;
+     * {@code en} - the base data - when omitted). Emitted onto the {@code .model} root; the Harmonia
+     * shell's Region &amp; Language setting lists them and sends the choice as {@code
+     * Accept-Language} on every call, which the generated multilingual repositories translate by.
+     */
+    private List<String> languages = new ArrayList<>();
 
     private List<EntityIntent> entities = new ArrayList<>();
     private List<ProcessIntent> processes = new ArrayList<>();
@@ -183,5 +190,13 @@ public class IntentModel {
 
     public void setRollups(List<RollupIntent> rollups) {
         this.rollups = rollups == null ? new ArrayList<>() : rollups;
+    }
+
+    public List<String> getLanguages() {
+        return languages;
+    }
+
+    public void setLanguages(List<String> languages) {
+        this.languages = languages;
     }
 }

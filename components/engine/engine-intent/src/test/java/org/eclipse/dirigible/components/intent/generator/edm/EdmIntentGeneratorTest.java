@@ -186,6 +186,36 @@ class EdmIntentGeneratorTest {
         assertNull(countryFk.get("widgetDependsOnProperty"));
     }
 
+    @Test
+    void multilingualEntityAndLanguagesFlowIntoTheModel() {
+        String yaml = """
+                name: uoms
+                languages: [en, bg]
+                entities:
+                  - name: UoM
+                    kind: setting
+                    multilingual: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "uoms");
+        List<Map<String, Object>> entities = entities(model);
+
+        assertEquals("true", entityByName(entities, "UoM").get("multilingual"),
+                "a multilingual entity should carry the EDM multilingual attribute");
+        assertNull(entityByName(entities, "Product").get("multilingual"), "a regular entity must not carry the attribute");
+
+        @SuppressWarnings("unchecked")
+        List<String> languages = (List<String>) ((Map<String, Object>) model.get("model")).get("languages");
+        assertEquals(List.of("en", "bg"), languages, "the intent's languages should land on the .model root");
+    }
+
     private static Map<String, Object> buildFromResource(String resource, String intentName) {
         IntentModel parsed = IntentParser.parse(readResource(resource));
         return EdmIntentGenerator.buildModelJsonForTest(parsed, intentName);

@@ -54,10 +54,14 @@ class IntentEngineIT extends IntegrationTest {
             name: orders
             description: Order management with approval workflow
             version: 1
+            # Data languages the app offers: the Harmonia Region & Language setting lists them and the
+            # multilingual entities translate by the chosen one.
+            languages: [en, bg]
 
             entities:
               - name: Country
                 kind: setting
+                multilingual: true
                 description: ISO 3166-1 country reference data
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
@@ -130,6 +134,11 @@ class IntentEngineIT extends IntegrationTest {
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+              # month(field) buckets a date dimension into a sortable YYYYMM integer.
+              - name: OrdersByMonth
+                source: Order
+                dimensions: ["month(orderDate)"]
+                measures: ["count(*)", "sum(total)"]
               - name: BigOrderItems
                 source: OrderItem
                 description: Order items with quantity over one, with their order date
@@ -146,6 +155,18 @@ class IntentEngineIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: Afghanistan, code2: AF }
                   - { id: 2, name: Albania,     code2: AL }
+              # Translations for the multilingual Country - land in ORDERS_COUNTRY_LANG.
+              - name: countries-bg
+                entity: Country
+                language: bg
+                rows:
+                  - { id: 1, name: "Афганистан" }
+                  - { id: 2, name: "Албания" }
+              # Large data sets stay OUT of the intent: an authored CSV in a subfolder, referenced
+              # by path - only the .csvim is generated.
+              - name: countries-extra
+                entity: Country
+                file: data/countries-extra.csv
 
             notifications:
               - name: orderUpdated
@@ -203,7 +224,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(2))
+                                                 .body("reports", hasSize(3))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -976,6 +997,86 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void multilingual_entity_generates_the_translation_stack() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
+
+        // Schema: the multilingual Country gets its sibling language table with the codbex shape.
+        String schema = contentOf("gen/orders/schema/" + PROJECT + ".schema");
+        assertTrue(schema.contains("ORDERS_COUNTRY_LANG"), "the schema should declare the <TABLE>_LANG table");
+        assertTrue(schema.contains("\"name\": \"Language\""), "the language table should carry the Language column");
+        assertTrue(schema.contains("\"name\": \"GUID\""), "the language table should carry the GUID primary key");
+        assertFalse(schema.contains("ORDERS_CUSTOMER_LANG"), "a non-multilingual entity must not get a language table");
+
+        // Java DAO: every read overlays the translations for the caller's Accept-Language.
+        String repository = contentOf("gen/orders/data/settings/CountryRepository.java");
+        assertTrue(repository.contains("Translator.translateList(super.findAll(), User.getLanguage(), \"ORDERS_COUNTRY\")"),
+                "the multilingual repository should overlay translations on findAll");
+        assertTrue(repository.contains("Translator.translateEntity(super.findById(id)"),
+                "the multilingual repository should overlay translations on findById");
+        assertTrue(repository.contains("public java.util.Optional<CountryEntity> findOne(Object id)"),
+                "the multilingual repository must also override findOne - the generated controller reads single records through it");
+        String customerRepository = contentOf("gen/orders/data/customer/CustomerRepository.java");
+        assertFalse(customerRepository.contains("Translator."), "a non-multilingual repository must stay untouched");
+
+        // Shell config: the offered data languages feed the Region & Language setting.
+        String config = contentOf("gen/orders/js/config.js");
+        assertTrue(config.contains("languages: [\"en\",\"bg\"]"), "config.js should carry the app's data languages");
+    }
+
+    @Test
+    void report_file_stack_generates_typed_column_filters() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // Replay the Harmonia report-file template like the editor does. The generation service
+        // derives the gen folder from the report file name (each report owns gen/<lowercased name>).
+        String payload = "{\"template\":\"template-application-ui-harmonia-java/template/template-report-file.js\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrdersByCustomer.report")
+                                                 .then()
+                                                 .statusCode(201));
+
+        // Backend: the report repository validates and applies per-column conditions over the wrapped
+        // query, typed from the report's own column metadata.
+        String repository = contentOf("gen/ordersbycustomer/data/reports/OrdersByCustomerRepository.java");
+        assertTrue(repository.contains("FILTER_COLUMNS"), "the report repository should carry the filterable-column allowlist");
+        assertTrue(repository.contains("SELECT * FROM (\").append(QUERY).append(\") AS \\\"REPORT_DATA\\\" WHERE"),
+                "conditions should wrap the report query");
+        assertTrue(repository.contains("\"GTE\", \">=\""), "range operators should be whitelisted");
+        String controller = contentOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
+        assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
+
+        // Frontend: the generated report page carries typed column metadata and the filter machinery.
+        // NB the case split: the UI files use the RAW genFolderName (the report file name,
+        // "OrdersByCustomer"), while the Java files use the sanitized javaGenFolderName
+        // ("ordersbycustomer") - two distinct folders on a case-sensitive filesystem.
+        String page = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/report.js");
+        assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
+        assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left' }"),
+                "the joined dimension should be a left-aligned text column");
+        assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
+        assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
+                "the page should build range and contains conditions");
+        String view = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/index.html");
+        assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
+                "the report view should carry the filter panel and toolbar toggle");
+        assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
+                "the report table should align and format cells from the column metadata");
+        assertTrue(page.contains("align: 'right', pattern: '### ### ### ##0.00'"),
+                "the page metadata should carry alignment + the money pattern for decimal columns");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1203,6 +1304,13 @@ class IntentEngineIT extends IntegrationTest {
                 modelBody.contains("\"widgetDependsOnProperty\": \"Customer\"")
                         && modelBody.contains("\"widgetDependsOnValueFrom\": \"CreditLimit\""),
                 "the .model JSON twin should carry the widgetDependsOn* attributes");
+
+        // Multilingual: Country carries the EDM multilingual attribute (its translations live in
+        // ORDERS_COUNTRY_LANG) and the intent's data languages land on the .model root.
+        assertTrue(edmXml.contains("multilingual=\"true\""), "a multilingual entity should carry the EDM multilingual attribute");
+        assertTrue(modelBody.contains("\"multilingual\": \"true\""), "the .model twin should carry the multilingual attribute");
+        assertTrue(modelBody.contains("\"languages\"") && modelBody.contains("\"bg\""),
+                "the intent's languages should land on the .model root");
     }
 
     private void assertGlue() {
@@ -1398,6 +1506,19 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"table\": \"ORDERS_ORDER\""),
                 "report table should be the same intent-prefixed table name the EDM declares as dataName");
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
+
+        // month(field) buckets the date dimension into a sortable YYYYMM integer, grouped the same way.
+        String monthly = contentOf("OrdersByMonth.report");
+        assertTrue(
+                monthly.contains(
+                        "(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))"),
+                "a month(field) dimension should emit the YYYYMM EXTRACT expression");
+        assertTrue(monthly.contains("as \\\"Month Order Date\\\""), "the bucketed column should carry a humanized alias");
+        assertTrue(monthly.contains("GROUP BY (EXTRACT(YEAR"), "the aggregation should group by the bucket expression");
+
+        // Rendering metadata on the model: numeric columns right-align, decimals carry the money pattern.
+        assertTrue(body.contains("\"align\": \"right\""), "numeric report columns should carry align: right");
+        assertTrue(body.contains("\"pattern\": \"### ### ### ##0.00\""), "decimal report columns should carry the money pattern");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
         // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
         // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds
@@ -1443,6 +1564,22 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(csvBody.startsWith("COUNTRY_ID,COUNTRY_NAME,COUNTRY_CODE2"),
                 "csv header should carry the upper-snake column names in entity-field order");
         assertTrue(csvBody.contains("1,Afghanistan,AF"), "csv should include the Afghanistan row with an integral id");
+
+        // The bg translation seed lands in the language table with the codbex _LANG shape.
+        String langCsvim = contentOf("countries-bg.csvim");
+        assertTrue(langCsvim.contains("\"table\": \"ORDERS_COUNTRY_LANG\""), "a language seed should target the <TABLE>_LANG table");
+        String langCsv = contentOf("countries-bg.csv");
+        assertTrue(langCsv.startsWith("GUID,Id,Name,Language"),
+                "the language csv should carry GUID + Id + the referenced PascalCase translatable columns + Language");
+        assertTrue(langCsv.contains("1,1,Афганистан,bg"), "the language csv should carry the translation rows with auto-numbered GUIDs");
+
+        // A file seed (large authored data set) generates ONLY the .csvim, pointing at the
+        // developer-owned CSV in its subfolder; no CSV body is generated (and none is scrubbed).
+        String fileCsvim = contentOf("countries-extra.csvim");
+        assertTrue(fileCsvim.contains("\"file\": \"/" + PROJECT + "/data/countries-extra.csv\""),
+                "a file seed's csvim should point at the authored CSV");
+        assertTrue(fileCsvim.contains("\"table\": \"ORDERS_COUNTRY\""), "a file seed still targets the entity's table");
+        assertFalse(resource("countries-extra.csv").exists(), "a file seed must not generate a CSV body");
     }
 
     @AfterEach

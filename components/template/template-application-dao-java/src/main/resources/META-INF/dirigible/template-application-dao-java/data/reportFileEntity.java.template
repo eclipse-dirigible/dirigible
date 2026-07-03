@@ -12,15 +12,32 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * Generated repository for the ${name} report. Executes the report query against the configured data
  * source and returns the rows as generic maps keyed by the result-set column aliases.
  *
+ * Besides the report's own declared parameters, a request may carry per-column {@code conditions}
+ * ({@code [{column, operator, value}]}) applied OVER the report's output: the query is wrapped as
+ * {@code SELECT * FROM (QUERY) AS "REPORT_DATA" WHERE "<alias>" <op> :reportFilter<i>}. Columns are
+ * validated against the report's column aliases and typed from the report metadata, operators
+ * against a fixed whitelist - so the filter surface is exactly the visible table.
+ *
  * Do not modify the content as it may be re-generated again.
  */
 public class ${name}Repository {
 
     private static final String QUERY = ${queryJava};
 
+    /** The report's output columns (result-set alias -> SQL type) - the filterable surface. */
+    private static final Map<String, String> FILTER_COLUMNS = Map.ofEntries(
+#foreach($column in $columns)
+            Map.entry("${column.alias}", "${column.type}")#if($foreach.hasNext),#end
+#end
+    );
+
+    private static final Map<String, String> OPERATORS =
+            Map.of("EQ", "=", "NE", "<>", "GT", ">", "GTE", ">=", "LT", "<", "LTE", "<=", "LIKE", "LIKE");
+
     @SuppressWarnings("unchecked")
     public List<Map<String, Object>> findAll(Integer limit, Integer offset, Map<String, Object> filter) {
-        StringBuilder sql = new StringBuilder(QUERY);
+        List<Map<String, Object>> parameters = baseParameters(filter);
+        StringBuilder sql = new StringBuilder(filteredQuery(filter, parameters));
         if (limit != null) {
             sql.append(" LIMIT ").append(limit.intValue());
         }
@@ -28,7 +45,7 @@ public class ${name}Repository {
             sql.append(" OFFSET ").append(offset.intValue());
         }
         try {
-            String result = Database.queryNamed(sql.toString(), parameters(filter));
+            String result = Database.queryNamed(sql.toString(), Json.stringify(parameters));
             return (List<Map<String, Object>>) Json.parse(result, List.class);
         } catch (Throwable t) {
             throw new RuntimeException("Failed to execute report ${name}", t);
@@ -37,9 +54,10 @@ public class ${name}Repository {
 
     @SuppressWarnings("unchecked")
     public long count(Map<String, Object> filter) {
-        String sql = "SELECT COUNT(*) AS REPORT_COUNT FROM (" + QUERY + ")";
+        List<Map<String, Object>> parameters = baseParameters(filter);
+        String sql = "SELECT COUNT(*) AS REPORT_COUNT FROM (" + filteredQuery(filter, parameters) + ") AS \"REPORT_TOTAL\"";
         try {
-            String result = Database.queryNamed(sql, parameters(filter));
+            String result = Database.queryNamed(sql, Json.stringify(parameters));
             List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);
             if (rows.isEmpty()) {
                 return 0L;
@@ -54,16 +72,71 @@ public class ${name}Repository {
         }
     }
 
-    public List<Map<String, Object>> exportCsv() {
-        return findAll(null, null, null);
+    public List<Map<String, Object>> exportCsv(Map<String, Object> filter) {
+        return findAll(null, null, filter);
     }
 
-    private static String parameters(Map<String, Object> filter) {
+    /**
+     * The report query, wrapped with the request's per-column conditions when present. Each condition
+     * binds a named parameter typed from the column's report metadata.
+     */
+    private static String filteredQuery(Map<String, Object> filter, List<Map<String, Object>> parameters) {
+        List<Map<String, Object>> conditions = conditionsOf(filter);
+        if (conditions.isEmpty()) {
+            return QUERY;
+        }
+        StringBuilder sql = new StringBuilder("SELECT * FROM (").append(QUERY).append(") AS \"REPORT_DATA\" WHERE ");
+        for (int i = 0; i < conditions.size(); i++) {
+            Map<String, Object> condition = conditions.get(i);
+            String column = stringValue(condition.get("column"));
+            String type = FILTER_COLUMNS.get(column);
+            if (type == null) {
+                throw new IllegalArgumentException("Unknown report filter column: " + column);
+            }
+            String operator = OPERATORS.get(stringValue(condition.get("operator")));
+            if (operator == null) {
+                throw new IllegalArgumentException("Unknown report filter operator: " + condition.get("operator"));
+            }
+            if (i > 0) {
+                sql.append(" AND ");
+            }
+            String marker = "reportFilter" + i;
+            sql.append("\"").append(column).append("\" ").append(operator).append(" :").append(marker);
+            parameters.add(parameter(marker, parameterType(type), condition.get("value")));
+        }
+        return sql.toString();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static List<Map<String, Object>> conditionsOf(Map<String, Object> filter) {
+        Object conditions = filter == null ? null : filter.get("conditions");
+        if (conditions instanceof List<?> list) {
+            List<Map<String, Object>> result = new ArrayList<>();
+            for (Object item : list) {
+                if (item instanceof Map<?, ?> map) {
+                    result.add((Map<String, Object>) map);
+                }
+            }
+            return result;
+        }
+        return List.of();
+    }
+
+    /** The named-parameter type for a report column type. */
+    private static String parameterType(String columnType) {
+        return "CHARACTER VARYING".equalsIgnoreCase(columnType) ? "VARCHAR" : columnType;
+    }
+
+    private static String stringValue(Object value) {
+        return value == null ? null : value.toString();
+    }
+
+    private static List<Map<String, Object>> baseParameters(Map<String, Object> filter) {
         List<Map<String, Object>> parameters = new ArrayList<>();
 #foreach($parameter in $parameters)
         parameters.add(parameter("${parameter.name}", "${parameter.type}", value(filter, "${parameter.name}", "${parameter.initial}")));
 #end
-        return Json.stringify(parameters);
+        return parameters;
     }
 
     private static Map<String, Object> parameter(String name, String type, Object value) {

@@ -157,6 +157,24 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
+may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
+layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java
+repository overlays the translated values for the caller's `Accept-Language` - the Harmonia shell's
+Region & Language setting (fed by the top-level `languages:`) sends the user's choice on every call.
+Author translations as seeds with a `language:` code (see seeds). Typical for nomenclatures:
+
+```yaml
+languages: [en, bg]        # top level: the data languages the app offers
+entities:
+  - name: UoM
+    kind: setting
+    multilingual: true
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: name, type: string, required: true, length: 100 }
+```
+
 **Custom imports (`imports:` on an entity):** a multi-line string of Java `import ...;` lines injected
 verbatim into that entity's generated repository, so a calculated-field action (or any custom class)
 can be referenced from the calculated fields by simple name. Pair it with `calculatedActionOnCreate`:
@@ -379,6 +397,10 @@ reports:
 ```
 
 **Rules:** `source` is a declared entity. A bare to-one relation dimension shows the target's label,
+
+A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM integer, e.g.
+202607) or `year(field)` — e.g. `dimensions: ["month(date)"]` with `measures: ["sum(total)", "sum(vat)"]`
+for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
 ### permissions - roles
@@ -406,7 +428,36 @@ seeds:
       - { id: 2, name: Reference }
 ```
 
-**Rules:** `entity` must be declared; integer `id`s stay integral.
+**Rules:** `entity` must be declared; integer `id`s stay integral. A row may set a to-one relation's
+FK by the relation's authored name (e.g. `Country: 34` on a City row).
+
+**Large data sets - reference a CSV file instead of inline rows.** Small configuration sets and
+statuses belong inline (their values are part of the flows and UX); a countries/currencies-sized list
+is just data and would bloat the intent. Point the seed at an authored CSV in a **subfolder** (root
+`.csv` files are owned and scrubbed by regeneration); only the `.csvim` is generated. The CSV's header
+carries the physical column names (`COUNTRY_ID,COUNTRY_NAME,...`):
+
+```yaml
+seeds:
+  - name: countries
+    entity: Country
+    file: data/countries.csv     # developer-owned; exactly one of file/rows
+```
+
+**Translations (`language:` on a seed).** For a `multilingual: true` entity, a seed with a short
+language code carries per-language values - it lands in the entity's `<TABLE>_LANG` table. Rows carry
+the base row's `id` plus translatable (string/text) fields only:
+
+```yaml
+seeds:
+  - name: uoms-bg
+    entity: UoM
+    language: bg
+    rows:
+      - { id: 1, name: "Килограм" }
+```
+(A `language:` seed may also use `file:` - the authored CSV then carries the
+`GUID,Id,<columns>,Language` header.)
 
 ### notifications - email on a data change
 
