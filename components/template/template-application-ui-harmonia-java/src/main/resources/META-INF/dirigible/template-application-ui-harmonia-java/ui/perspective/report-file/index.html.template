@@ -33,6 +33,7 @@
         </button>
         <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
         <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" data-lucide="download"></i><span>Export</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" data-lucide="printer"></i><span>Print</span></button>
       </div>
 
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,

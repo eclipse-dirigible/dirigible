@@ -67,5 +67,44 @@ document.addEventListener('alpine:init', () => {
         return [cols.join(',')].concat(rows.map(r => cols.map(c => esc(r[c])).join(','))).join('\n');
       }
     },
+
+    // Column metadata for printing (label + numeric alignment/format), from the report model.
+    printColumns: [
+#foreach($property in $properties)
+      { key: '${property.name}', label: #if($property.widgetLabel)'${property.widgetLabel}'#else'${property.name}'#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end },
+#end
+    ],
+
+    // Print the report: the FULL result set (POST /export, same as the CSV export) rendered into a
+    // minimal print document in a new window.
+    async printReport() {
+      try {
+        const data = await App.services.api.post(this.apiPath + '/export', {});
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) return;
+        const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const cell = (col, row) => col.float ? this.displayNumber(row[col.key], col.pattern) : row[col.key];
+        const th = this.printColumns.map(c => '<th class="' + (c.number ? 'text-right' : '') + '">' + esc(c.label) + '</th>').join('');
+        const body = rows.map(r => '<tr>' + this.printColumns.map(c => '<td class="' + (c.number ? 'text-right' : '') + '">' + esc(cell(c, r)) + '</td>').join('') + '</tr>').join('');
+        const html = '<!doctype html><html><head><title>${name}</title><style>'
+          + 'body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}'
+          + 'h1{font-size:18px;margin:0 0 4px}'
+          + '.meta{font-size:11px;color:#555;margin:0 0 16px}'
+          + 'table{border-collapse:collapse;width:100%;font-size:12px}'
+          + 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
+          + 'th{background:#eee}.text-right{text-align:right}'
+          + '</style></head><body><h1>${name}</h1>'
+          + '<p class="meta">' + rows.length + ' rows - ' + esc(new Date().toLocaleString()) + '</p>'
+          + '<table><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></body></html>';
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        w.print();
+      } catch (e) {
+        this.error = App.services.apiErrors.messageFor(e, 'Print failed.');
+      }
+    },
   }));
 }, { once: true });

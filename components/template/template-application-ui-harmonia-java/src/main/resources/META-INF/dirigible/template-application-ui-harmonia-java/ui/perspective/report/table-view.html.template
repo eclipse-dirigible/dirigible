@@ -5,6 +5,7 @@
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
     <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" data-lucide="download"></i><span>Export</span></button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" data-lucide="printer"></i><span>Print</span></button>
   </div>
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
   <div x-show="state === 'error'" x-h-alert data-variant="negative" role="alert" class="m-4"><div x-h-alert-description x-text="error"></div></div>
