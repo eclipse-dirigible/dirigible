@@ -146,7 +146,7 @@
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
     <div class="vbox gap-2 w-full" x-show="itemsEnabled">
       <div x-h-toolbar data-variant="transparent">
-        <span x-h-toolbar-title class="shrink-0">${documentItemsLabel}</span>
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
         <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
       </div>
