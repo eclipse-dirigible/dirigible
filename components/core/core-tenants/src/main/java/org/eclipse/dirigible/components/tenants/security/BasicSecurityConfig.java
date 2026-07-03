@@ -9,17 +9,21 @@
  */
 package org.eclipse.dirigible.components.tenants.security;
 
+import jakarta.servlet.http.HttpServletRequest;
+
 import org.eclipse.dirigible.components.base.http.access.CorsConfigurationSourceProvider;
 import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigurator;
 import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfigurationSource;
 
@@ -49,11 +53,35 @@ public class BasicSecurityConfig {
             .addFilterBefore(tenantContextInitFilter, UsernamePasswordAuthenticationFilter.class)
             .formLogin(Customizer.withDefaults())
             .logout(logout -> logout.deleteCookies("JSESSIONID"))
-            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()));
+            .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
+            // A programmatic (fetch/XHR) request whose session expired must get a PLAIN 401 - the
+            // default Basic entry point's `WWW-Authenticate: Basic` challenge makes the BROWSER pop
+            // its native login dialog before any script sees the response (the generated apps poll
+            // the inbox every 30s, so an idle tab surfaced the dialog "out of nowhere"). Browser
+            // navigations don't match and keep the normal Basic/form login flow.
+            .exceptionHandling(handling -> handling.defaultAuthenticationEntryPointFor(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+                    BasicSecurityConfig::isProgrammaticRequest));
 
         httpSecurityURIConfigurator.configure(http);
 
         return http.build();
+    }
+
+    /**
+     * Whether the request comes from script (fetch / XMLHttpRequest) rather than a browser navigation:
+     * every modern browser stamps programmatic requests with a {@code Sec-Fetch-Mode} other than
+     * {@code navigate}; the {@code X-Requested-With} header is the legacy client-sent marker kept as a
+     * fallback.
+     *
+     * @param request the inbound request
+     * @return true for a programmatic request
+     */
+    private static boolean isProgrammaticRequest(HttpServletRequest request) {
+        String secFetchMode = request.getHeader("Sec-Fetch-Mode");
+        if (secFetchMode != null) {
+            return !"navigate".equalsIgnoreCase(secFetchMode);
+        }
+        return "XMLHttpRequest".equalsIgnoreCase(request.getHeader("X-Requested-With"));
     }
 
     /**
