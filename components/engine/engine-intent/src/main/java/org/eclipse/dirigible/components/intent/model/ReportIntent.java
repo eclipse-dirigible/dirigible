@@ -30,6 +30,11 @@ public class ReportIntent {
      * {@code dashboard: false} excludes it (it still appears in the sidebar Reports section).
      */
     private Boolean dashboard;
+    /**
+     * Optional dashboard KPI derived from this report; when present, the dashboard shows the KPI tile
+     * instead of the report's preview tile.
+     */
+    private WidgetIntent widget;
 
     public String getName() {
         return name;
@@ -90,5 +95,13 @@ public class ReportIntent {
 
     public void setDashboard(Boolean dashboard) {
         this.dashboard = dashboard;
+    }
+
+    public WidgetIntent getWidget() {
+        return widget;
+    }
+
+    public void setWidget(WidgetIntent widget) {
+        this.widget = widget;
     }
 }

@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -34,6 +35,7 @@ import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
+import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 import org.yaml.snakeyaml.constructor.SafeConstructor;
@@ -152,6 +154,7 @@ public final class IntentParser {
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
+        validateWidgets(model, issues);
         validateSeeds(model, entityNames, issues);
         validateLanguages(model, issues);
         validateNotifications(model, entityNames, issues);
@@ -1170,7 +1173,104 @@ public final class IntentParser {
             } else if (!entityNames.contains(report.getSource())) {
                 issues.add("report [" + report.getName() + "] sources from unknown entity [" + report.getSource() + "]");
             }
+            if (report.getWidget() != null) {
+                validateReportWidget(report, issues);
+            }
         }
+    }
+
+    private static final Set<String> WIDGET_KINDS = Set.of("count", "value", "list");
+    private static final Set<String> CUSTOM_WIDGET_KINDS = Set.of("kpi", "page");
+
+    /**
+     * Top-level {@code widgets:} — custom dashboard widgets: {@code kind: kpi} fetches {@code {value,
+     * description?}} from the developer's REST endpoint, {@code kind: page} embeds the developer's HTML
+     * page. The URL is the developer's own contract (typically code under {@code custom/}), so only its
+     * shape is checked: same-origin (an absolute or relative path, no scheme/host) to keep the
+     * dashboard's fetch/iframe inside the application.
+     */
+    private static void validateWidgets(IntentModel model, List<String> issues) {
+        Set<String> widgetNames = new HashSet<>();
+        for (CustomWidgetIntent widget : model.getWidgets()) {
+            if (widget.getName() == null || widget.getName()
+                                                  .isBlank()) {
+                issues.add("widget has no name");
+                continue;
+            }
+            String prefix = "widget [" + widget.getName() + "]";
+            if (!widgetNames.add(widget.getName())) {
+                issues.add("duplicate widget [" + widget.getName() + "]");
+            }
+            String kind = widget.getKind() == null ? "kpi"
+                    : widget.getKind()
+                            .trim();
+            if (!CUSTOM_WIDGET_KINDS.contains(kind)) {
+                issues.add(prefix + " has unknown kind [" + widget.getKind() + "] - expected one of " + CUSTOM_WIDGET_KINDS);
+            }
+            String url = widget.getUrl();
+            if (url == null || url.isBlank()) {
+                issues.add(prefix + " has no url");
+            } else if (url.contains("://") || url.startsWith("//")) {
+                issues.add(prefix + " url must be a same-origin path (no scheme/host): [" + url + "]");
+            }
+        }
+    }
+
+    /**
+     * A report {@code widget:} block turns the report into a dashboard KPI tile. {@code kind: count}
+     * (default) shows the report's record count; {@code kind: value} shows one aggregate cell -
+     * {@code value} names a declared measure and {@code at} pins declared dimensions to a token
+     * ({@code now}) or a literal; {@code kind: list} shows the report's first {@code limit} rows.
+     * Alias/type resolution happens in the report generator (same leniency as report filters).
+     */
+    private static void validateReportWidget(ReportIntent report, List<String> issues) {
+        WidgetIntent widget = report.getWidget();
+        String prefix = "report [" + report.getName() + "] widget";
+        String kind = widget.getKind() == null ? (widget.getValue() != null ? "value" : "count")
+                : widget.getKind()
+                        .trim();
+        if (!WIDGET_KINDS.contains(kind)) {
+            issues.add(prefix + " has unknown kind [" + widget.getKind() + "] - expected one of " + WIDGET_KINDS);
+            return;
+        }
+        if ("value".equals(kind)) {
+            if (widget.getValue() == null || widget.getValue()
+                                                   .isBlank()) {
+                issues.add(prefix + " of kind [value] requires `value` naming a declared measure");
+            } else if (report.getMeasures()
+                             .stream()
+                             .noneMatch(m -> m != null && normalizeExpression(m).equals(normalizeExpression(widget.getValue())))) {
+                issues.add(prefix + " value [" + widget.getValue() + "] does not name a declared measure");
+            }
+        } else if (widget.getValue() != null) {
+            issues.add(prefix + " of kind [" + kind + "] must not declare `value` - use kind [value]");
+        }
+        for (Map.Entry<String, Object> pin : widget.getAt()
+                                                   .entrySet()) {
+            String dimension = pin.getKey();
+            if (report.getDimensions()
+                      .stream()
+                      .noneMatch(d -> d != null && normalizeExpression(d).equals(normalizeExpression(dimension)))) {
+                issues.add(prefix + " pins unknown dimension [" + dimension + "]");
+            }
+            Object value = pin.getValue();
+            if (!(value instanceof String || value instanceof Number || value instanceof Boolean)) {
+                issues.add(prefix + " pin [" + dimension + "] must be a scalar token or literal");
+            }
+        }
+        if (widget.getLimit() != null) {
+            if (!"list".equals(kind)) {
+                issues.add(prefix + " of kind [" + kind + "] must not declare `limit` - it applies to kind [list] only");
+            } else if (widget.getLimit() < 1) {
+                issues.add(prefix + " limit must be a positive number");
+            }
+        }
+    }
+
+    /** Whitespace/case-insensitive compare key for measure and dimension expressions. */
+    private static String normalizeExpression(String expression) {
+        return expression.replaceAll("\\s+", "")
+                         .toLowerCase(Locale.ROOT);
     }
 
     private static void validateSeeds(IntentModel model, Set<String> entityNames, List<String> issues) {

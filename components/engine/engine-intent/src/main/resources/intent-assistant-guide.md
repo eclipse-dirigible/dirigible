@@ -407,6 +407,75 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].widget - dashboard KPI tiles
+
+**Use when:** the user wants a meaningful number on the home dashboard — "overdue invoices",
+"revenue this month" — instead of (or besides) the full report. The report supplies the data; the
+widget only says which single number (or top-N slice) the tile shows.
+
+```yaml
+reports:
+  - name: OverdueInvoices
+    source: Invoice
+    dimensions: [number, customer.name, dueOn, total]
+    filter: "dueOn < CURRENT_DATE and status.name <> 'Paid'"
+    widget:
+      kind: count                      # default: the number of records the report yields
+      label: Overdue Invoices          # optional, defaults to the report label
+      icon: alert-triangle             # optional Lucide icon, default gauge
+
+  - name: RevenueByMonth
+    source: Invoice
+    dimensions: ["month(issuedOn)"]
+    measures: ["sum(total)"]
+    widget:
+      value: "sum(total)"              # names a declared measure => kind: value
+      at: { "month(issuedOn)": now }   # pin dimensions: the token `now` or a literal
+      label: Revenue (this month)
+      icon: banknote
+
+  - name: TopDebtors
+    source: Invoice
+    dimensions: [customer.name]
+    measures: ["sum(total)"]
+    filter: "status.name <> 'Paid'"
+    widget: { kind: list, limit: 5, label: Top Debtors, icon: list-ordered }
+```
+
+**Rules:** `kind` is `count` (default) / `value` / `list`. `value` must name a declared measure and
+implies `kind: value`; `limit` (default 5) applies to `kind: list` only. `at` keys must name
+declared dimensions; the token `now` resolves at view time, type-aware — current YYYYMM on a
+`month(x)` dimension, current year on `year(x)`, today on a date column — anything else is a
+literal pinned with an equals condition. **Behavior:** a widget-bearing report shows a compact KPI
+tile INSTEAD of its dashboard preview tile (click still opens the full report), and declaring any
+widget replaces the auto per-entity record-count tiles; `dashboard: false` hides both tiles of a
+report. Prefer a handful of business-meaningful widgets over restating entity counts.
+
+### widgets - custom dashboard widgets
+
+**Use when:** the dashboard needs content the report machinery cannot express - a number computed
+by hand-written code, or an entirely custom visualization page. This is the dashboard's escape
+hatch; prefer `reports[].widget` when a report can supply the number.
+
+```yaml
+widgets:
+  - name: SystemHealth
+    kind: kpi                                    # default: a number tile fed by a REST endpoint
+    url: /services/js/sales/custom/health.js     # GET returns { value, description? }
+    label: System Health                         # optional, defaults to the humanized name
+    icon: activity                               # optional Lucide icon, default gauge
+  - name: SalesFunnel
+    kind: page                                   # a large tile embedding the developer's HTML page
+    url: /services/web/sales/custom/funnel/index.html
+```
+
+**Rules:** `kind` is `kpi` (default) or `page` - the kind implies how the `url` is consumed (JSON
+fetch vs iframe), so there is no separate source-type field. `url` must be a same-origin path (no
+scheme/host); the implementation is hand-written code under the project's `custom/` folder (e.g. a
+client-Java `@Component @Controller`) or any served page. A `kpi` endpoint returns
+`{ "value": <number|string>, "description": "optional secondary line" }`. Declaring any widget
+(custom or report-attached) replaces the auto per-entity record-count tiles.
+
 ### permissions - roles
 
 **Use when:** different users may do different things.

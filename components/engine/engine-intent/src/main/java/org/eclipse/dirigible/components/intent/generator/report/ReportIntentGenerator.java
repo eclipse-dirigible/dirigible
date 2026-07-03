@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -141,6 +142,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> columns = new ArrayList<>();
         List<String> selectParts = new ArrayList<>();
         List<String> groupParts = new ArrayList<>();
+        // Widget resolution inputs: the column each authored dimension/measure expression produced
+        // (keyed by the whitespace/case-insensitive expression), plus the date-bucket function of a
+        // month(x)/year(x) dimension so the KPI runtime can resolve the `now` token type-aware.
+        Map<String, WidgetDimension> dimensionColumns = new LinkedHashMap<>();
+        Map<String, Map<String, Object>> measureColumns = new LinkedHashMap<>();
 
         for (String dimension : report.getDimensions()) {
             if (dimension == null || dimension.isBlank()) {
@@ -162,7 +168,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
                         : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
                 String alias = humanize(function + " " + fieldReference.replace('.', ' '));
-                columns.add(column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated));
+                Map<String, Object> bucketColumn = column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated);
+                columns.add(bucketColumn);
+                dimensionColumns.put(expressionKey(dimension), new WidgetDimension(bucketColumn, function));
                 selectParts.add(expression + " as \"" + alias + "\"");
                 if (aggregated) {
                     groupParts.add(expression);
@@ -171,7 +179,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
             registerJoin(joins, ref);
-            columns.add(column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE", aggregated));
+            Map<String, Object> dimensionColumn =
+                    column(ref.tableAlias, ref.displayAlias, ref.physicalColumn, ref.reportType, "NONE", aggregated);
+            columns.add(dimensionColumn);
+            dimensionColumns.put(expressionKey(dimension), new WidgetDimension(dimensionColumn, null));
             selectParts.add(ref.qualified() + " as \"" + ref.displayAlias + "\"");
             if (aggregated) {
                 groupParts.add(ref.qualified());
@@ -181,7 +192,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (measure == null || measure.isBlank()) {
                 continue;
             }
+            int before = columns.size();
             addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns, selectParts);
+            if (columns.size() > before) {
+                measureColumns.put(expressionKey(measure), columns.get(before));
+            }
         }
 
         String where = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
@@ -200,6 +215,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // dashboard: false excludes the report's tile from the home dashboard (it still shows in the
         // sidebar). Carried on the .report; the Harmonia reports store reads it.
         document.put("dashboard", report.isDashboardExcluded() ? Boolean.FALSE : Boolean.TRUE);
+        if (report.getWidget() != null) {
+            document.put("widget", widget(report, dimensionColumns, measureColumns));
+        }
         document.put("columns", columns);
         document.put("query", query);
         document.put("conditions", conditions(context, model, source, baseAlias, report.getFilter()));
@@ -234,6 +252,86 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
         }
         LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", measure);
+    }
+
+    /**
+     * A dimension's emitted column plus its date-bucket function ({@code month}/{@code year}), if any.
+     */
+    record WidgetDimension(Map<String, Object> column, String bucket) {
+    }
+
+    /**
+     * The report's dashboard KPI, resolved from authored expressions to the report's own column aliases
+     * so the runtime can query the generated report controller directly: {@code kind: count} uses the
+     * count endpoint, {@code kind: value} reads {@code valueColumn} off the row matching the {@code at}
+     * pins (typed EQ conditions), {@code kind: list} shows the first {@code limit} rows. The
+     * {@code now} token stays symbolic - the dashboard resolves it client-side, type-aware per the
+     * pinned column's {@code bucket}/{@code type}. No SQL and no URLs live in this block.
+     */
+    static Map<String, Object> widget(ReportIntent report, Map<String, WidgetDimension> dimensionColumns,
+            Map<String, Map<String, Object>> measureColumns) {
+        WidgetIntent intent = report.getWidget();
+        String kind = intent.getKind() != null && !intent.getKind()
+                                                         .isBlank() ? intent.getKind()
+                                                                            .trim()
+                                                                 : (intent.getValue() != null ? "value" : "count");
+        Map<String, Object> widget = new LinkedHashMap<>();
+        widget.put("kind", kind);
+        widget.put("label", intent.getLabel() != null && !intent.getLabel()
+                                                                .isBlank() ? intent.getLabel() : humanize(report.getName()));
+        widget.put("tId", translationId("widget" + report.getName()));
+        widget.put("icon", intent.getIcon() != null && !intent.getIcon()
+                                                              .isBlank() ? intent.getIcon() : "gauge");
+        if ("value".equals(kind)) {
+            Map<String, Object> measureColumn = measureColumns.get(expressionKey(intent.getValue()));
+            if (measureColumn == null) {
+                LOGGER.warn("Widget of report [{}] references measure [{}] which produced no column - the KPI will not resolve",
+                        report.getName(), intent.getValue());
+            } else {
+                widget.put("valueColumn", measureColumn.get("alias"));
+                widget.put("valueType", measureColumn.get("type"));
+                if (measureColumn.containsKey("pattern")) {
+                    widget.put("pattern", measureColumn.get("pattern"));
+                }
+            }
+        }
+        if ("list".equals(kind)) {
+            widget.put("limit", intent.getLimit() == null ? 5 : intent.getLimit());
+        }
+        List<Map<String, Object>> pins = new ArrayList<>();
+        for (Map.Entry<String, Object> at : intent.getAt()
+                                                  .entrySet()) {
+            WidgetDimension dimension = dimensionColumns.get(expressionKey(at.getKey()));
+            if (dimension == null) {
+                LOGGER.warn("Widget of report [{}] pins unknown dimension [{}] - skipping the pin", report.getName(), at.getKey());
+                continue;
+            }
+            Map<String, Object> pin = new LinkedHashMap<>();
+            pin.put("column", dimension.column()
+                                       .get("alias"));
+            pin.put("type", dimension.column()
+                                     .get("type"));
+            if (dimension.bucket() != null) {
+                pin.put("bucket", dimension.bucket());
+            }
+            if ("now".equals(at.getValue())) {
+                pin.put("token", "now");
+            } else {
+                pin.put("value", at.getValue());
+            }
+            pins.add(pin);
+        }
+        if (!pins.isEmpty()) {
+            widget.put("at", pins);
+        }
+        return widget;
+    }
+
+    /** Whitespace/case-insensitive compare key for authored measure and dimension expressions. */
+    private static String expressionKey(String expression) {
+        return expression == null ? ""
+                : expression.replaceAll("\\s+", "")
+                            .toLowerCase(Locale.ROOT);
     }
 
     /**

@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -308,6 +310,23 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                   .isEmpty()) {
             body.put("languages", new ArrayList<>(model.getLanguages()));
         }
+        // Any declared dashboard widget - a report-attached KPI or a custom widget - flips this
+        // .model root flag so the Harmonia shell template suppresses the auto per-entity count tiles
+        // at generation time: declared widgets replace them. (Report-attached widget definitions
+        // live in the .report files, read by the runtime store; custom widgets are baked below.)
+        boolean reportWidgets = model.getReports()
+                                     .stream()
+                                     .anyMatch(report -> report.getWidget() != null);
+        List<Map<String, Object>> customWidgets = buildCustomWidgets(model);
+        if (reportWidgets || !customWidgets.isEmpty()) {
+            body.put("dashboardKpis", Boolean.TRUE);
+        }
+        // Custom dashboard widgets (top-level `widgets:`): developer-supplied REST KPIs (kind kpi -
+        // the url returns {value, description?}) and embedded pages (kind page - the url is iframed).
+        // Carried on the .model root; the Harmonia shell template bakes them into the dashboard.
+        if (!customWidgets.isEmpty()) {
+            body.put("widgets", customWidgets);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -432,6 +451,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     private static boolean notBlank(String value) {
         return value != null && !value.isBlank();
+    }
+
+    /**
+     * The custom dashboard widgets for the {@code .model} root: name, kind ({@code kpi} default /
+     * {@code page}), the developer's same-origin URL, presentation defaults, and a {@code tId} that
+     * lands in the model's translation catalog. Unnamed/duplicate widgets are skipped with a warning
+     * (the parser already reports them as validation issues).
+     */
+    private static List<Map<String, Object>> buildCustomWidgets(IntentModel model) {
+        List<Map<String, Object>> widgets = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (CustomWidgetIntent widget : model.getWidgets()) {
+            if (widget.getName() == null || widget.getName()
+                                                  .isBlank()
+                    || !seen.add(widget.getName())) {
+                LOGGER.warn("Skipping unnamed or duplicate custom widget in intent [{}]", model.getName());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", widget.getName());
+            entry.put("kind", notBlank(widget.getKind()) ? widget.getKind()
+                                                                 .trim()
+                    : "kpi");
+            entry.put("url", widget.getUrl());
+            entry.put("label", notBlank(widget.getLabel()) ? widget.getLabel() : IntentNaming.humanize(widget.getName()));
+            entry.put("tId", "widget" + widget.getName()
+                                              .replace(" ", "")
+                                              .replace("_", "")
+                                              .replace(".", "")
+                                              .replace(":", ""));
+            entry.put("icon", notBlank(widget.getIcon()) ? widget.getIcon() : "gauge");
+            if (notBlank(widget.getDescription())) {
+                entry.put("description", widget.getDescription());
+            }
+            widgets.add(entry);
+        }
+        return widgets;
     }
 
     private static Map<String, Object> perspectiveEntry(String name, int order, String icon) {

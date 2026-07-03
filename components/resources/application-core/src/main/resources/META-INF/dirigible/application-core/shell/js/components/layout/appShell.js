@@ -97,7 +97,7 @@ document.addEventListener('alpine:init', () => {
       if (SHELL[top]) {
         const selectedReport = top === 'reports' && this.$store.reports && this.$store.reports.selected;
         crumbs.push({ label: SHELL[top], route: selectedReport ? '/' + top : null });
-        if (selectedReport) crumbs.push({ label: this.$store.reports.selected.label, route: null });
+        if (selectedReport) crumbs.push({ label: this.$store.reports.displayLabel(this.$store.reports.selected), route: null });
         return crumbs;
       }
 

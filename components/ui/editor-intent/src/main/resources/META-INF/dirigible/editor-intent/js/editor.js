@@ -504,7 +504,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const renderGlue = () => {
         const categories = [
             { list: $scope.model.forms, icon: ICON.form, color: COLOR.output, entity: f => f.forEntity, detail: () => 'form' },
-            { list: $scope.model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: () => 'report' },
+            { list: $scope.model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: r => r.widget ? 'report • KPI ' + (r.widget.kind || (r.widget.value ? 'value' : 'count')) : 'report' },
             { list: $scope.model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => (eventOf(n.event) || {}).entity, detail: n => eventVerb((eventOf(n.event) || {}).kind) + ' → email' },
             { list: $scope.model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.entity, detail: s => s.cron || 'scheduled' },
             { list: $scope.model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => (eventOf(i.event) || {}).entity, detail: i => (i.method || 'POST') + ' ' + eventVerb((eventOf(i.event) || {}).kind) },

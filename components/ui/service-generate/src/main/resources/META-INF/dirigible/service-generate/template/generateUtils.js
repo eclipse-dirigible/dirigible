@@ -82,6 +82,10 @@ function getReportTranslations(report) {
     for (let i = 0; i < report.columns.length; i++) {
         translations[report.columns[i]['tId']] = report.columns[i]['label'];
     }
+    // A report-attached KPI widget carries its own tile label (shown on the home dashboard).
+    if (report.widget && report.widget.tId) {
+        translations[report.widget.tId] = report.widget.label || report.label;
+    }
     return translations;
 }
 
@@ -759,6 +763,14 @@ export function generateFiles(model, parameters, templateSources) {
                         translations.t[`${model.navigations[i].id}nheader`] = model.navigations[i].header;
                     }
                     translations.t[model.navigations[i].id] = model.navigations[i].label;
+                }
+            }
+            // Custom dashboard widgets (the .model root `widgets` array): their tile labels.
+            if (model.widgets) {
+                for (let i = 0; i < model.widgets.length; i++) {
+                    if (model.widgets[i].tId) {
+                        translations.t[model.widgets[i].tId] = model.widgets[i].label || model.widgets[i].name;
+                    }
                 }
             }
             generatedFiles.push({

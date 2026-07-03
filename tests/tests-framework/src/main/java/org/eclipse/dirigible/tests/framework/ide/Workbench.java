@@ -42,14 +42,17 @@ public class Workbench {
 
     public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
-        // Wait for the DURABLE effect of publishing - every workspace project appearing in the
-        // registry - not the transient "Published all projects in" toast. On slow CI runners the
-        // cross-frame text sweep can outlast the toast, and the sweep's timeout fallback reloads the
-        // page, destroying it for good (the recurring DependsOnIT publish flake - same failure mode
-        // as the regenerate toast this replaced in EdmView).
+        // Wait for the DURABLE effect of publishing - every workspace file landing in the registry -
+        // not the transient "Published all projects in" toast. On slow CI runners the cross-frame
+        // text sweep can outlast the toast, and the sweep's timeout fallback reloads the page,
+        // destroying it for good (the recurring DependsOnIT publish flake - same failure mode as the
+        // regenerate toast this replaced in EdmView). Checking only that the project COLLECTION
+        // exists is not enough: publish copies file by file, so the check passed on half-published
+        // projects and the sample ITs then hit "JS source could not be found, consider publishing
+        // it". The whole workspace sub-tree must be contained in /registry/public.
         String workspacePath = IRepositoryStructure.PATH_USERS + "/admin/workspace";
         Awaitility.await()
-                  .atMost(120, TimeUnit.SECONDS)
+                  .atMost(300, TimeUnit.SECONDS)
                   .pollInterval(1, TimeUnit.SECONDS)
                   .until(() -> {
                       ICollection workspace = repository.getCollection(workspacePath);
@@ -58,13 +61,39 @@ public class Workbench {
                       }
                       List<String> projects = workspace.getCollectionsNames();
                       return projects.stream()
-                                     .allMatch(project -> repository.hasCollection(
-                                             IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project));
+                                     .allMatch(project -> fullyPublished(workspace.getCollection(project),
+                                             repository.getCollection(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project)));
                   });
 
         if (waitForSynchronizationExecution) {
             SynchronizationUtil.waitForSynchronizationExecution();
         }
+    }
+
+    /**
+     * Whether every resource of the workspace sub-tree exists in the published counterpart. Dot-named
+     * collections (a cloned project's {@code .git}) are ignored - the synchronizers never read them, so
+     * the tests must not depend on when (or whether) they finish copying.
+     */
+    private static boolean fullyPublished(ICollection source, ICollection target) {
+        if (!target.exists()) {
+            return false;
+        }
+        for (String resource : source.getResourcesNames()) {
+            if (!target.getResource(resource)
+                       .exists()) {
+                return false;
+            }
+        }
+        for (String child : source.getCollectionsNames()) {
+            if (child.startsWith(".")) {
+                continue;
+            }
+            if (!fullyPublished(source.getCollection(child), target.getCollection(child))) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public void clickPublishAll() {
