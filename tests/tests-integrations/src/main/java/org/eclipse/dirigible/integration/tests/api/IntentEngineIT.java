@@ -134,6 +134,11 @@ class IntentEngineIT extends IntegrationTest {
                 source: Order
                 dimensions: [customer]
                 measures: ["count(*)", "sum(total)"]
+              # month(field) buckets a date dimension into a sortable YYYYMM integer.
+              - name: OrdersByMonth
+                source: Order
+                dimensions: ["month(orderDate)"]
+                measures: ["count(*)", "sum(total)"]
               - name: BigOrderItems
                 source: OrderItem
                 description: Order items with quantity over one, with their order date
@@ -219,7 +224,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(2))
+                                                 .body("reports", hasSize(3))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -1024,6 +1029,54 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void report_file_stack_generates_typed_column_filters() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // Replay the Harmonia report-file template like the editor does. The generation service
+        // derives the gen folder from the report file name (each report owns gen/<lowercased name>).
+        String payload = "{\"template\":\"template-application-ui-harmonia-java/template/template-report-file.js\",\"parameters\":{}}";
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body(payload)
+                                                 .when()
+                                                 .post("/services/js/service-generate/generate.mjs/model/" + WORKSPACE + "/" + PROJECT
+                                                         + "?path=OrdersByCustomer.report")
+                                                 .then()
+                                                 .statusCode(201));
+
+        // Backend: the report repository validates and applies per-column conditions over the wrapped
+        // query, typed from the report's own column metadata.
+        String repository = contentOf("gen/ordersbycustomer/data/reports/OrdersByCustomerRepository.java");
+        assertTrue(repository.contains("FILTER_COLUMNS"), "the report repository should carry the filterable-column allowlist");
+        assertTrue(repository.contains("SELECT * FROM (\").append(QUERY).append(\") AS \\\"REPORT_DATA\\\" WHERE"),
+                "conditions should wrap the report query");
+        assertTrue(repository.contains("\"GTE\", \">=\""), "range operators should be whitelisted");
+        String controller = contentOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
+        assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
+
+        // Frontend: the generated report page carries typed column metadata and the filter machinery.
+        // NB the case split: the UI files use the RAW genFolderName (the report file name,
+        // "OrdersByCustomer"), while the Java files use the sanitized javaGenFolderName
+        // ("ordersbycustomer") - two distinct folders on a case-sensitive filesystem.
+        String page = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/report.js");
+        assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
+        assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left' }"),
+                "the joined dimension should be a left-aligned text column");
+        assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
+        assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
+                "the page should build range and contains conditions");
+        String view = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/index.html");
+        assertTrue(view.contains("applyFilters()") && view.contains("data-lucide=\"filter\""),
+                "the report view should carry the filter panel and toolbar toggle");
+        assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
+                "the report table should align and format cells from the column metadata");
+        assertTrue(page.contains("align: 'right', pattern: '### ### ### ##0.00'"),
+                "the page metadata should carry alignment + the money pattern for decimal columns");
+    }
+
+    @Test
     void regeneration_scrubs_stale_model_files() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1453,6 +1506,19 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("\"table\": \"ORDERS_ORDER\""),
                 "report table should be the same intent-prefixed table name the EDM declares as dataName");
         assertTrue(body.contains("\"aggregate\": \"COUNT\""), "count(*) should be parsed into an aggregate COUNT column");
+
+        // month(field) buckets the date dimension into a sortable YYYYMM integer, grouped the same way.
+        String monthly = contentOf("OrdersByMonth.report");
+        assertTrue(
+                monthly.contains(
+                        "(EXTRACT(YEAR FROM Order.\\\"ORDER_ORDER_DATE\\\") * 100 + EXTRACT(MONTH FROM Order.\\\"ORDER_ORDER_DATE\\\"))"),
+                "a month(field) dimension should emit the YYYYMM EXTRACT expression");
+        assertTrue(monthly.contains("as \\\"Month Order Date\\\""), "the bucketed column should carry a humanized alias");
+        assertTrue(monthly.contains("GROUP BY (EXTRACT(YEAR"), "the aggregation should group by the bucket expression");
+
+        // Rendering metadata on the model: numeric columns right-align, decimals carry the money pattern.
+        assertTrue(body.contains("\"align\": \"right\""), "numeric report columns should carry align: right");
+        assertTrue(body.contains("\"pattern\": \"### ### ### ##0.00\""), "decimal report columns should carry the money pattern");
         assertTrue(body.contains("\"aggregate\": \"SUM\""), "sum(total) should be parsed into an aggregate SUM column");
         // The query is materialised SQL (not left empty): SELECT ... FROM <table> as <alias> ... GROUP BY.
         // Physical table/column identifiers are double-quoted so the SQL runs on PostgreSQL (which folds

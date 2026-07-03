@@ -22,12 +22,14 @@ import java.util.regex.Pattern;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
+import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -90,6 +92,11 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
     private static final Set<String> KNOWN_AGGREGATES = Set.of("COUNT", "SUM", "AVG", "MIN", "MAX");
     private static final Pattern DOTTED_REF = Pattern.compile("\\b([A-Za-z_][A-Za-z0-9_]*)\\.([A-Za-z_][A-Za-z0-9_]*)\\b");
     private static final Pattern SIMPLE_CONDITION = Pattern.compile("^\\s*(\\S+)\\s*(<=|>=|<>|!=|=|<|>)\\s*(.+?)\\s*$");
+    /**
+     * {@code month(field)} / {@code year(field)} dimension - the bucket function in group 1, field in
+     * group 2.
+     */
+    private static final Pattern DATE_BUCKET = Pattern.compile("\\s*(month|year)\\s*\\(\\s*([^)]+?)\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
 
     @Override
     public String name() {
@@ -137,6 +144,29 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
 
         for (String dimension : report.getDimensions()) {
             if (dimension == null || dimension.isBlank()) {
+                continue;
+            }
+            // A month(field)/year(field) dimension buckets a date for aggregation: month emits the
+            // sortable YYYYMM integer (EXTRACT(YEAR) * 100 + EXTRACT(MONTH) - e.g. 202607), year the
+            // plain year. EXTRACT is standard SQL (H2, PostgreSQL); SQL Server does not support it -
+            // date-bucketed reports are an H2/PostgreSQL feature for now.
+            Matcher bucket = DATE_BUCKET.matcher(dimension.trim());
+            if (bucket.matches()) {
+                String function = bucket.group(1)
+                                        .toLowerCase(Locale.ROOT);
+                String fieldReference = bucket.group(2)
+                                              .trim();
+                ColumnRef ref = resolve(context, model, source, baseAlias, fieldReference);
+                registerJoin(joins, ref);
+                String expression = "month".equals(function)
+                        ? "(EXTRACT(YEAR FROM " + ref.qualified() + ") * 100 + EXTRACT(MONTH FROM " + ref.qualified() + "))"
+                        : "EXTRACT(YEAR FROM " + ref.qualified() + ")";
+                String alias = humanize(function + " " + fieldReference.replace('.', ' '));
+                columns.add(column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated));
+                selectParts.add(expression + " as \"" + alias + "\"");
+                if (aggregated) {
+                    groupParts.add(expression);
+                }
                 continue;
             }
             ColumnRef ref = resolve(context, model, source, baseAlias, dimension.trim());
@@ -224,9 +254,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 ref.tableAlias = targetAlias;
                 ref.physicalColumn = column(targetAlias, fieldName);
                 FieldIntent targetField = fieldByName(target, fieldName);
-                ref.reportType = reportType(targetField == null ? null : targetField.getType());
+                // A cross-model target's fields are not in this model; string is the safe display type.
+                ref.reportType = targetField == null ? "CHARACTER VARYING" : reportType(targetField.getType());
                 ref.displayAlias = humanize(reference.replace('.', ' '));
-                ref.join = join(context, source, relation, target, targetAlias, baseAlias);
+                ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
                 return ref;
             }
         }
@@ -247,13 +278,15 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 && ("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
             EntityIntent target = entityByName(model, relation.getTo());
             String targetAlias = relation.getTo();
-            String labelField = labelFieldName(target);
+            // A cross-model target's label comes from the resolved owner model (its Name-like field).
+            CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
+            String labelField = info != null ? info.labelField() : labelFieldName(target);
             FieldIntent labeled = fieldByName(target, labelField);
             ref.tableAlias = targetAlias;
             ref.physicalColumn = column(targetAlias, labelField);
-            ref.reportType = reportType(labeled == null ? null : labeled.getType());
+            ref.reportType = info != null ? "CHARACTER VARYING" : reportType(labeled == null ? null : labeled.getType());
             ref.displayAlias = humanize(reference);
-            ref.join = join(context, source, relation, target, targetAlias, baseAlias);
+            ref.join = join(context, model, source, relation, target, targetAlias, baseAlias);
             return ref;
         }
         // Best-effort: treat the reference as a raw column on the source.
@@ -293,13 +326,39 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         return "string".equals(t) || "text".equals(t) || "uuid".equals(t);
     }
 
-    private static Join join(IntentGenerationContext context, EntityIntent source, RelationIntent relation, EntityIntent target,
-            String targetAlias, String baseAlias) {
-        FieldIntent targetPk = target == null ? null : primaryKeyOf(target);
+    private static Join join(IntentGenerationContext context, IntentModel model, EntityIntent source, RelationIntent relation,
+            EntityIntent target, String targetAlias, String baseAlias) {
         String fkColumn = quote(column(source.getName(), relation.getName()));
+        // A cross-model target's table and primary-key column come from the resolved owner model -
+        // this model's intent-prefixed naming would point at a non-existent local table.
+        CrossModelSupport.TargetInfo info = crossModelInfo(context, model, relation);
+        if (info != null) {
+            return new Join(info.tableDataName(), targetAlias,
+                    baseAlias + "." + fkColumn + " = " + targetAlias + "." + quote(info.keyColumn()));
+        }
+        FieldIntent targetPk = target == null ? null : primaryKeyOf(target);
         String pkColumn = quote(column(targetAlias, targetPk == null ? "id" : targetPk.getName()));
         return new Join(IntentNaming.tableName(context, targetAlias), targetAlias,
                 baseAlias + "." + fkColumn + " = " + targetAlias + "." + pkColumn);
+    }
+
+    /**
+     * The resolved owner-model facts for a cross-model relation, or null for a same-model one.
+     * Resolution mirrors the EDM generator (workspace, then registry; convention fallback only with a
+     * null context) and fails loudly for an unresolvable dependency - generate leaf-first.
+     */
+    private static CrossModelSupport.TargetInfo crossModelInfo(IntentGenerationContext context, IntentModel model,
+            RelationIntent relation) {
+        if (!relation.isCrossModel()) {
+            return null;
+        }
+        for (UsesIntent uses : model.getUses()) {
+            if (relation.getModel()
+                        .equals(uses.getModel())) {
+                return CrossModelSupport.resolve(context, uses, relation.getTo());
+            }
+        }
+        return null;
     }
 
     private static void registerJoin(Map<String, Join> joins, ColumnRef ref) {
@@ -351,7 +410,7 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             if (relation != null && relation.getTo() != null) {
                 EntityIntent target = entityByName(model, relation.getTo());
                 String targetAlias = relation.getTo();
-                joins.putIfAbsent(targetAlias, join(context, source, relation, target, targetAlias, baseAlias));
+                joins.putIfAbsent(targetAlias, join(context, model, source, relation, target, targetAlias, baseAlias));
                 matcher.appendReplacement(dotted,
                         Matcher.quoteReplacement(targetAlias + "." + quote(column(targetAlias, matcher.group(2)))));
             } else {
@@ -427,6 +486,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         column.put("grouping", grouping && "NONE".equals(aggregate));
         column.put("tId", translationId(alias));
         column.put("label", alias);
+        // Rendering metadata carried on the model so every report UI aligns and formats consistently:
+        // numeric columns right-align; decimals carry the platform money pattern.
+        boolean numeric = "INTEGER".equals(reportType) || "BIGINT".equals(reportType) || "DECIMAL".equals(reportType);
+        column.put("align", numeric ? "right" : "left");
+        if ("DECIMAL".equals(reportType)) {
+            column.put("pattern", "### ### ### ##0.00");
+        }
         return column;
     }
 

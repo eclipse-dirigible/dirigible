@@ -36,6 +36,16 @@ document.addEventListener('alpine:init', () => {
     displayName: '${name}',   // humanised in init() — "MembersWithLoansDue" -> "Members With Loans Due"
     rows: [],
     columns: [],        // derived from the data — the controller returns rows keyed by column alias
+    // The report's typed output columns (generation-time metadata) — the filterable surface. Each
+    // entry is { key: <result-set alias>, kind: date|number|boolean|text }, driving the per-column
+    // filter controls (date/number ranges, boolean select, text contains).
+    reportColumns: [
+#foreach($column in $columns)
+      { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}'#if($column.pattern), pattern: '${column.pattern}'#end },
+#end
+    ],
+    showFilters: false,
+    filters: {},        // column key -> { from, to, min, max, contains, equals } (per kind)
     state: 'loading',   // loading | error | empty | default
     error: null,
     page: 1,
@@ -53,7 +63,44 @@ document.addEventListener('alpine:init', () => {
         this.preview = new URLSearchParams(location.search).get('preview') === '1';
       } catch (e) { /* no location */ }
       if (this.preview) this.limit = 5;
+      for (const col of this.reportColumns) {
+        this.filters[col.key] = { from: '', to: '', min: null, max: null, contains: '', equals: '' };
+      }
       try { document.title = this.displayName; } catch (e) { /* no document */ }
+      this.load();
+    },
+
+    // The active per-column conditions in the controller's shape: [{ column, operator, value }].
+    // Ranges become GTE/LTE pairs, text becomes a LIKE with wildcards, boolean an EQ.
+    conditions() {
+      const conditions = [];
+      for (const col of this.reportColumns) {
+        const f = this.filters[col.key];
+        if (!f) continue;
+        if (col.kind === 'date') {
+          if (f.from) conditions.push({ column: col.key, operator: 'GTE', value: f.from });
+          if (f.to) conditions.push({ column: col.key, operator: 'LTE', value: f.to });
+        } else if (col.kind === 'number') {
+          if (f.min !== null && f.min !== '') conditions.push({ column: col.key, operator: 'GTE', value: f.min });
+          if (f.max !== null && f.max !== '') conditions.push({ column: col.key, operator: 'LTE', value: f.max });
+        } else if (col.kind === 'boolean') {
+          if (f.equals !== '') conditions.push({ column: col.key, operator: 'EQ', value: f.equals === 'true' });
+        } else if (f.contains) {
+          conditions.push({ column: col.key, operator: 'LIKE', value: '%' + f.contains + '%' });
+        }
+      }
+      return conditions;
+    },
+
+    get activeFilterCount() { return this.conditions().length; },
+
+    applyFilters() { this.page = 1; this.load(); },
+
+    clearFilters() {
+      for (const col of this.reportColumns) {
+        this.filters[col.key] = { from: '', to: '', min: null, max: null, contains: '', equals: '' };
+      }
+      this.page = 1;
       this.load();
     },
 
@@ -62,12 +109,22 @@ document.addEventListener('alpine:init', () => {
       this.error = null;
       try {
         const offset = (this.page - 1) * this.limit;
-        const rows = await reportHttp.get(this.apiBase + '?${dollar}limit=' + this.limit + '&${dollar}offset=' + offset);
+        const conditions = this.conditions();
+        let rows;
+        if (conditions.length) {
+          rows = await reportHttp.post(this.apiBase + '/search', { ${dollar}limit: this.limit, ${dollar}offset: offset, conditions });
+        } else {
+          rows = await reportHttp.get(this.apiBase + '?${dollar}limit=' + this.limit + '&${dollar}offset=' + offset);
+        }
         this.rows = rows || [];
-        // Columns come from the row keys (the report's result-set aliases, e.g. "Member Name").
+        // Columns come from the row keys (the report's result-set aliases, e.g. "Member Name"),
+        // falling back to the generation-time metadata when a filter empties the page.
         if (this.rows.length) this.columns = Object.keys(this.rows[0]);
+        else if (!this.columns.length && this.reportColumns.length) this.columns = this.reportColumns.map(c => c.key);
         try {
-          const c = await reportHttp.get(this.apiBase + '/count');
+          const c = conditions.length
+            ? await reportHttp.post(this.apiBase + '/count', { conditions })
+            : await reportHttp.get(this.apiBase + '/count');
           this.count = (c && c.count != null) ? c.count : this.rows.length;
         } catch (e) { this.count = this.rows.length; }
         this.state = this.rows.length ? 'default' : 'empty';
@@ -78,6 +135,42 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
+    columnMeta(key) { return this.reportColumns.find(c => c.key === key) || null; },
+
+    // Numeric columns right-align (from the .report column metadata).
+    alignClass(key) {
+      const meta = this.columnMeta(key);
+      return meta && meta.align === 'right' ? 'text-right' : '';
+    },
+
+    // Cell text: decimals format by the column's DecimalFormat-style pattern (grouped thousands,
+    // fixed decimals - the platform money pattern); everything else renders as-is.
+    cellText(key, row) {
+      const v = row[key];
+      const meta = this.columnMeta(key);
+      if (meta && meta.pattern) return this.displayNumber(v, meta.pattern);
+      // Pattern-less numeric columns (counts, year/month buckets) still render as clean integers -
+      // the DB returns them as decimals (1.0, 202607.0).
+      if (meta && meta.kind === 'number') return this.displayNumber(v, '##0');
+      return v;
+    },
+
+    displayNumber(v, pattern) {
+      if (v === null || v === undefined || v === '') return '';
+      const n = Number(v);
+      if (isNaN(n)) return v;
+      let decimals = 2;
+      let groupSep = ' ';
+      if (pattern) {
+        const dot = pattern.lastIndexOf('.');
+        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
+        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
+      }
+      const parts = n.toFixed(decimals).split('.');
+      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+    },
+
     get totalPages() { return Math.max(1, Math.ceil(this.count / this.limit)); },
     next() { if (this.page < this.totalPages) { this.page++; this.load(); } },
     prev() { if (this.page > 1) { this.page--; this.load(); } },
@@ -85,7 +178,8 @@ document.addEventListener('alpine:init', () => {
     // Export the FULL result set (POST /export returns all rows) as CSV.
     async exportCsv() {
       try {
-        const data = await reportHttp.post(this.apiBase + '/export', {});
+        // The export honors the active per-column filters - it downloads what the table shows.
+        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions() });
         const rows = Array.isArray(data) ? data : [];
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);

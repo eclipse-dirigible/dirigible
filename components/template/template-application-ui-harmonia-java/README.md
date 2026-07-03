@@ -34,7 +34,10 @@ for a single language) writes the shared `locale` Alpine store
 `codbex.harmonia.language`); the shared fetch client sends the value as
 `Accept-Language` on every call, which the generated multilingual Java repositories
 translate by (`<TABLE>_LANG` overlay), and the document Print flow prefers the same
-language when a template for it exists. UI **labels** remain untranslated — the Harmonia
+language when a template for it exists. The standalone **report page** offers **typed per-column filters** (date ranges,
+number ranges, boolean, text contains) from generation-time column metadata, applied
+**server-side** over the wrapped report query — pagination, count and CSV export all
+reflect the active filters. UI **labels** remain untranslated — the Harmonia
 framework itself has no i18n API (verified against 1.24.2: only breakpoint +
 colour-scheme helpers), so label i18n is a documented follow-up on top of the locale
 store; the generated `translations/en-US/*.json` catalogs already exist for it. Remaining items are refinements — see the checklist + the
