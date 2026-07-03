@@ -9,6 +9,20 @@
 <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
+      <!-- Region & Language: the browser-wide data-language flag (localStorage codbex.harmonia.language,
+           sent as Accept-Language by every app's fetch client). Offered codes are the union of the
+           languages the embedded apps declare in their generated config.js; hidden when only one. -->
+      <div class="vbox gap-1" x-show="languageOptions().length > 1">
+        <span x-h-text.muted class="text-sm">Region &amp; Language</span>
+        <div x-h-select>
+          <input x-h-select-input x-model="language" placeholder="Language" />
+          <div x-h-select-content>
+            <template x-for="opt in languageOptions()" :key="opt.value">
+              <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+            </template>
+          </div>
+        </div>
+      </div>
       <span x-h-text.muted class="text-sm">Configuration &amp; nomenclature across all applications.</span>
       <template x-for="item in settingsItems" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"

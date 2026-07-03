@@ -33,6 +33,41 @@ document.addEventListener('alpine:init', () => {
     settingsMode: false,
     settingsSelected: '',
     settingsUrl: '',
+    // Region & Language: the app-wide language flag (the shared locale store), offered here because
+    // the shell's Settings is where users look for it. The available codes are the UNION of the
+    // languages every embedded app declares in its generated js/config.js.
+    language: 'en',
+    languages: ['en'],
+
+    // Union of the data languages the embedded apps declare (each generated app's js/config.js
+    // carries `languages: [...]` from its intent). The config is a JS file, so the array is read
+    // with a targeted match rather than executed.
+    async loadLanguages(perspectives) {
+      const bases = new Set();
+      const collect = (item) => {
+        const path = item && item.path;
+        const match = typeof path === 'string' && path.match(/^(\/services\/web\/[^#?]*\/)index\.html/);
+        if (match) bases.add(match[1]);
+      };
+      (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
+      const union = new Set(['en']);
+      await Promise.all([...bases].map(async (base) => {
+        try {
+          const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
+          if (!res.ok) return;
+          const text = await res.text();
+          const match = text.match(/languages:\s*(\[[^\]]*\])/);
+          if (match) JSON.parse(match[1].replace(/'/g, '"')).forEach(code => union.add(code));
+        } catch (e) { /* an app without a readable config simply contributes nothing */ }
+      }));
+      this.languages = [...union];
+    },
+
+    // The offered codes with display names for the Settings picker (delegates to the locale store).
+    languageOptions() {
+      const locale = Alpine.store('locale');
+      return this.languages.map(code => ({ value: code, text: locale ? locale.displayName(code) : code }));
+    },
 
     async init() {
       try {
@@ -84,11 +119,22 @@ document.addEventListener('alpine:init', () => {
           this.settingsItems = settings;
           // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
           this.loadCounts();
+          // Fire-and-forget: union the data languages the embedded apps offer (drives the
+          // Region & Language picker in Settings; hidden while only one language is known).
+          this.loadLanguages(all);
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
       }
       this.loading = false;
+
+      // Mirror the shared locale store so the Settings picker has a plain bindable property;
+      // persisting goes through the store (the fetch client sends it as Accept-Language).
+      const locale = Alpine.store('locale');
+      if (locale) {
+        this.language = locale.value;
+        this.$watch('language', (v) => locale.set(v));
+      }
 
       // Resolve shell state from the current route. Hosted domain apps are addressable as
       // /app/<perspective-id>[/<inner-route>]; everything else is a built-in page rendered into #app.
