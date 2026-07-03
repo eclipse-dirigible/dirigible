@@ -246,6 +246,7 @@ document.addEventListener('alpine:init', () => {
 
     newEntity()  { window.PineconeRouter.navigate('/${name}/create'); },
     editEntity(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
+    previewEntity(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },
 
     askDelete(row) {
       this.deleteTarget = row;

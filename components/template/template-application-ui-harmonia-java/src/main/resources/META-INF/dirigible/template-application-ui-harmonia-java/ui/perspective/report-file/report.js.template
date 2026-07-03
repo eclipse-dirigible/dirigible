@@ -198,6 +198,38 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // Print the report: the FULL filtered result set (POST /export, same as the CSV export - not
+    // just the on-screen page) rendered into a minimal print document in a new window.
+    async printReport() {
+      try {
+        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions() });
+        const rows = Array.isArray(data) ? data : [];
+        if (!rows.length) return;
+        const cols = Object.keys(rows[0]);
+        const esc = (v) => String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        const th = cols.map(c => '<th class="' + this.alignClass(c) + '">' + esc(c) + '</th>').join('');
+        const body = rows.map(r => '<tr>' + cols.map(c => '<td class="' + this.alignClass(c) + '">' + esc(this.cellText(c, r)) + '</td>').join('') + '</tr>').join('');
+        const html = '<!doctype html><html><head><title>' + esc(this.displayName) + '</title><style>'
+          + 'body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}'
+          + 'h1{font-size:18px;margin:0 0 4px}'
+          + '.meta{font-size:11px;color:#555;margin:0 0 16px}'
+          + 'table{border-collapse:collapse;width:100%;font-size:12px}'
+          + 'th,td{border:1px solid #999;padding:4px 8px;text-align:left}'
+          + 'th{background:#eee}.text-right{text-align:right}'
+          + '</style></head><body><h1>' + esc(this.displayName) + '</h1>'
+          + '<p class="meta">' + rows.length + ' rows' + (this.activeFilterCount ? ' (filtered)' : '') + ' - ' + esc(new Date().toLocaleString()) + '</p>'
+          + '<table><thead><tr>' + th + '</tr></thead><tbody>' + body + '</tbody></table></body></html>';
+        const w = window.open('', '_blank');
+        if (!w) return;
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        w.print();
+      } catch (e) {
+        this.error = (e && e.message) || 'Print failed.';
+      }
+    },
+
     refreshIcons() {
       this.${dollar}nextTick(() => { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); });
     },

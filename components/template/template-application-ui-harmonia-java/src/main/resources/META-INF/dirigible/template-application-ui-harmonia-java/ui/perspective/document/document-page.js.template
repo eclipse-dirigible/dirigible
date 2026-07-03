@@ -6,9 +6,10 @@
  */
 
 /*
- * Document (header-items) editor for ${name}. One component serves both routes:
- *   /${name}/create        -> create mode (header only; items enable once the header is saved)
+ * Document (header-items) editor for ${name}. One component serves all three routes:
+ *   /${name}/create         -> create mode (header only; items enable once the header is saved)
  *   /${name}/{id}/edit      -> edit mode (loads the document, its items, and the totals)
+ *   /${name}/{id}/preview   -> preview mode (same data as edit, everything read-only; Print stays)
  *
  * Layout (see ${name}-document.html): the master's own fields as a header form (the `aggregate`
  * totals are excluded here and shown in the footer), an inline-editable line-items table for the
@@ -157,9 +158,10 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
     get isEdit() { return this.mode === 'edit'; },
+    get isPreview() { return this.mode === 'preview'; },
     get errorCount() { return Object.keys(this.errors).filter(k => this.errors[k]).length; },
     // Items can only be added once the document (header) exists, so we have a master id to bind them to.
-    get itemsEnabled() { return this.isEdit && this.id != null; },
+    get itemsEnabled() { return (this.isEdit || this.isPreview) && this.id != null; },
     // Any OTHER composition child of this master (not the line-items entity) renders as a normal panel —
     // like the line items, only once the document (header) exists (nothing to allocate against on Create).
     get secondaryDetails() { return this.itemsEnabled ? App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}') : []; },
@@ -232,7 +234,9 @@ document.addEventListener('alpine:init', () => {
     async init() {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id ?? null;
-      this.mode = this.id != null ? 'edit' : 'create';
+      // Read the live hash to tell /preview from /edit (Pinecone's context can lag the hash).
+      const routePath = (window.location.hash || '').split('?')[0];
+      this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
 
       // The line-items child registered itself as a detail of this master; pick it by name.
       this.itemsDef = App.detailsFor('${name}').find(d => d.entity === '${documentItemsEntity}') || null;
@@ -250,7 +254,7 @@ document.addEventListener('alpine:init', () => {
 
       await this.loadOptions();
 
-      if (this.isEdit) {
+      if (this.isEdit || this.isPreview) {
         this.state = 'loading';
         try {
           await this.loadHeader();
@@ -383,6 +387,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async save() {
+      if (this.isPreview) return;
       if (!this.validate()) {
         this.state = 'validation-error';
         this.scrollToSummary();
@@ -601,7 +606,7 @@ document.addEventListener('alpine:init', () => {
 
     // ----- Add / edit line dialog ----------------------------------------------------------------
     openRowDialog(row) {
-      if (!this.itemsEnabled) return;
+      if (!this.itemsEnabled || this.isPreview) return;
       this.draftError = null;
       this.draftMode = row ? 'edit' : 'create';
       // Suppress the Depends-On watchers while the draft is (re)built - filling an existing row's
@@ -681,7 +686,7 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    askDeleteRow(row) { this.deleteTarget = row; this.deleteOpen = true; },
+    askDeleteRow(row) { if (this.isPreview) return; this.deleteTarget = row; this.deleteOpen = true; },
 
     async confirmDeleteRow() {
       if (!this.deleteTarget) return;
@@ -720,5 +725,8 @@ document.addEventListener('alpine:init', () => {
     },
 
     backToList() { window.PineconeRouter.navigate('/${name}'); },
+
+    // Preview -> the editable document for the same record.
+    goEdit() { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit'); },
   }));
 }, { once: true });

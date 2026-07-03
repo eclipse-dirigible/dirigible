@@ -129,6 +129,7 @@ document.addEventListener('alpine:init', () => {
 
     newMaster()  { window.PineconeRouter.navigate('/${name}/create'); },
     editMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
+    previewMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },
 
     askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },
     async confirmDelete() {
