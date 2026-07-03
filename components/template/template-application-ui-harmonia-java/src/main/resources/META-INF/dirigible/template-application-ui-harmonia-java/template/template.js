@@ -25,6 +25,12 @@ export function generate(model, parameters) {
     // Data-language codes the app offers (the intent's `languages:`, carried on the .model root).
     // Rendered into config.js as a JSON array; the shell's Region & Language setting lists them.
     parameters.appLanguages = JSON.stringify(Array.isArray(model.languages) && model.languages.length ? model.languages : ['en']);
+    // Declared dashboard widgets exist (the .model root flag EdmIntentGenerator sets): they replace
+    // the auto per-entity count tiles, so the dashboard skips baking them. Custom widgets (top-level
+    // intent `widgets:` — REST KPIs and embedded pages) ride the .model root and are baked into the
+    // dashboard page directly.
+    parameters.hasWidgets = model.dashboardKpis === true;
+    parameters.customWidgets = model.widgets || [];
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 

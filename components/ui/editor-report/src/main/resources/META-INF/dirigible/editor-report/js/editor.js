@@ -132,6 +132,10 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.$evalAsync(() => {
 					if (response.data === '') $scope.report = {};
 					else $scope.report = migrateReport(response.data);
+					$scope.widgetEnabled = !!$scope.report.widget;
+					// Absent means shown on the dashboard - make it explicit so the checkbox binds
+					// cleanly (before the dirty-tracking snapshot below, so this is not a change).
+					if ($scope.report.dashboard === undefined) $scope.report.dashboard = true;
 					contents = JSON.stringify($scope.report, null, 4);
 					$scope.query = $scope.report.query;
 					$scope.state.isBusy = false;
@@ -1531,4 +1535,135 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 
 	// End Security Section ----------------------------------------------------------------------------------------
+
+	// Begin Dashboard Widget Section ------------------------------------------------------------------------------
+	// The `widget` block turns the report into a dashboard KPI tile: kind `count` shows the report's
+	// record count, `value` one aggregate cell (a measure column, optionally pinned by `at` equals
+	// conditions over grouping columns), `list` the first rows as a mini table. Consumed at runtime
+	// by the Harmonia shell's reports store; the tile replaces the report's dashboard preview tile.
+
+	$scope.widgetKinds = [
+		{ value: 'count', label: 'Count - the number of records' },
+		{ value: 'value', label: 'Value - one aggregate cell' },
+		{ value: 'list', label: 'List - the first rows' },
+	];
+
+	$scope.toggleWidget = () => {
+		if ($scope.widgetEnabled) {
+			if (!$scope.report.widget) {
+				$scope.report.widget = {
+					kind: 'count',
+					label: $scope.report.label || $scope.report.name,
+					tId: getTranslationId('widget' + ($scope.report.name || '')),
+					icon: 'gauge',
+				};
+			}
+		} else {
+			delete $scope.report.widget;
+		}
+	};
+
+	$scope.widgetKindChanged = () => {
+		const widget = $scope.report.widget;
+		if (widget.kind === 'list') {
+			if (!widget.limit) widget.limit = 5;
+		} else {
+			delete widget.limit;
+		}
+		if (widget.kind !== 'value') {
+			delete widget.valueColumn;
+			delete widget.valueType;
+			delete widget.pattern;
+		}
+	};
+
+	// The measure the tile shows: an aggregate column of this report. Type and (money) pattern ride
+	// along so the dashboard can format the number without re-deriving the column.
+	$scope.widgetMeasureColumns = () => ($scope.report.columns || []).filter(c => c.aggregate && c.aggregate !== 'NONE');
+
+	$scope.widgetPinColumns = () => ($scope.report.columns || []).filter(c => !c.aggregate || c.aggregate === 'NONE');
+
+	$scope.widgetValueChanged = () => {
+		const widget = $scope.report.widget;
+		const column = ($scope.report.columns || []).find(c => c.alias === widget.valueColumn);
+		if (column) {
+			widget.valueType = column.type;
+			if (column.pattern) widget.pattern = column.pattern;
+			else delete widget.pattern;
+		}
+	};
+
+	$scope.addWidgetPin = () => {
+		const options = $scope.widgetPinColumns().map(c => ({ label: c.alias, value: c.alias }));
+		if (options.length === 0) {
+			dialogHub.showAlert({
+				title: 'No columns to pin',
+				message: 'Widget pins reference the report\'s non-aggregate (grouping) columns - add such a column first.',
+				type: AlertTypes.Information,
+				preformatted: false,
+			});
+			return;
+		}
+		dialogHub.showFormDialog({
+			title: 'Add widget pin',
+			form: {
+				'wpdColumn': {
+					label: 'Column',
+					placeholder: 'Select column',
+					controlType: 'dropdown',
+					options: options,
+					value: options[0].value,
+					required: true,
+				},
+				'wpdMode': {
+					label: 'Pin to',
+					controlType: 'dropdown',
+					options: [
+						{ label: 'Literal value', value: 'literal' },
+						{ label: 'Now - the current date / period', value: 'now' },
+					],
+					value: 'literal',
+					required: true,
+				},
+				'wpiValue': {
+					label: 'Value (for a literal pin)',
+					controlType: 'input',
+					placeholder: 'Enter value',
+					type: 'text',
+					maxlength: 255,
+				},
+			},
+			submitLabel: 'Add',
+			cancelLabel: 'Cancel'
+		}).then((form) => {
+			if (form) {
+				$scope.$evalAsync(() => {
+					const widget = $scope.report.widget;
+					if (!widget.at) widget.at = [];
+					const column = ($scope.report.columns || []).find(c => c.alias === form['wpdColumn']);
+					const pin = { column: form['wpdColumn'], type: column ? column.type : 'VARCHAR' };
+					if (form['wpdMode'] === 'now') pin.token = 'now';
+					else pin.value = form['wpiValue'];
+					widget.at.push(pin);
+				});
+			}
+		}, (error) => {
+			console.error(error);
+			dialogHub.showAlert({
+				title: 'New widget pin error',
+				message: 'There was an error while adding the new widget pin.',
+				type: AlertTypes.Error,
+				preformatted: false,
+			});
+		});
+	};
+
+	$scope.deleteWidgetPin = (index) => {
+		$scope.$evalAsync(() => {
+			$scope.report.widget.at.splice(index, 1);
+			if ($scope.report.widget.at.length === 0) delete $scope.report.widget.at;
+		});
+	};
+
+	// End Dashboard Widget Section --------------------------------------------------------------------------------
 });

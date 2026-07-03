@@ -6,14 +6,19 @@
  * one per top-level entity showing its live record count (fetched from the entity controller's
  * /count endpoint, click -> the entity list) and one per report (runtime-discovered via the reports
  * store, click -> open it embedded). The entity widget list is baked in from the model; counts load
- * lazily so a slow/erroring controller never blocks the others. KPI-tile style adopted from the
- * codbex dashboards (codbex-hestia-dashboard).
+ * lazily so a slow/erroring controller never blocks the others. When the model declares
+ * report-attached KPI widgets (reports[].widget in the intent), those replace the auto entity-count
+ * tiles: the entity list is baked empty and the KPI tiles come from the reports store (kind count /
+ * value / list, values fetched from each report's generated controller). KPI-tile style adopted
+ * from the codbex dashboards (codbex-hestia-dashboard).
  */
 document.addEventListener('alpine:init', () => {
   Alpine.data('dashboardPage', () => ({
     ...basePage(),
 
-    // One widget per top-level entity, generated from the model.
+    // One widget per top-level entity, generated from the model. Baked empty when the model
+    // declares KPI widgets — they replace the raw entity-count tiles.
+#if(!$hasWidgets)
     entities: [
 #foreach($entity in $models)
 #if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER") && $entity.type == "PRIMARY" && $entity.dashboardWidget != "false")
@@ -30,10 +35,44 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
     ],
+#else
+    entities: [],
+#end
+
+    // Custom dashboard widgets (top-level intent `widgets:`), baked from the model. A `kpi` kind
+    // fetches { value, description? } from the developer's REST endpoint; a `page` kind embeds the
+    // developer's HTML page like a report preview tile.
+    customWidgets: [
+#foreach($widget in $customWidgets)
+      {
+        name: '${widget.name}',
+        kind: '${widget.kind}',
+        url: '${widget.url}',
+        label: '${widget.label}',
+        tkey: '$projectName:${tprefix}.t.${widget.tId}',
+        icon: '${widget.icon}',
+#if($widget.description)
+        detail: '${widget.description}',
+#else
+        detail: '',
+#end
+        value: null,
+        error: false
+      },
+#end
+    ],
+
+    // Per-KPI load state, keyed by report name: { loaded, value | rows | error | forbidden }.
+    kpiData: {},
 
     init() {
       this.loadCounts();
+      this.loadCustomWidgets();
       this.refreshIcons();
+      // KPI widgets come from the runtime reports store, which enriches asynchronously — reload
+      // whenever the discovered set changes (and once now, in case it is already there).
+      this.${dollar}watch('kpis', () => this.loadKpis());
+      this.loadKpis();
     },
 
     // Fetch each entity's record count independently (one slow/erroring controller must not block
@@ -52,8 +91,97 @@ document.addEventListener('alpine:init', () => {
     },
 
     // Reports are discovered at runtime by the reports store (see the sidebar Reports section);
-    // a report with dashboard:false in its .report is kept out of the dashboard (still in the sidebar).
-    get reports() { return this.${dollar}store.reports.items.filter(r => r.dashboard !== false); },
+    // a report with dashboard:false in its .report is kept out of the dashboard (still in the
+    // sidebar), and a report with a KPI widget shows its KPI tile instead of the iframe preview.
+    get reports() { return this.${dollar}store.reports.items.filter(r => r.dashboard !== false && !r.widget); },
+
+    // Reports carrying a KPI widget. A role-guarded report the user may not read (403 on the value
+    // fetch) is hidden, not shown as an error tile.
+    get kpis() {
+      return this.${dollar}store.reports.items.filter(r => r.widget && r.dashboard !== false)
+        .filter(r => !(this.kpiData[r.name] && this.kpiData[r.name].forbidden));
+    },
+
+    // Load each KPI's data once from its report controller (the reports store does the fetch and
+    // the `at`-pin token resolution); tiles render independently, an error never blocks the rest.
+    async loadKpis() {
+      const store = this.${dollar}store.reports;
+      await Promise.all(this.kpis.map(async (r) => {
+        if (this.kpiData[r.name]) return;
+        this.kpiData[r.name] = { loaded: false };
+        const result = await store.loadWidgetValue(r);
+        this.kpiData[r.name] = { loaded: true, ...result };
+        this.refreshIcons();
+      }));
+    },
+
+    kpiState(r) { return this.kpiData[r.name] || { loaded: false }; },
+
+    // Custom widgets, split by how they render: number tiles (kpi) vs embedded pages.
+    get customKpis() { return this.customWidgets.filter(w => w.kind !== 'page'); },
+    get customPages() { return this.customWidgets.filter(w => w.kind === 'page'); },
+
+    // Fetch each custom KPI's { value, description? } from its endpoint — the developer's own
+    // contract, typically a client-Java @Controller under the project's custom/ folder. The URL is
+    // an absolute same-origin path, so the shared client must not prepend the REST base.
+    async loadCustomWidgets() {
+      await Promise.all(this.customKpis.map(async (w) => {
+        try {
+          const r = await App.services.api.get(w.url, { baseUrl: '' });
+          w.value = (r && r.value !== undefined && r.value !== null) ? r.value : 0;
+          if (r && r.description) w.detail = r.description;
+        } catch (err) {
+          w.error = true;
+          console.error('[dashboard] custom widget failed for ' + w.name, err);
+        }
+      }));
+      this.refreshIcons();
+    },
+
+    // A custom KPI value renders as-is when it is not a number (the endpoint may return '99.9%');
+    // numbers get the grouped format, with decimals only when the value has them. NB: an undefined
+    // pattern means displayNumber's grouped two-decimals default — never write the hash-style
+    // DecimalFormat literal here, Velocity treats two hashes as a line comment.
+    customValueText(w) {
+      if (w.value === null || w.value === undefined) return '';
+      if (typeof w.value !== 'number') return String(w.value);
+      return this.displayNumber(w.value, Number.isInteger(w.value) ? '0' : undefined);
+    },
+
+    // The KPI number, formatted: a value-kind widget with a decimal pattern gets the platform money
+    // format; counts and pattern-less numbers render as clean integers (the DB may return 12.0).
+    kpiValueText(r) {
+      const d = this.kpiState(r);
+      if (!d.loaded || d.error) return '';
+      return this.displayNumber(d.value, r.widget.pattern || '0');
+    },
+
+    // List-kind helpers: the tile shows the report's own columns (from the .report metadata).
+    kpiColumns(r) { return (r.columns || []).filter(c => c.select === true || c.select === 'true'); },
+    kpiRows(r) { return this.kpiState(r).rows || []; },
+    kpiCellText(r, row, c) {
+      const v = row[c.alias];
+      if (c.pattern) return this.displayNumber(v, c.pattern);
+      const numeric = c.type === 'INTEGER' || c.type === 'BIGINT' || c.type === 'DECIMAL';
+      return numeric ? this.displayNumber(v, '0') : v;
+    },
+    kpiAlignClass(c) { return c.align === 'right' ? 'text-right' : ''; },
+
+    displayNumber(v, pattern) {
+      if (v === null || v === undefined || v === '') return '';
+      const n = Number(v);
+      if (isNaN(n)) return v;
+      let decimals = 2;
+      let groupSep = ' ';
+      if (pattern) {
+        const dot = pattern.lastIndexOf('.');
+        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
+        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
+      }
+      const parts = n.toFixed(decimals).split('.');
+      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
+      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+    },
 
     openEntity(route) { window.PineconeRouter.navigate(route); },
     openReport(r) { this.${dollar}store.reports.selected = r; window.PineconeRouter.navigate('/reports'); },
