@@ -33,40 +33,57 @@ document.addEventListener('alpine:init', () => {
     settingsMode: false,
     settingsSelected: '',
     settingsUrl: '',
-    // Region & Language: the app-wide language flag (the shared locale store), offered here because
-    // the shell's Settings is where users look for it. The available codes are the UNION of the
-    // languages every embedded app declares in its generated js/config.js.
+    // Region & Language: the platform-wide language flag (the shared locale store), offered here
+    // because the shell's Settings is where users look for it. The offered codes are the PLATFORM's
+    // supported set (DIRIGIBLE_APPLICATION_LANGUAGES via the locale store) - modules never define
+    // what the stack supports. Each app's generated js/config.js declares which languages it
+    // PROVIDES translations for; apps missing a platform language are listed as warnings so
+    // developers know where translations are still needed (data falls back to the default language).
     language: 'en',
-    languages: ['en'],
+    appLanguages: [],
 
-    // Union of the data languages the embedded apps declare (each generated app's js/config.js
-    // carries `languages: [...]` from its intent). The config is a JS file, so the array is read
-    // with a targeted match rather than executed.
-    async loadLanguages(perspectives) {
-      const bases = new Set();
+    // Language coverage of the embedded apps: which languages each generated app PROVIDES
+    // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
+    // a JS file, so the array is read with a targeted match rather than executed). One entry per
+    // project; an app without a readable declaration counts as providing only the default language.
+    async loadLanguageCoverage(perspectives) {
+      const bases = new Map();
       const collect = (item) => {
         const path = item && item.path;
-        const match = typeof path === 'string' && path.match(/^(\/services\/web\/[^#?]*\/)index\.html/);
-        if (match) bases.add(match[1]);
+        const match = typeof path === 'string' && path.match(/^\/services\/web\/([^\/]+)\/([^#?]*\/)?index\.html/);
+        if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
       };
       (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
-      const union = new Set(['en']);
-      await Promise.all([...bases].map(async (base) => {
+      const coverage = await Promise.all([...bases].map(async ([app, base]) => {
+        let provided = ['en'];
         try {
           const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
-          if (!res.ok) return;
-          const text = await res.text();
-          const match = text.match(/languages:\s*(\[[^\]]*\])/);
-          if (match) JSON.parse(match[1].replace(/'/g, '"')).forEach(code => union.add(code));
-        } catch (e) { /* an app without a readable config simply contributes nothing */ }
+          if (res.ok) {
+            const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
+            if (match) {
+              const codes = JSON.parse(match[1].replace(/'/g, '"'));
+              if (Array.isArray(codes) && codes.length) provided = codes;
+            }
+          }
+        } catch (e) { /* undeclared coverage counts as default-language only */ }
+        return { app, provided };
       }));
-      this.languages = [...union];
+      this.appLanguages = coverage;
     },
 
-    // The offered codes with display names for the Settings picker (delegates to the locale store).
+    // Apps that do not provide every platform language - the developers' to-do list for missing
+    // translation content. Reactive on both the coverage scan and the platform set.
+    languageWarnings() {
+      const platform = Alpine.store('locale').languages();
+      return this.appLanguages
+                 .map(({ app, provided }) => ({ app, missing: platform.filter(code => !provided.includes(code)) }))
+                 .filter(({ missing }) => missing.length > 0);
+    },
+
+    // The platform's language codes with display names for the Settings picker.
     languageOptions() {
       const locale = Alpine.store('locale');
-      return this.languages.map(code => ({ value: code, text: locale ? locale.displayName(code) : code }));
+      return locale.languages().map(code => ({ value: code, text: locale.displayName(code) }));
     },
 
     async init() {
@@ -119,9 +136,9 @@ document.addEventListener('alpine:init', () => {
           this.settingsItems = settings;
           // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
           this.loadCounts();
-          // Fire-and-forget: union the data languages the embedded apps offer (drives the
-          // Region & Language picker in Settings; hidden while only one language is known).
-          this.loadLanguages(all);
+          // Fire-and-forget: scan which languages each embedded app provides translations for
+          // (drives the missing-translations warnings in Settings).
+          this.loadLanguageCoverage(all);
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);

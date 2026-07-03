@@ -10,30 +10,43 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 /*
- * locale store — the app's single language flag (the Region & Language setting). A global store
- * (like the theme) persisted per user in localStorage. The shared fetch client (services/api.js)
- * sends the value as Accept-Language on every call, so the same flag drives BOTH the frontend and
- * the backend: generated multilingual repositories overlay <TABLE>_LANG values for it, and the
- * document Print flow prefers it. The available codes come from the generated App.config.languages
- * (the intent's `languages:`); a value outside that list falls back to the first entry.
+ * locale store — the PLATFORM's single language flag (the Region & Language setting). A global
+ * store (like the theme) persisted per user in localStorage. The shared fetch client
+ * (services/api.js) sends the value as Accept-Language on every call, so the same flag drives
+ * BOTH the frontend and the backend: generated multilingual repositories overlay <TABLE>_LANG
+ * values for it, and the document Print flow prefers it. The offered codes are the platform's
+ * supported language set (DIRIGIBLE_APPLICATION_LANGUAGES, default en,bg) — individual modules
+ * never define what the stack supports; they only provide translations, and anything a module
+ * does not translate falls back to the base (first/default) language naturally.
  */
 document.addEventListener('alpine:init', () => {
   const STORAGE_KEY = 'codbex.harmonia.language';
 
+  const LANGUAGES_URL = '/services/js/platform-core/services/application-languages.js';
+
   Alpine.store('locale', {
     value: 'en',
+    // The platform's supported set; the served value replaces this default asynchronously.
+    supported: ['en', 'bg'],
 
     init() {
-      const configured = this.languages();
       let saved = null;
       try { saved = localStorage.getItem(STORAGE_KEY); } catch (e) { /* storage unavailable */ }
-      this.value = (saved && configured.includes(saved)) ? saved : (configured[0] || 'en');
+      if (saved) this.value = saved;
+      // Fire-and-forget: refresh the platform set (DIRIGIBLE_APPLICATION_LANGUAGES); on failure the
+      // built-in default stands. A persisted value outside the set falls back to the first entry.
+      fetch(LANGUAGES_URL, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        .then((r) => r.ok ? r.json() : null)
+        .then((codes) => {
+          if (Array.isArray(codes) && codes.length) this.supported = codes;
+          if (!this.supported.includes(this.value)) this.value = this.supported[0];
+        })
+        .catch(() => { /* platform default stands */ });
     },
 
-    // The app's offered data-language codes (from config.js; defaults to just 'en').
+    // The platform's supported data-language codes (never per-module).
     languages() {
-      const configured = (window.App && App.config && App.config.languages) || [];
-      return Array.isArray(configured) && configured.length ? configured : ['en'];
+      return this.supported;
     },
 
     // Human-readable name for a code ('bg' -> 'Bulgarian'), falling back to the code itself.
