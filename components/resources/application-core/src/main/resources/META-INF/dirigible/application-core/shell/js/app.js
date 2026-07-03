@@ -9,6 +9,11 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+// Safety net for apps generated before label i18n existed: their index.html does not load
+// services/i18n.js, but the SHARED views (inbox/documents/reports) now bind labels through T().
+// The stub returns the English fallback; i18n.js overwrites it with the real translator when loaded.
+window.T = window.T || ((key, fallback) => fallback !== undefined ? fallback : key);
+
 window.App = {
   services: {},
   routes: {},

@@ -11,8 +11,8 @@
 <div class="vbox size-full overflow-auto" x-init="$nextTick(() => { if (window.lucide) window.lucide.createIcons(); })">
   <div class="vbox gap-6 p-6">
     <div class="vbox gap-1">
-      <h1 class="text-2xl font-bold">Dashboard</h1>
-      <p x-h-text.muted>Overview of your published applications.</p>
+      <h1 class="text-2xl font-bold" x-text="T('application-core:shell.nav.dashboard', 'Dashboard')"></h1>
+      <p x-h-text.muted x-text="T('application-core:shell.dashboard.overview', 'Overview of your published applications.')"></p>
     </div>
 
     <div x-show="!loading && groups.length === 0 && $store.reports.items.length === 0" x-cloak x-h-text.muted>
@@ -53,7 +53,7 @@
     <!-- Reports: a preview tile per discovered report (the same set as the sidebar Reports section). -->
     <div class="vbox gap-3" x-show="$store.reports.items.length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span>Reports</span>
+        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in $store.reports.items" :key="r.url">

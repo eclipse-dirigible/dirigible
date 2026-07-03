@@ -6,10 +6,10 @@
 <div x-data="${name}ManageListPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title class="shrink-0">${menuLabel}</span>
+    <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
-      <input x-h-input.group type="text" placeholder="Search ${menuLabel}..."
+      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${menuLabel}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"
              x-model="searchTerm" @input="onSearchChange()" />
       <div x-h-input-group-addon data-align="inline-start">
         <svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg>
@@ -17,7 +17,7 @@
     </div>
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" data-lucide="plus"></i>
-      <span>New</span>
+      <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
   </div>
 
@@ -28,11 +28,11 @@
   <div x-show="displayState === 'error'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><svg x-h-icon.circle-error role="img" aria-label="error"></svg></div>
-      <div x-h-info-page-title>Could not load</div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="error"></div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="primary" @click="load()">Retry</button>
+      <button x-h-button data-variant="primary" @click="load()" x-text="T('$projectName:${tprefix}.defaults.retry', 'Retry')"></button>
     </div>
   </div>
 
@@ -40,11 +40,11 @@
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon><i role="img" data-lucide="inbox"></i></div>
-      <div x-h-info-page-title>No ${menuLabel} yet</div>
-      <div x-h-info-page-description>Get started by creating the first record.</div>
+      <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
+      <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
     <div x-h-info-page-content>
-      <button x-h-button data-variant="primary" @click="newEntity()">New ${entityLabel}</button>
+      <button x-h-button data-variant="primary" @click="newEntity()" x-text="T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></button>
     </div>
   </div>
 
@@ -64,7 +64,7 @@
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
-                    ${property.name}
+                    <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
                     <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
                     <i role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></i>
                     <i role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></i>
@@ -81,7 +81,7 @@
                   <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''">
                     <select x-show="col.type === 'fk'" x-model="columnFilters[col.name]" @change="applyServerFilter()"
                             class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1">
-                      <option value="">All</option>
+                      <option value="" x-text="T('$projectName:${tprefix}.defaults.all', 'All')"></option>
                       <template x-for="opt in optionsForFilter(col.name)" :key="opt.value">
                         <option :value="opt.value" x-text="opt.text"></option>
                       </template>
@@ -89,13 +89,13 @@
                     <input x-show="col.type !== 'fk'" x-model="columnFilters[col.name]"
                            :type="col.type === 'date' ? 'date' : 'text'"
                            @input.debounce.400ms="applyServerFilter()"
-                           placeholder="Filter…"
+                           :placeholder="T('$projectName:${tprefix}.defaults.filter', 'Filter…')"
                            class="w-full text-sm rounded-md border border-border bg-transparent px-2 py-1" />
                   </th>
                 </template>
                 <th x-h-table-head scope="col" class="text-center">
                   <button type="button" x-show="hasActiveColumnFilters" @click="clearColumnFilters()"
-                          title="Clear filters" class="text-muted-foreground hover:text-foreground">
+                          :title="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')" class="text-muted-foreground hover:text-foreground">
                     <i role="img" data-lucide="filter-x" class="size-4"></i>
                   </button>
                 </th>
@@ -103,7 +103,7 @@
             </thead>
             <tbody x-h-table-body>
               <tr x-show="displayState === 'no-results'" x-h-table-row>
-                <td x-h-table-cell>No matching ${menuLabel}.</td>
+                <td x-h-table-cell x-text="T('$projectName:${tprefix}.messages.noData', 'No matching ${menuLabel}.')"></td>
               </tr>
               <template x-for="row in paginatedItems" :key="row.${primaryKeysString}">
                 <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)" style="cursor:pointer;">
@@ -127,9 +127,9 @@
                       <i role="img" data-lucide="ellipsis"></i>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
-                      <li x-h-menu-item @click="editEntity(row)">Edit</li>
+                      <li x-h-menu-item @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
                       <li x-h-menu-separator></li>
-                      <li x-h-menu-item data-variant="negative" @click="askDelete(row)">Delete</li>
+                      <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
                     </ul>
                   </td>
                 </tr>
@@ -139,9 +139,9 @@
         </div>
 
         <nav x-h-pagination class="p-2" x-show="totalPages > 1">
-          <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1">Previous</button>
+          <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
           <span x-h-pagination-item x-text="currentPage + ' / ' + totalPages"></span>
-          <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages">Next</button>
+          <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
         </nav>
       </div>
     </div>
@@ -152,16 +152,16 @@
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-          <div x-h-info-page-title>Select a ${entityLabel}</div>
-          <div x-h-info-page-description>Choose a row to see all its details#if($hasProcess) and pending tasks#end.</div>
+          <div x-h-info-page-title x-text="T('$projectName:${tprefix}.defaults.selectTitle', 'Select a ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
+          <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.detailSelectRecord', 'Choose a row to see all its details#if($hasProcess) and pending tasks#end.')"></div>
         </div>
       </div>
 
       <div x-show="selected" class="vbox size-full overflow-auto">
         <div x-h-toolbar data-variant="transparent" data-size="sm">
-          <span x-h-toolbar-title class="shrink-0" x-text="'${entityLabel} #' + selectedId"></span>
+          <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
-          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" data-lucide="pencil"></i><span>Edit</span></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" data-lucide="trash-2"></i></button>
         </div>
 
@@ -179,7 +179,7 @@
         <!-- Every property of the selected record (the table above shows only the major ones). A framed
              condensed two-column grid (matches the master-detail pane). -->
         <div x-h-card class="m-4">
-          <div x-h-card-header><h3 x-h-card-title>Details</h3></div>
+          <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
           <div x-h-card-content>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
 #foreach($property in $properties)
@@ -187,7 +187,7 @@
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
           <div class="vbox gap-0">
-            <span x-h-text.muted class="text-xs">${plabel}</span>
+            <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
             <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
@@ -209,21 +209,21 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete ${entityLabel}</h2>
-        <p x-h-dialog-description>This action cannot be undone.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></h2>
+        <p x-h-dialog-description></p>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
       </div>
       <div x-h-dialog-content>
-        <p>Are you sure you want to delete this record?</p>
+        <p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this record?', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></p>
         <div x-show="deleteError" x-h-alert data-variant="negative" role="alert" class="mt-2">
           <div x-h-alert-description x-text="deleteError"></div>
         </div>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy">Cancel</button>
+        <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy">
           <span x-show="deleteBusy" x-h-spinner></span>
-          <span>Delete</span>
+          <span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span>
         </button>
       </div>
     </div>

@@ -9,6 +9,13 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import java.util.List;
+import java.util.concurrent.TimeUnit;
+
+import org.awaitility.Awaitility;
+import org.eclipse.dirigible.repository.api.ICollection;
+import org.eclipse.dirigible.repository.api.IRepository;
+import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
@@ -24,16 +31,36 @@ public class Workbench {
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
     private final TerminalFactory terminalFactory;
+    private final IRepository repository;
 
-    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
+    protected Workbench(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory, IRepository repository) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
         this.terminalFactory = terminalFactory;
+        this.repository = repository;
     }
 
     public void publishAll(boolean waitForSynchronizationExecution) {
         clickPublishAll();
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Published all projects in");
+        // Wait for the DURABLE effect of publishing - every workspace project appearing in the
+        // registry - not the transient "Published all projects in" toast. On slow CI runners the
+        // cross-frame text sweep can outlast the toast, and the sweep's timeout fallback reloads the
+        // page, destroying it for good (the recurring DependsOnIT publish flake - same failure mode
+        // as the regenerate toast this replaced in EdmView).
+        String workspacePath = IRepositoryStructure.PATH_USERS + "/admin/workspace";
+        Awaitility.await()
+                  .atMost(120, TimeUnit.SECONDS)
+                  .pollInterval(1, TimeUnit.SECONDS)
+                  .until(() -> {
+                      ICollection workspace = repository.getCollection(workspacePath);
+                      if (!workspace.exists()) {
+                          return false;
+                      }
+                      List<String> projects = workspace.getCollectionsNames();
+                      return projects.stream()
+                                     .allMatch(project -> repository.hasCollection(
+                                             IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project));
+                  });
 
         if (waitForSynchronizationExecution) {
             SynchronizationUtil.waitForSynchronizationExecution();

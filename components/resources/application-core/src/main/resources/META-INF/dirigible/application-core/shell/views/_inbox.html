@@ -16,7 +16,7 @@
      dashboard Process Inbox redesigned in #6064/#6068). -->
 <div x-data="inboxPage" class="vbox size-full">
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title>Inbox</span>
+    <span x-h-toolbar-title x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
     <span x-h-badge data-variant="information" x-text="tasks.length"></span>
     <div x-h-toolbar-spacer></div>
     <span x-show="lastUpdated" x-h-text.muted x-text="'Updated ' + fmtTime(lastUpdated)"></span>
@@ -24,7 +24,7 @@
             @click="toggleAuto()" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'">
       <i role="img" :data-lucide="autoRefresh ? 'pause' : 'play'"></i>
     </button>
-    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
   </div>
 
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
@@ -34,7 +34,7 @@
       <div class="vbox size-full">
         <div class="p-2">
           <div x-h-input-group data-size="sm">
-            <input x-h-input.group type="text" placeholder="Filter tasks..." x-model="searchTerm" @input="refreshIcons()" />
+            <input x-h-input.group type="text" :placeholder="T('application-core:shell.inbox.filterTasks', 'Filter tasks...')" x-model="searchTerm" @input="refreshIcons()" />
             <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
           </div>
         </div>
@@ -42,8 +42,8 @@
         <div x-show="filtered.length === 0" x-h-info-page class="p-4">
           <div x-h-info-page-header>
             <div x-h-info-page-media.icon><svg x-h-icon.inbox role="img" aria-label="inbox"></svg></div>
-            <div x-h-info-page-title>No tasks</div>
-            <div x-h-info-page-description>You have no pending tasks.</div>
+            <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTasks', 'No tasks')"></div>
+            <div x-h-info-page-description x-text="T('application-core:shell.inbox.noTasksHint', 'You have no pending tasks.')"></div>
           </div>
         </div>
 
@@ -75,8 +75,8 @@
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-          <div x-h-info-page-title>No task selected</div>
-          <div x-h-info-page-description>Select a task from the list to claim it or open its form.</div>
+          <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTaskSelected', 'No task selected')"></div>
+          <div x-h-info-page-description x-text="T('application-core:shell.inbox.selectTaskHint', 'Select a task from the list to claim it or open its form.')"></div>
         </div>
       </div>
 
@@ -93,18 +93,18 @@
           <div x-h-info-page>
             <div x-h-info-page-header>
               <div x-h-info-page-media.icon><svg x-h-icon.inbox role="img" aria-label="inbox"></svg></div>
-              <div x-h-info-page-title>Claim this task</div>
-              <div x-h-info-page-description>This task is available to your group. Claim it to open and complete its form.</div>
+              <div x-h-info-page-title x-text="T('application-core:shell.inbox.claimTask', 'Claim this task')"></div>
+              <div x-h-info-page-description x-text="T('application-core:shell.inbox.claimHint', 'This task is available to your group. Claim it to open and complete its form.')"></div>
             </div>
           </div>
-          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" data-lucide="hand"></i><span>Claim &amp; open</span></button>
+          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" data-lucide="hand"></i><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
         </div>
 
         <!-- Claimed + has a form: render the standalone form inline. -->
         <template x-if="selected && selected.mine && selected.formKey">
           <iframe :src="formSrc(selected)" title="Task form" class="flex-1" style="width:100%; border:0;"></iframe>
         </template>
-        <div x-show="selected && selected.mine && !selected.formKey" x-h-text.muted class="p-4">This task has no form.</div>
+        <div x-show="selected && selected.mine && !selected.formKey" x-h-text.muted class="p-4" x-text="T('application-core:shell.inbox.noForm', 'This task has no form.')"></div>
       </div>
     </div>
   </div>

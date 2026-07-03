@@ -33,6 +33,58 @@ document.addEventListener('alpine:init', () => {
     settingsMode: false,
     settingsSelected: '',
     settingsUrl: '',
+    // Region & Language: the platform-wide language flag (the shared locale store), offered here
+    // because the shell's Settings is where users look for it. The offered codes are the PLATFORM's
+    // supported set (DIRIGIBLE_APPLICATION_LANGUAGES via the locale store) - modules never define
+    // what the stack supports. Each app's generated js/config.js declares which languages it
+    // PROVIDES translations for; apps missing a platform language are listed as warnings so
+    // developers know where translations are still needed (data falls back to the default language).
+    language: 'en',
+    appLanguages: [],
+
+    // Language coverage of the embedded apps: which languages each generated app PROVIDES
+    // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
+    // a JS file, so the array is read with a targeted match rather than executed). One entry per
+    // project; an app without a readable declaration counts as providing only the default language.
+    async loadLanguageCoverage(perspectives) {
+      const bases = new Map();
+      const collect = (item) => {
+        const path = item && item.path;
+        const match = typeof path === 'string' && path.match(/^\/services\/web\/([^\/]+)\/([^#?]*\/)?index\.html/);
+        if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
+      };
+      (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
+      const coverage = await Promise.all([...bases].map(async ([app, base]) => {
+        let provided = ['en'];
+        try {
+          const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
+          if (res.ok) {
+            const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
+            if (match) {
+              const codes = JSON.parse(match[1].replace(/'/g, '"'));
+              if (Array.isArray(codes) && codes.length) provided = codes;
+            }
+          }
+        } catch (e) { /* undeclared coverage counts as default-language only */ }
+        return { app, provided };
+      }));
+      this.appLanguages = coverage;
+    },
+
+    // Apps that do not provide every platform language - the developers' to-do list for missing
+    // translation content. Reactive on both the coverage scan and the platform set.
+    languageWarnings() {
+      const platform = Alpine.store('locale').languages();
+      return this.appLanguages
+                 .map(({ app, provided }) => ({ app, missing: platform.filter(code => !provided.includes(code)) }))
+                 .filter(({ missing }) => missing.length > 0);
+    },
+
+    // The platform's language codes with display names for the Settings picker.
+    languageOptions() {
+      const locale = Alpine.store('locale');
+      return locale.languages().map(code => ({ value: code, text: locale.displayName(code) }));
+    },
 
     async init() {
       try {
@@ -78,17 +130,28 @@ document.addEventListener('alpine:init', () => {
           if (ungrouped.length) {
             ungrouped.sort((a, b) => (a.order || 0) - (b.order || 0)
               || (a.label || '').toLowerCase().localeCompare((b.label || '').toLowerCase()));
-            appGroups.push({ id: 'other', label: 'Other', items: ungrouped });
+            appGroups.push({ id: 'other', label: 'Other', tkey: 'application-core:shell.nav.other', items: ungrouped });
           }
           this.groups = appGroups;
           this.settingsItems = settings;
           // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
           this.loadCounts();
+          // Fire-and-forget: scan which languages each embedded app provides translations for
+          // (drives the missing-translations warnings in Settings).
+          this.loadLanguageCoverage(all);
         }
       } catch (e) {
         console.error('Failed to load application perspectives', e);
       }
       this.loading = false;
+
+      // Mirror the shared locale store so the Settings picker has a plain bindable property;
+      // persisting goes through the store (the fetch client sends it as Accept-Language).
+      const locale = Alpine.store('locale');
+      if (locale) {
+        this.language = locale.value;
+        this.$watch('language', (v) => locale.set(v));
+      }
 
       // Resolve shell state from the current route. Hosted domain apps are addressable as
       // /app/<perspective-id>[/<inner-route>]; everything else is a built-in page rendered into #app.
@@ -262,8 +325,12 @@ document.addEventListener('alpine:init', () => {
 
     isSettingActive(item) { return this.settingsMode && this.settingsSelected === item.id; },
 
-    /** Find a setting entity (perspective) by id. */
-    findSettingItem(id) { return (this.settingsItems || []).find(i => i.id === id) || null; },
+    /** Find a setting entity (perspective) by id. 'region-language' is the built-in shell entry
+     *  (the platform language preference) - it has no app path; its detail renders locally. */
+    findSettingItem(id) {
+      if (id === 'region-language') return { id: 'region-language' };
+      return (this.settingsItems || []).find(i => i.id === id) || null;
+    },
 
     /** Open the task behind a (task-derived) notification, and mark it read. */
     openNotification(n) {

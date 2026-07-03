@@ -1,0 +1,83 @@
+{
+  "shell": {
+    "nav": {
+      "dashboard": "Dashboard",
+      "inbox": "Inbox",
+      "documents": "Documents",
+      "reports": "Reports",
+      "settings": "Settings",
+      "application": "Application",
+      "applications": "Applications",
+      "entities": "Entities",
+      "other": "Other",
+      "create": "Create",
+      "edit": "Edit"
+    },
+    "user": {
+      "user": "User",
+      "logout": "Log out"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "caughtUp": "You're all caught up."
+    },
+    "dashboard": {
+      "title": "Dashboard",
+      "overview": "Overview of your published applications."
+    },
+    "inbox": {
+      "refresh": "Refresh",
+      "filterTasks": "Filter tasks...",
+      "noTasks": "No tasks",
+      "noTasksHint": "You have no pending tasks.",
+      "claimOpen": "Claim & open",
+      "claimTask": "Claim this task",
+      "noTaskSelected": "No task selected",
+      "selectTaskHint": "Select a task from the list to claim it or open its form.",
+      "noForm": "This task has no form.",
+      "taskForm": "Task form",
+      "claimHint": "This task is available to your group. Claim it to open and complete its form."
+    },
+    "documents": {
+      "newFolder": "New folder",
+      "uploadFiles": "Upload files",
+      "uploadZip": "Upload zip contents",
+      "download": "Download",
+      "rename": "Rename",
+      "delete": "Delete",
+      "cancel": "Cancel",
+      "create": "Create",
+      "copyLink": "Copy link",
+      "dropFiles": "Drop files here",
+      "filePreview": "File Preview",
+      "folderName": "Folder name",
+      "newName": "New name",
+      "name": "Name",
+      "enterFolderName": "Enter folder name...",
+      "findInFolder": "Find in folder"
+    },
+    "reports": {
+      "select": "Select a report",
+      "selectHint": "Choose a report from the sidebar to view it here."
+    },
+    "notfound": {
+      "title": "Page not found",
+      "hint": "The page you are looking for does not exist."
+    },
+    "settings": {
+      "selectSetting": "Select a setting",
+      "selectSettingHint": "Choose a configuration entity on the left to manage it here.",
+      "configFor": "Configuration & nomenclature for {{name}}.",
+      "configAll": "Configuration & nomenclature across all applications.",
+      "regionLanguage": "Region & Language",
+      "language": "Language",
+      "missingTranslations": "Missing translations",
+      "missingWarning": "{{app}} does not provide: {{missing}} - falls back to the default language.",
+      "rlDescription": "One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language."
+    },
+    "apps": {
+      "loading": "Loading applications...",
+      "empty": "No applications published yet."
+    }
+  }
+}

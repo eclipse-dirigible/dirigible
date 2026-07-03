@@ -161,11 +161,15 @@ composition is opt-in.
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java
 repository overlays the translated values for the caller's `Accept-Language` - the Harmonia shell's
-Region & Language setting (fed by the top-level `languages:`) sends the user's choice on every call.
-Author translations as seeds with a `language:` code (see seeds). Typical for nomenclatures:
+Region & Language setting sends the user's choice on every call. The languages the STACK supports are
+a platform concern (`DIRIGIBLE_APPLICATION_LANGUAGES`, default `en,bg`) - never defined per module.
+The top-level `languages:` only declares which languages THIS module provides translations for; the
+application shell warns about modules missing a platform language, and untranslated content falls
+back to the default language. Author translations as seeds with a `language:` code (see seeds).
+Typical for nomenclatures:
 
 ```yaml
-languages: [en, bg]        # top level: the data languages the app offers
+languages: [en, bg]        # top level: the languages this module PROVIDES translations for
 entities:
   - name: UoM
     kind: setting

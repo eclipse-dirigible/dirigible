@@ -64,6 +64,8 @@ public enum DirigibleConfig {
 
     HOME_URL("DIRIGIBLE_HOME_URL", "services/web/shell-ide/"), //
 
+    APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en,bg"), //
+
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
 
     MAIL_PASSWORD("DIRIGIBLE_MAIL_PASSWORD", null), //

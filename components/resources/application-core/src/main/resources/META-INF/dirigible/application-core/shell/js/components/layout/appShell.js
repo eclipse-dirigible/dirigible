@@ -103,10 +103,13 @@ document.addEventListener('alpine:init', () => {
 
       // Entity route: top is the entity name; label it the same way the sidebar does.
       const isList = segments.length === 1;
-      crumbs.push({ label: this.navLabel(this.navLabels[top] || top), route: isList ? null : '/' + top });
+      const navKeys = window.__harmoniaNavKeys || {};
+      crumbs.push({ label: window.T ? T(navKeys[top], this.navLabel(this.navLabels[top] || top)) : this.navLabel(this.navLabels[top] || top), route: isList ? null : '/' + top });
       if (!isList) {
         const last = segments[segments.length - 1];
-        const action = last === 'create' ? 'Create' : last === 'edit' ? 'Edit' : this.navLabel(last);
+        const action = last === 'create' ? (window.T ? T('application-core:shell.nav.create', 'Create') : 'Create')
+                : last === 'edit' ? (window.T ? T('application-core:shell.nav.edit', 'Edit') : 'Edit')
+                : this.navLabel(last);
         crumbs.push({ label: action, route: null });
       }
       return crumbs;

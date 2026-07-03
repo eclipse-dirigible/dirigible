@@ -25,8 +25,10 @@ App.config = {
   // matching the package the DAO/REST templates emit — NOT the raw genFolderName.
   restBase: '/services/java/${projectName}/gen/${javaGenFolderName}/api',
 
-  // Data-language codes this app offers (the intent's `languages:`). The shell's Region & Language
-  // setting lists them; the chosen code is sent as Accept-Language on every API call, which the
-  // generated multilingual repositories translate by. A single entry hides the picker.
+  // Data-language codes this app PROVIDES translations for (the intent's `languages:`). This never
+  // defines what the stack supports - the platform's set (DIRIGIBLE_APPLICATION_LANGUAGES) drives
+  // the Region & Language picker. The shared application shell compares this declaration against
+  // the platform set and lists the app as a warning when translations are missing; untranslated
+  // content falls back to the default language.
   languages: ${appLanguages}
 };
