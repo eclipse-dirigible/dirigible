@@ -53,7 +53,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private void verifyPaymentAmount() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Sales Order");
 
         browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
@@ -76,7 +76,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private void verifyCustomerPayment() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Sales Order");
 
         browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
@@ -111,7 +111,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private void verifyOrderCustomer() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Sales Order");
 
         browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
@@ -126,7 +126,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private void verifyProductPrice() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Sales Order");
 
         browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
@@ -145,7 +145,7 @@ class DependsOnScenariosTestProject extends BaseTestProject {
 
     private void verifyProductUom() {
         browser.openPath(VERIFICATION_URI);
-        browser.clickOnElementWithText(HtmlElementType.SPAN, "SalesOrder");
+        browser.clickOnElementWithText(HtmlElementType.SPAN, "Sales Order");
 
         browser.clickOnElementWithText(HtmlElementType.DIV, "Customer A");
 
