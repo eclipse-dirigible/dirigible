@@ -119,7 +119,7 @@
                 <ul x-h-sidebar-menu>
                   <template x-for="r in $store.reports.items" :key="r.url">
                     <li x-h-sidebar-menu-item>
-                      <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/reports') && $store.reports.selected && $store.reports.selected.url === r.url" @click="$store.reports.selected = r; navigate('/reports')">
+                      <button x-h-sidebar-menu-button :data-active="$store.reports.selected && $store.reports.selected.url === r.url" @click="openReport(r)">
                         <i role="img" data-lucide="bar-chart-3"></i><span x-text="$store.reports.displayLabel(r)"></span>
                       </button>
                     </li>
@@ -261,6 +261,8 @@
     <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
     <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
+    <!-- /reports/<name> deep-links a specific report (restored on refresh); applyRoute resolves the store selection. -->
+    <template x-route="/reports/:name" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
     <!-- Settings: list (/settings) or a selected entity (/settings/<perspective-id>). The master-detail
          fragment renders into #app (visible) so its split lays out correctly. -->
     <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>

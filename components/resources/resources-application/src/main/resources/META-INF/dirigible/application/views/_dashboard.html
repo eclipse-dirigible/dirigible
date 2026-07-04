@@ -30,8 +30,8 @@
         <template x-for="r in $store.reports.kpiReports()" :key="r.name">
           <div x-h-card role="button" tabindex="0" class="cursor-pointer"
                :class="r.widget.kind === 'list' ? 'sm:col-span-2' : ''"
-               @click="$store.reports.selected = r; navigate('/reports')"
-               @keydown.enter.prevent="$store.reports.selected = r; navigate('/reports')">
+               @click="openReport(r)"
+               @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
                 <i role="img" :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
@@ -43,6 +43,7 @@
                   <template x-if="!$store.reports.widgetState(r).loaded"><div x-h-skeleton class="w-1/2 h-9"></div></template>
                   <p x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" class="text-3xl font-bold" x-text="$store.reports.widgetValueText(r)"></p>
                   <p x-show="$store.reports.widgetState(r).error" x-h-text.muted class="text-3xl font-bold">—</p>
+                  <p x-show="r.description" x-h-text.muted class="text-xs" x-text="$store.reports.displayDescription(r)"></p>
                 </div>
               </template>
               <template x-if="r.widget.kind === 'list'">
@@ -87,12 +88,12 @@
           <div x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
-                  @click="$store.reports.selected = r; navigate('/reports')">
+                  @click="openReport(r)">
                 <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"
-                        @click="$store.reports.selected = r; navigate('/reports')" aria-label="Open report">
+                        @click="openReport(r)" aria-label="Open report">
                   <i role="img" data-lucide="arrow-up-right"></i>
                 </button>
               </div>

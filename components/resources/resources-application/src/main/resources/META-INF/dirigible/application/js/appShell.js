@@ -160,6 +160,17 @@ document.addEventListener('alpine:init', () => {
         this.$watch('language', (v) => locale.set(v));
       }
 
+      // Reports are discovered asynchronously (the store walks the registry). Once its items arrive,
+      // re-resolve a deep-linked /reports/<name> so a refresh on that URL lands on the right report
+      // instead of the "Select a report" empty state.
+      this.$watch('$store.reports.loaded', () => {
+        if (this.currentPath === '/reports' || this.currentPath.indexOf('/reports/') === 0) {
+          this.selectReportByName(this.currentPath.indexOf('/reports/') === 0
+                  ? decodeURIComponent(this.currentPath.slice('/reports/'.length))
+                  : '');
+        }
+      });
+
       // Resolve shell state from the current route. Hosted domain apps are addressable as
       // /app/<perspective-id>[/<inner-route>]; everything else is a built-in page rendered into #app.
       // The inner route is the iframe app's own hash route (e.g. /SalesInvoice/42/edit), so the top
@@ -203,6 +214,12 @@ document.addEventListener('alpine:init', () => {
           } else {
             this.hostedId = '';
             this.hostedUrl = '';
+            // Reports deep-link: /reports/<name> selects that report so a browser refresh restores it.
+            // The store may still be loading (its items arrive asynchronously) - the `$store.reports.loaded`
+            // watcher below re-resolves once they do.
+            if (p === '/reports' || p.indexOf('/reports/') === 0) {
+              this.selectReportByName(p.indexOf('/reports/') === 0 ? decodeURIComponent(p.slice('/reports/'.length)) : '');
+            }
           }
         }
         this.refreshIcons();
@@ -231,6 +248,23 @@ document.addEventListener('alpine:init', () => {
       this.settingsMode = false;
       window.PineconeRouter.navigate(route);
       this.closeSideNav();
+    },
+
+    /** Open a discovered report deep-linkably: the report name goes in the URL (/reports/<name>) so a
+     *  refresh restores it. applyRoute (and the reports-loaded watcher) resolve the store selection. */
+    openReport(report) {
+      this.navigate('/reports/' + encodeURIComponent(report.name));
+    },
+
+    /** Select the discovered report with this name (from the shared reports store) for the Reports page.
+     *  A blank name (bare /reports) clears the selection so the empty state shows; an unknown name (the
+     *  store not loaded yet) leaves it null until the loaded watcher re-resolves. */
+    selectReportByName(name) {
+      const store = Alpine.store('reports');
+      if (!store) {
+        return;
+      }
+      store.selected = name ? (store.items || []).find(r => r.name === name) || null : null;
     },
 
     /** Host a domain app (a perspective) in the iframe. Swap the iframe synchronously on click (do not
