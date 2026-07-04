@@ -79,6 +79,10 @@ function getTranslations(model) {
 function getReportTranslations(report) {
     let translations = {};
     translations[report.tId] = report.label;
+    // The report's description is externalized under its own key so translators localize it too.
+    if (report.descriptionTId && report.description) {
+        translations[report.descriptionTId] = report.description;
+    }
     for (let i = 0; i < report.columns.length; i++) {
         translations[report.columns[i]['tId']] = report.columns[i]['label'];
     }

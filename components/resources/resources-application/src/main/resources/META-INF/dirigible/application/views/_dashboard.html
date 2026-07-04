@@ -98,7 +98,7 @@
               </div>
             </div>
             <div x-h-card-content class="vbox gap-2">
-              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="r.description"></p>
+              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="$store.reports.displayDescription(r)"></p>
               <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
                       style="width:100%; height:220px; border:0;"></iframe>
             </div>

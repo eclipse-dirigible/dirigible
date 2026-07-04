@@ -206,11 +206,14 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         document.put("name", report.getName());
         document.put("alias", baseAlias);
         document.put("table", baseTable);
-        document.put("tId", translationId(report.getName()));
+        String tId = translationId(report.getName());
+        document.put("tId", tId);
         document.put("label", humanize(report.getName()));
         if (report.getDescription() != null && !report.getDescription()
                                                       .isBlank()) {
             document.put("description", report.getDescription());
+            // Externalize the description as its own catalog key so it localizes alongside the label.
+            document.put("descriptionTId", tId + "Description");
         }
         // dashboard: false excludes the report's tile from the home dashboard (it still shows in the
         // sidebar). Carried on the .report; the Harmonia reports store reads it.
