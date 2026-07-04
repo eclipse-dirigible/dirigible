@@ -27,12 +27,19 @@
         <span x-h-toolbar-title class="shrink-0" x-text="displayName"></span>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
         <div x-h-toolbar-spacer></div>
+#if($chart)
+        <button x-h-button data-variant="outline" data-size="sm" @click="toggleView()">
+          <i role="img" :data-lucide="view === 'chart' ? 'table-2' : 'bar-chart-3'"></i>
+          <span x-text="view === 'chart' ? 'Table' : 'Chart'"></span>
+        </button>
+#end
         <button x-h-button data-variant="outline" data-size="sm" @click="showFilters = !showFilters; refreshIcons()">
           <i role="img" data-lucide="filter"></i><span>Filters</span>
           <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
         </button>
         <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
         <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" data-lucide="download"></i><span>Export</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" data-lucide="printer"></i><span>Print</span></button>
       </div>
 
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
@@ -92,6 +99,13 @@
       </div>
 
       <div x-show="state === 'default'" class="vbox gap-2 p-4 flex-1 overflow-auto">
+#if($chart)
+        <!-- Chart surface: the report's aggregated rows rendered as a ${chart} chart (Chart.js). -->
+        <div x-show="view === 'chart'" class="flex-1" style="position: relative; min-height: 60vh;">
+          <canvas x-ref="chartCanvas"></canvas>
+        </div>
+        <div x-show="view === 'table'" class="vbox gap-2">
+#end
         <div x-h-table-container.scroll data-border="true">
           <table x-h-table data-borders="both">
             <thead x-h-table-header>
@@ -114,9 +128,16 @@
           <span x-h-text.muted x-text="'Page ' + page + ' / ' + totalPages"></span>
           <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span>Next</span><i role="img" data-lucide="chevron-right"></i></button>
         </div>
+#if($chart)
+        </div>
+#end
       </div>
     </div>
 
+#if($chart)
+    <!-- Chart.js (webjar): drives the ${chart} chart rendering for this report page. -->
+    <script src="/webjars/chart.js/dist/chart.umd.js"></script>
+#end
     <script src="./report.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>

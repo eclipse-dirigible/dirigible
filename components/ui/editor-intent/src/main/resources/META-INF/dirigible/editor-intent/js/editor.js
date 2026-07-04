@@ -185,7 +185,32 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 });
             });
             themingHub.onThemeChange((theme) => monaco.editor.setTheme(monacoThemeFor(theme)));
+            recoverWhenRevealed(container);
         });
+    };
+
+    // After a browser refresh every open editor iframe bootstraps at once, but only the focused tab
+    // is visible - the rest sit in `display:none` tab panels (the layout toggles them with ng-show).
+    // Monaco created inside a hidden, zero-size container measures a zero-width font and lays out to
+    // nothing, and unlike the geometry-driven mxGraph diagrams it does not repaint on its own when the
+    // tab is finally revealed: the text pane shows up blank. `automaticLayout` re-runs layout on the
+    // size change but keeps the stale zero font metrics, so the glyphs stay invisible. Watch for the
+    // container gaining real size (the tab being shown) and, once, remeasure the fonts and relayout so
+    // the source appears. A no-op for the focused editor, which is already sized when Monaco is created.
+    let revealObserver = null;
+    const recoverWhenRevealed = (container) => {
+        if (typeof ResizeObserver === 'undefined') return;
+        if (container.clientWidth > 0 && container.clientHeight > 0) return; // already visible at creation
+        revealObserver = new ResizeObserver(() => {
+            if (container.clientWidth > 0 && container.clientHeight > 0) {
+                revealObserver.disconnect();
+                revealObserver = null;
+                if (!monacoEditor) return;
+                if (monacoApi) monacoApi.editor.remeasureFonts();
+                monacoEditor.layout();
+            }
+        });
+        revealObserver.observe(container);
     };
 
     // ----- Live preview --------------------------------------------------------
@@ -504,7 +529,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const renderGlue = () => {
         const categories = [
             { list: $scope.model.forms, icon: ICON.form, color: COLOR.output, entity: f => f.forEntity, detail: () => 'form' },
-            { list: $scope.model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: () => 'report' },
+            { list: $scope.model.reports, icon: ICON.report, color: COLOR.output, entity: r => r.source, detail: r => r.widget ? 'report • KPI ' + (r.widget.kind || (r.widget.value ? 'value' : 'count')) : 'report' },
             { list: $scope.model.notifications, icon: ICON.notification, color: COLOR.glue, entity: n => (eventOf(n.event) || {}).entity, detail: n => eventVerb((eventOf(n.event) || {}).kind) + ' → email' },
             { list: $scope.model.schedules, icon: ICON.schedule, color: COLOR.glue, entity: s => s.entity, detail: s => s.cron || 'scheduled' },
             { list: $scope.model.integrations, icon: ICON.integration, color: COLOR.glue, entity: i => (eventOf(i.event) || {}).entity, detail: i => (i.method || 'POST') + ' ' + eventVerb((eventOf(i.event) || {}).kind) },
@@ -711,6 +736,10 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.$on('$destroy', () => {
         teardown();
         disposeDiff();
+        if (revealObserver) {
+            revealObserver.disconnect();
+            revealObserver = null;
+        }
         if (monacoEditor) {
             monacoEditor.dispose();
             monacoEditor = null;

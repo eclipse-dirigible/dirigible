@@ -285,6 +285,7 @@ public class Configuration {
                 "DIRIGIBLE_SYNCHRONIZER_IGNORE_DEPENDENCIES", //
                 "DIRIGIBLE_SYNCHRONIZER_EXCLUDE_PATHS", //
                 "DIRIGIBLE_HOME_URL", //
+                "DIRIGIBLE_APPLICATION_LANGUAGES", //
                 "DIRIGIBLE_JOB_EXPRESSION_BPM", //
                 "DIRIGIBLE_JOB_EXPRESSION_DATA_STRUCTURES", //
                 "DIRIGIBLE_JOB_EXPRESSION_EXTENSIONS", //

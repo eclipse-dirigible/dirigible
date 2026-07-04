@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -26,6 +27,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
@@ -189,11 +191,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             else if (!dependent && !setting && !compositionParents.containsValue(name)) {
                 entityMap.put("layoutType", "MANAGE");
             }
-            // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
-            // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
-            if (entity.isDashboardExcluded()) {
-                entityMap.put("dashboardWidget", "false");
-            }
             // multilingual: the entity keeps per-language values in a sibling <TABLE>_LANG table. The
             // schema template generates that table and the Java DAO template overlays translated values
             // on every read for the caller's Accept-Language (same attribute the EDM editor writes).
@@ -271,6 +268,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
+            // Explicit UI control order (intent `order:`): reorder the properties so the generated
+            // form/list controls follow the author's sequence (fields and to-one relations interleaved)
+            // instead of the default fields-then-relations layout. Unlisted properties keep their
+            // relative position, appended after the listed ones.
+            properties = applyOrder(properties, entity.getOrder());
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             if (!relations.isEmpty()) {
@@ -307,6 +309,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!model.getLanguages()
                   .isEmpty()) {
             body.put("languages", new ArrayList<>(model.getLanguages()));
+        }
+        // Custom dashboard widgets (top-level `widgets:`): developer-supplied REST KPIs (kind kpi -
+        // the url returns {value, description?}) and embedded pages (kind page - the url is iframed).
+        // Carried on the .model root; the Harmonia shell template bakes them into the dashboard.
+        List<Map<String, Object>> customWidgets = buildCustomWidgets(model);
+        if (!customWidgets.isEmpty()) {
+            body.put("widgets", customWidgets);
         }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
@@ -434,6 +443,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return value != null && !value.isBlank();
     }
 
+    /**
+     * The custom dashboard widgets for the {@code .model} root: name, kind ({@code kpi} default /
+     * {@code page}), the developer's same-origin URL, presentation defaults, and a {@code tId} that
+     * lands in the model's translation catalog. Unnamed/duplicate widgets are skipped with a warning
+     * (the parser already reports them as validation issues).
+     */
+    private static List<Map<String, Object>> buildCustomWidgets(IntentModel model) {
+        List<Map<String, Object>> widgets = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (CustomWidgetIntent widget : model.getWidgets()) {
+            if (widget.getName() == null || widget.getName()
+                                                  .isBlank()
+                    || !seen.add(widget.getName())) {
+                LOGGER.warn("Skipping unnamed or duplicate custom widget in intent [{}]", model.getName());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("name", widget.getName());
+            entry.put("kind", notBlank(widget.getKind()) ? widget.getKind()
+                                                                 .trim()
+                    : "kpi");
+            entry.put("url", widget.getUrl());
+            entry.put("label", notBlank(widget.getLabel()) ? widget.getLabel() : IntentNaming.humanize(widget.getName()));
+            entry.put("tId", "widget" + widget.getName()
+                                              .replace(" ", "")
+                                              .replace("_", "")
+                                              .replace(".", "")
+                                              .replace(":", ""));
+            entry.put("icon", notBlank(widget.getIcon()) ? widget.getIcon() : "gauge");
+            if (notBlank(widget.getDescription())) {
+                entry.put("description", widget.getDescription());
+            }
+            widgets.add(entry);
+        }
+        return widgets;
+    }
+
     private static Map<String, Object> perspectiveEntry(String name, int order, String icon) {
         Map<String, Object> perspective = new LinkedHashMap<>();
         perspective.put("name", name);
@@ -477,6 +523,49 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("generateReport", "false");
         entity.put("generateDefaultRoles", "false");
         return entity;
+    }
+
+    /**
+     * Reorder an entity's generated properties by the intent's explicit {@code order} (a list of
+     * property names, matched case-insensitively against each property's model name). Listed properties
+     * come first in the given order; every property not named keeps its relative order and is appended
+     * after. A blank/empty order returns the list unchanged. A name that matches no property is skipped
+     * (the parser already validates order names, so this only guards system properties like audit
+     * columns that the author never lists).
+     *
+     * @param properties the properties in their default order (fields, then to-one relations)
+     * @param order the authored property-name sequence (may be empty)
+     * @return a new list in the requested order, or {@code properties} when no order is given
+     */
+    private static List<Map<String, Object>> applyOrder(List<Map<String, Object>> properties, List<String> order) {
+        if (order == null || order.isEmpty()) {
+            return properties;
+        }
+        List<Map<String, Object>> ordered = new ArrayList<>(properties.size());
+        Set<Integer> placed = new HashSet<>();
+        for (String wanted : order) {
+            if (wanted == null) {
+                continue;
+            }
+            String token = wanted.trim();
+            for (int i = 0; i < properties.size(); i++) {
+                if (placed.contains(i)) {
+                    continue;
+                }
+                if (token.equalsIgnoreCase(String.valueOf(properties.get(i)
+                                                                    .get("name")))) {
+                    ordered.add(properties.get(i));
+                    placed.add(i);
+                    break;
+                }
+            }
+        }
+        for (int i = 0; i < properties.size(); i++) {
+            if (!placed.contains(i)) {
+                ordered.add(properties.get(i));
+            }
+        }
+        return ordered;
     }
 
     private static Map<String, Object> propertyMap(String entityName, FieldIntent field) {

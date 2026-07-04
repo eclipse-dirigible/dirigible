@@ -43,5 +43,21 @@ document.addEventListener('alpine:init', () => {
       if (this._chart) this._chart.destroy();
       this._chart = new Chart(this.$refs.canvas, { type, data: { labels, datasets } });
     },
+
+    // Print the chart: snapshot the canvas as a PNG into a minimal print document in a new window
+    // (printing the live canvas directly would clip it to the viewport).
+    printChart() {
+      const canvas = this.$refs.canvas;
+      if (!canvas || this.state !== 'default') return;
+      const data = canvas.toDataURL('image/png');
+      const w = window.open('', '_blank');
+      if (!w) return;
+      w.document.write('<!doctype html><html><head><title>${name}</title><style>'
+        + 'body{font-family:system-ui,-apple-system,sans-serif;margin:24px;color:#111}'
+        + 'h1{font-size:18px;margin:0 0 16px}img{max-width:100%}'
+        + '</style></head><body><h1>${name}</h1>'
+        + '<img src="' + data + '" onload="window.focus();window.print()" /></body></html>');
+      w.document.close();
+    },
   }));
 }, { once: true });

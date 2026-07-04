@@ -28,7 +28,11 @@ public class SynchronizationUtil {
 
         LOGGER.debug("Waiting until the synchronization is not needed...");
 
-        await().atMost(30, TimeUnit.SECONDS)
+        // 120s, not 30: right after a publishAll the synchronizer chews through the freshly copied
+        // projects, and on loaded CI runners (PostgreSQL/MSSQL matrices) a full cycle over cloned
+        // sample projects exceeds 30s - DependsOnIT timed out here while the sync was simply busy.
+        // An at-most bound only affects failing runs; passing runs return as soon as the sync idles.
+        await().atMost(120, TimeUnit.SECONDS)
                .pollDelay(1, TimeUnit.SECONDS)
                .pollInterval(500, TimeUnit.MILLISECONDS)
                .until(() -> {
@@ -37,5 +41,24 @@ public class SynchronizationUtil {
                    LOGGER.debug("Synchronization NOT needed: [{}], synch NOT running [{}]", synchNotNeeded, synchNotRunning);
                    return synchNotNeeded && synchNotRunning;
                });
+    }
+
+    /**
+     * Wait until the synchronizer stays idle for a full quiet period. A plain idle check is not enough
+     * right after a publish: the registry file watcher (a polling watcher on some platforms) delivers
+     * trailing change events SECONDS after the copy, scheduling one more cycle - which may re-register
+     * data-store entities and rebuild their tables mid-test (StoreAPISampleProjectIT saw its
+     * just-inserted rows vanish exactly this way). Requiring the idle condition to HOLD for ten seconds
+     * absorbs those late events before the test proceeds.
+     */
+    public static void waitForStableSynchronization() {
+        SynchronizationProcessor synchronizationProcessor = BeanProvider.getBean(SynchronizationProcessor.class);
+
+        LOGGER.debug("Waiting until the synchronization stays idle for a quiet period...");
+
+        await().atMost(180, TimeUnit.SECONDS)
+               .during(10, TimeUnit.SECONDS)
+               .pollInterval(500, TimeUnit.MILLISECONDS)
+               .until(() -> !synchronizationProcessor.isSynchronizationNeeded() && !synchronizationProcessor.isSynchronizationRunning());
     }
 }

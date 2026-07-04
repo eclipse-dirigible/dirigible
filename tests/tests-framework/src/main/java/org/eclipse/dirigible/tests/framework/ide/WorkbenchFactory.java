@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.tests.framework.ide;
 
+import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Component;
@@ -20,11 +21,14 @@ public class WorkbenchFactory {
     private final Browser browser;
     private final WelcomeViewFactory welcomeViewFactory;
     private final TerminalFactory terminalFactory;
+    private final IRepository repository;
 
-    protected WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory) {
+    protected WorkbenchFactory(Browser browser, WelcomeViewFactory welcomeViewFactory, TerminalFactory terminalFactory,
+            IRepository repository) {
         this.browser = browser;
         this.welcomeViewFactory = welcomeViewFactory;
         this.terminalFactory = terminalFactory;
+        this.repository = repository;
     }
 
     public Workbench create() {
@@ -32,6 +36,6 @@ public class WorkbenchFactory {
     }
 
     public Workbench create(Browser browser) {
-        return new Workbench(browser, welcomeViewFactory, terminalFactory);
+        return new Workbench(browser, welcomeViewFactory, terminalFactory, repository);
     }
 }

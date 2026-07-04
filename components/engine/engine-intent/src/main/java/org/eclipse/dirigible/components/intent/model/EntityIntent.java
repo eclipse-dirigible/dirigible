@@ -34,11 +34,6 @@ public class EntityIntent {
      */
     private String icon;
     /**
-     * Whether this entity gets a tile on the home dashboard. Absent (the default) → shown;
-     * {@code dashboard: false} excludes it. (Setting entities are excluded regardless.)
-     */
-    private Boolean dashboard;
-    /**
      * Whether the generator adds the four standard audit columns ({@code CreatedAt}, {@code CreatedBy},
      * {@code UpdatedAt}, {@code UpdatedBy}) the platform's {@code org.eclipse.dirigible.sdk.db} audit
      * annotations populate. Absent (the default) → no audit columns.
@@ -71,11 +66,27 @@ public class EntityIntent {
      * Translation rows are authored as {@code seeds} with a {@code language:} code.
      */
     private Boolean multilingual;
+    /**
+     * Optional explicit ordering of the generated UI controls (form inputs, list columns, detail rows)
+     * by property name - fields and to-one relations interleaved, in the given order. Names match the
+     * authored field / relation names (case-insensitive). Any property not listed keeps its default
+     * position, appended after the listed ones. Absent → the default order (fields in declaration
+     * order, then to-one relations), which pushes all relations to the end.
+     */
+    private List<String> order = new ArrayList<>();
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
     public String getName() {
         return name;
+    }
+
+    public List<String> getOrder() {
+        return order;
+    }
+
+    public void setOrder(List<String> order) {
+        this.order = order == null ? new ArrayList<>() : order;
     }
 
     public void setName(String name) {
@@ -104,19 +115,6 @@ public class EntityIntent {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    /** Whether this entity is excluded from the home dashboard ({@code dashboard: false}). */
-    public boolean isDashboardExcluded() {
-        return Boolean.FALSE.equals(dashboard);
-    }
-
-    public Boolean getDashboard() {
-        return dashboard;
-    }
-
-    public void setDashboard(Boolean dashboard) {
-        this.dashboard = dashboard;
     }
 
     public String getIcon() {

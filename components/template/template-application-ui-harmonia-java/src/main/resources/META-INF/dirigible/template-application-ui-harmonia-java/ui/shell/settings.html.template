@@ -6,7 +6,7 @@
      single "Settings" sidebar entry, keeping the individual settings out of the main navigation. -->
 <div x-data="settingsPage" class="vbox size-full">
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title>Settings</span>
+    <span x-h-toolbar-title x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
   </div>
 
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
@@ -14,12 +14,14 @@
     <!-- Master: the setting entities -->
     <div x-h-split-panel data-size="25%" data-min="200">
       <div class="vbox gap-2 p-4">
-        <!-- Region & Language: the app's single language flag (mirrors the IDE's Region & Language
-             setting). One preference drives both sides: the fetch client sends it as Accept-Language,
-             so multilingual entities come back translated; Print prefers it too. Hidden when the app
-             offers a single language. -->
+        <!-- Region & Language: the PLATFORM's single language flag (mirrors the IDE's Region &
+             Language setting). The offered codes are the platform's supported set
+             (DIRIGIBLE_APPLICATION_LANGUAGES, default en,bg) - never per-app. One preference drives
+             both sides: the fetch client sends it as Accept-Language, so multilingual entities come
+             back translated; Print prefers it too. Hidden only when the platform configures a
+             single language. -->
         <div class="vbox gap-1" x-show="languageOptions().length > 1">
-          <span x-h-text.muted>Region &amp; Language</span>
+          <span x-h-text.muted x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
           <div x-h-select>
             <input x-h-select-input x-model="language" placeholder="Language" />
             <div x-h-select-content>
@@ -29,13 +31,13 @@
             </div>
           </div>
         </div>
-        <span x-h-text.muted>Configuration &amp; nomenclature for ${projectName}.</span>
+        <span x-h-text.muted x-text="T('application-core:shell.settings.configFor', 'Configuration and nomenclature for ${projectName}.', { name: '${projectName}' })"></span>
 #foreach($entity in $models)
 #if($entity.type == "SETTING")
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="selected === '${entity.name}' ? 'selected' : ''"
                 @click="select('${entity.name}', './views/${entity.perspectiveName}/${entity.name}-manage-list.html')">
-          <i role="img" data-lucide="settings"></i><span>${entity.name}</span>
+          <i role="img" data-lucide="settings"></i><span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', '${entity.name}')"></span>
         </button>
 #end
 #end
@@ -47,8 +49,8 @@
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
-          <div x-h-info-page-title>Select a setting</div>
-          <div x-h-info-page-description>Choose a configuration entity on the left to manage it here.</div>
+          <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
+          <div x-h-info-page-description x-text="T('application-core:shell.settings.selectSettingHint', 'Choose a configuration entity on the left to manage it here.')"></div>
         </div>
       </div>
       <div x-show="selected && loading" class="p-4"><div x-h-spinner></div></div>

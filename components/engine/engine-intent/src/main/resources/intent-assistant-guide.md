@@ -157,15 +157,36 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
+rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
+last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving
+fields and relations for a better form layout:
+
+```yaml
+- name: SalesInvoiceItem
+  order: [Id, SalesInvoice, Product, Name, Quantity, UoM, Price, Discount, Net, Vat, Total]
+  fields: [ ... ]
+  relations: [ ... ]
+```
+
+Names match the field / relation names (case-insensitive). A **partial** order is fine - any property
+not listed keeps its default position and is appended after the listed ones. System properties
+(`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
+the entity.
+
 **Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java
 repository overlays the translated values for the caller's `Accept-Language` - the Harmonia shell's
-Region & Language setting (fed by the top-level `languages:`) sends the user's choice on every call.
-Author translations as seeds with a `language:` code (see seeds). Typical for nomenclatures:
+Region & Language setting sends the user's choice on every call. The languages the STACK supports are
+a platform concern (`DIRIGIBLE_APPLICATION_LANGUAGES`, default `en,bg`) - never defined per module.
+The top-level `languages:` only declares which languages THIS module provides translations for; the
+application shell warns about modules missing a platform language, and untranslated content falls
+back to the default language. Author translations as seeds with a `language:` code (see seeds).
+Typical for nomenclatures:
 
 ```yaml
-languages: [en, bg]        # top level: the data languages the app offers
+languages: [en, bg]        # top level: the languages this module PROVIDES translations for
 entities:
   - name: UoM
     kind: setting
@@ -402,6 +423,94 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 202607) or `year(field)` — e.g. `dimensions: ["month(date)"]` with `measures: ["sum(total)", "sum(vat)"]`
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
+
+#### reports[].chart - render as a chart
+
+Add `chart:` to render the report page as a chart instead of a table (the page keeps a Table/Chart
+toggle, so filters, CSV export and print still work). The grouping dimension labels the axis and each
+measure becomes a series, so a chart report should have exactly one dimension and one or more measures.
+
+```yaml
+reports:
+  - name: MonthlyRevenue
+    source: SalesInvoice
+    dimensions: ["month(date)"]
+    measures: ["sum(net)", "sum(vat)", "sum(total)"]
+    chart: bar                            # bar | line | pie | doughnut | polarArea | radar
+```
+
+**Rules:** `bar`/`line` suit a dimension with multiple measures; `pie`/`doughnut`/`polarArea`/`radar`
+read best with a single measure. `chart` and `widget` are independent — a report may have both (a
+dashboard KPI tile and a chart page).
+
+#### reports[].widget - dashboard KPI tiles
+
+**Use when:** the user wants a meaningful number on the home dashboard — "overdue invoices",
+"revenue this month" — instead of (or besides) the full report. The report supplies the data; the
+widget only says which single number (or top-N slice) the tile shows.
+
+```yaml
+reports:
+  - name: OverdueInvoices
+    source: Invoice
+    dimensions: [number, customer.name, dueOn, total]
+    filter: "dueOn < CURRENT_DATE and status.name <> 'Paid'"
+    widget:
+      kind: count                      # default: the number of records the report yields
+      label: Overdue Invoices          # optional, defaults to the report label
+      icon: alert-triangle             # optional Lucide icon, default gauge
+
+  - name: RevenueByMonth
+    source: Invoice
+    dimensions: ["month(issuedOn)"]
+    measures: ["sum(total)"]
+    widget:
+      value: "sum(total)"              # names a declared measure => kind: value
+      at: { "month(issuedOn)": now }   # pin dimensions: the token `now` or a literal
+      label: Revenue (this month)
+      icon: banknote
+
+  - name: TopDebtors
+    source: Invoice
+    dimensions: [customer.name]
+    measures: ["sum(total)"]
+    filter: "status.name <> 'Paid'"
+    widget: { kind: list, limit: 5, label: Top Debtors, icon: list-ordered }
+```
+
+**Rules:** `kind` is `count` (default) / `value` / `list`. `value` must name a declared measure and
+implies `kind: value`; `limit` (default 5) applies to `kind: list` only. `at` keys must name
+declared dimensions; the token `now` resolves at view time, type-aware — current YYYYMM on a
+`month(x)` dimension, current year on `year(x)`, today on a date column — anything else is a
+literal pinned with an equals condition. **Behavior:** a widget-bearing report shows a compact KPI
+tile INSTEAD of its dashboard preview tile (click still opens the full report); `dashboard: false`
+hides both tiles of a report. The home dashboard shows report/custom widget tiles and report
+previews — there are no auto per-entity record-count tiles. Prefer a handful of business-meaningful
+widgets.
+
+### widgets - custom dashboard widgets
+
+**Use when:** the dashboard needs content the report machinery cannot express - a number computed
+by hand-written code, or an entirely custom visualization page. This is the dashboard's escape
+hatch; prefer `reports[].widget` when a report can supply the number.
+
+```yaml
+widgets:
+  - name: SystemHealth
+    kind: kpi                                    # default: a number tile fed by a REST endpoint
+    url: /services/js/sales/custom/health.js     # GET returns { value, description? }
+    label: System Health                         # optional, defaults to the humanized name
+    icon: activity                               # optional Lucide icon, default gauge
+  - name: SalesFunnel
+    kind: page                                   # a large tile embedding the developer's HTML page
+    url: /services/web/sales/custom/funnel/index.html
+```
+
+**Rules:** `kind` is `kpi` (default) or `page` - the kind implies how the `url` is consumed (JSON
+fetch vs iframe), so there is no separate source-type field. `url` must be a same-origin path (no
+scheme/host); the implementation is hand-written code under the project's `custom/` folder (e.g. a
+client-Java `@Component @Controller`) or any served page. A `kpi` endpoint returns
+`{ "value": <number|string>, "description": "optional secondary line" }`.
 
 ### permissions - roles
 

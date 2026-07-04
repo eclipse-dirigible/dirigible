@@ -15,6 +15,7 @@ import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.ide.GitPerspective;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
+import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
@@ -34,6 +35,11 @@ abstract class SampleProjectRepositoryIT extends UserInterfaceIntegrationTest {
         workbench.publishAll(true);
 
         synchronizationProcessor.forceProcessSynchronizers();
+
+        // The registry watcher may deliver trailing publish events seconds later, scheduling one
+        // more sync cycle that can re-register data-store entities (rebuilding their tables) while
+        // the verification is already inserting data. Proceed only after the sync stays idle.
+        SynchronizationUtil.waitForStableSynchronization();
 
         verifyProject();
     }

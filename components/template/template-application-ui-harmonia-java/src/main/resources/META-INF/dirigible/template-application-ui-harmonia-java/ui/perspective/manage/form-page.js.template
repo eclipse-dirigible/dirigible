@@ -6,9 +6,10 @@
  */
 
 /*
- * Create/Edit form page for ${name}. One component serves both routes:
- *   /${name}/create        -> create mode (empty form)
- *   /${name}/{id}/edit     -> edit mode (loads the record by primary key)
+ * Create/Edit/Preview form page for ${name}. One component serves all three routes:
+ *   /${name}/create         -> create mode (empty form)
+ *   /${name}/{id}/edit      -> edit mode (loads the record by primary key)
+ *   /${name}/{id}/preview   -> preview mode (same data as edit, everything read-only)
  * Built on baseFormPage: a 422 ValidationError from the REST controller is mapped
  * onto per-field `errors` (see mapCauses), everything else into a banner.
  */
@@ -18,8 +19,13 @@ document.addEventListener('alpine:init', () => {
 
     // empty-form | loading | ready | saving | validation-error | save-failure | load-failure
     state: 'ready',
-    mode: 'create',          // 'create' | 'edit'
+    mode: 'create',          // 'create' | 'edit' | 'preview'
     id: null,
+
+    // This entity's registered detail collections (masters only; empty otherwise). Rendered as
+    // detail panels below the form on edit/preview - matching the master browse view, which was
+    // previously the ONLY place details showed up.
+    detailDefs: [],
 
     // Form model — one entry per editable property (auto-increment PK excluded).
     form: {
@@ -44,6 +50,7 @@ document.addEventListener('alpine:init', () => {
 #end
 
     get isEdit() { return this.mode === 'edit'; },
+    get isPreview() { return this.mode === 'preview'; },
     get errorCount() { return Object.keys(this.errors).filter(k => this.errors[k]).length; },
 
     // Controller path for ${name}, relative to App.config.restBase
@@ -51,16 +58,20 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
     async init() {
-      // The edit route is /${name}/{id}/edit — Pinecone exposes the param as `id`.
+      // The edit/preview routes are /${name}/{id}/edit|preview — Pinecone exposes the param as `id`.
+      // Read the live hash, not PineconeRouter.context.path: for these routes Pinecone can fire
+      // pinecone:end before the context is assigned, but the hash is already updated.
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
       this.id = params.id ?? null;
-      this.mode = this.id != null ? 'edit' : 'create';
+      const routePath = (window.location.hash || '').split('?')[0];
+      this.mode = this.id == null ? 'create' : (routePath.endsWith('/preview') ? 'preview' : 'edit');
+      this.detailDefs = this.id != null ? App.detailsFor('${name}') : [];
 
 #if($hasDropdowns)
       await this.loadOptions();
 #end
 
-      if (this.isEdit) {
+      if (this.isEdit || this.isPreview) {
         this.state = 'loading';
         try {
           const record = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
@@ -213,6 +224,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async save() {
+      if (this.isPreview) return;
       if (!this.validate()) {
         this.state = 'validation-error';
         this.scrollToSummary();
@@ -308,6 +320,12 @@ document.addEventListener('alpine:init', () => {
         return;
       }
       this.navigateBack('/${name}');
+    },
+
+    // Preview -> the editable form for the same record (returnTo carried over).
+    goEdit() {
+      const ret = this.returnToParam();
+      window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit' + (ret ? '?returnTo=' + encodeURIComponent(ret) : ''));
     },
   }));
 }, { once: true });
