@@ -115,8 +115,18 @@ document.addEventListener('alpine:init', () => {
       this.state = 'loading';
       this.error = null;
       try {
-        const offset = (this.page - 1) * this.limit;
         const conditions = this.conditions();
+        // Fetch the total first so preview mode (the dashboard tile) can window to the LAST rows -
+        // the most recent records in the report's natural order - rather than the first ones.
+        try {
+          const c = conditions.length
+            ? await reportHttp.post(this.apiBase + '/count', { conditions })
+            : await reportHttp.get(this.apiBase + '/count');
+          this.count = (c && c.count != null) ? c.count : 0;
+        } catch (e) { this.count = 0; }
+        const offset = this.preview
+          ? Math.max(0, this.count - this.limit)
+          : (this.page - 1) * this.limit;
         let rows;
         if (conditions.length) {
           rows = await reportHttp.post(this.apiBase + '/search', { ${dollar}limit: this.limit, ${dollar}offset: offset, conditions });
@@ -128,12 +138,7 @@ document.addEventListener('alpine:init', () => {
         // falling back to the generation-time metadata when a filter empties the page.
         if (this.rows.length) this.columns = Object.keys(this.rows[0]);
         else if (!this.columns.length && this.reportColumns.length) this.columns = this.reportColumns.map(c => c.key);
-        try {
-          const c = conditions.length
-            ? await reportHttp.post(this.apiBase + '/count', { conditions })
-            : await reportHttp.get(this.apiBase + '/count');
-          this.count = (c && c.count != null) ? c.count : this.rows.length;
-        } catch (e) { this.count = this.rows.length; }
+        if (!this.count) this.count = this.rows.length;
         this.state = this.rows.length ? 'default' : 'empty';
       } catch (e) {
         this.error = (e && e.message) || 'Could not run the ${name} report.';
