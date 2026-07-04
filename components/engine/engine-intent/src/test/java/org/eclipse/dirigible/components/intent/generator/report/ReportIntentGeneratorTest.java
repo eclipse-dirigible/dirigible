@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.intent.generator.report;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.LinkedHashMap;
@@ -21,6 +22,7 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -66,6 +68,45 @@ class ReportIntentGeneratorTest {
             column.put("pattern", pattern);
         }
         return column;
+    }
+
+    @Test
+    void chartKindParsesOntoTheReport() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                      - { name: total, type: decimal }
+                reports:
+                  - name: MonthlyRevenue
+                    source: Invoice
+                    dimensions: ["month(issuedOn)"]
+                    measures: ["sum(total)"]
+                    chart: bar
+                """);
+        assertEquals("bar", model.getReports()
+                                 .get(0)
+                                 .getChart());
+    }
+
+    @Test
+    void unknownChartKindIsRejected() {
+        assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                reports:
+                  - name: Revenue
+                    source: Invoice
+                    measures: ["sum(total)"]
+                    chart: bogus
+                """));
     }
 
     @Test

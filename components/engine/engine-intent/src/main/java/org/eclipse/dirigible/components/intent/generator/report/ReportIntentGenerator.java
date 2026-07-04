@@ -215,6 +215,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         // dashboard: false excludes the report's tile from the home dashboard (it still shows in the
         // sidebar). Carried on the .report; the Harmonia reports store reads it.
         document.put("dashboard", report.isDashboardExcluded() ? Boolean.FALSE : Boolean.TRUE);
+        // chart: bar (or line/pie/...) makes the report page render the aggregated rows as that chart
+        // type instead of a table (the grouping dimension labels the axis, one dataset per measure).
+        if (report.getChart() != null && !report.getChart()
+                                                .isBlank()) {
+            document.put("chart", report.getChart()
+                                        .trim());
+        }
         if (report.getWidget() != null) {
             document.put("widget", widget(report, dimensionColumns, measureColumns));
         }

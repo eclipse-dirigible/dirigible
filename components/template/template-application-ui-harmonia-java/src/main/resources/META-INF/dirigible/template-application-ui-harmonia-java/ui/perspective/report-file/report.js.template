@@ -41,7 +41,7 @@ document.addEventListener('alpine:init', () => {
     // filter controls (date/number ranges, boolean select, text contains).
     reportColumns: [
 #foreach($column in $columns)
-      { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}'#if($column.pattern), pattern: '${column.pattern}'#end },
+      { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}', agg: '${column.aggregate}'#if($column.pattern), pattern: '${column.pattern}'#end },
 #end
     ],
     showFilters: false,
@@ -54,6 +54,13 @@ document.addEventListener('alpine:init', () => {
     // Preview mode (dashboard tile): only the first few rows, no toolbar / pagination. Driven by
     // the ?preview=1 query param the dashboard tile passes when it embeds this page in an iframe.
     preview: false,
+#if($chart)
+    // Chart rendering (chart: ${chart} in the .report). `view` toggles the chart/table surfaces; the
+    // chart labels come from the grouping dimension column and one dataset per aggregate (measure).
+    chartType: '${chart}',
+    view: 'chart',      // 'chart' | 'table'
+    _chart: null,
+#end
 
     init() {
       this.displayName = String(this.displayName || '')
@@ -133,7 +140,56 @@ document.addEventListener('alpine:init', () => {
         this.state = 'error';
       }
       this.refreshIcons();
+#if($chart)
+      if (this.chartType && this.view === 'chart' && this.rows.length) this.${dollar}nextTick(() => this.renderChart());
+#end
     },
+#if($chart)
+
+    // Toggle between the chart and the raw data table (both driven by the same fetched rows).
+    toggleView() {
+      this.view = this.view === 'chart' ? 'table' : 'chart';
+      if (this.view === 'chart') this.${dollar}nextTick(() => this.renderChart());
+      this.refreshIcons();
+    },
+
+    // Render the aggregated rows as a Chart.js chart: the grouping dimension (aggregate NONE) labels
+    // the axis, each aggregate column becomes a dataset. Re-created on every load/filter/toggle.
+    renderChart() {
+      if (!this.chartType || typeof Chart === 'undefined') return;
+      const canvas = this.${dollar}refs.chartCanvas;
+      if (!canvas) return;
+      const category = this.reportColumns.find(c => c.agg === 'NONE') || this.reportColumns[0];
+      let series = this.reportColumns.filter(c => c.agg && c.agg !== 'NONE');
+      if (!series.length) series = this.reportColumns.filter(c => c !== category);
+      const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : ''));
+      const palette = ['#3584e4', '#26a269', '#e9a319', '#9141ac', '#c64600', '#708090'];
+      const datasets = series.map((c, i) => ({
+        label: c.key,
+        data: this.rows.map(r => Number(r[c.key]) || 0),
+        backgroundColor: palette[i % palette.length],
+        borderColor: palette[i % palette.length],
+        borderWidth: 1,
+      }));
+      this.destroyChart();
+      this._chart = new Chart(canvas, {
+        type: this.chartType,
+        data: { labels, datasets },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: datasets.length > 1 } } },
+      });
+    },
+
+    destroyChart() { if (this._chart) { this._chart.destroy(); this._chart = null; } },
+
+    // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07".
+    axisLabel(v) {
+      const n = Number(v);
+      if (Number.isInteger(n) && n >= 190001 && n <= 999912 && (n % 100) >= 1 && (n % 100) <= 12) {
+        return Math.floor(n / 100) + '-' + String(n % 100).padStart(2, '0');
+      }
+      return v == null ? '' : String(v);
+    },
+#end
 
     columnMeta(key) { return this.reportColumns.find(c => c.key === key) || null; },
 
