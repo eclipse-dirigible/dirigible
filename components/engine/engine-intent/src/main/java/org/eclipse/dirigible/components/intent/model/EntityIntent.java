@@ -34,11 +34,6 @@ public class EntityIntent {
      */
     private String icon;
     /**
-     * Whether this entity gets a tile on the home dashboard. Absent (the default) → shown;
-     * {@code dashboard: false} excludes it. (Setting entities are excluded regardless.)
-     */
-    private Boolean dashboard;
-    /**
      * Whether the generator adds the four standard audit columns ({@code CreatedAt}, {@code CreatedBy},
      * {@code UpdatedAt}, {@code UpdatedBy}) the platform's {@code org.eclipse.dirigible.sdk.db} audit
      * annotations populate. Absent (the default) → no audit columns.
@@ -104,19 +99,6 @@ public class EntityIntent {
 
     public void setDescription(String description) {
         this.description = description;
-    }
-
-    /** Whether this entity is excluded from the home dashboard ({@code dashboard: false}). */
-    public boolean isDashboardExcluded() {
-        return Boolean.FALSE.equals(dashboard);
-    }
-
-    public Boolean getDashboard() {
-        return dashboard;
-    }
-
-    public void setDashboard(Boolean dashboard) {
-        this.dashboard = dashboard;
     }
 
     public String getIcon() {

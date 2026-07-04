@@ -243,8 +243,6 @@ class EdmIntentGeneratorTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> root = (Map<String, Object>) model.get("model");
 
-        assertEquals(Boolean.TRUE, root.get("dashboardKpis"), "declared widgets should flip the .model root flag");
-
         @SuppressWarnings("unchecked")
         List<Map<String, Object>> widgets = (List<Map<String, Object>>) root.get("widgets");
         assertEquals(2, widgets.size(), "both custom widgets should land on the .model root");
@@ -259,7 +257,7 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
-    void reportWidgetAloneFlipsTheDashboardKpisFlagWithoutCustomWidgets() {
+    void reportWidgetAloneAddsNoCustomWidgetsArray() {
         String yaml = """
                 name: sales
                 entities:
@@ -275,7 +273,6 @@ class EdmIntentGeneratorTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> root = (Map<String, Object>) EdmIntentGenerator.buildModelJsonForTest(parsed, "sales")
                                                                            .get("model");
-        assertEquals(Boolean.TRUE, root.get("dashboardKpis"));
         assertNull(root.get("widgets"), "no custom widgets - the .model root must not carry an empty array");
     }
 

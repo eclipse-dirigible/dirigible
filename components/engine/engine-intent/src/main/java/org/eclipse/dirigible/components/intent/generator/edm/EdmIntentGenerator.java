@@ -191,11 +191,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             else if (!dependent && !setting && !compositionParents.containsValue(name)) {
                 entityMap.put("layoutType", "MANAGE");
             }
-            // dashboard: false excludes the entity from the home dashboard tiles (settings are excluded
-            // anyway by their type); carried on the .model entity, read by the Harmonia dashboard.
-            if (entity.isDashboardExcluded()) {
-                entityMap.put("dashboardWidget", "false");
-            }
             // multilingual: the entity keeps per-language values in a sibling <TABLE>_LANG table. The
             // schema template generates that table and the Java DAO template overlays translated values
             // on every read for the caller's Accept-Language (same attribute the EDM editor writes).
@@ -310,20 +305,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                   .isEmpty()) {
             body.put("languages", new ArrayList<>(model.getLanguages()));
         }
-        // Any declared dashboard widget - a report-attached KPI or a custom widget - flips this
-        // .model root flag so the Harmonia shell template suppresses the auto per-entity count tiles
-        // at generation time: declared widgets replace them. (Report-attached widget definitions
-        // live in the .report files, read by the runtime store; custom widgets are baked below.)
-        boolean reportWidgets = model.getReports()
-                                     .stream()
-                                     .anyMatch(report -> report.getWidget() != null);
-        List<Map<String, Object>> customWidgets = buildCustomWidgets(model);
-        if (reportWidgets || !customWidgets.isEmpty()) {
-            body.put("dashboardKpis", Boolean.TRUE);
-        }
         // Custom dashboard widgets (top-level `widgets:`): developer-supplied REST KPIs (kind kpi -
         // the url returns {value, description?}) and embedded pages (kind page - the url is iframed).
         // Carried on the .model root; the Harmonia shell template bakes them into the dashboard.
+        List<Map<String, Object>> customWidgets = buildCustomWidgets(model);
         if (!customWidgets.isEmpty()) {
             body.put("widgets", customWidgets);
         }
