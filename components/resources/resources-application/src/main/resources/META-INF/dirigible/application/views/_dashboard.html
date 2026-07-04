@@ -23,7 +23,7 @@
     <template x-for="group in groups" :key="group.id">
       <div class="vbox gap-3" x-show="group.items.some(i => i.kind === 'PRIMARY')">
         <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-          <i role="img" data-lucide="layout-grid" class="size-4"></i><span x-text="group.label"></span>
+          <i role="img" data-lucide="layout-grid" class="size-4"></i><span x-text="group.tkey ? T(group.tkey, group.label) : group.label"></span>
         </div>
         <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <template x-for="item in group.items.filter(i => i.kind === 'PRIMARY')" :key="item.id">
@@ -34,7 +34,7 @@
                   <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                   <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
                   <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'" class="size-4"></i></template>
-                  <span x-text="item.label"></span>
+                  <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
                 </div>
               </div>
               <div x-h-card-content>

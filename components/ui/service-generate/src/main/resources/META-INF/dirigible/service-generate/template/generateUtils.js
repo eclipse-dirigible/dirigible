@@ -17,6 +17,51 @@ function getTranslationId(str) {
     return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
 }
 
+// Humanize a PascalCase/camelCase identifier for display ("SalesInvoice" -> "Sales Invoice").
+// Mirrors org.eclipse.dirigible.components.intent.generator.IntentNaming.humanize, including its
+// acronym overrides, so a hand-authored .edm (no entityLabel/menuLabel baked by the intent
+// generator) still yields the same labels the intent path would.
+const HUMANIZE_OVERRIDES = { 'uom': 'Unit of Measure' };
+
+function humanizeName(name) {
+    if (!name) return '';
+    const override = HUMANIZE_OVERRIDES[name.toLowerCase()];
+    if (override) return override;
+    let out = '';
+    for (let i = 0; i < name.length; i++) {
+        const c = name.charAt(i);
+        if (i > 0 && c >= 'A' && c <= 'Z' && !(name.charAt(i - 1) >= 'A' && name.charAt(i - 1) <= 'Z')) {
+            out += ' ';
+        }
+        out += i === 0 ? c.toUpperCase() : c;
+    }
+    return out;
+}
+
+// Pluralize a humanized label's last word ("Sales Invoice" -> "Sales Invoices", "Country" ->
+// "Countries"). Mirrors IntentNaming.pluralize, including its irregular overrides.
+const PLURALIZE_OVERRIDES = { 'unit of measure': 'Units of Measure', 'uom': 'Units of Measure' };
+
+function pluralizeLabel(label) {
+    if (!label) return '';
+    const override = PLURALIZE_OVERRIDES[label.toLowerCase()];
+    if (override) return override;
+    const sp = label.lastIndexOf(' ');
+    const head = sp >= 0 ? label.substring(0, sp + 1) : '';
+    const last = sp >= 0 ? label.substring(sp + 1) : label;
+    if (!last) return label;
+    const lower = last.toLowerCase();
+    let plural;
+    if (lower.length > 1 && lower.endsWith('y') && 'aeiou'.indexOf(lower.charAt(lower.length - 2)) < 0) {
+        plural = last.substring(0, last.length - 1) + 'ies';
+    } else if (lower.endsWith('s') || lower.endsWith('x') || lower.endsWith('z') || lower.endsWith('ch') || lower.endsWith('sh')) {
+        plural = last + 'es';
+    } else {
+        plural = last + 's';
+    }
+    return head + plural;
+}
+
 function getTranslations(model) {
     let translations = {};
     for (const [key, value] of Object.entries(model)) {
@@ -686,7 +731,15 @@ export function generateFiles(model, parameters, templateSources) {
             if (model.entities) {
                 for (let i = 0; i < model.entities.length; i++) {
                     if (model.entities[i].dataName && model.entities[i].name) {
-                        translations.t[model.entities[i].dataName] = model.entities[i].name;
+                        // The entity's humanized singular ("Sales Invoice") and pluralized
+                        // ("Sales Invoices") display names, per language: t.<dataName> feeds the
+                        // singular UI texts (form captions, "New X", "X #id"), t.<dataName>_plural
+                        // the plural ones (sidebar entries, list/master titles, detail panels).
+                        // The model's own entityLabel/menuLabel (EdmIntentGenerator) win; models
+                        // without them (hand-authored .edm) get the same derivation applied here.
+                        const singular = model.entities[i].entityLabel || humanizeName(model.entities[i].name);
+                        translations.t[model.entities[i].dataName] = singular;
+                        translations.t[`${model.entities[i].dataName}_plural`] = model.entities[i].menuLabel || pluralizeLabel(singular);
                     }
                     if (model.entities[i].properties) {
                         properties(model.entities[i].properties);

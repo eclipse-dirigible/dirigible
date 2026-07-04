@@ -19,7 +19,8 @@
 App.registerDetail('${masterEntity}', {
   entity: '${name}',
   label: '${menuLabel}',
-  tkey: '$projectName:${tprefix}.t.${dataName}',
+  // The label is the pluralized humanized name ("Loans"), so its key is the _plural variant.
+  tkey: '$projectName:${tprefix}.t.${dataName}_plural',
   apiPath: '/${javaPerspectiveName}/${name}Controller',
   masterEntityId: '${masterEntityId}',
   primaryKey: '${primaryKeysString}',
