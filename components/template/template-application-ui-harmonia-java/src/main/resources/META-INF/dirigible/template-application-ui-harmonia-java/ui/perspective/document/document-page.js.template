@@ -134,8 +134,6 @@ document.addEventListener('alpine:init', () => {
     // Items table state (the ${documentItemsEntity} child, rendered inline).
     itemsDef: null,
     items: [],
-    itemsPage: 1,
-    itemsPageSize: 20,
     itemsState: 'loading',   // loading | error | empty | default
     itemsError: null,
     itemOptions: {},         // edit-column name -> [{ value, text }] for relationship cells
@@ -478,7 +476,6 @@ document.addEventListener('alpine:init', () => {
         const q = '?' + encodeURIComponent(this.itemsDef.masterEntityId) + '=' + encodeURIComponent(this.id);
         const rows = await App.services.api.getAll(this.itemsDef.apiPath + q);
         this.items = rows || [];
-        if ((this.itemsPage - 1) * this.itemsPageSize >= this.items.length) this.itemsPage = 1;
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
       } catch (e) {
         this.itemsError = App.services.apiErrors.messageFor(e, 'Could not load items.');
@@ -486,15 +483,6 @@ document.addEventListener('alpine:init', () => {
       }
       this.refreshIcons();
     },
-
-    // Client-side pagination over the line items (default 20/page; pager shown only when > 1). The
-    // page is preserved across reloads unless it would fall past the end (an add/delete shrank the set).
-    get itemsPageCount() { return Math.max(1, Math.ceil(this.items.length / this.itemsPageSize)); },
-    get pagedItems() {
-      const start = (this.itemsPage - 1) * this.itemsPageSize;
-      return this.items.slice(start, start + this.itemsPageSize);
-    },
-    goItemsPage(n) { this.itemsPage = Math.max(1, Math.min(n, this.itemsPageCount)); this.refreshIcons(); },
 
     async loadItemOptions() {
       for (const col of this.editColumns) {

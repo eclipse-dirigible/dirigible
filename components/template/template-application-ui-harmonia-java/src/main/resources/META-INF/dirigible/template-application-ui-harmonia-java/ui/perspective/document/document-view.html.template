@@ -160,7 +160,7 @@
           </tr>
         </thead>
         <tbody x-h-table-body>
-          <template x-for="(row, idx) in pagedItems" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
+          <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
               <template x-for="col in editColumns" :key="col.name">
                 <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellDisplay(col, row)"></td>
@@ -182,11 +182,6 @@
           </tr>
         </tbody>
       </table>
-      <nav x-h-pagination class="p-2" x-show="itemsPageCount > 1">
-        <button x-h-pagination-prev @click="goItemsPage(itemsPage - 1)" :disabled="itemsPage === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
-        <span x-h-pagination-item x-text="itemsPage + ' / ' + itemsPageCount"></span>
-        <button x-h-pagination-next @click="goItemsPage(itemsPage + 1)" :disabled="itemsPage === itemsPageCount" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
-      </nav>
     </div>
 
     <!-- ===== Totals footer (aggregate fields, read-only, right-aligned) — only once the document exists ===== -->
