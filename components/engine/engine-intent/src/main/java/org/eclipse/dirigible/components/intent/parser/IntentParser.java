@@ -1176,9 +1176,18 @@ public final class IntentParser {
             if (report.getWidget() != null) {
                 validateReportWidget(report, issues);
             }
+            if (report.getChart() != null && !report.getChart()
+                                                    .isBlank()
+                    && !REPORT_CHART_KINDS.contains(report.getChart()
+                                                          .trim())) {
+                issues.add("report [" + report.getName() + "] has unknown chart [" + report.getChart() + "] - expected one of "
+                        + REPORT_CHART_KINDS);
+            }
         }
     }
 
+    /** Chart types a report page can render (Chart.js). */
+    private static final Set<String> REPORT_CHART_KINDS = Set.of("bar", "line", "pie", "doughnut", "polarArea", "radar");
     private static final Set<String> WIDGET_KINDS = Set.of("count", "value", "list");
     private static final Set<String> CUSTOM_WIDGET_KINDS = Set.of("kpi", "page");
 

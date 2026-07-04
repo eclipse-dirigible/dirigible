@@ -407,6 +407,25 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].chart - render as a chart
+
+Add `chart:` to render the report page as a chart instead of a table (the page keeps a Table/Chart
+toggle, so filters, CSV export and print still work). The grouping dimension labels the axis and each
+measure becomes a series, so a chart report should have exactly one dimension and one or more measures.
+
+```yaml
+reports:
+  - name: MonthlyRevenue
+    source: SalesInvoice
+    dimensions: ["month(date)"]
+    measures: ["sum(net)", "sum(vat)", "sum(total)"]
+    chart: bar                            # bar | line | pie | doughnut | polarArea | radar
+```
+
+**Rules:** `bar`/`line` suit a dimension with multiple measures; `pie`/`doughnut`/`polarArea`/`radar`
+read best with a single measure. `chart` and `widget` are independent — a report may have both (a
+dashboard KPI tile and a chart page).
+
 #### reports[].widget - dashboard KPI tiles
 
 **Use when:** the user wants a meaningful number on the home dashboard — "overdue invoices",
