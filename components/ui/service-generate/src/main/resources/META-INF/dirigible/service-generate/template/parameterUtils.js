@@ -171,6 +171,11 @@ export function process(model, parameters) {
                     const javaUrl = `/services/java/${targetProject}/gen/${javaGen}/api/${javaPerspective}/${p.relationshipEntityName}Controller`;
                     p.widgetDropdownUrl = javaUrl;
                     p.widgetDropdownControllerUrl = javaUrl;
+                    // The target's own Harmonia SPA (for the FK "Add new" iframe dialog). The web assets
+                    // live under the RAW genFolderName, while the Java controllers use the sanitized one
+                    // - so this must be derived from targetGenFolder directly, NOT by rewriting the
+                    // controller URL (that keeps the sanitized folder and 404s for hyphenated names).
+                    p.widgetDropdownAppUrl = `/services/web/${targetProject}/gen/${targetGenFolder}/index.html`;
                 } else {
                     p.widgetDropdownUrl = `/services/ts/${targetProject}/gen/${targetGenFolder}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Service.ts`;
                     p.widgetDropdownControllerUrl = `/services/ts/${targetProject}/gen/${targetGenFolder}/api/${p.relationshipEntityPerspectiveName}/${p.relationshipEntityName}Controller.ts`;
