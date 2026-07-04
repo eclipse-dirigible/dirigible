@@ -88,7 +88,7 @@
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
                   @click="$store.reports.selected = r; navigate('/reports')">
-                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="r.label"></span>
+                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"
