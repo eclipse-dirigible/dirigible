@@ -43,7 +43,7 @@
                   <template x-if="!$store.reports.widgetState(r).loaded"><div x-h-skeleton class="w-1/2 h-9"></div></template>
                   <p x-show="$store.reports.widgetState(r).loaded && !$store.reports.widgetState(r).error" class="text-3xl font-bold" x-text="$store.reports.widgetValueText(r)"></p>
                   <p x-show="$store.reports.widgetState(r).error" x-h-text.muted class="text-3xl font-bold">—</p>
-                  <p x-show="r.description" x-h-text.muted class="text-xs" x-text="r.description"></p>
+                  <p x-show="r.description" x-h-text.muted class="text-xs" x-text="$store.reports.displayDescription(r)"></p>
                 </div>
               </template>
               <template x-if="r.widget.kind === 'list'">
@@ -89,7 +89,7 @@
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
                   @click="openReport(r)">
-                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="r.label"></span>
+                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"
@@ -99,7 +99,7 @@
               </div>
             </div>
             <div x-h-card-content class="vbox gap-2">
-              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="r.description"></p>
+              <p x-show="r.description" x-h-text.muted class="text-sm" x-text="$store.reports.displayDescription(r)"></p>
               <iframe :src="r.url + '?preview=1'" title="Report preview" loading="lazy"
                       style="width:100%; height:220px; border:0;"></iframe>
             </div>

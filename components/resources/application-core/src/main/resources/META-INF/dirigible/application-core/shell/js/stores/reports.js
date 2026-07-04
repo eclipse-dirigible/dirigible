@@ -98,6 +98,7 @@ document.addEventListener('alpine:init', () => {
           if (def.description) it.description = def.description;
           if (def.dashboard === false) it.dashboard = false;
           if (def.tId) it.tId = def.tId;
+          if (def.descriptionTId) it.descriptionTId = def.descriptionTId;
           // A report-attached KPI widget: the dashboard shows a compact KPI tile (count / single
           // aggregate value / top-N list) instead of the report's iframe preview tile.
           if (def.widget) {
@@ -185,6 +186,9 @@ document.addEventListener('alpine:init', () => {
     tkey(it, tId) { return it.project + ':' + it.name + '-report.t.' + tId; },
     displayLabel(it) {
       return (window.T && it.tId) ? T(this.tkey(it, it.tId), it.label) : it.label;
+    },
+    displayDescription(it) {
+      return (window.T && it.descriptionTId) ? T(this.tkey(it, it.descriptionTId), it.description) : it.description;
     },
     widgetLabel(it) {
       const w = it.widget || {};
