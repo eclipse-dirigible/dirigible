@@ -103,7 +103,7 @@
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <i role="img" data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></i>
-                      <span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end'))"></span>
+                      <span x-text="T('$projectName:${tprefix}.t.${entity.dataName}_plural', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end'))"></span>
                     </button>
                   </li>
 #end
@@ -368,7 +368,7 @@
       // Route segment -> i18n catalog key (the shared shell translates breadcrumbs through these).
       window.__harmoniaNavKeys = {
 #foreach($entity in $models)
-        "${entity.name}": "$projectName:${tprefix}.t.${entity.dataName}",
+        "${entity.name}": "$projectName:${tprefix}.t.${entity.dataName}_plural",
 #end
       };
     </script>
