@@ -163,6 +163,12 @@ document.addEventListener('alpine:init', () => {
         let p = (h.charAt(0) === '#' ? h.slice(1) : h) || '/';
         if (p === '/') p = '/dashboard';
         this.currentPath = p;
+        // Landing on the dashboard: re-pull the KPI widget values so freshly entered records show
+        // without a full browser refresh (the reports store memoizes, so force a reload).
+        if (p === '/dashboard') {
+          const reports = Alpine.store('reports');
+          if (reports) reports.loadWidgets(true);
+        }
         if (p === '/settings' || p.indexOf('/settings/') === 0) {
           // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
           this.settingsMode = true;

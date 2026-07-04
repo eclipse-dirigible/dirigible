@@ -128,12 +128,14 @@ document.addEventListener('alpine:init', () => {
     // Non-widget reports shown on the dashboard as an iframe preview tile.
     previewReports() { return this.items.filter(r => r.dashboard !== false && !r.widget); },
 
-    // Load each KPI widget's value once (memoized in widgetData); tiles render independently, an
-    // error on one never blocks the rest.
-    async loadWidgets() {
+    // Load each KPI widget's value (memoized in widgetData); tiles render independently, an error on
+    // one never blocks the rest. Pass force=true to re-pull already-loaded widgets — used when the
+    // dashboard is re-entered so freshly entered records show without a full browser refresh; the
+    // current tile value is kept until the new one arrives (no skeleton flash on refresh).
+    async loadWidgets(force) {
       await Promise.all(this.items.filter(r => r.widget).map(async (r) => {
-        if (this.widgetData[r.name]) return;
-        this.widgetData[r.name] = { loaded: false };
+        if (this.widgetData[r.name] && !force) return;
+        if (!this.widgetData[r.name]) this.widgetData[r.name] = { loaded: false };
         const result = await this.loadWidgetValue(r);
         this.widgetData[r.name] = { loaded: true, ...result };
       }));
