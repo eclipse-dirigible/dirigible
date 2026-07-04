@@ -10,7 +10,7 @@
     <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
-      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="refreshIcons()" />
+      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="page = 1; refreshIcons()" />
       <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
     </div>
     <button x-h-button data-variant="primary" @click="newMaster()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
@@ -39,7 +39,7 @@
           </thead>
           <tbody x-h-table-body>
             <tr x-show="filteredMasters.length === 0" x-h-table-row><td x-h-table-cell x-text="T('$projectName:${tprefix}.messages.noData', 'No ${name}.')"></td></tr>
-            <template x-for="row in filteredMasters" :key="row.${primaryKeysString}">
+            <template x-for="row in pagedMasters" :key="row.${primaryKeysString}">
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
@@ -69,6 +69,11 @@
             </template>
           </tbody>
         </table>
+      </div>
+      <div class="hbox items-center gap-2 p-2" x-show="(state === 'default' || state === 'empty') && pageCount > 1">
+        <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="goPage(page - 1)"><i role="img" data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
+        <span x-h-text.muted x-text="'Page ' + page + ' / ' + pageCount"></span>
+        <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= pageCount" @click="goPage(page + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" data-lucide="chevron-right"></i></button>
       </div>
     </div>
 

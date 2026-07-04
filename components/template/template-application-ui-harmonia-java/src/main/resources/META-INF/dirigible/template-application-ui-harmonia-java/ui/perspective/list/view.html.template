@@ -94,11 +94,11 @@
           </table>
         </div>
 
-        <nav x-h-pagination class="p-2" x-show="totalPages > 1">
-          <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
-          <span x-h-pagination-item x-text="currentPage + ' / ' + totalPages"></span>
-          <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
-        </nav>
+        <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
+          <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" data-lucide="chevron-right"></i></button>
+        </div>
       </div>
     </div>
 

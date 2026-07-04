@@ -19,7 +19,7 @@ document.addEventListener('alpine:init', () => {
     sortColumn: null,
     sortDirection: null,
     currentPage: 1,
-    pageSize: 10,
+    pageSize: 20,
     selected: null,   // the row shown in the right-hand details pane
 
     // Per-column filter row (server-side, POST /search). string -> LIKE %v%, number/fk -> EQ, date -> EQ.
