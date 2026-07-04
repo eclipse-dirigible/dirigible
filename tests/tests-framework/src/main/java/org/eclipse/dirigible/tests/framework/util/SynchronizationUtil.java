@@ -42,4 +42,23 @@ public class SynchronizationUtil {
                    return synchNotNeeded && synchNotRunning;
                });
     }
+
+    /**
+     * Wait until the synchronizer stays idle for a full quiet period. A plain idle check is not enough
+     * right after a publish: the registry file watcher (a polling watcher on some platforms) delivers
+     * trailing change events SECONDS after the copy, scheduling one more cycle - which may re-register
+     * data-store entities and rebuild their tables mid-test (StoreAPISampleProjectIT saw its
+     * just-inserted rows vanish exactly this way). Requiring the idle condition to HOLD for ten seconds
+     * absorbs those late events before the test proceeds.
+     */
+    public static void waitForStableSynchronization() {
+        SynchronizationProcessor synchronizationProcessor = BeanProvider.getBean(SynchronizationProcessor.class);
+
+        LOGGER.debug("Waiting until the synchronization stays idle for a quiet period...");
+
+        await().atMost(180, TimeUnit.SECONDS)
+               .during(10, TimeUnit.SECONDS)
+               .pollInterval(500, TimeUnit.MILLISECONDS)
+               .until(() -> !synchronizationProcessor.isSynchronizationNeeded() && !synchronizationProcessor.isSynchronizationRunning());
+    }
 }
