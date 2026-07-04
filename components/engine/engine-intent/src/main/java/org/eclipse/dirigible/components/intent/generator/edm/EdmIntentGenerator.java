@@ -268,6 +268,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
+            // Explicit UI control order (intent `order:`): reorder the properties so the generated
+            // form/list controls follow the author's sequence (fields and to-one relations interleaved)
+            // instead of the default fields-then-relations layout. Unlisted properties keep their
+            // relative position, appended after the listed ones.
+            properties = applyOrder(properties, entity.getOrder());
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             if (!relations.isEmpty()) {
@@ -518,6 +523,49 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("generateReport", "false");
         entity.put("generateDefaultRoles", "false");
         return entity;
+    }
+
+    /**
+     * Reorder an entity's generated properties by the intent's explicit {@code order} (a list of
+     * property names, matched case-insensitively against each property's model name). Listed properties
+     * come first in the given order; every property not named keeps its relative order and is appended
+     * after. A blank/empty order returns the list unchanged. A name that matches no property is skipped
+     * (the parser already validates order names, so this only guards system properties like audit
+     * columns that the author never lists).
+     *
+     * @param properties the properties in their default order (fields, then to-one relations)
+     * @param order the authored property-name sequence (may be empty)
+     * @return a new list in the requested order, or {@code properties} when no order is given
+     */
+    private static List<Map<String, Object>> applyOrder(List<Map<String, Object>> properties, List<String> order) {
+        if (order == null || order.isEmpty()) {
+            return properties;
+        }
+        List<Map<String, Object>> ordered = new ArrayList<>(properties.size());
+        Set<Integer> placed = new HashSet<>();
+        for (String wanted : order) {
+            if (wanted == null) {
+                continue;
+            }
+            String token = wanted.trim();
+            for (int i = 0; i < properties.size(); i++) {
+                if (placed.contains(i)) {
+                    continue;
+                }
+                if (token.equalsIgnoreCase(String.valueOf(properties.get(i)
+                                                                    .get("name")))) {
+                    ordered.add(properties.get(i));
+                    placed.add(i);
+                    break;
+                }
+            }
+        }
+        for (int i = 0; i < properties.size(); i++) {
+            if (!placed.contains(i)) {
+                ordered.add(properties.get(i));
+            }
+        }
+        return ordered;
     }
 
     private static Map<String, Object> propertyMap(String entityName, FieldIntent field) {

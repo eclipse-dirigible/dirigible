@@ -276,6 +276,39 @@ class EdmIntentGeneratorTest {
         assertNull(root.get("widgets"), "no custom widgets - the .model root must not carry an empty array");
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    void explicitOrderInterleavesFieldsAndRelations() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Header
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Line
+                    order: [Id, Header, Product, Name]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Header, kind: manyToOne, to: Header, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        Map<String, Object> line = entityByName(entities(model), "Line");
+        List<String> names = ((List<Map<String, Object>>) line.get("properties")).stream()
+                                                                                 .map(p -> String.valueOf(p.get("name")))
+                                                                                 .toList();
+        // The four listed properties come first in the given order (relations interleaved, no longer
+        // pushed last); the unlisted Quantity keeps its default position and is appended after.
+        assertEquals(List.of("Id", "Header", "Product", "Name", "Quantity"), names,
+                "properties should follow the explicit order, with unlisted ones appended");
+    }
+
     private static Map<String, Object> buildFromResource(String resource, String intentName) {
         IntentModel parsed = IntentParser.parse(readResource(resource));
         return EdmIntentGenerator.buildModelJsonForTest(parsed, intentName);
