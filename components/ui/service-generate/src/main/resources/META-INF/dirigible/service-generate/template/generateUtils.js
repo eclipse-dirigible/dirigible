@@ -209,6 +209,16 @@ export function generateFiles(model, parameters, templateSources) {
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
     const daoModels = model.entities.filter(e => e.type !== "PROJECTION");
     annotateDocumentModels(model.entities);
+    // A human-readable singular label for every entity. The intent generator (EdmIntentGenerator)
+    // bakes `entityLabel`; a hand-authored .edm carries none, so derive it the same way the i18n
+    // catalog does. Without this the templates' `${entityLabel}` fallback renders literally (e.g. the
+    // Harmonia form/list/master captions showed "${ENTITYLABEL}") whenever the runtime catalog lookup
+    // misses.
+    for (const entity of model.entities) {
+        if (!entity.entityLabel || !`${entity.entityLabel}`.trim()) {
+            entity.entityLabel = humanizeName(entity.name);
+        }
+    }
     const feedModels = model.entities.filter(e => e.feedUrl);
 
     const generateReportModels = model.entities.filter(e => e.generateReport === "true");
