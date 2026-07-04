@@ -157,6 +157,23 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
+rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
+last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving
+fields and relations for a better form layout:
+
+```yaml
+- name: SalesInvoiceItem
+  order: [Id, SalesInvoice, Product, Name, Quantity, UoM, Price, Discount, Net, Vat, Total]
+  fields: [ ... ]
+  relations: [ ... ]
+```
+
+Names match the field / relation names (case-insensitive). A **partial** order is fine - any property
+not listed keeps its default position and is appended after the listed ones. System properties
+(`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
+the entity.
+
 **Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java

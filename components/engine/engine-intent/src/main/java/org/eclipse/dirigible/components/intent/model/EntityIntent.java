@@ -66,11 +66,27 @@ public class EntityIntent {
      * Translation rows are authored as {@code seeds} with a {@code language:} code.
      */
     private Boolean multilingual;
+    /**
+     * Optional explicit ordering of the generated UI controls (form inputs, list columns, detail rows)
+     * by property name - fields and to-one relations interleaved, in the given order. Names match the
+     * authored field / relation names (case-insensitive). Any property not listed keeps its default
+     * position, appended after the listed ones. Absent → the default order (fields in declaration
+     * order, then to-one relations), which pushes all relations to the end.
+     */
+    private List<String> order = new ArrayList<>();
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
     public String getName() {
         return name;
+    }
+
+    public List<String> getOrder() {
+        return order;
+    }
+
+    public void setOrder(List<String> order) {
+        this.order = order == null ? new ArrayList<>() : order;
     }
 
     public void setName(String name) {

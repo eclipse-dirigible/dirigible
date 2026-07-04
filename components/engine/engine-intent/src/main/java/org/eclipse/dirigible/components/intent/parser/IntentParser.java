@@ -151,6 +151,7 @@ public final class IntentParser {
         List<String> issues = new ArrayList<>();
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
+        validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateReports(model, entityNames, issues);
@@ -165,6 +166,50 @@ public final class IntentParser {
         validateSettlements(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
+        }
+    }
+
+    /**
+     * Each entity's optional {@code order} lists property names (fields or to-one relations, matched
+     * case-insensitively against the authored names) to sequence the generated UI controls. Every
+     * listed name must resolve to a declared field or relation of that entity, and no name may repeat.
+     * A partial order is fine - unlisted properties keep their default position.
+     */
+    private static void validateOrders(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            List<String> order = entity.getOrder();
+            if (order == null || order.isEmpty() || entity.getName() == null) {
+                continue;
+            }
+            Set<String> known = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() != null) {
+                    known.add(field.getName()
+                                   .toLowerCase(Locale.ROOT));
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null) {
+                    known.add(relation.getName()
+                                      .toLowerCase(Locale.ROOT));
+                }
+            }
+            Set<String> seen = new HashSet<>();
+            for (String token : order) {
+                if (token == null || token.isBlank()) {
+                    issues.add("entity [" + entity.getName() + "] order has a blank entry");
+                    continue;
+                }
+                String key = token.trim()
+                                  .toLowerCase(Locale.ROOT);
+                if (!seen.add(key)) {
+                    issues.add("entity [" + entity.getName() + "] order lists [" + token + "] more than once");
+                }
+                if (!known.contains(key)) {
+                    issues.add(
+                            "entity [" + entity.getName() + "] order references [" + token + "] which is not a declared field or relation");
+                }
+            }
         }
     }
 
