@@ -119,7 +119,7 @@
                 <ul x-h-sidebar-menu>
                   <template x-for="r in $store.reports.items" :key="r.url">
                     <li x-h-sidebar-menu-item>
-                      <button x-h-sidebar-menu-button :data-active="$store.reports.selected && $store.reports.selected.url === r.url" @click="openReport(r)">
+                      <button x-h-sidebar-menu-button :data-active="isReportActive(r)" @click="openReport(r)">
                         <i role="img" data-lucide="bar-chart-3"></i><span x-text="$store.reports.displayLabel(r)"></span>
                       </button>
                     </li>

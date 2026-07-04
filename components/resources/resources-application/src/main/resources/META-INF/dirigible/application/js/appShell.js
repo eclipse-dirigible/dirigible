@@ -380,6 +380,12 @@ document.addEventListener('alpine:init', () => {
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },
     isAppActive(item) { return this.hostedId === item.id; },
+    // A report entry is active only while a report route is showing it — keying off the current route
+    // (not just $store.reports.selected) so navigating to an entity/inbox/documents clears its highlight.
+    isReportActive(report) {
+      const selected = Alpine.store('reports').selected;
+      return !this.hostedUrl && this.currentPath.indexOf('/reports') === 0 && selected && selected.url === report.url;
+    },
     isSvgIcon(icon) { return !!icon && /\.svg(\?|#|$)/i.test(icon); },
     isImageIcon(icon) { return !!icon && !this.isSvgIcon(icon) && (icon.indexOf('/') !== -1 || icon.indexOf('.') !== -1 || icon.indexOf('http') === 0); },
 
