@@ -447,9 +447,10 @@ implies `kind: value`; `limit` (default 5) applies to `kind: list` only. `at` ke
 declared dimensions; the token `now` resolves at view time, type-aware — current YYYYMM on a
 `month(x)` dimension, current year on `year(x)`, today on a date column — anything else is a
 literal pinned with an equals condition. **Behavior:** a widget-bearing report shows a compact KPI
-tile INSTEAD of its dashboard preview tile (click still opens the full report), and declaring any
-widget replaces the auto per-entity record-count tiles; `dashboard: false` hides both tiles of a
-report. Prefer a handful of business-meaningful widgets over restating entity counts.
+tile INSTEAD of its dashboard preview tile (click still opens the full report); `dashboard: false`
+hides both tiles of a report. The home dashboard shows report/custom widget tiles and report
+previews — there are no auto per-entity record-count tiles. Prefer a handful of business-meaningful
+widgets.
 
 ### widgets - custom dashboard widgets
 
@@ -473,8 +474,7 @@ widgets:
 fetch vs iframe), so there is no separate source-type field. `url` must be a same-origin path (no
 scheme/host); the implementation is hand-written code under the project's `custom/` folder (e.g. a
 client-Java `@Component @Controller`) or any served page. A `kpi` endpoint returns
-`{ "value": <number|string>, "description": "optional secondary line" }`. Declaring any widget
-(custom or report-attached) replaces the auto per-entity record-count tiles.
+`{ "value": <number|string>, "description": "optional secondary line" }`.
 
 ### permissions - roles
 
