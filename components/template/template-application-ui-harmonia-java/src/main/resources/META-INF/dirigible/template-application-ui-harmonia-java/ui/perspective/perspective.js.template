@@ -11,11 +11,11 @@
 const perspectiveData = {
 	id: '${projectName}-${name}',
 	label: '${menuLabel}',
+	// i18n key of the (pluralized) label in the owning project's generated catalog; the shared shell
+	// translates the sidebar entry through it (loading the '${projectName}' namespace on demand).
+	tkey: '${projectName}:${tprefix}.t.${dataName}_plural',
 	path: '/services/web/${projectName}/gen/${genFolderName}/index.html?embedded=true#/${name}',
 	kind: '${type}',
-	// Absolute /count of this entity's generated REST controller, so the shared shell dashboard can show
-	// a live KPI tile (same controller the standalone dashboard hits, just fully qualified).
-	countUrl: '/services/java/${projectName}/gen/${javaGenFolderName}/api/${javaPerspectiveName}/${name}Controller/count',
 #if($perspectiveNavId)
 	groupId: '${perspectiveNavId}',
 #end

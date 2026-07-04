@@ -134,8 +134,15 @@ document.addEventListener('alpine:init', () => {
           }
           this.groups = appGroups;
           this.settingsItems = settings;
-          // Fire-and-forget: load each entity's live record count for the dashboard KPI tiles.
-          this.loadCounts();
+          // Fire-and-forget: load the contributing apps' i18n catalogs so the sidebar / dashboard /
+          // Settings entries translate. Each perspective's tkey is '<project>:<path>' - the project
+          // is the catalog namespace, which the shell (having no project of its own) must add.
+          if (window.AppI18nAddNamespaces) {
+            const namespaces = [...new Set(all.flatMap(g => Array.isArray(g.items) ? g.items : [g])
+              .map(it => (it.tkey || '').split(':')[0])
+              .filter(ns => ns && ns !== 'application-core'))];
+            AppI18nAddNamespaces(namespaces);
+          }
           // Fire-and-forget: scan which languages each embedded app provides translations for
           // (drives the missing-translations warnings in Settings).
           this.loadLanguageCoverage(all);
@@ -165,6 +172,12 @@ document.addEventListener('alpine:init', () => {
         let p = (h.charAt(0) === '#' ? h.slice(1) : h) || '/';
         if (p === '/') p = '/dashboard';
         this.currentPath = p;
+        // Landing on the dashboard: re-pull the KPI widget values so freshly entered records show
+        // without a full browser refresh (the reports store memoizes, so force a reload).
+        if (p === '/dashboard') {
+          const reports = Alpine.store('reports');
+          if (reports) reports.loadWidgets(true);
+        }
         if (p === '/settings' || p.indexOf('/settings/') === 0) {
           // Settings master-detail: /settings (list only) or /settings/<perspective-id> (one selected).
           this.settingsMode = true;
@@ -234,24 +247,6 @@ document.addEventListener('alpine:init', () => {
         this.refreshIcons();
       }
       this.closeSideNav();
-    },
-
-    /** Load each PRIMARY entity's live record count for the dashboard KPI tiles. Lazy and independent:
-     *  a slow/erroring controller never blocks the others, and an app generated before countUrl existed
-     *  simply shows a dash. The number lands on the perspective item (reactive) so the tile re-renders. */
-    loadCounts() {
-      const items = this.groups.flatMap(g => g.items || [])
-        .filter(it => it && it.kind === 'PRIMARY' && it.countUrl && it.count === undefined);
-      items.forEach(async (it) => {
-        try {
-          const r = await fetch(it.countUrl, { headers: { 'Accept': 'application/json' } });
-          if (!r.ok) { it.countError = true; return; }
-          const d = await r.json();
-          it.count = (d && typeof d.count === 'number') ? d.count : 0;
-        } catch (e) {
-          it.countError = true;
-        }
-      });
     },
 
     /** Build the iframe src for a perspective, overriding its hash with `inner` (e.g. /SalesInvoice/42/edit). */

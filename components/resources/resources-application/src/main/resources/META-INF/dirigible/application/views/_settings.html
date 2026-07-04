@@ -22,7 +22,7 @@
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
           <i role="img" data-lucide="settings"></i>
-          <span x-text="item.label"></span>
+          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
         </button>
       </template>
     </div>

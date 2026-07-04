@@ -39,21 +39,29 @@
       <bk-toolbar no-bottom-border="true" compact="true">
         <span>Unstaged</span>
         <bk-toolbar-spacer></bk-toolbar-spacer>
+        <bk-button state="transparent" toggled="searchUnstaged.visible" glyph="sap-icon--search" aria-label="Toggle search" title="Toggle search" ng-click="toggleUnstagedSearch()"></bk-button>
         <bk-button state="transparent" glyph="sap-icon--add" aria-label="Add to index" title="Add to index" ng-click="addToIndex()">
         </bk-button>
         <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff()"></bk-button>
         <bk-button state="transparent" glyph="sap-icon--reset" aria-label="Revert to last commit" title="Revert to last commit" ng-click="revert()"></bk-button>
       </bk-toolbar>
-      <div id="unstaged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom jstree-list-mode" style="flex: 4">
+      <bk-toolbar no-bottom-border="true" compact="true" ng-if="searchUnstaged.visible">
+        <bk-input type="search" placeholder="Filter" ng-keyup="searchUnstagedFiles($event)" ng-model="searchUnstaged.text" bk-focus="true"></bk-input>
+      </bk-toolbar>
+      <div id="unstaged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom" style="flex: 4">
       </div>
       <bk-toolbar no-bottom-border="true" compact="true">
         <span>Staged</span>
         <bk-toolbar-spacer></bk-toolbar-spacer>
+        <bk-button state="transparent" toggled="searchStaged.visible" glyph="sap-icon--search" aria-label="Toggle search" title="Toggle search" ng-click="toggleStagedSearch()"></bk-button>
         <bk-button state="transparent" glyph="sap-icon--less" aria-label="Remove from index" title="Remove from index" ng-click="removeFromIndex()">
         </bk-button>
         <bk-button state="transparent" glyph="sap-icon--filter-facets" aria-label="Show difference" title="Show difference" ng-click="getSelectedDiff(false)"></bk-button>
       </bk-toolbar>
-      <div id="staged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom jstree-list-mode" style="flex: 4"></div>
+      <bk-toolbar no-bottom-border="true" compact="true" ng-if="searchStaged.visible">
+        <bk-input type="search" placeholder="Filter" ng-keyup="searchStagedFiles($event)" ng-model="searchStaged.text" bk-focus="true"></bk-input>
+      </bk-toolbar>
+      <div id="staged" bk-scrollbar class="jstree-fiori--fill bk-border--top bk-border--bottom" style="flex: 4"></div>
       <div class="fd-container fd-form-layout-grid-container" style="padding: 0.5rem;" ng-hide="loadingGitState" ng-form="forms.credentialsFieldset">
         <div class="fd-row">
 
