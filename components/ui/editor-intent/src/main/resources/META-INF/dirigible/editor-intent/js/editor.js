@@ -185,7 +185,32 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 });
             });
             themingHub.onThemeChange((theme) => monaco.editor.setTheme(monacoThemeFor(theme)));
+            recoverWhenRevealed(container);
         });
+    };
+
+    // After a browser refresh every open editor iframe bootstraps at once, but only the focused tab
+    // is visible - the rest sit in `display:none` tab panels (the layout toggles them with ng-show).
+    // Monaco created inside a hidden, zero-size container measures a zero-width font and lays out to
+    // nothing, and unlike the geometry-driven mxGraph diagrams it does not repaint on its own when the
+    // tab is finally revealed: the text pane shows up blank. `automaticLayout` re-runs layout on the
+    // size change but keeps the stale zero font metrics, so the glyphs stay invisible. Watch for the
+    // container gaining real size (the tab being shown) and, once, remeasure the fonts and relayout so
+    // the source appears. A no-op for the focused editor, which is already sized when Monaco is created.
+    let revealObserver = null;
+    const recoverWhenRevealed = (container) => {
+        if (typeof ResizeObserver === 'undefined') return;
+        if (container.clientWidth > 0 && container.clientHeight > 0) return; // already visible at creation
+        revealObserver = new ResizeObserver(() => {
+            if (container.clientWidth > 0 && container.clientHeight > 0) {
+                revealObserver.disconnect();
+                revealObserver = null;
+                if (!monacoEditor) return;
+                if (monacoApi) monacoApi.editor.remeasureFonts();
+                monacoEditor.layout();
+            }
+        });
+        revealObserver.observe(container);
     };
 
     // ----- Live preview --------------------------------------------------------
@@ -711,6 +736,10 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.$on('$destroy', () => {
         teardown();
         disposeDiff();
+        if (revealObserver) {
+            revealObserver.disconnect();
+            revealObserver = null;
+        }
         if (monacoEditor) {
             monacoEditor.dispose();
             monacoEditor = null;

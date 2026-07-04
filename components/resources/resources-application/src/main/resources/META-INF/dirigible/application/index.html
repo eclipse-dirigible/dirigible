@@ -102,7 +102,7 @@
                           <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                           <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
                           <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
-                          <span x-text="item.label"></span>
+                          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
                         </button>
                       </li>
                     </template>

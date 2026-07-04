@@ -134,6 +134,15 @@ document.addEventListener('alpine:init', () => {
           }
           this.groups = appGroups;
           this.settingsItems = settings;
+          // Fire-and-forget: load the contributing apps' i18n catalogs so the sidebar / dashboard /
+          // Settings entries translate. Each perspective's tkey is '<project>:<path>' - the project
+          // is the catalog namespace, which the shell (having no project of its own) must add.
+          if (window.AppI18nAddNamespaces) {
+            const namespaces = [...new Set(all.flatMap(g => Array.isArray(g.items) ? g.items : [g])
+              .map(it => (it.tkey || '').split(':')[0])
+              .filter(ns => ns && ns !== 'application-core'))];
+            AppI18nAddNamespaces(namespaces);
+          }
           // Fire-and-forget: scan which languages each embedded app provides translations for
           // (drives the missing-translations warnings in Settings).
           this.loadLanguageCoverage(all);

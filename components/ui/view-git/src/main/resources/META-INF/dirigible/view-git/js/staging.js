@@ -18,9 +18,11 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
         credentialsFieldset: {}
     };
     $scope.loadingGitState = false;
-    $scope.listType = 'path';
+    $scope.listType = 'tree';
     $scope.unstagedFiles = [];
     $scope.stagedFiles = [];
+    $scope.searchUnstaged = { visible: false, text: '' };
+    $scope.searchStaged = { visible: false, text: '' };
     $scope.jstreeUnstaged = angular.element('#unstaged');
     $scope.jstreeStaged = angular.element('#staged');
     $scope.jstreeTypes = {
@@ -56,57 +58,40 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
         commitMessage: '',
     };
 
-    // function arrangeIntoTree(rawData) {
-    //     let tree = [];
-    //     let paths = [];
-    //     for (let i = 0; i < rawData.length; i++) {
-    //         paths.push(rawData[i].path.split('/'));
-    //     }
-
-    //     for (let i = 0; i < paths.length; i++) {
-    //         let path = paths[i];
-    //         let currentLevel = tree;
-    //         for (let j = 0; j < path.length; j++) {
-    //             let part = path[j];
-
-    //             let existingPath = findWhere(currentLevel, 'text', part);
-
-    //             if (existingPath) {
-    //                 currentLevel = existingPath.children;
-    //             } else {
-    //                 let newPart;
-    //                 if (j === path.length - 1) {
-    //                     newPart = {
-    //                         text: part,
-    //                         type: rawData[i].type,
-    //                         data: { path: rawData[i].path },
-    //                     }
-    //                 } else {
-    //                     newPart = {
-    //                         text: part,
-    //                         type: 'node',
-    //                         children: [],
-    //                     }
-    //                 }
-
-    //                 currentLevel.push(newPart);
-    //                 currentLevel = newPart.children;
-    //             }
-    //         }
-    //     }
-    //     return tree;
-
-    //     function findWhere(array, key, value) {
-    //         let counter = 0;
-    //         while (counter < array.length && array[counter][key] !== value) { counter++; };
-
-    //         if (counter < array.length) {
-    //             return array[counter]
-    //         } else {
-    //             return false;
-    //         }
-    //     }
-    // }
+    function arrangeIntoTree(rawData) {
+        const tree = [];
+        for (let i = 0; i < rawData.length; i++) {
+            const parts = rawData[i].path.split('/');
+            let currentLevel = tree;
+            for (let j = 0; j < parts.length; j++) {
+                const part = parts[j];
+                const isLeaf = j === parts.length - 1;
+                const existing = currentLevel.find((n) => n.text === part && (isLeaf ? n.type !== 'node' : n.type === 'node'));
+                if (existing) {
+                    currentLevel = existing.children;
+                } else {
+                    let newPart;
+                    if (isLeaf) {
+                        newPart = {
+                            text: part,
+                            type: rawData[i].type,
+                            data: { path: rawData[i].path },
+                        };
+                    } else {
+                        newPart = {
+                            text: part,
+                            type: 'node',
+                            state: { opened: true },
+                            children: [],
+                        };
+                    }
+                    currentLevel.push(newPart);
+                    currentLevel = newPart.children;
+                }
+            }
+        }
+        return tree;
+    }
 
     $scope.jstreeUnstaged.jstree({
         core: {
@@ -116,21 +101,15 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
                 variant: 'compact',
             },
             data: (_node, cb) => {
-                const data = [];
-                // if ($scope.listType === 'path') {
-                for (let i = 0; i < $scope.unstagedFiles.length; i++) {
-                    data.push({
-                        text: $scope.unstagedFiles[i].path,
-                        type: $scope.unstagedFiles[i].type,
-                    });
-                }
-                // } else {
-                //     data = arrangeIntoTree($scope.unstagedFiles);
-                // }
-                cb(data);
+                cb(arrangeIntoTree($scope.unstagedFiles));
             },
         },
-        plugins: ['wholerow', 'types'],
+        search: {
+            case_sensitive: false,
+            show_only_matches: true,
+            show_only_matches_children: true,
+        },
+        plugins: ['wholerow', 'types', 'search'],
         types: $scope.jstreeTypes,
     });
 
@@ -142,21 +121,15 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
                 variant: 'compact',
             },
             data: (_node, cb) => {
-                const data = [];
-                // if ($scope.listType === 'path') {
-                for (let i = 0; i < $scope.stagedFiles.length; i++) {
-                    data.push({
-                        text: $scope.stagedFiles[i].path,
-                        type: $scope.stagedFiles[i].type,
-                    });
-                }
-                // } else {
-                //     data = arrangeIntoTree($scope.stagedFiles);
-                // }
-                cb(data);
+                cb(arrangeIntoTree($scope.stagedFiles));
             },
         },
-        plugins: ['wholerow', 'types'],
+        search: {
+            case_sensitive: false,
+            show_only_matches: true,
+            show_only_matches_children: true,
+        },
+        plugins: ['wholerow', 'types', 'search'],
         types: $scope.jstreeTypes,
     });
 
@@ -168,6 +141,18 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
     $scope.jstreeStaged.on('dblclick.jstree', (event) => {
         const node = $scope.jstreeStaged.jstree(true).get_node(event.target);
         showDiff(node);
+    });
+
+    $scope.jstreeUnstaged.on('refresh.jstree', () => {
+        if ($scope.searchUnstaged.visible && $scope.searchUnstaged.text) {
+            $scope.jstreeUnstaged.jstree(true).search($scope.searchUnstaged.text);
+        }
+    });
+
+    $scope.jstreeStaged.on('refresh.jstree', () => {
+        if ($scope.searchStaged.visible && $scope.searchStaged.text) {
+            $scope.jstreeStaged.jstree(true).search($scope.searchStaged.text);
+        }
     });
 
     $scope.getSelectedDiff = (unstaged = true) => {
@@ -187,10 +172,7 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
 
     function showDiff(node) {
         if (node.type !== 'node') {
-            let path;
-            path = node.text;
-            // if ($scope.listType === 'path') path = node.text;
-            // else path = node.data.path;
+            const path = node.data.path;
             notificationHub.postMessage({
                 topic: 'git.staging.file.diff',
                 data: {
@@ -200,6 +182,42 @@ stagingView.controller('StagingViewController', ($scope, GitService, ButtonState
             });
         }
     }
+
+    let unstagedSearchTimeout;
+    $scope.toggleUnstagedSearch = () => {
+        $scope.searchUnstaged.text = '';
+        $scope.jstreeUnstaged.jstree(true).clear_search();
+        $scope.searchUnstaged.visible = !$scope.searchUnstaged.visible;
+    };
+
+    $scope.searchUnstagedFiles = (event) => {
+        if (unstagedSearchTimeout) clearTimeout(unstagedSearchTimeout);
+        if (event.originalEvent.key === 'Escape') {
+            $scope.toggleUnstagedSearch();
+            return;
+        }
+        unstagedSearchTimeout = setTimeout(() => {
+            $scope.jstreeUnstaged.jstree(true).search($scope.searchUnstaged.text);
+        }, 250);
+    };
+
+    let stagedSearchTimeout;
+    $scope.toggleStagedSearch = () => {
+        $scope.searchStaged.text = '';
+        $scope.jstreeStaged.jstree(true).clear_search();
+        $scope.searchStaged.visible = !$scope.searchStaged.visible;
+    };
+
+    $scope.searchStagedFiles = (event) => {
+        if (stagedSearchTimeout) clearTimeout(stagedSearchTimeout);
+        if (event.originalEvent.key === 'Escape') {
+            $scope.toggleStagedSearch();
+            return;
+        }
+        stagedSearchTimeout = setTimeout(() => {
+            $scope.jstreeStaged.jstree(true).search($scope.searchStaged.text);
+        }, 250);
+    };
 
     $scope.addToIndex = () => {
         const paths = getSelectedUnstagedPaths();
