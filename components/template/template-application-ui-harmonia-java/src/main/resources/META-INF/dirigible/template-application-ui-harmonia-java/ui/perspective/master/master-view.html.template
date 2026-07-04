@@ -10,7 +10,7 @@
     <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
-      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="refreshIcons()" />
+      <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="page = 1; refreshIcons()" />
       <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
     </div>
     <button x-h-button data-variant="primary" @click="newMaster()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
@@ -39,7 +39,7 @@
           </thead>
           <tbody x-h-table-body>
             <tr x-show="filteredMasters.length === 0" x-h-table-row><td x-h-table-cell x-text="T('$projectName:${tprefix}.messages.noData', 'No ${name}.')"></td></tr>
-            <template x-for="row in filteredMasters" :key="row.${primaryKeysString}">
+            <template x-for="row in pagedMasters" :key="row.${primaryKeysString}">
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
@@ -70,6 +70,11 @@
           </tbody>
         </table>
       </div>
+      <nav x-h-pagination class="p-2" x-show="(state === 'default' || state === 'empty') && pageCount > 1">
+        <button x-h-pagination-prev @click="goPage(page - 1)" :disabled="page === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
+        <span x-h-pagination-item x-text="page + ' / ' + pageCount"></span>
+        <button x-h-pagination-next @click="goPage(page + 1)" :disabled="page === pageCount" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
+      </nav>
     </div>
 
     <!-- Detail area — hidden (0%) until a master record is selected, then ~40%. -->
@@ -153,7 +158,7 @@
                     </tr>
                   </thead>
                   <tbody x-h-table-body>
-                    <template x-for="row in rows" :key="row[def.primaryKey]">
+                    <template x-for="row in pagedRows" :key="row[def.primaryKey]">
                       <tr x-h-table-row data-hoverable="true">
                         <template x-for="col in def.columns" :key="col.name">
                           <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
@@ -178,6 +183,11 @@
                   </tbody>
                 </table>
               </div>
+              <nav x-h-pagination class="p-2" x-show="state === 'default' && pageCount > 1">
+                <button x-h-pagination-prev @click="goPage(page - 1)" :disabled="page === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
+                <span x-h-pagination-item x-text="page + ' / ' + pageCount"></span>
+                <button x-h-pagination-next @click="goPage(page + 1)" :disabled="page === pageCount" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
+              </nav>
             </div>
 
             <!-- Detail delete confirmation -->

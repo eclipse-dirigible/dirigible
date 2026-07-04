@@ -28,6 +28,8 @@ function detailPanel(def, masterId) {
     def,
     masterId,
     rows: [],
+    page: 1,
+    pageSize: 20,
     state: 'loading',     // loading | error | empty | default
     error: null,
     deleteOpen: false,
@@ -109,8 +111,11 @@ function detailPanel(def, masterId) {
       this.error = null;
       try {
         // The detail controller filters by the master FK query param (apiPath is relative to restBase).
+        // getAll (paged), NOT get: get returns only the controller's first page (default 20), which
+        // would silently cap a detail with more rows and hide the ones past the first page.
         const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
-        this.rows = await App.services.api.get(this.def.apiPath + q);
+        this.rows = await App.services.api.getAll(this.def.apiPath + q);
+        this.page = 1;
         this.state = this.rows.length === 0 ? 'empty' : 'default';
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');
@@ -118,6 +123,14 @@ function detailPanel(def, masterId) {
       }
       this.refreshIcons();
     },
+
+    // Client-side pagination over the loaded detail rows (default 20/page; pager shown only when > 1).
+    get pageCount() { return Math.max(1, Math.ceil(this.rows.length / this.pageSize)); },
+    get pagedRows() {
+      const start = (this.page - 1) * this.pageSize;
+      return this.rows.slice(start, start + this.pageSize);
+    },
+    goPage(n) { this.page = Math.max(1, Math.min(n, this.pageCount)); this.refreshIcons(); },
 
     // Create/edit route to the detail's own form page, carrying the FK + a returnTo back here.
     addRow() {
