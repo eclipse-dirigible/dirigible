@@ -1036,16 +1036,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(bigItems.contains("\"kind\": \"count\""), "the count widget should carry its kind");
         assertTrue(bigItems.contains("\"icon\": \"alert-triangle\""), "the widget icon should be carried");
 
-        // The .model root flags the declared KPIs so the shell template suppresses the raw
-        // per-entity count tiles (declared widgets replace them), and carries the custom widgets.
+        // The .model root carries the custom widgets. (The per-entity count tiles are now suppressed
+        // by the shell template itself when widgets are declared - the old `dashboardKpis` flag was
+        // dropped in #6136 - so that suppression is asserted on the generated dashboard below.)
         String model = contentOf("orders.model");
-        assertTrue(model.contains("\"dashboardKpis\": true"), "the .model root should flag the declared KPI widgets");
         assertTrue(model.contains("\"widgetSystemHealth\""), "the custom kpi widget should land on the .model root with its tId");
         assertTrue(model.contains("\"kind\": \"page\""), "the custom page widget should carry its kind");
 
         generateFromModel("template-application-ui-harmonia-java/template/template.js", "orders.model");
         String dashboard = contentOf("gen/orders/js/components/pages/dashboardPage.js");
-        assertTrue(dashboard.contains("entities: [],"), "the entity tile list should be baked empty when widgets are declared");
+        // Per-entity count tiles were removed entirely in #6136 (the dashboard no longer bakes an
+        // `entities` array); "replaces entity tiles" is now verified by the absence of any baked
+        // per-entity count endpoint.
         assertFalse(dashboard.contains("apiPath: '/"), "no entity count tile should be baked when widgets are declared");
         assertTrue(dashboard.contains("loadKpis"), "the dashboard should carry the KPI loading machinery");
         assertTrue(dashboard.contains("loadWidgetValue"), "the KPI tiles should delegate to the reports store's widget fetch");
@@ -1145,7 +1147,7 @@ class IntentEngineIT extends IntegrationTest {
         // ("ordersbycustomer") - two distinct folders on a case-sensitive filesystem.
         String page = contentOf("gen/OrdersByCustomer/reports/OrdersByCustomer/report.js");
         assertTrue(page.contains("reportColumns"), "the report page should embed the typed column metadata");
-        assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left' }"),
+        assertTrue(page.contains("{ key: 'Customer', kind: 'text', align: 'left'"),
                 "the joined dimension should be a left-aligned text column");
         assertTrue(page.contains("kind: 'number'"), "the aggregate measures should be number columns");
         assertTrue(page.contains("operator: 'GTE'") && page.contains("operator: 'LIKE'"),
@@ -1155,8 +1157,8 @@ class IntentEngineIT extends IntegrationTest {
                 "the report view should carry the filter panel and toolbar toggle");
         assertTrue(view.contains("alignClass(col)") && view.contains("cellText(col, row)"),
                 "the report table should align and format cells from the column metadata");
-        assertTrue(page.contains("align: 'right', pattern: '### ### ### ##0.00'"),
-                "the page metadata should carry alignment + the money pattern for decimal columns");
+        assertTrue(page.contains("align: 'right'"), "decimal measures should be right-aligned");
+        assertTrue(page.contains("pattern: '### ### ### ##0.00'"), "the page metadata should carry the money pattern for decimal columns");
     }
 
     @Test
