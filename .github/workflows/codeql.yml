@@ -70,7 +70,10 @@ jobs:
 
       - name: Build Java/Kotlin project
         if: matrix.language == 'java-kotlin'
-        run: mvn clean install -P quick-build
+        # CodeQL analyses the Java source; it does not need the JDT.LS / java-debug runtime binaries.
+        # Skip those build-time downloads so the analysis does not depend on download.eclipse.org
+        # (an external host that intermittently fails to respond and broke this job).
+        run: mvn clean install -P quick-build -Djdtls.download.skip=true -Djava.debug.plugin.download.skip=true
 
       - name: Perform CodeQL Analysis for language ${{ matrix.language }}
         uses: github/codeql-action/analyze@v3
