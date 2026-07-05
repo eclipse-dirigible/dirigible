@@ -103,7 +103,7 @@
               </template>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>&nbsp;<span x-text="T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"></span></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>&nbsp;<span x-text="T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"></span></button>
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else

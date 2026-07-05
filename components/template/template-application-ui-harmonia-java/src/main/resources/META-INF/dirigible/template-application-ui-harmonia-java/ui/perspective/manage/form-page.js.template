@@ -155,10 +155,12 @@ document.addEventListener('alpine:init', () => {
       return found ? found.text : value;
     },
 
-    // "Add new <related>" from a non-setting FK combobox: open the target's own create page in the
-    // shared related-create iframe dialog; on save, reload that field's options and select the new id.
-    addRelated(field, controllerUrl, entity) {
-      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), 'New ' + entity, async (id) => {
+    // "Add new <related>" from a non-setting FK combobox: open the target's own create page (its
+    // Harmonia SPA, which may live in another project) in the shared related-create iframe dialog;
+    // on save, reload that field's options and select the new id. appUrl is the target app's raw
+    // web index.html (the generator resolves the correct - unsanitized - gen folder).
+    addRelated(field, appUrl, entity) {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), 'New ' + entity, async (id) => {
         await this.loadOptions();
         if (id != null) this.form[field] = String(id);
       });
