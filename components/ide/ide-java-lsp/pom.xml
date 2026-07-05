@@ -56,6 +56,9 @@
                             <outputFileName>jdtls.tar.gz</outputFileName>
                             <cacheDirectory>${settings.localRepository}/jdtls-cache</cacheDirectory>
                             <readTimeOut>300000</readTimeOut>
+                            <!-- download.eclipse.org intermittently fails to respond; retry a few
+                                 times before failing the build rather than failing on the first blip. -->
+                            <retries>3</retries>
                         </configuration>
                     </execution>
                 </executions>
