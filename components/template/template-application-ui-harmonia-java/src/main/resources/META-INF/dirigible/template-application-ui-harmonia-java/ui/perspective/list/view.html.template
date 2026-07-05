@@ -15,6 +15,12 @@
         <svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+    <!-- Developer-contributed page actions for this view (customActions extension point). -->
+    <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
+      <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action)">
+        <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+      </button>
+    </template>
   </div>
 
   <!-- Loading -->
@@ -128,6 +134,16 @@
           </template>
         </div>
 #end
+
+        <!-- Developer-contributed per-record actions for this entity (customActions extension point).
+             Passes the selected record's id to the action page. -->
+        <div x-show="$store.customActions.getActions(caView, 'entity').length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
+          <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+            <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">
+              <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+            </button>
+          </template>
+        </div>
 
         <!-- Every property of the selected record (the table above shows only the major ones). -->
         <div class="vbox gap-3 p-4">
