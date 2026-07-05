@@ -23,6 +23,8 @@ import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -156,6 +158,7 @@ public final class IntentParser {
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
+        validateGenerates(model, entityNames, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
         validateSeeds(model, entityNames, issues);
@@ -1151,6 +1154,117 @@ public final class IntentParser {
             if (action.getPage() == null || action.getPage()
                                                   .isBlank()) {
                 issues.add("action [" + name + "] has no page (a same-origin path to open)");
+            }
+        }
+    }
+
+    /**
+     * Validate the {@code generates} block: each create-from action needs a unique name, a known
+     * {@code from} entity in this model, a {@code to} target (in this model, or in a declared
+     * {@code uses} model), a {@code forEntity} that renders the button, and a {@code scope} of
+     * {@code entity} or {@code page}. Every {@code map} value must be a field or to-one relation of the
+     * source entity (one-hop {@code relation.field} paths are not yet supported); {@code items} follow
+     * the same rules against the source child entity. Target property names are resolved (and, when the
+     * target model is available, validated) at generation time by the {@code GlueIntentGenerator}.
+     */
+    private static void validateGenerates(IntentModel model, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (GeneratesIntent g : model.getGenerates()) {
+            if (g.getName() == null || g.getName()
+                                        .isBlank()) {
+                issues.add("generates action has no name");
+                continue;
+            }
+            String name = g.getName();
+            if (!names.add(name)) {
+                issues.add("duplicate generates action [" + name + "]");
+            }
+            EntityIntent source = null;
+            if (g.getFrom() == null || g.getFrom()
+                                        .isBlank()) {
+                issues.add("generates [" + name + "] has no from entity");
+            } else if (!entityNames.contains(g.getFrom())) {
+                issues.add("generates [" + name + "] from references unknown entity [" + g.getFrom() + "]");
+            } else {
+                source = byName.get(g.getFrom());
+            }
+            if (g.getTo() == null || g.getTo()
+                                      .isBlank()) {
+                issues.add("generates [" + name + "] has no to entity");
+            }
+            boolean crossModel = g.getUses() != null && !g.getUses()
+                                                          .isBlank();
+            if (crossModel) {
+                if (!usesAliases.contains(g.getUses())) {
+                    issues.add(
+                            "generates [" + name + "] uses unknown model alias [" + g.getUses() + "] (declare it under the model's uses:)");
+                }
+            } else if (g.getTo() != null && !g.getTo()
+                                              .isBlank()
+                    && !entityNames.contains(g.getTo())) {
+                issues.add("generates [" + name + "] to references unknown entity [" + g.getTo()
+                        + "] (add a uses: alias if the target lives in another model)");
+            }
+            String forEntity = g.getForEntity();
+            if (forEntity == null || forEntity.isBlank()) {
+                issues.add("generates [" + name + "] has no forEntity");
+            } else if (!entityNames.contains(forEntity)) {
+                issues.add("generates [" + name + "] forEntity references unknown entity [" + forEntity + "]");
+            }
+            String scope = g.getScope();
+            if (!"entity".equals(scope) && !"page".equals(scope)) {
+                issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
+            }
+            validateMapSource(source, g.getMap(), name, "map", issues);
+            if (g.getItems() != null) {
+                GeneratesItemsIntent items = g.getItems();
+                EntityIntent itemSource = null;
+                if (items.getFrom() == null || items.getFrom()
+                                                    .isBlank()) {
+                    issues.add("generates [" + name + "] items has no from entity");
+                } else if (!entityNames.contains(items.getFrom())) {
+                    issues.add("generates [" + name + "] items from references unknown entity [" + items.getFrom() + "]");
+                } else {
+                    itemSource = byName.get(items.getFrom());
+                }
+                if (items.getTo() == null || items.getTo()
+                                                  .isBlank()) {
+                    issues.add("generates [" + name + "] items has no to entity");
+                }
+                validateMapSource(itemSource, items.getMap(), name, "items map", issues);
+            }
+        }
+    }
+
+    /**
+     * Each {@code map} value must name a field or a to-one relation of the source entity; a one-hop
+     * {@code relation.field} path is rejected (not yet supported). Skipped when the source is unknown -
+     * that error is already reported.
+     */
+    private static void validateMapSource(EntityIntent source, Map<String, String> map, String name, String role, List<String> issues) {
+        if (source == null || map == null) {
+            return;
+        }
+        for (Map.Entry<String, String> entry : map.entrySet()) {
+            String sourceProp = entry.getValue();
+            if (sourceProp == null || sourceProp.isBlank()) {
+                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] has no source property");
+                continue;
+            }
+            if (sourceProp.indexOf('.') >= 0) {
+                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
+                        + "] which is not yet supported - map a direct field or to-one relation of [" + source.getName() + "]");
+                continue;
+            }
+            if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
+                issues.add("generates [" + name + "] " + role + " source [" + sourceProp + "] is not a field or to-one relation of ["
+                        + source.getName() + "]");
             }
         }
     }

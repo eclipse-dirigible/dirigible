@@ -693,6 +693,42 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "generates":
+                    // Create-from (intent layer): per generate action, a REST @Controller that clones a
+                    // source record into a fresh target record. The source lives in this project; the
+                    // target may be cross-model (its gen folder = sanitized model alias). Java package
+                    // segments are the lowercased (sanitized) perspectives. The field assignment
+                    // expressions are pre-rendered by the glue generator - passed through untouched.
+                    if (model.generates) {
+                        for (let i = 0; i < model.generates.length; i++) {
+                            const g = model.generates[i];
+                            const generateParameters = {
+                                ...parameters,
+                                name: g.name,
+                                className: g.className,
+                                fromEntity: g.fromEntity,
+                                fromJavaPerspective: sanitizeJavaIdentifier(g.fromPerspective),
+                                toEntity: g.toEntity,
+                                toGenFolder: g.crossModel ? sanitizeJavaIdentifier(g.toModel) : parameters.javaGenFolderName,
+                                toJavaPerspective: sanitizeJavaIdentifier(g.toPerspective),
+                                toPk: g.toPk,
+                                fieldAssignments: g.fieldAssignments,
+                                hasItems: g.hasItems,
+                                fromItemEntity: g.fromItemEntity,
+                                toItemEntity: g.toItemEntity,
+                                srcFkProperty: g.srcFkProperty,
+                                toFkProperty: g.toFkProperty,
+                                itemFieldAssignments: g.itemFieldAssignments
+                            };
+                            const cleanGenerateParameters = cleanData(generateParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanGenerateParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanGenerateParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

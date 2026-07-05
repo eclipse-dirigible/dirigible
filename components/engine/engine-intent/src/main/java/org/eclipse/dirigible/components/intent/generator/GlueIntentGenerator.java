@@ -23,6 +23,8 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -88,10 +90,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && settlements.isEmpty()) {
+                && settlements.isEmpty() && generates.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -108,6 +111,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("inbound", inbound);
         glue.put("rollups", rollups);
         glue.put("settlements", settlements);
+        glue.put("generates", generates);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
                 "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] writer(s), [{}] setter(s),"
@@ -400,6 +404,149 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One glue entry per {@link GeneratesIntent}: resolves the source entity's perspective/genFolder
+     * (in this project) and the target's - possibly cross-model, via {@link CrossModelSupport} - plus
+     * the pre-rendered field assignment expressions (source-copy, {@code now}, or literal) for the
+     * header and (optionally) the composition items. The {@code Generate.java.template} then renders a
+     * REST {@code @Controller} that clones a source record into a fresh target record and saves it
+     * through the <b>target's</b> generated repository so its create-time logic (numbering, status
+     * init) fires. The matching client button is emitted separately by the
+     * {@code GeneratesIntentGenerator}.
+     */
+    private static List<Map<String, Object>> buildGenerates(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (GeneratesIntent g : model.getGenerates()) {
+            if (g.getName() == null || g.getName()
+                                        .isBlank()) {
+                continue;
+            }
+            EntityIntent source = byName.get(g.getFrom());
+            if (source == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("generates", g.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing controller for generates [{}] (not generated)", g.getName());
+                continue;
+            }
+            boolean crossModel = g.getUses() != null && !g.getUses()
+                                                          .isBlank();
+            UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
+            CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
+            String toPerspective =
+                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+            String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
+
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", g.getName());
+            e.put("className", IntentNaming.pascalIdentifier(g.getName()));
+            e.put("crossModel", crossModel);
+            e.put("fromEntity", g.getFrom());
+            e.put("fromPerspective", IntentEntities.resolvePerspective(g.getFrom(), compositionParents));
+            e.put("toEntity", g.getTo());
+            e.put("toModel", crossModel ? g.getUses() : "");
+            e.put("toPerspective", toPerspective);
+            e.put("toPk", toPk);
+            e.put("fieldAssignments", assignments(g.getMap(), g.getDefaults(), "source"));
+
+            GeneratesItemsIntent items = g.getItems();
+            boolean hasItems = items != null && items.getFrom() != null && !items.getFrom()
+                                                                                 .isBlank()
+                    && items.getTo() != null && !items.getTo()
+                                                      .isBlank();
+            e.put("hasItems", hasItems);
+            if (hasItems) {
+                e.put("fromItemEntity", items.getFrom());
+                e.put("toItemEntity", items.getTo());
+                // A document child's FK back to its master is, by convention, the master entity's name.
+                e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
+                e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
+                e.put("itemFieldAssignments", assignments(items.getMap(), items.getDefaults(), "srcItem"));
+            } else {
+                e.put("fromItemEntity", "");
+                e.put("toItemEntity", "");
+                e.put("srcFkProperty", "");
+                e.put("toFkProperty", "");
+                e.put("itemFieldAssignments", new ArrayList<>());
+            }
+            out.add(e);
+        }
+        return out;
+    }
+
+    /**
+     * Test hook: build the {@code generates} glue collection without a repository. With a null context
+     * a cross-model target falls back to {@link CrossModelSupport}'s naming-convention defaults
+     * (perspective = entity name, key = {@code Id}), which is deterministic and enough to assert the
+     * mapping shape.
+     */
+    static List<Map<String, Object>> buildGeneratesForTest(IntentModel model) {
+        return buildGenerates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
+    }
+
+    /**
+     * Pre-render the target field assignments for a generate mapping: a {@code map} entry copies a
+     * source property ({@code <sourceVar>.<Prop>}); a {@code defaults} entry sets {@code now} (today's
+     * date) or a literal. The expression is rendered here (in Java, testable) so the Velocity template
+     * only emits {@code target.<prop> = <expr>;} - no expression logic in the template.
+     */
+    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+        List<Map<String, Object>> list = new ArrayList<>();
+        if (map != null) {
+            for (Map.Entry<String, String> entry : map.entrySet()) {
+                if (entry.getValue() == null || entry.getValue()
+                                                     .isBlank()) {
+                    continue;
+                }
+                list.add(assignment(entry.getKey(), sourceVar + "." + IntentNaming.pascalCase(entry.getValue())));
+            }
+        }
+        if (defaults != null) {
+            for (Map.Entry<String, String> entry : defaults.entrySet()) {
+                if (entry.getValue() == null || entry.getValue()
+                                                     .isBlank()) {
+                    continue;
+                }
+                list.add(assignment(entry.getKey(), literalExpression(entry.getValue())));
+            }
+        }
+        return list;
+    }
+
+    private static Map<String, Object> assignment(String targetProperty, String expression) {
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("targetProp", IntentNaming.pascalCase(targetProperty));
+        a.put("expr", expression);
+        return a;
+    }
+
+    /**
+     * A Java expression for a {@code defaults} value: {@code now} -> today's {@code LocalDate}; an
+     * integer / decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
+     */
+    private static String literalExpression(String value) {
+        String v = value.trim();
+        if ("now".equals(v)) {
+            return "java.time.LocalDate.now()";
+        }
+        if ("true".equals(v) || "false".equals(v)) {
+            return v;
+        }
+        if (v.matches("-?\\d+")) {
+            return v;
+        }
+        if (v.matches("-?\\d+\\.\\d+")) {
+            return "new java.math.BigDecimal(\"" + v + "\")";
+        }
+        return "\"" + v.replace("\\", "\\\\")
+                       .replace("\"", "\\\"")
+                       .replace("\n", "\\n")
+                       .replace("\r", "\\r")
+                + "\"";
     }
 
     /** The junction's to-one relation whose target is the given entity, or null. */
