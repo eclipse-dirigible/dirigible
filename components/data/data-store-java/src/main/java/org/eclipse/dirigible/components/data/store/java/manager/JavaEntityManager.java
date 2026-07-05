@@ -19,6 +19,8 @@ import javax.sql.DataSource;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
 import org.eclipse.dirigible.components.data.store.java.hbm.JavaEntityToHbmMapper;
 import org.hibernate.SessionFactory;
 import org.hibernate.boot.registry.StandardServiceRegistry;
@@ -54,6 +56,16 @@ public class JavaEntityManager implements DisposableBean {
 
     private final DataSourcesManager dataSourcesManager;
 
+    /**
+     * Hibernate multi-tenancy wiring, reused from the TypeScript {@code DataStore}. Without it the
+     * dynamic {@link SessionFactory} binds a single datasource and every tenant's entity CRUD hits the
+     * same schema (cross-tenant data leak); with it, Hibernate resolves the current tenant per session
+     * and the connection provider hands back a tenant-routed connection at query time.
+     */
+    private final MultiTenantConnectionProviderImpl connectionProvider;
+
+    private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
+
     /** Current registered entities, keyed by {@code <project>::<fqn>}. */
     private final Map<String, RegisteredEntity> registered = new LinkedHashMap<>();
 
@@ -64,10 +76,16 @@ public class JavaEntityManager implements DisposableBean {
     /**
      * @param dataSourcesManager source of the JDBC {@link DataSource} used by the dynamic
      *        {@link SessionFactory}
+     * @param connectionProvider the Hibernate multi-tenant connection provider (tenant-routed
+     *        connections)
+     * @param tenantIdentifierResolver resolves the current tenant for each session
      */
     @Autowired
-    public JavaEntityManager(DataSourcesManager dataSourcesManager) {
+    public JavaEntityManager(DataSourcesManager dataSourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
+            CurrentTenantIdentifierResolverImpl tenantIdentifierResolver) {
         this.dataSourcesManager = dataSourcesManager;
+        this.connectionProvider = connectionProvider;
+        this.tenantIdentifierResolver = tenantIdentifierResolver;
     }
 
     /**
@@ -200,6 +218,12 @@ public class JavaEntityManager implements DisposableBean {
 
         StandardServiceRegistryBuilder builder = new StandardServiceRegistryBuilder();
         builder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, dataSource);
+        // Enable Hibernate multi-tenancy (mirrors the TypeScript DataStore): the connection provider
+        // resolves the datasource per connection at request time and the resolver scopes each session
+        // to the current tenant, so Java-entity CRUD is isolated per tenant instead of all tenants
+        // sharing the datasource captured when this factory was built.
+        builder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
+        builder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
         builder.applySettings(configuration.getProperties());
 
         StandardServiceRegistry serviceRegistry = builder.build();
