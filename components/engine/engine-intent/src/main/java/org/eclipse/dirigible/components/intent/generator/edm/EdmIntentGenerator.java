@@ -183,6 +183,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // the line-items' humanized + pluralized label ("Sales Invoice Items").
                 entityMap.put("documentLabel", IntentNaming.humanize(name));
                 entityMap.put("documentItemsLabel", IntentNaming.pluralize(IntentNaming.humanize(itemsEntity)));
+                // duplicable: the document view offers a built-in Duplicate action that clones the
+                // current document (header + line items) into a new draft (see the document template).
+                if (entity.isDuplicable()) {
+                    entityMap.put("duplicable", "true");
+                }
             }
             // A plain PRIMARY entity with NO composition children of its own is standalone, not a
             // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
