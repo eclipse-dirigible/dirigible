@@ -243,7 +243,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         logger.info("[java-lsp] Starting JDT.LS for {}/{} → {}", sanitize(username), sanitize(workspace), workspaceRootPath);
 
         Process process = new ProcessBuilder(cmd).start();
-        return new JdtLsInstance(process, virtualRoot, realRoot);
+        return new JdtLsInstance(process, virtualRoot, realRoot, workspaceRootPath);
     }
 
     /**
