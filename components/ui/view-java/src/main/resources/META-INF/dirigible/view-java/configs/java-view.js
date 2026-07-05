@@ -11,7 +11,7 @@
  */
 const viewData = {
 	id: 'java',
-	label: 'Java',
+	label: 'Hierarchy',
 	lazyLoad: true,
 	autoFocusTab: false,
 	region: 'bottom',
