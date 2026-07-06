@@ -742,6 +742,52 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "printFeeders":
+                    // Print data feeders (intent layer): one @Controller per document master that loads
+                    // the record + its related graph through the generated repositories and returns the
+                    // nested { document, items } payload the .print template binds. Not entity-shaped, so
+                    // it gets its own loop. Root/items live in this project (javaGenFolderName); a
+                    // cross-model relation node's gen folder is its sanitized model alias, same as the
+                    // dropdowns/settlements. Java package segments are the lowercased (sanitized)
+                    // perspectives.
+                    if (model.printFeeders) {
+                        for (let f = 0; f < model.printFeeders.length; f++) {
+                            const feeder = model.printFeeders[f];
+                            const feederParameters = {
+                                ...parameters,
+                                className: feeder.className,
+                                entity: feeder.entity,
+                                javaPerspective: sanitizeJavaIdentifier(feeder.perspective),
+                                rootScalars: feeder.rootScalars,
+                                itemsEntity: feeder.itemsEntity,
+                                itemsJavaPerspective: sanitizeJavaIdentifier(feeder.itemsPerspective),
+                                itemsFkProperty: feeder.itemsFkProperty,
+                                itemScalars: feeder.itemScalars,
+                                nodes: (feeder.nodes || []).map(function (n) {
+                                    return {
+                                        entityVar: n.entityVar,
+                                        mapVar: n.mapVar,
+                                        parentEntityVar: n.parentEntityVar,
+                                        parentMapVar: n.parentMapVar,
+                                        fkProperty: n.fkProperty,
+                                        keyInParent: n.keyInParent,
+                                        entity: n.entity,
+                                        genFolder: n.crossModel ? sanitizeJavaIdentifier(n.model) : parameters.javaGenFolderName,
+                                        javaPerspective: sanitizeJavaIdentifier(n.perspective),
+                                        labelField: n.labelField,
+                                        scalars: n.scalars
+                                    };
+                                })
+                            };
+                            const cleanFeederParameters = cleanData(feederParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanFeederParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanFeederParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;

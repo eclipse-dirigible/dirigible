@@ -83,7 +83,7 @@ public interface SynchronizersOrder {
     /** The openapi. */
     int OPENAPI = 510;
 
-    /** The print template. */
-    int PRINT = 520;
+    /** The CMS seed (files under a project's {@code doc/} folder, seeded into the CMS). */
+    int CMS_SEED = 520;
 
 }

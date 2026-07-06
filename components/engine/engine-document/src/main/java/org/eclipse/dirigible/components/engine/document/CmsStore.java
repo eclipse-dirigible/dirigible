@@ -30,44 +30,51 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * The single CMS access point for print templates. Templates live under
- * {@code Templates/<EntityName>/Print/<language>/} in the (tenant-scoped) CMS; the synchronizer
- * seeds them there and the print endpoint reads them back.
+ * The single CMS access point for the document engine. It has two sides:
+ * <ul>
+ * <li><b>Seeding</b> — {@link #seed(String, byte[])} copies a file placed under a project's
+ * {@code doc/} folder into the (tenant-scoped) CMS at the mirrored path, <b>create-if-absent</b>:
+ * an already existing document is a user customization and is never overwritten. Generic — any
+ * path, any content.</li>
+ * <li><b>Print reads</b> — {@link #listLanguages(String)} / {@link #findTemplate(String, String)}
+ * resolve print templates under {@code Templates/<EntityName>/Print/<language>/} for the print
+ * endpoint.</li>
+ * </ul>
  */
 @Component
-class PrintTemplateCmsStore {
+class CmsStore {
 
-    private static final Logger logger = LoggerFactory.getLogger(PrintTemplateCmsStore.class);
+    private static final Logger logger = LoggerFactory.getLogger(CmsStore.class);
 
     private static final String TEMPLATES_ROOT = "Templates";
     private static final String PRINT_SEGMENT = "Print";
-    private static final String DEFAULT_LANGUAGE = "en";
-    private static final String DEFAULT_TEMPLATE_NAME = "standard.print";
     private static final String TEMPLATE_EXTENSION = ".print";
-    private static final String TEMPLATE_MEDIA_TYPE = "text/xml";
     private static final String PATH_SEPARATOR = "/";
+    private static final String DEFAULT_MEDIA_TYPE = "application/octet-stream";
 
     /**
-     * Seeds the default template for the given entity at
-     * {@code Templates/<EntityName>/Print/en/standard.print} — create-if-absent only: an already
-     * existing document is a user customization and is never overwritten.
+     * Seeds a file into the CMS at the given absolute path — create-if-absent only: an already existing
+     * document is a user customization and is never overwritten. Missing parent folders are created.
      *
-     * @param entityName the domain entity name
-     * @param content the template source
+     * @param cmsPath the absolute CMS path, e.g.
+     *        {@code /Templates/SalesInvoice/Print/en/standard.print}
+     * @param content the raw file content
      * @throws IOException on CMS access failure
      */
-    void seedDefaultTemplate(String entityName, String content) throws IOException {
-        String folderPath = printFolderPath(entityName) + PATH_SEPARATOR + DEFAULT_LANGUAGE;
-        String documentPath = folderPath + PATH_SEPARATOR + DEFAULT_TEMPLATE_NAME;
+    void seed(String cmsPath, byte[] content) throws IOException {
+        String normalized = cmsPath.startsWith(PATH_SEPARATOR) ? cmsPath : PATH_SEPARATOR + cmsPath;
+        int lastSeparator = normalized.lastIndexOf(PATH_SEPARATOR);
+        String folderPath = normalized.substring(0, lastSeparator);
+        String documentName = normalized.substring(lastSeparator + 1);
 
         CmisSession session = CmisSessionFactory.getSession();
-        if (exists(session, documentPath)) {
-            logger.debug("Print template [{}] already exists - keeping the user's version", documentPath);
+        if (exists(session, normalized)) {
+            logger.debug("CMS document [{}] already exists - keeping the existing version", normalized);
             return;
         }
-        CmisFolder folder = ensureFolder(session, folderPath);
-        createDocument(session, folder, DEFAULT_TEMPLATE_NAME, content);
-        logger.info("Seeded print template [{}]", documentPath);
+        CmisFolder folder = folderPath.isEmpty() ? session.getRootFolder() : ensureFolder(session, folderPath);
+        createDocument(session, folder, documentName, content);
+        logger.info("Seeded CMS document [{}]", normalized);
     }
 
     /**
@@ -186,14 +193,43 @@ class PrintTemplateCmsStore {
         return current;
     }
 
-    private void createDocument(CmisSession session, CmisFolder folder, String name, String content) throws IOException {
+    private void createDocument(CmisSession session, CmisFolder folder, String name, byte[] content) throws IOException {
         Map<String, String> properties = Map.of(CmisConstants.OBJECT_TYPE_ID, CmisConstants.OBJECT_TYPE_DOCUMENT, CmisConstants.NAME, name);
-        byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-        try (InputStream inputStream = new ByteArrayInputStream(bytes)) {
+        try (InputStream inputStream = new ByteArrayInputStream(content)) {
             CmisContentStream contentStream = session.getObjectFactory()
-                                                     .createContentStream(name, bytes.length, TEMPLATE_MEDIA_TYPE, inputStream);
+                                                     .createContentStream(name, content.length, mediaType(name), inputStream);
             folder.createDocument(properties, contentStream);
         }
+    }
+
+    /** A best-effort media type from the file extension; the CMS stores the bytes regardless. */
+    private static String mediaType(String name) {
+        String lower = name.toLowerCase();
+        if (lower.endsWith(".print") || lower.endsWith(".xml")) {
+            return "text/xml";
+        }
+        if (lower.endsWith(".html") || lower.endsWith(".htm")) {
+            return "text/html";
+        }
+        if (lower.endsWith(".txt") || lower.endsWith(".csv")) {
+            return "text/plain";
+        }
+        if (lower.endsWith(".json")) {
+            return "application/json";
+        }
+        if (lower.endsWith(".pdf")) {
+            return "application/pdf";
+        }
+        if (lower.endsWith(".png")) {
+            return "image/png";
+        }
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
+            return "image/jpeg";
+        }
+        if (lower.endsWith(".svg")) {
+            return "image/svg+xml";
+        }
+        return DEFAULT_MEDIA_TYPE;
     }
 
     private String readContent(CmisDocument document) throws IOException {

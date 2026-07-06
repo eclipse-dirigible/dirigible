@@ -209,10 +209,16 @@ document.addEventListener('alpine:init', () => {
       this.printError = null;
       this.printBusy = true;
       try {
+        // The generated print feeder (gen/events/${name}PrintFeeder) loads the document + its related
+        // graph through the repositories and returns the { document, items } payload the template binds
+        // - so {{document.<Relation>.<Field>}} resolves. It is the auditable source of what a print
+        // receives; the browser calls it as the logged-in user (auth + tenant + i18n are the caller's).
+        const payload = await App.services.api.get(
+          '/services/java/${projectName}/gen/events/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
         const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.printPayload()),
+          body: JSON.stringify(payload),
         });
         if (!response.ok) {
           this.printError = response.status === 404
@@ -230,18 +236,6 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.printBusy = false;
       }
-    },
-
-    // The template data contract: `document` = the loaded record overlaid with current edits and
-    // dropdown FKs resolved to their display labels; `items` = the line items as loaded.
-    printPayload() {
-      const doc = Object.assign({}, this.record, this.form);
-#foreach($property in $properties)
-#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
-      doc.${property.name} = ((this.options${property.name}.find(o => String(o.value) === String(doc.${property.name})) || {}).text) || doc.${property.name};
-#end
-#end
-      return { document: doc, items: this.items };
     },
 
     async init() {

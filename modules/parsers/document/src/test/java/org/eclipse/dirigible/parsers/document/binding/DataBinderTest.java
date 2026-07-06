@@ -201,4 +201,26 @@ public class DataBinderTest {
                                 .get(0)
                                 .text());
     }
+
+    @Test
+    public void bareRelationNodeRendersItsLabelAndPathsDescend() {
+        // A relation is provided as a nested object carrying __label (the print feeder shape): a bare
+        // {{document.Customer}} shows the label, while {{document.Customer.Address.Street}} descends.
+        Node root = parser.parse("<document><text>{{document.Customer}} @ {{document.Customer.Address.Street}}</text></document>");
+        Map<String, Object> data =
+                Map.of("document", Map.of("Customer", Map.of("__label", "BoomData", "Address", Map.of("Street", "558 Pacific Highway"))));
+        Node bound = binder.bind(root, data);
+        assertEquals("BoomData @ 558 Pacific Highway", bound.children()
+                                                            .get(0)
+                                                            .text());
+    }
+
+    @Test
+    public void relationNodeWithoutLabelRendersEmpty() {
+        Node root = parser.parse("<document><text>[{{document.Customer}}]</text></document>");
+        Node bound = binder.bind(root, Map.of("document", Map.of("Customer", Map.of())));
+        assertEquals("[]", bound.children()
+                                .get(0)
+                                .text());
+    }
 }

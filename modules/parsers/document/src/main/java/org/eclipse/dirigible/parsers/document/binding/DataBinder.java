@@ -184,14 +184,21 @@ public final class DataBinder {
 
     /**
      * Floating-point values print in the generated forms' money pattern ({@code ### ### ### ##0.00} —
-     * thousands grouped by a space, two decimals), locale-independent for deterministic output; every
-     * other value prints via {@code toString}.
+     * thousands grouped by a space, two decimals), locale-independent for deterministic output; a
+     * {@code Map} (a relation/object node) prints its {@code __label} value so a bare
+     * {@code {{document.Customer}}} still renders the display label while
+     * {@code {{document.Customer.Address}}} descends into the same node; every other value prints via
+     * {@code toString}.
      */
     private static String stringify(Object resolved) {
         if (resolved instanceof Double || resolved instanceof Float || resolved instanceof BigDecimal) {
             DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.ROOT);
             symbols.setGroupingSeparator(' ');
             return new DecimalFormat("###,###,###,##0.00", symbols).format(resolved);
+        }
+        if (resolved instanceof Map<?, ?> map) {
+            Object label = map.get("__label");
+            return label == null ? "" : stringify(label);
         }
         return String.valueOf(resolved);
     }

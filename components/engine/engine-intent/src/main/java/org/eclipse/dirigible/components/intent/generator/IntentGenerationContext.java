@@ -96,6 +96,26 @@ public final class IntentGenerationContext {
     }
 
     /**
+     * Write a model file only if it does not already exist at the project root; an existing file (a
+     * developer's customization) is left untouched. Either way the file name is recorded so the
+     * post-pass scrub keeps it. Use this for a generate-once template whose content the developer is
+     * expected to adapt and keep — the {@code .print} document template, mirroring the developer-owned
+     * {@code .settings} file — where regenerating over an already-formatted artifact would destroy
+     * those edits.
+     *
+     * @param fileName bare file name including extension, e.g. {@code SalesInvoice.print}
+     * @param content the full file content to create when absent
+     */
+    public void writeModelFileIfAbsent(String fileName, String content) {
+        String path = projectRoot + "/" + fileName;
+        IResource existing = repository.getResource(path);
+        if (!existing.exists()) {
+            repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
+        }
+        writtenFileNames.add(fileName);
+    }
+
+    /**
      * The bare file names emitted through {@link #writeModelFile(String, String)} so far.
      *
      * @return an unmodifiable view of the written file names

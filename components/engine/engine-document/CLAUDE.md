@@ -6,28 +6,36 @@ Merged via PR [#6119](https://github.com/eclipse-dirigible/dirigible/pull/6119).
 
 ## The contract (read this first)
 
-A `.print` file at a project root (the DSL of `dirigible-parsers-document`; normally generated
-by the Intent Editor's Generate, one per document entity) is a **runtime artefact**: on publish,
-`PrintTemplateSynchronizer` seeds it into the CMS at
+CMS seed content lives under a project's **`doc/` folder**, laid out **exactly as it must appear in
+the CMS**. On publish the generic **`CmsSeedSynchronizer`** mirrors everything under `<project>/doc/`
+into the (tenant-scoped) CMS at the same relative path — so
 
 ```
-Templates/<EntityName>/Print/en/standard.print
+<project>/doc/Templates/SalesInvoice/Print/en/standard.print
+        → CMS  /Templates/SalesInvoice/Print/en/standard.print
 ```
 
-where `<EntityName>` is the `.print` file's base name (`SalesInvoice.print` → `SalesInvoice`).
+The synchronizer is **generic and folder-scoped** — it is not print-specific and not
+extension-specific: *any* file under `doc/` (print templates, images, documents) is seeded as opaque
+CMS content. `engine-intent`'s `PrintIntentGenerator` produces the print template directly at its CMS
+path under `doc/` (the `Templates/<Entity>/Print/en/standard.print` convention now lives in the
+generator, not the synchronizer). Do **not** drop model artefacts (`.csvim`, `.bpmn`, …) under `doc/`
+expecting their normal engines — under `doc/` they are opaque content.
+
 Three rules that must never regress:
 
 1. **Create-if-absent, never overwrite.** The CMS copy is the business user's customization
    surface (download/edit/upload through the Documents perspective). A re-publish or regeneration
-   must not clobber it — the generated file is only the never-customized default.
-2. **DELETE never touches the CMS.** Removing the `.print` artefact (or the project) removes the
+   must not clobber it — the seeded file is only the never-customized default.
+2. **DELETE never touches the CMS.** Removing the seed file (or the project) removes the `CmsSeed`
    DB row only; uploaded customizations survive.
-3. **Per-tenant.** The synchronizer is a `MultitenantBaseSynchronizer` because the internal CMS
+3. **Per-tenant.** `CmsSeedSynchronizer` is a `MultitenantBaseSynchronizer` because the internal CMS
    root is tenant-scoped (`<CMS root>/<tenantId>/cms`) — each tenant's sync seeds its own copy.
-   `SynchronizersOrder.PRINT = 520`.
+   `SynchronizersOrder.CMS_SEED = 520`.
 
-Multilanguage is folder-based: additional languages are simply more `Print/<lang>/` folders,
-uploaded by the user (only `en` is seeded). The Print button asks which to use when several exist.
+Multilanguage is folder-based: additional languages are simply more
+`doc/Templates/<Entity>/Print/<lang>/` files (only `en` is generated; the others are authored or
+uploaded). The Print button asks which to use when several exist.
 
 ## Endpoints
 
@@ -49,17 +57,23 @@ formats in the form money pattern `### ### ### ##0.00`).
 
 ## Structure notes
 
-- The synchronizer, endpoint, `PrintTemplateCmsStore` and `PrintRenderer` share the root package
-  `org.eclipse.dirigible.components.engine.document` so the CMS store can stay package-private
+- `CmsSeedSynchronizer`, `PrintEndpoint`, `CmsStore` and `PrintRenderer` share the root package
+  `org.eclipse.dirigible.components.engine.document` so `CmsStore` can stay package-private
   while serving both consumers (Java packages don't nest). `domain`/`repository`/`service` follow
   the engine-openapi sub-package shape.
-- `PrintTemplateCmsStore` is the **only** CMS surface: `seedDefaultTemplate` / `listLanguages` /
-  `findTemplate`; `ensureFolder` walks/creates one level at a time (the engine `CmisFolder
-  .createFolder` is single-level); a missing path is the `IOException` `getObjectByPath` throws
-  (logged at DEBUG with the throwable). Writes go through the raw engine-cms interfaces
-  (`CmisSessionFactory.getSession()`), which bypass CMS role checks — correct for a server-side
-  seeder, same as `data-processes`' `BaseExportTask`.
-- `PrintTemplate` stores the template source in a `PRINT_CONTENT` CLOB so the seeding phase does
+- **`CmsSeedSynchronizer` matches by folder, not extension** — it overrides `isAccepted(Path, attrs)`
+  to accept any regular file whose path contains a `/doc/` segment (and `getFileExtension()` returns
+  `""`, unused since the override replaces the default extension match). The CMS path is the
+  location from `/doc/` down (`toCmsPath`).
+- `CmsStore` is the **only** CMS surface, with two sides: **seed** — `seed(cmsPath, bytes)` (generic,
+  create-if-absent, `ensureFolder` walks/creates one level at a time since the engine
+  `CmisFolder.createFolder` is single-level; a media type is inferred from the file extension); and
+  **print reads** — `listLanguages` / `findTemplate` (used by `PrintEndpoint`). A missing path is the
+  `IOException` `getObjectByPath` throws (logged at DEBUG with the throwable). Writes go through the
+  raw engine-cms interfaces (`CmisSessionFactory.getSession()`), which bypass CMS role checks —
+  correct for a server-side seeder, same as `data-processes`' `BaseExportTask`.
+- `CmsSeed` stores the raw content in a `CMS_SEED_CONTENT` BLOB (bytes, so binary seeds work) plus
+  the target `CMS_SEED_PATH`, so the seeding phase does
   not re-read the repository.
 
 ## Renderer v1 limits (documented in `XslFoRenderer`, deliberate)

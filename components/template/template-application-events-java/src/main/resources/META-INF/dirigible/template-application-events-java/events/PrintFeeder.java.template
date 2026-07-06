@@ -1,0 +1,85 @@
+package gen.events;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.PathParam;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Print data feeder for ${entity}: loads the document record and its related graph through the
+ * generated repositories and returns the nested { document, items } payload the ${entity}.print
+ * template binds - so a template path like {{document.<Relation>.<Field>}} resolves.
+ *
+ * Generated from the intent printFeeders glue - do not edit; it is re-generated with the application.
+ * Every fetch and every field handed to the template is explicit below (this class IS the audit of
+ * what a print receives). Entity access goes ONLY through the generated repositories, so validations,
+ * events and the multilingual translation overlay (print in the caller's language) all apply, and the
+ * browser calls it as the logged-in user so authorization and tenant are the caller's own.
+ * Served at /services/java/<project>/gen/events/${className}PrintFeeder/{id}.
+ */
+@Controller
+public class ${className}PrintFeeder {
+
+    @Get("/{id}")
+    public String feed(@PathParam("id") Integer id) {
+        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity root =
+                new gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository().findById(id);
+        if (root == null) {
+            return "{}";
+        }
+        Map<String, Object> document = new LinkedHashMap<>();
+#foreach($s in $rootScalars)
+#if($s.date)
+        document.put("${s.name}", root.${s.name} == null ? null : root.${s.name}.toString());
+#else
+        document.put("${s.name}", root.${s.name});
+#end
+#end
+#foreach($n in $nodes)
+
+        // ${n.entity} (via ${n.fkProperty})
+        gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Entity ${n.entityVar} = null;
+        Map<String, Object> ${n.mapVar} = new LinkedHashMap<>();
+        if (${n.parentEntityVar} != null && ${n.parentEntityVar}.${n.fkProperty} != null) {
+            ${n.entityVar} = new gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Repository().findById(${n.parentEntityVar}.${n.fkProperty});
+        }
+        if (${n.entityVar} != null) {
+#if($n.labelField != "")
+            ${n.mapVar}.put("__label", ${n.entityVar}.${n.labelField});
+#end
+#foreach($s in $n.scalars)
+#if($s.date)
+            ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name} == null ? null : ${n.entityVar}.${s.name}.toString());
+#else
+            ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name});
+#end
+#end
+        }
+        ${n.parentMapVar}.put("${n.keyInParent}", ${n.mapVar});
+#end
+
+        List<Object> items = new ArrayList<>();
+        for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository().findAll(Criteria.create().eq("${itemsFkProperty}", id))) {
+            Map<String, Object> im = new LinkedHashMap<>();
+#foreach($s in $itemScalars)
+#if($s.date)
+            im.put("${s.name}", item.${s.name} == null ? null : item.${s.name}.toString());
+#else
+            im.put("${s.name}", item.${s.name});
+#end
+#end
+            items.add(im);
+        }
+
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("document", document);
+        payload.put("items", items);
+        return Json.stringify(payload);
+    }
+}

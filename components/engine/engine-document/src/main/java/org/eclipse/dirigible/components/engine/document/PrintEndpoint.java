@@ -59,9 +59,9 @@ class PrintEndpoint extends BaseEndpoint {
     private static final Gson GSON = new GsonBuilder().setObjectToNumberStrategy(ToNumberPolicy.LONG_OR_DOUBLE)
                                                       .create();
 
-    private final PrintTemplateCmsStore cmsStore;
+    private final CmsStore cmsStore;
 
-    PrintEndpoint(PrintTemplateCmsStore cmsStore) {
+    PrintEndpoint(CmsStore cmsStore) {
         this.cmsStore = cmsStore;
     }
 
