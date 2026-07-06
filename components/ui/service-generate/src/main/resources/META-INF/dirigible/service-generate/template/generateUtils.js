@@ -632,29 +632,43 @@ export function generateFiles(model, parameters, templateSources) {
                     }
                     break;
                 case "rollups":
-                    // Rollups (intent layer): per rollup, two @Listeners (child create/delete) that
-                    // recompute a parent counter. Not entity-shaped, own loop.
+                    // Rollups (intent layer): @Listeners that recompute a parent's totals on child events.
+                    // COALESCE every roll-up sharing the same child entity + parent relation + event into a
+                    // SINGLE handler, so one child event does exactly one read-modify-write of the parent -
+                    // separate handlers each persisting the whole parent row would clobber each other's
+                    // fields (lost update). The flat glue list already splits per event via topicSuffix, so
+                    // grouping by (childEntity, fkProperty, topicSuffix) yields the right aggregate set per
+                    // event (e.g. count roll-ups have no "-updated" entry, so the update handler is sum-only).
                     if (model.rollups) {
+                        const rollupGroups = {};
+                        const rollupOrder = [];
                         for (let r = 0; r < model.rollups.length; r++) {
+                            const ru = model.rollups[r];
+                            const key = ru.childEntity + "|" + ru.fkProperty + "|" + (ru.topicSuffix || "");
+                            if (!rollupGroups[key]) { rollupGroups[key] = []; rollupOrder.push(key); }
+                            rollupGroups[key].push(ru);
+                        }
+                        const rollupSuffixName = (s) => s === "-updated" ? "RollupOnUpdate"
+                            : (s === "-deleted" ? "RollupOnDelete" : "RollupOnCreate");
+                        for (let gi = 0; gi < rollupOrder.length; gi++) {
+                            const group = rollupGroups[rollupOrder[gi]];
+                            const first = group[0];
+                            let aggregateBlock = "";
+                            for (let a = 0; a < group.length; a++) {
+                                aggregateBlock += renderRollupAggregate(group[a]);
+                            }
                             const rollupParameters = {
                                 ...parameters,
-                                className: model.rollups[r].className,
-                                childEntity: model.rollups[r].childEntity,
-                                childPerspective: model.rollups[r].childPerspective,
-                                javaChildPerspective: sanitizeJavaIdentifier(model.rollups[r].childPerspective),
-                                parentEntity: model.rollups[r].parentEntity,
-                                javaParentPerspective: sanitizeJavaIdentifier(model.rollups[r].parentPerspective),
-                                fkProperty: model.rollups[r].fkProperty,
-                                countField: model.rollups[r].countField,
-                                op: model.rollups[r].op,
-                                sumField: model.rollups[r].sumField,
-                                capacityField: model.rollups[r].capacityField,
-                                balanceField: model.rollups[r].balanceField,
-                                statusField: model.rollups[r].statusField,
-                                statusWhenFull: model.rollups[r].statusWhenFull,
-                                statusWhenPartial: model.rollups[r].statusWhenPartial,
-                                topicSuffix: model.rollups[r].topicSuffix,
-                                criteriaExpression: model.rollups[r].criteriaExpression
+                                className: first.childEntity + first.fkProperty + rollupSuffixName(first.topicSuffix || ""),
+                                childEntity: first.childEntity,
+                                childPerspective: first.childPerspective,
+                                javaChildPerspective: sanitizeJavaIdentifier(first.childPerspective),
+                                parentEntity: first.parentEntity,
+                                javaParentPerspective: sanitizeJavaIdentifier(first.parentPerspective),
+                                fkProperty: first.fkProperty,
+                                topicSuffix: first.topicSuffix || "",
+                                criteriaExpression: first.criteriaExpression,
+                                aggregateBlock: aggregateBlock
                             };
                             const cleanRollupParameters = cleanData(rollupParameters);
                             generatedFiles.push({
@@ -1000,6 +1014,50 @@ function annotateDocumentModels(entities) {
             fkProperty: fkProperty
         };
     }
+}
+
+// Render one roll-up aggregate's compute block for the coalesced handler. References `rows` (the child
+// list), `parent`, and `changed` provided by Rollup.java.template; each aggregate is wrapped in its own
+// scope so locals (sum/capacity) never collide. The change-guard sets the field + flips `changed` only
+// when the value actually moves, so the parent is written (and its "-updated" event raised) once per
+// event and the transitive cascade terminates.
+function renderRollupAggregate(ru) {
+    const cf = ru.countField;
+    if (ru.op === "sum") {
+        const sf = ru.sumField;
+        let s = "        {\n";
+        s += "            java.math.BigDecimal sum = java.math.BigDecimal.ZERO;\n";
+        s += "            for (var row : rows) {\n";
+        s += "                if (row." + sf + " != null) {\n";
+        s += "                    sum = sum.add(row." + sf + ");\n";
+        s += "                }\n";
+        s += "            }\n";
+        s += "            if (parent." + cf + " == null || parent." + cf + ".compareTo(sum) != 0) {\n";
+        s += "                parent." + cf + " = sum;\n";
+        if (ru.capacityField) {
+            s += "                java.math.BigDecimal capacity = parent." + ru.capacityField + " == null ? java.math.BigDecimal.ZERO : parent." + ru.capacityField + ";\n";
+            if (ru.balanceField) {
+                s += "                parent." + ru.balanceField + " = capacity.subtract(sum);\n";
+            }
+            if (ru.statusField) {
+                s += "                if (sum.signum() > 0) {\n";
+                s += "                    parent." + ru.statusField + " = sum.compareTo(capacity) >= 0 ? " + ru.statusWhenFull + " : " + ru.statusWhenPartial + ";\n";
+                s += "                }\n";
+            }
+        }
+        s += "                changed = true;\n";
+        s += "            }\n";
+        s += "        }\n";
+        return s;
+    }
+    let s = "        {\n";
+    s += "            int count = rows.size();\n";
+    s += "            if (parent." + cf + " == null || parent." + cf + ".intValue() != count) {\n";
+    s += "                parent." + cf + " = count;\n";
+    s += "                changed = true;\n";
+    s += "            }\n";
+    s += "        }\n";
+    return s;
 }
 
 function cleanData(data) {
