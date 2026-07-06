@@ -15,6 +15,12 @@
         <svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+    <!-- Developer-contributed page actions for this view (customActions extension point). -->
+    <template x-for="action in $store.customActions.getActions(caView, 'page')" :key="action.id">
+      <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action)">
+        <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+      </button>
+    </template>
   </div>
 
   <!-- Loading -->
@@ -94,11 +100,11 @@
           </table>
         </div>
 
-        <nav x-h-pagination class="p-2" x-show="totalPages > 1">
-          <button x-h-pagination-prev @click="goPage(currentPage - 1)" :disabled="currentPage === 1" x-text="T('$projectName:${tprefix}.defaults.previous', 'Previous')"></button>
-          <span x-h-pagination-item x-text="currentPage + ' / ' + totalPages"></span>
-          <button x-h-pagination-next @click="goPage(currentPage + 1)" :disabled="currentPage === totalPages" x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></button>
-        </nav>
+        <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
+          <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" data-lucide="chevron-right"></i></button>
+        </div>
       </div>
     </div>
 
@@ -128,6 +134,16 @@
           </template>
         </div>
 #end
+
+        <!-- Developer-contributed per-record actions for this entity (customActions extension point).
+             Passes the selected record's id to the action page. -->
+        <div x-show="$store.customActions.getActions(caView, 'entity').length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
+          <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+            <button x-h-button data-variant="outline" data-size="sm" @click="$store.customActions.trigger(action, selectedId)">
+              <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+            </button>
+          </template>
+        </div>
 
         <!-- Every property of the selected record (the table above shows only the major ones). -->
         <div class="vbox gap-3 p-4">

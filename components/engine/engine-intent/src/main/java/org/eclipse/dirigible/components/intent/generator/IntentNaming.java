@@ -88,6 +88,39 @@ public final class IntentNaming {
     }
 
     /**
+     * A valid PascalCase Java identifier from an arbitrary authored name: splits on every run of
+     * non-alphanumeric separators ({@code -}, {@code _}, space, {@code .}) and capitalizes each
+     * segment, so a kebab-case action name becomes a legal class name ({@code order-from-quote} ->
+     * {@code OrderFromQuote}). A pure camelCase input just gets its first letter capitalized
+     * ({@code orderFromQuote} -> {@code OrderFromQuote}); unlike {@link #pascalCase(String)} this never
+     * leaves a separator in the result.
+     *
+     * @param name the identifier to convert (may be null)
+     * @return the PascalCase identifier, empty for null/empty input
+     */
+    public static String pascalIdentifier(String name) {
+        if (name == null || name.isEmpty()) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(name.length());
+        boolean capitalizeNext = true;
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            if (!Character.isLetterOrDigit(c)) {
+                capitalizeNext = true;
+                continue;
+            }
+            if (capitalizeNext) {
+                out.append(Character.toUpperCase(c));
+                capitalizeNext = false;
+            } else {
+                out.append(c);
+            }
+        }
+        return out.toString();
+    }
+
+    /**
      * Camel-/Pascal-case to upper snake. Handles {@code IDValue} -> {@code ID_VALUE}, and collapses any
      * run of non-alphanumeric separators ({@code -}, space, {@code .}, {@code /}) to a single
      * underscore so a kebab-case intent/project name produces a <b>valid SQL identifier</b>:

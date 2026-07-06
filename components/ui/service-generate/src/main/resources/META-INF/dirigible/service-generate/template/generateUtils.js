@@ -209,6 +209,16 @@ export function generateFiles(model, parameters, templateSources) {
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
     const daoModels = model.entities.filter(e => e.type !== "PROJECTION");
     annotateDocumentModels(model.entities);
+    // A human-readable singular label for every entity. The intent generator (EdmIntentGenerator)
+    // bakes `entityLabel`; a hand-authored .edm carries none, so derive it the same way the i18n
+    // catalog does. Without this the templates' `${entityLabel}` fallback renders literally (e.g. the
+    // Harmonia form/list/master captions showed "${ENTITYLABEL}") whenever the runtime catalog lookup
+    // misses.
+    for (const entity of model.entities) {
+        if (!entity.entityLabel || !`${entity.entityLabel}`.trim()) {
+            entity.entityLabel = humanizeName(entity.name);
+        }
+    }
     const feedModels = model.entities.filter(e => e.feedUrl);
 
     const generateReportModels = model.entities.filter(e => e.generateReport === "true");
@@ -679,6 +689,42 @@ export function generateFiles(model, parameters, templateSources) {
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanSettlementParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSettlementParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "generates":
+                    // Create-from (intent layer): per generate action, a REST @Controller that clones a
+                    // source record into a fresh target record. The source lives in this project; the
+                    // target may be cross-model (its gen folder = sanitized model alias). Java package
+                    // segments are the lowercased (sanitized) perspectives. The field assignment
+                    // expressions are pre-rendered by the glue generator - passed through untouched.
+                    if (model.generates) {
+                        for (let i = 0; i < model.generates.length; i++) {
+                            const g = model.generates[i];
+                            const generateParameters = {
+                                ...parameters,
+                                name: g.name,
+                                className: g.className,
+                                fromEntity: g.fromEntity,
+                                fromJavaPerspective: sanitizeJavaIdentifier(g.fromPerspective),
+                                toEntity: g.toEntity,
+                                toGenFolder: g.crossModel ? sanitizeJavaIdentifier(g.toModel) : parameters.javaGenFolderName,
+                                toJavaPerspective: sanitizeJavaIdentifier(g.toPerspective),
+                                toPk: g.toPk,
+                                fieldAssignments: g.fieldAssignments,
+                                hasItems: g.hasItems,
+                                fromItemEntity: g.fromItemEntity,
+                                toItemEntity: g.toItemEntity,
+                                srcFkProperty: g.srcFkProperty,
+                                toFkProperty: g.toFkProperty,
+                                itemFieldAssignments: g.itemFieldAssignments
+                            };
+                            const cleanGenerateParameters = cleanData(generateParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanGenerateParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanGenerateParameters)
                             });
                         }
                     }

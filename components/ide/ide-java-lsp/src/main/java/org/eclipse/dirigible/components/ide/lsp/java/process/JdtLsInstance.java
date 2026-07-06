@@ -24,12 +24,16 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
 
 /**
  * Wraps a single running JDT Language Server OS process and the WebSocket sessions it serves.
@@ -51,6 +55,23 @@ public class JdtLsInstance {
     private final String virtualRoot;
     /** Real filesystem URI root used by JDT.LS, e.g. {@code file:///home/user/.../proj1/}. */
     private final String realRoot;
+    /**
+     * On-disk workspace root ({@code <repo>/root/users/<user>/<workspace>}); its project sub-dirs may
+     * be symlinks.
+     */
+    private final Path workspaceRootPath;
+
+    /**
+     * Canonical (symlink-resolved) real URI prefix → virtual URI prefix, one entry per project whose
+     * workspace directory is a symlink. Dirigible stores git clones under
+     * {@code <repo>/.git/<user>/<workspace>/<clone>/} and symlinks each contained project into the
+     * workspace root, so JDT.LS resolves the symlink and reports the canonical clone path — which the
+     * plain {@link #realRoot} replace cannot map back. Rebuilt on a short TTL so a freshly cloned
+     * project is picked up without restarting JDT.LS.
+     */
+    private volatile Map<String, String> symlinkPrefixes = Collections.emptyMap();
+    private volatile long symlinkPrefixesBuiltAt = 0L;
+    private static final long SYMLINK_MAP_TTL_MS = 5000L;
 
     private final Map<Integer, CompletableFuture<JsonNode>> pendingRequests = new ConcurrentHashMap<>();
     private final AtomicInteger serverRequestCounter = new AtomicInteger(-1);
@@ -70,11 +91,12 @@ public class JdtLsInstance {
      */
     private volatile boolean lspInitialized = false;
 
-    JdtLsInstance(Process process, String virtualRoot, String realRoot) {
+    JdtLsInstance(Process process, String virtualRoot, String realRoot, Path workspaceRootPath) {
         this.process = process;
         this.stdin = process.getOutputStream();
         this.virtualRoot = virtualRoot;
         this.realRoot = realRoot;
+        this.workspaceRootPath = workspaceRootPath;
         startStdoutReader();
         startStderrDrain();
     }
@@ -317,6 +339,65 @@ public class JdtLsInstance {
         return files;
     }
 
+    /**
+     * Translates the real filesystem URIs JDT.LS emits back to the virtual URIs the browser uses.
+     * Applies the plain {@link #realRoot}→{@link #virtualRoot} mapping first (covers regular,
+     * non-symlinked projects), then the per-project symlink mapping (covers git clones stored under
+     * {@code .git/…}).
+     */
+    private String translateToVirtual(String json) {
+        String out = json.replace(realRoot, virtualRoot);
+        for (Map.Entry<String, String> entry : symlinkPrefixes().entrySet()) {
+            if (out.contains(entry.getKey())) {
+                out = out.replace(entry.getKey(), entry.getValue());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Returns the canonical-real→virtual URI prefix map for symlinked project directories, rebuilding
+     * it when the cached copy is older than {@link #SYMLINK_MAP_TTL_MS}. See {@link #symlinkPrefixes}
+     * field.
+     */
+    private Map<String, String> symlinkPrefixes() {
+        long now = System.currentTimeMillis();
+        if (now - symlinkPrefixesBuiltAt < SYMLINK_MAP_TTL_MS) {
+            return symlinkPrefixes;
+        }
+        Map<String, String> map = new HashMap<>();
+        try (Stream<Path> children = Files.list(workspaceRootPath)) {
+            children.filter(Files::isDirectory)
+                    .forEach(child -> addSymlinkPrefix(map, child));
+        } catch (IOException e) {
+            logger.debug("[java-lsp] Could not list workspace root {} for symlink mapping", workspaceRootPath, e);
+        }
+        symlinkPrefixes = map;
+        symlinkPrefixesBuiltAt = now;
+        return map;
+    }
+
+    private void addSymlinkPrefix(Map<String, String> map, Path child) {
+        try {
+            String canonical = withTrailingSlash(child.toRealPath()
+                                                      .toUri()
+                                                      .toString());
+            String nominal = withTrailingSlash(child.toUri()
+                                                    .toString());
+            // Only symlinked (relocated) project dirs need the extra mapping; the plain realRoot replace
+            // already covers a project whose canonical path equals its nominal workspace path.
+            if (!canonical.equals(nominal)) {
+                map.put(canonical, virtualRoot + child.getFileName() + "/");
+            }
+        } catch (IOException e) {
+            logger.debug("[java-lsp] Could not resolve real path of {}", child, e);
+        }
+    }
+
+    private static String withTrailingSlash(String uri) {
+        return uri.endsWith("/") ? uri : uri + "/";
+    }
+
     private void startStdoutReader() {
         Thread t = new Thread(() -> {
             try {
@@ -329,7 +410,7 @@ public class JdtLsInstance {
                     if (body.length == 0)
                         break;
                     String json = new String(body, StandardCharsets.UTF_8);
-                    String translated = json.replace(realRoot, virtualRoot);
+                    String translated = translateToVirtual(json);
                     if (!routeToServerRequest(translated)) {
                         captureDiagnostics(translated);
                         broadcast(translated);

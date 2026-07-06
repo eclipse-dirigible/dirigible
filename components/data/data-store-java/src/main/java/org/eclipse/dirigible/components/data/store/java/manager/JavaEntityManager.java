@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.data.store.java.manager;
 
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +21,8 @@ import javax.sql.DataSource;
 
 import org.apache.commons.io.IOUtils;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
+import org.eclipse.dirigible.components.data.store.config.CurrentTenantIdentifierResolverImpl;
+import org.eclipse.dirigible.components.data.store.config.MultiTenantConnectionProviderImpl;
 import org.eclipse.dirigible.components.data.store.java.hbm.JavaEntityToHbmMapper;
 import org.hibernate.SessionFactory;
 import org.hibernate.boot.registry.StandardServiceRegistry;
@@ -54,6 +58,16 @@ public class JavaEntityManager implements DisposableBean {
 
     private final DataSourcesManager dataSourcesManager;
 
+    /**
+     * Hibernate multi-tenancy wiring, reused from the TypeScript {@code DataStore}. Without it the
+     * dynamic {@link SessionFactory} binds a single datasource and every tenant's entity CRUD hits the
+     * same schema (cross-tenant data leak); with it, Hibernate resolves the current tenant per session
+     * and the connection provider hands back a tenant-routed connection at query time.
+     */
+    private final MultiTenantConnectionProviderImpl connectionProvider;
+
+    private final CurrentTenantIdentifierResolverImpl tenantIdentifierResolver;
+
     /** Current registered entities, keyed by {@code <project>::<fqn>}. */
     private final Map<String, RegisteredEntity> registered = new LinkedHashMap<>();
 
@@ -64,10 +78,16 @@ public class JavaEntityManager implements DisposableBean {
     /**
      * @param dataSourcesManager source of the JDBC {@link DataSource} used by the dynamic
      *        {@link SessionFactory}
+     * @param connectionProvider the Hibernate multi-tenant connection provider (tenant-routed
+     *        connections)
+     * @param tenantIdentifierResolver resolves the current tenant for each session
      */
     @Autowired
-    public JavaEntityManager(DataSourcesManager dataSourcesManager) {
+    public JavaEntityManager(DataSourcesManager dataSourcesManager, MultiTenantConnectionProviderImpl connectionProvider,
+            CurrentTenantIdentifierResolverImpl tenantIdentifierResolver) {
         this.dataSourcesManager = dataSourcesManager;
+        this.connectionProvider = connectionProvider;
+        this.tenantIdentifierResolver = tenantIdentifierResolver;
     }
 
     /**
@@ -183,6 +203,16 @@ public class JavaEntityManager implements DisposableBean {
         Configuration configuration = new Configuration().setProperty(Environment.HBM2DDL_AUTO, "update")
                                                          .setProperty(Environment.SHOW_SQL, "false");
 
+        // Pin the dialect explicitly (as the TypeScript DataStore does). With multi-tenancy the
+        // connection used for boot-time metadata detection is not guaranteed to reflect the target
+        // database, and an unresolved/wrong dialect breaks dialect-specific behaviour - notably MSSQL
+        // IDENTITY key generation, where the insert would otherwise send an explicit NULL for the
+        // auto-increment primary key instead of letting the database assign it.
+        String dialect = detectHibernateDialect();
+        if (dialect != null) {
+            configuration.setProperty("hibernate.dialect", dialect);
+        }
+
         for (RegisteredEntity entity : registered.values()) {
             // Re-map fresh through JavaEntityToHbmMapper rather than reusing reflection-derived
             // descriptors — keeps Java reflection objects out of the Hibernate metadata layer.
@@ -200,6 +230,12 @@ public class JavaEntityManager implements DisposableBean {
 
         StandardServiceRegistryBuilder builder = new StandardServiceRegistryBuilder();
         builder.applySetting(Environment.JAKARTA_JTA_DATASOURCE, dataSource);
+        // Enable Hibernate multi-tenancy (mirrors the TypeScript DataStore): the connection provider
+        // resolves the datasource per connection at request time and the resolver scopes each session
+        // to the current tenant, so Java-entity CRUD is isolated per tenant instead of all tenants
+        // sharing the datasource captured when this factory was built.
+        builder.applySetting(Environment.MULTI_TENANT_CONNECTION_PROVIDER, connectionProvider);
+        builder.applySetting(Environment.MULTI_TENANT_IDENTIFIER_RESOLVER, tenantIdentifierResolver);
         builder.applySettings(configuration.getProperties());
 
         StandardServiceRegistry serviceRegistry = builder.build();
@@ -212,6 +248,47 @@ public class JavaEntityManager implements DisposableBean {
             } catch (RuntimeException e) {
                 LOGGER.warn("Failed to close prior SessionFactory cleanly: {}", e.getMessage());
             }
+        }
+    }
+
+    /**
+     * Detect the Hibernate dialect from the default datasource's metadata, mirroring the TypeScript
+     * {@code DataStore}. Returns {@code null} when it cannot be determined, in which case Hibernate
+     * falls back to its own auto-detection.
+     *
+     * @return the fully qualified Hibernate dialect class name, or {@code null}
+     */
+    private String detectHibernateDialect() {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            String productName = connection.getMetaData()
+                                           .getDatabaseProductName();
+            if (productName == null) {
+                return null;
+            }
+            String name = productName.toLowerCase();
+            if (name.contains("h2")) {
+                return "org.hibernate.dialect.H2Dialect";
+            }
+            if (name.contains("postgres")) {
+                return "org.hibernate.dialect.PostgreSQLDialect";
+            }
+            if (name.contains("mariadb")) {
+                return "org.hibernate.dialect.MariaDBDialect";
+            }
+            if (name.contains("mysql")) {
+                return "org.hibernate.dialect.MySQLDialect";
+            }
+            if (name.contains("microsoft sql server") || name.contains("mssql")) {
+                return "org.hibernate.dialect.SQLServerDialect";
+            }
+            if (name.contains("hdb") || name.contains("hana")) {
+                return "org.hibernate.dialect.HANADialect";
+            }
+            return null;
+        } catch (SQLException e) {
+            LOGGER.warn("Could not detect Hibernate dialect from datasource metadata", e);
+            return null;
         }
     }
 

@@ -1,0 +1,10 @@
+{
+    "namespace": "dirigible.test.project.Readers",
+    "entities": [
+        {
+            "name": "Reader",
+            "alias": "Readers",
+            "table": "READERS"
+        }
+    ]
+}

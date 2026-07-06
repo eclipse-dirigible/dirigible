@@ -67,6 +67,14 @@ public class EntityIntent {
      */
     private Boolean multilingual;
     /**
+     * Marks a document entity as <b>duplicable</b>: its generated document view shows a built-in
+     * Duplicate action that clones the current record (header + composition line items) into a new
+     * draft and opens it. The clone creates through the normal REST create path, so the number
+     * ({@code calculatedActionOnCreate}), the initial status ({@code init}) and calculated fields are
+     * reassigned by the server. Absent (the default) → no Duplicate action.
+     */
+    private Boolean duplicable;
+    /**
      * Optional explicit ordering of the generated UI controls (form inputs, list columns, detail rows)
      * by property name - fields and to-one relations interleaved, in the given order. Names match the
      * authored field / relation names (case-insensitive). Any property not listed keeps its default
@@ -181,5 +189,21 @@ public class EntityIntent {
 
     public void setMultilingual(Boolean multilingual) {
         this.multilingual = multilingual;
+    }
+
+    /**
+     * Whether this entity's document view offers the built-in Duplicate action
+     * ({@code duplicable: true}).
+     */
+    public boolean isDuplicable() {
+        return Boolean.TRUE.equals(duplicable);
+    }
+
+    public Boolean getDuplicable() {
+        return duplicable;
+    }
+
+    public void setDuplicable(Boolean duplicable) {
+        this.duplicable = duplicable;
     }
 }

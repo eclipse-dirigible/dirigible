@@ -128,10 +128,13 @@
         <maven-download-plugin.version>1.13.0</maven-download-plugin.version>
 
         <!-- JDT Language Server bundled at build time.
-             Pinned milestone tarballs on download.eclipse.org get pruned (causes 404 build failures),
-             so we track the rolling 'latest' snapshot, which is never removed. The contents change over
-             time, so the download is intentionally not sha256-pinned. -->
-        <jdtls.download.url>https://download.eclipse.org/jdtls/snapshots/jdt-language-server-latest.tar.gz</jdtls.download.url>
+             Served from our own mirror (dirigiblelabs/jdtls-mirror releases) because
+             download.eclipse.org intermittently fails to respond and flakes the build, and its
+             '-latest' snapshot is a moving target that breaks reproducibility. Each mirror release
+             pins one known-good JDT.LS snapshot. To bump: publish a new release on the mirror named
+             after the JDT.LS version (from plugins/org.eclipse.jdt.ls.core_<version>.jar in the
+             tarball) and point this URL at the new asset. See the mirror repo README. -->
+        <jdtls.download.url>https://github.com/dirigiblelabs/jdtls-mirror/releases/download/1.47.0.202505151856/jdt-language-server-1.47.0.202505151856.tar.gz</jdtls.download.url>
         <jdtls.download.skip>false</jdtls.download.skip>
         <!-- com.microsoft.java.debug plugin bundled alongside JDT.LS (EPL-1.0, on Maven Central) -->
         <java.debug.plugin.version>0.53.1</java.debug.plugin.version>

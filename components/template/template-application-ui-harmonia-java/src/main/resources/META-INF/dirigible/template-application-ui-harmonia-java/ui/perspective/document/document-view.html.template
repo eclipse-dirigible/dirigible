@@ -278,6 +278,19 @@
         <span x-show="printBusy" x-h-spinner></span>
         <i role="img" data-lucide="printer" x-show="!printBusy"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
       </button>
+#if($duplicable)
+      <!-- Built-in Duplicate action: clones this document (header + items) into a new draft and opens it. -->
+      <button type="button" x-h-button data-variant="outline" x-show="isEdit || isPreview" :disabled="state === 'saving'" @click="duplicate()">
+        <i role="img" data-lucide="copy"></i><span x-text="T('$projectName:${tprefix}.defaults.duplicate', 'Duplicate')"></span>
+      </button>
+#end
+      <!-- Developer-contributed per-record actions for this document (customActions extension point).
+           Shown for an existing document (edit/preview); passes the document id to the action page. -->
+      <template x-for="action in $store.customActions.getActions(caView, 'entity')" :key="action.id">
+        <button type="button" x-h-button data-variant="outline" x-show="isEdit || isPreview" @click="$store.customActions.trigger(action, id)">
+          <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
+        </button>
+      </template>
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">

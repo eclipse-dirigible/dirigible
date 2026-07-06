@@ -13,11 +13,15 @@ import org.eclipse.dirigible.tests.framework.browser.Browser;
 import org.eclipse.dirigible.tests.framework.browser.BrowserFactory;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import java.util.List;
 
+@Disabled("Superseded by the Harmonia+Java MultitenancyHarmoniaIT (per-tenant isolation of the "
+        + "generated Harmonia app + Java REST). This one drives the AngularJS/TypeScript full-stack; "
+        + "kept in the tree while that stack is still around.")
 public class MultitenancyIT extends MultitenancyUserInterfaceIntegrationTest {
 
     @Autowired

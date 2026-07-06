@@ -55,6 +55,7 @@ class TaskServiceImpl implements TaskService {
     @Override
     public long getTasksCount() {
         return flowableTaskService.createTaskQuery()
+                                  .taskTenantId(getTenantId())
                                   .count();
     }
 
@@ -153,6 +154,8 @@ class TaskServiceImpl implements TaskService {
 
     @Override
     public void deleteTasks(Collection<String> taskIds, String deleteReason) {
+        flowableArtefactsValidator.validateTasks(taskIds);
+
         flowableTaskService.deleteTasks(taskIds, deleteReason);
     }
 

@@ -157,6 +157,14 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Duplicate action (`duplicable: true`):** on a **document** entity (a master owning a composition
+child whose name ends in `Item`) this adds a built-in **Duplicate** button to the document view. It
+clones the current document - header plus its line items - into a new draft and opens it, cloning
+through the normal create path so the number (`calculatedActionOnCreate`), the initial status
+(`init`), the audit columns and all calculated/aggregate fields are reassigned by the server (only the
+source's identity/system/status fields are dropped). Use it for documents users routinely copy
+(invoices, orders). It has no effect on non-document entities.
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving
@@ -403,6 +411,78 @@ paths / relations.
   time): list `actions: [approve, reject]` only when the `userTask` is immediately followed by a
   `decision` that branches on the chosen `action` (e.g. `if: "action == 'approve'"`). For a task that
   just continues linearly, use a **single action** (e.g. `actions: [issue]`) and no decision.
+
+### actions - on-demand action buttons
+
+**Use when:** a generated entity view needs a developer-defined button that opens a custom page - a
+whole-view toolbar action (import, a wizard, a report launcher) or a per-record action (open a portal,
+a related view). This is the UI escape hatch for on-demand actions; it is distinct from a form's task
+`actions` (which complete a BPM user task).
+
+```yaml
+actions:
+  - name: OpenPortal            # unique id; also names the generated contribution files
+    forEntity: Order            # the entity whose generated view shows the button
+    scope: entity               # 'entity' (per-record) or 'page' (whole-view toolbar)
+    label: Open Portal          # button label (defaults to a humanized name)
+    icon: external-link         # optional Lucide icon
+    order: 10                   # optional ordering among a view's actions
+    page: /services/web/myapp/custom/portal.html   # same-origin path opened in the app-wide dialog
+```
+
+**Rules:** unique `name`; `forEntity` must be a declared entity; `scope` is `entity` or `page`
+(default `entity`); `page` is a required same-origin path. Each action generates a contribution to the
+app's `<project>-custom-action` extension point (a `<name>-action.extension` + a `<name>-action.js`
+module), which the generated Harmonia views render through the shared `customActions` store - a
+`page` action becomes a toolbar button, an `entity` action a per-record button that passes the
+selected record's id to the opened page (as `?id=`). External projects may contribute to the same
+point; the app's own declared actions and third-party contributions render through one path. The
+opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent.
+
+### generates - create one document from another (create-from)
+
+**Use when:** a record should spawn a new record of another type - often a document in another model:
+generate a `SalesInvoice` from a `ProjectTimesheet`, an `Order` from a `Quote`. It adds a button on the
+source view that, on click, clones the selected record on the server and toasts the result.
+
+```yaml
+generates:
+  - name: invoice-from-timesheet   # unique id; also names the contribution files + the controller class
+    from: ProjectTimesheet         # source entity in THIS model (loaded by the selected record's id)
+    to: SalesInvoice               # target entity to create
+    uses: sales                    # model alias (from uses:) the target lives in; omit if same model
+    forEntity: ProjectTimesheet    # view that shows the button (defaults to `from`)
+    label: Generate Invoice        # button label (defaults to a humanized name)
+    icon: file-plus                # optional Lucide icon
+    scope: entity                  # 'entity' (per-record, default) or 'page'
+    map:                           # target property <- source property (a field or to-one relation)
+      Customer: Customer
+      Currency: Currency
+    defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
+      InvoiceDate: now
+      Note: "Generated from timesheet"
+    items:                         # optional: clone the source document's composition items too
+      from: ProjectTimesheetItem
+      to: SalesInvoiceItem
+      map:
+        Description: Description
+        Amount: Amount
+```
+
+**Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
+entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared
+entity; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
+to-one relation** of the source entity - one-hop `relation.field` paths are not yet supported. `map`
+copies a source value; `defaults` sets a constant (`now` = today's date, or a literal). Do **not** map
+the target's identity, document number, status or the item->master foreign key: they are left for the
+target to mint - the clone is saved through the **target's** generated repository, so its create-time
+logic (numbering, status init, calculated fields) fires naturally.
+
+Two halves are generated: a client button (a `<name>-generate-action.extension` + `.js` contribution
+to the app's `<project>-custom-action` point, carrying an `endpoint`) and a server-side Java
+`@Controller` (`<ClassName>Generate`, via the `.glue` file) served at
+`/services/java/<project>/gen/events/<ClassName>Generate/run`. The shared `customActions` store POSTs
+the selected id to that endpoint and toasts the created record (no page dialog).
 
 ### reports - read-only aggregations
 
@@ -718,6 +798,8 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "store / manage X" -> **entities**
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
+- "a button on X's view that opens a custom page / action" -> **actions**
+- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" -> **generates**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**

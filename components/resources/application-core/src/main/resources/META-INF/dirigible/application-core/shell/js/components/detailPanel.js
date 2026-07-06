@@ -109,8 +109,10 @@ function detailPanel(def, masterId) {
       this.error = null;
       try {
         // The detail controller filters by the master FK query param (apiPath is relative to restBase).
+        // getAll (paged), NOT get: get returns only the controller's first page (default 20), which
+        // would silently cap a detail with more rows and hide the ones past the first page.
         const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
-        this.rows = await App.services.api.get(this.def.apiPath + q);
+        this.rows = await App.services.api.getAll(this.def.apiPath + q);
         this.state = this.rows.length === 0 ? 'empty' : 'default';
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');

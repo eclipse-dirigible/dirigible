@@ -17,8 +17,15 @@ document.addEventListener('alpine:init', () => {
     // <restBase>/<perspective>/<Entity>Controller (the master's own controller).
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
+    // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
+    // at this view. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
+    // call in the template would emit any nested ${...} verbatim.
+    caView: '${name}',
+
     state: 'loading',          // loading | error | empty | default
     masters: [],
+    page: 1,
+    pageSize: 20,
     error: null,
     searchTerm: '',
     selected: null,
@@ -71,6 +78,16 @@ document.addEventListener('alpine:init', () => {
       }
       this.refreshIcons();
     },
+
+    // Client-side pagination over the (search-)filtered masters (default 20/page; pager shown only
+    // when > 1). Page clamps to range so a shrinking filter/search never strands an empty page.
+    get pageCount() { return Math.max(1, Math.ceil(this.filteredMasters.length / this.pageSize)); },
+    get pagedMasters() {
+      const page = Math.min(this.page, this.pageCount);
+      const start = (page - 1) * this.pageSize;
+      return this.filteredMasters.slice(start, start + this.pageSize);
+    },
+    goPage(n) { this.page = Math.max(1, Math.min(n, this.pageCount)); this.refreshIcons(); },
 
     get filteredMasters() {
       if (!this.searchTerm) return this.masters;

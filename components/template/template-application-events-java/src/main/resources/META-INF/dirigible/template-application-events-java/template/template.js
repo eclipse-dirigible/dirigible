@@ -108,6 +108,13 @@ export function getTemplate(parameters) {
                 collection: "settlements"
             },
             {
+                location: "/template-application-events-java/events/Generate.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Generate.java",
+                engine: "velocity",
+                collection: "generates"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

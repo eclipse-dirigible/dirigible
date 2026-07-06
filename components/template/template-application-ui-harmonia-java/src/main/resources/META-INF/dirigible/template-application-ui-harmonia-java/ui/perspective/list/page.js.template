@@ -19,12 +19,17 @@ document.addEventListener('alpine:init', () => {
     sortColumn: null,
     sortDirection: null,
     currentPage: 1,
-    pageSize: 10,
+    pageSize: 20,
     selected: null,   // the row shown in the right-hand details pane
 
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+
+    // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
+    // at this view. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
+    // call in the template would emit any nested ${...} verbatim.
+    caView: '${name}',
 
     async init() {
       await this.load();

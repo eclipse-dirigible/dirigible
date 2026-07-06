@@ -57,6 +57,26 @@ public class IntentModel {
     private List<InboundIntent> inbound = new ArrayList<>();
     private List<RollupIntent> rollups = new ArrayList<>();
     private List<SettlementIntent> settlements = new ArrayList<>();
+    /** Developer-declared on-demand action buttons contributed onto entity views. */
+    private List<ActionIntent> actions = new ArrayList<>();
+    /** Create-from (document generation) actions - clone a source record into a new target record. */
+    private List<GeneratesIntent> generates = new ArrayList<>();
+
+    public List<ActionIntent> getActions() {
+        return actions;
+    }
+
+    public void setActions(List<ActionIntent> actions) {
+        this.actions = actions == null ? new ArrayList<>() : actions;
+    }
+
+    public List<GeneratesIntent> getGenerates() {
+        return generates;
+    }
+
+    public void setGenerates(List<GeneratesIntent> generates) {
+        this.generates = generates == null ? new ArrayList<>() : generates;
+    }
 
     public List<SettlementIntent> getSettlements() {
         return settlements;
