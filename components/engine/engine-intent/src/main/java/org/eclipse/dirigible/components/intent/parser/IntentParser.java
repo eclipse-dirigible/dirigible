@@ -76,6 +76,17 @@ public final class IntentParser {
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
+    /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
+    private static final Set<String> ENTITY_FUNCTIONS = Set.of("document", "documentitem", "master", "detail", "list", "setting");
+    /**
+     * Entity {@code function} values whose template is reserved but not yet shipped (gated with a
+     * message).
+     */
+    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
+    /** Implemented field {@code function} values (lower-cased). */
+    private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
+    /** Implemented relation {@code function} values (lower-cased). */
+    private static final Set<String> RELATION_FUNCTIONS = Set.of("documentstatus");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
@@ -154,6 +165,7 @@ public final class IntentParser {
         List<String> issues = new ArrayList<>();
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
+        validateFunctions(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -172,6 +184,97 @@ public final class IntentParser {
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * Validate the explicit {@code function} presentation role on entities, fields and relations: a
+     * value known for its level, reserved-but-unimplemented values ({@code Calendar}, ...) gated with a
+     * clear message, and the two consistency checks that keep the layout resolvable - a
+     * {@code DocumentItem} must actually be a composition child, and a {@code Document} must resolve a
+     * line-items child (a flagged / {@code *Item} child, or a single composition child).
+     */
+    private static void validateFunctions(IntentModel model, List<String> issues) {
+        Map<String, String> compositionParent = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() == null) {
+                continue;
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isComposition() && relation.getTo() != null) {
+                    compositionParent.put(entity.getName(), relation.getTo());
+                    break;
+                }
+            }
+        }
+        for (EntityIntent entity : model.getEntities()) {
+            String name = entity.getName();
+            if (name == null) {
+                continue;
+            }
+            String fn = entity.getFunction();
+            if (fn != null && !fn.isBlank()) {
+                String key = fn.trim()
+                               .toLowerCase(Locale.ROOT);
+                if (ENTITY_FUNCTIONS_RESERVED.contains(key)) {
+                    issues.add("entity [" + name + "] function [" + fn
+                            + "] is reserved for an upcoming template and is not yet available in this version");
+                } else if (!ENTITY_FUNCTIONS.contains(key)) {
+                    issues.add("entity [" + name + "] has unknown function [" + fn
+                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting)");
+                } else if (entity.isDocumentItem() && !compositionParent.containsKey(name)) {
+                    issues.add("entity [" + name
+                            + "] function: DocumentItem must be a composition child (a manyToOne/oneToOne relation with composition: true)");
+                } else if (entity.isDocument() && !hasItemsChild(model, compositionParent, name)) {
+                    issues.add("entity [" + name
+                            + "] function: Document has no line-items child - flag one composition child with function: DocumentItem"
+                            + " (or give it a single composition child)");
+                }
+            }
+            for (FieldIntent field : entity.getFields()) {
+                String ff = field.getFunction();
+                if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
+                                                                               .toLowerCase(Locale.ROOT))) {
+                    issues.add("entity [" + name + "] field [" + field.getName() + "] has unknown function [" + ff
+                            + "] (valid: DocumentTitle)");
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                String rf = relation.getFunction();
+                if (rf == null || rf.isBlank()) {
+                    continue;
+                }
+                if (!RELATION_FUNCTIONS.contains(rf.trim()
+                                                   .toLowerCase(Locale.ROOT))) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName() + "] has unknown function [" + rf
+                            + "] (valid: DocumentStatus)");
+                } else if (relation.isDocumentStatus()
+                        && !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName()
+                            + "] function: DocumentStatus must be a manyToOne/oneToOne relation");
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether {@code master} has a resolvable document line-items child: a composition child flagged
+     * {@code function: DocumentItem} or named {@code *Item}, or a single composition child overall.
+     */
+    private static boolean hasItemsChild(IntentModel model, Map<String, String> compositionParent, String master) {
+        int compositionChildren = 0;
+        boolean flagged = false;
+        for (EntityIntent entity : model.getEntities()) {
+            String child = entity.getName();
+            if (child == null || !master.equals(compositionParent.get(child))) {
+                continue;
+            }
+            compositionChildren++;
+            if (entity.isDocumentItem() || child.endsWith("Item")) {
+                flagged = true;
+            }
+        }
+        return flagged || compositionChildren == 1;
     }
 
     /**

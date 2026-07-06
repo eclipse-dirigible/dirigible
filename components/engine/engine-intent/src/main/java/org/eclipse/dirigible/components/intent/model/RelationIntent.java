@@ -37,6 +37,9 @@ public class RelationIntent {
      * in the form's title bar instead of an editable dropdown - typically a workflow-managed status.
      */
     private boolean documentStatus;
+
+    /** Explicit relation role selecting a document slot - currently {@code DocumentStatus}. */
+    private String function;
     /**
      * Optional initial value for this to-one relation's FK: the integer id of a seed row of the target
      * (e.g. a status nomenclature). Emitted as the FK column's {@code dataDefaultValue}, so a new row
@@ -133,8 +136,20 @@ public class RelationIntent {
         return model != null && !model.isBlank();
     }
 
+    public String getFunction() {
+        return function;
+    }
+
+    public void setFunction(String function) {
+        this.function = function;
+    }
+
+    /**
+     * Whether this to-one relation is the document's status pill - the explicit
+     * {@code function: DocumentStatus} or the legacy {@code documentStatus: true}.
+     */
     public boolean isDocumentStatus() {
-        return documentStatus;
+        return documentStatus || (function != null && "DocumentStatus".equalsIgnoreCase(function.trim()));
     }
 
     public void setDocumentStatus(boolean documentStatus) {

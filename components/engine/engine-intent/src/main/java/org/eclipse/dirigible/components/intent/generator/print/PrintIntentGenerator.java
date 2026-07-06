@@ -69,9 +69,11 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The document masters of the model: entities that are the composition parent of a {@code *Item}
-     * child, mapped to that items entity (first {@code *Item} child wins, in declaration order — the
-     * same convention the EDM generator uses for the document layout).
+     * The document masters of the model: entities that own the document's line-items, mapped to that
+     * items entity (in declaration order). An items entity is one flagged
+     * {@code function: DocumentItem} or (legacy) named {@code *Item}; additionally, a master flagged
+     * {@code function: Document} with a single composition child adopts that child. Same resolution the
+     * EDM generator uses.
      *
      * @param model the parsed intent model
      * @return master entity to items entity, in declaration order
@@ -86,21 +88,52 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
         Map<EntityIntent, EntityIntent> masters = new LinkedHashMap<>();
         for (EntityIntent child : model.getEntities()) {
             String childName = child.getName();
-            if (childName == null || !childName.endsWith("Item")) {
+            if (childName == null || !(child.isDocumentItem() || childName.endsWith("Item"))) {
                 continue;
             }
-            for (RelationIntent relation : child.getRelations()) {
-                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-                if (toOne && relation.isComposition() && relation.getTo() != null) {
-                    EntityIntent parent = byName.get(relation.getTo());
-                    if (parent != null && !masters.containsKey(parent)) {
-                        masters.put(parent, child);
-                    }
-                    break;
-                }
+            EntityIntent parent = compositionParentOf(child, byName);
+            if (parent != null && !masters.containsKey(parent)) {
+                masters.put(parent, child);
+            }
+        }
+        for (EntityIntent master : model.getEntities()) {
+            if (!master.isDocument() || masters.containsKey(master)) {
+                continue;
+            }
+            EntityIntent sole = soleCompositionChild(master, model.getEntities(), byName);
+            if (sole != null) {
+                masters.put(master, sole);
             }
         }
         return masters;
+    }
+
+    /**
+     * The entity targeted by {@code child}'s first {@code composition: true} to-one relation, or null.
+     */
+    private static EntityIntent compositionParentOf(EntityIntent child, Map<String, EntityIntent> byName) {
+        for (RelationIntent relation : child.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && relation.isComposition() && relation.getTo() != null) {
+                return byName.get(relation.getTo());
+            }
+        }
+        return null;
+    }
+
+    /** The single composition child of {@code master}, or null when it has zero or several. */
+    private static EntityIntent soleCompositionChild(EntityIntent master, java.util.List<EntityIntent> entities,
+            Map<String, EntityIntent> byName) {
+        EntityIntent only = null;
+        for (EntityIntent entity : entities) {
+            if (compositionParentOf(entity, byName) == master) {
+                if (only != null) {
+                    return null;
+                }
+                only = entity;
+            }
+        }
+        return only;
     }
 
     /**

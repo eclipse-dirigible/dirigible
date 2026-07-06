@@ -372,17 +372,48 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      */
     private static Map<String, String> documentMasters(List<EntityIntent> entities, Map<String, String> compositionParents) {
         Map<String, String> masters = new LinkedHashMap<>();
+        // 1. A composition child that is the document's line-items - explicit `function: DocumentItem`,
+        // or the legacy `*Item` naming - makes its composition parent a document master.
         for (EntityIntent entity : entities) {
             String child = entity.getName();
-            if (child == null || !child.endsWith("Item")) {
+            if (child == null) {
                 continue;
             }
             String parent = compositionParents.get(child);
-            if (parent != null && !masters.containsKey(parent)) {
+            if (parent == null) {
+                continue;
+            }
+            if ((entity.isDocumentItem() || child.endsWith("Item")) && !masters.containsKey(parent)) {
                 masters.put(parent, child);
             }
         }
+        // 2. `function: Document` on a master whose single composition child is neither flagged nor
+        // `*Item`-named: the sole child is the items (the author declared the document intent).
+        for (EntityIntent entity : entities) {
+            String name = entity.getName();
+            if (name == null || !entity.isDocument() || masters.containsKey(name)) {
+                continue;
+            }
+            String sole = soleCompositionChild(entities, compositionParents, name);
+            if (sole != null) {
+                masters.put(name, sole);
+            }
+        }
         return masters;
+    }
+
+    /** The single composition child of {@code master}, or {@code null} when it has zero or several. */
+    private static String soleCompositionChild(List<EntityIntent> entities, Map<String, String> compositionParents, String master) {
+        String only = null;
+        for (EntityIntent entity : entities) {
+            if (entity.getName() != null && master.equals(compositionParents.get(entity.getName()))) {
+                if (only != null) {
+                    return null; // ambiguous - more than one composition child
+                }
+                only = entity.getName();
+            }
+        }
+        return only;
     }
 
     /**

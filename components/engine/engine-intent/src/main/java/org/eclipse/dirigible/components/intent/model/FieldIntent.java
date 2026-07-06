@@ -74,6 +74,9 @@ public class FieldIntent {
      * (e.g. {@code SALES INVOICE 00001231}) instead of as an editable field.
      */
     private boolean documentTitle;
+
+    /** Explicit field role selecting a document slot - currently {@code DocumentTitle}. */
+    private String function;
     /**
      * Whether the field appears as a column in the entity <b>list</b> table (the model's
      * {@code widgetIsMajor}). Defaults to {@code true}; set {@code major: false} to keep the field off
@@ -226,8 +229,20 @@ public class FieldIntent {
         this.readOnly = readOnly;
     }
 
+    public String getFunction() {
+        return function;
+    }
+
+    public void setFunction(String function) {
+        this.function = function;
+    }
+
+    /**
+     * Whether this field is the document's title/number - the explicit {@code function: DocumentTitle}
+     * or the legacy {@code documentTitle: true}.
+     */
     public boolean isDocumentTitle() {
-        return documentTitle;
+        return documentTitle || (function != null && "DocumentTitle".equalsIgnoreCase(function.trim()));
     }
 
     public void setDocumentTitle(boolean documentTitle) {
