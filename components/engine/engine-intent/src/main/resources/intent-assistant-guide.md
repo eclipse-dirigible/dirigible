@@ -157,6 +157,14 @@ composition is opt-in.
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
+**Duplicate action (`duplicable: true`):** on a **document** entity (a master owning a composition
+child whose name ends in `Item`) this adds a built-in **Duplicate** button to the document view. It
+clones the current document - header plus its line items - into a new draft and opens it, cloning
+through the normal create path so the number (`calculatedActionOnCreate`), the initial status
+(`init`), the audit columns and all calculated/aggregate fields are reassigned by the server (only the
+source's identity/system/status fields are dropped). Use it for documents users routinely copy
+(invoices, orders). It has no effect on non-document entities.
+
 **Control order (`order:`):** by default the generated UI controls (form inputs, list columns, detail
 rows) follow the declaration order - all fields first, then the to-one relations, so relations end up
 last. Give an entity an `order:` list of property names to sequence them explicitly, interleaving

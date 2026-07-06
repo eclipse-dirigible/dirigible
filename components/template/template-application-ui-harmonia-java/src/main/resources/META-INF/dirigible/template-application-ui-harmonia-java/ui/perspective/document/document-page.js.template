@@ -100,6 +100,14 @@ function harmoniaCalcEval(expr, vars, scale) {
   return roundHalfUp(isFinite(result) ? result : 0, scale == null ? 2 : scale);
 }
 
+## Document-role properties (the number/title field and the status FK), derived once here so they are
+## available to duplicate()'s clone-strip list below (which runs before the status-pill #set further down).
+#set($docNumberProp = "")
+#set($docStatusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_NUMBER")#set($docNumberProp = $property.name)#end
+#if($property.widgetType == "DOCUMENT_STATUS")#set($docStatusProp = $property.name)#end
+#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}DocumentPage', () => ({
     ...baseFormPage(),
@@ -468,6 +476,55 @@ document.addEventListener('alpine:init', () => {
 #end
       return payload;
     },
+
+#if($duplicable)
+    // Duplicate this document (header + line items) into a new draft and open it. Clones through the
+    // normal create path, so the number (calculatedActionOnCreate), the initial status (init default),
+    // audit columns and calculated/aggregate fields are reassigned by the server; the source's
+    // identity/system/status fields are dropped from the cloned header.
+    async duplicate() {
+      if (this.id == null) return;
+      this.state = 'saving';
+      try {
+        const src = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id));
+        const header = { ...src };
+        [
+          '${primaryKeysString}', 'ProcessId', 'CreatedAt', 'CreatedBy', 'UpdatedAt', 'UpdatedBy', 'Uuid',
+#foreach($property in $properties)
+#if($property.isReadOnlyProperty == "true" || $property.aggregate == "true")
+          '${property.name}',
+#end
+#end
+#if($docStatusProp != "")
+          '${docStatusProp}',
+#end
+#if($docNumberProp != "")
+          '${docNumberProp}',
+#end
+        ].forEach(f => { delete header[f]; });
+        const created = await App.services.api.post(this.apiPath, header);
+        const newId = created && (created.${primaryKeysString} !== undefined ? created.${primaryKeysString} : created.id);
+        if (newId == null) throw new Error('No id returned for the duplicated document.');
+        // Clone the line items, repointed at the new header (editable inputs only; calculated item
+        // fields are recomputed by the server on create).
+        if (this.itemsDef) {
+          const q = '?' + encodeURIComponent(this.itemsDef.masterEntityId) + '=' + encodeURIComponent(this.id);
+          const items = (await App.services.api.getAll(this.itemsDef.apiPath + q)) || [];
+          for (const it of items) {
+            const body = {};
+            this.editColumns.forEach(c => { if (!c.readonly && it[c.name] !== undefined) body[c.name] = it[c.name]; });
+            body[this.itemsDef.masterEntityId] = newId;
+            await App.services.api.post(this.itemsDef.apiPath, body);
+          }
+        }
+        window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(newId) + '/edit');
+      } catch (e) {
+        this.applyApiError(e, { fallbackMessage: 'Could not duplicate the document.' });
+      } finally {
+        this.state = 'ready';
+      }
+    },
+#end
 
     // ----- Items (read-only table + add/edit dialog, server-side) --------------------------------
     get editColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
