@@ -101,11 +101,13 @@ composition is opt-in.
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
   read-only automatically — you don't need this on them.)
-- `documentTitle: true` (on a field) / `documentStatus: true` (on a to-one relation) - **document layout
-  roles** for a document (header-items) entity. The `documentTitle` field shows in the form's title (e.g.
-  `SALES INVOICE 00001231` = the document name + the number) and the `documentStatus` relation shows as a
-  read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
-  field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
+- `function: DocumentTitle` (on a field) / `function: DocumentStatus` (on a to-one relation) - **document
+  layout roles** for a document (header-items) entity. The `DocumentTitle` field shows in the form's title
+  (e.g. `SALES INVOICE 00001231` = the document name + the number) and the `DocumentStatus` relation shows
+  as a read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the
+  number field is `DocumentTitle`, the workflow-managed status FK is `DocumentStatus`. (The older
+  `documentTitle: true` / `documentStatus: true` booleans still work but `function` is preferred - see the
+  **function** section below.)
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
@@ -273,6 +275,48 @@ across many invoices, each link carrying its partial `amount`:
       - { name: SalesInvoice,    kind: manyToOne, to: SalesInvoice, composition: true, required: true }
       - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }
 ```
+
+### function - the entity's presentation role (explicit template selection)
+
+**Use when:** you want to state *explicitly* how an entity (or a field / relation) is presented, instead
+of relying on structure or naming. `function` is optional and **authoritative when set**; when absent,
+the role is still inferred (composition structure, `kind: setting`, an `*Item`-named child), so nothing
+existing breaks.
+
+**Entity `function`** picks the UI template:
+
+| `function:` | meaning | inferred equivalent |
+|---|---|---|
+| `Document` | header + line-items + status pill + totals | had an `*Item` child |
+| `DocumentItem` | the document's line-items (rendered inline under its parent) | was the `*Item` child |
+| `Master` | master-detail master | had composition children |
+| `Detail` | a plain composition detail | was a composition child |
+| `List` | plain searchable list | had no composition children |
+| `Setting` | nomenclature under Settings | `kind: setting` |
+
+**Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
+`DocumentStatus` (the read-only status pill).
+
+```yaml
+entities:
+  - name: ProjectTimesheet
+    function: Document
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: number, type: string, function: DocumentTitle }
+    relations:
+      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: DocumentStatus, init: 1 }
+  - name: EmployeeTimesheet          # the items - no "*Item" name needed
+    function: DocumentItem
+    relations:
+      - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet, composition: true, required: true }
+```
+
+**Rules:** a `DocumentItem` must be a composition child; a `Document` must resolve a line-items child
+(a `DocumentItem`/`*Item` child, or a single composition child). Prefer `function` over the legacy
+`*Item` naming and the `documentTitle`/`documentStatus`/`kind: setting` flags (all still accepted).
+Reserved values for upcoming templates (e.g. `Calendar`) are recognised but rejected with a clear
+"not yet available" message until the template ships.
 
 ### processes - workflows and approvals
 
@@ -665,10 +709,12 @@ notifications:
 **Rules:** exactly one event referencing a declared entity; `channel` is `email`; `to` follows the
 recipient rule (literal / field / one-hop `relation.field`).
 
-### schedules - run on a cron and notify
+### schedules - run on a cron and notify or generate records
 
-**Use when:** something must run **on a schedule** (cron), find records matching conditions, and
-notify about them (e.g. "every morning, email members with overdue loans").
+**Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
+matching row, perform **exactly one** per-row action: `notify` (email) or `generate` (create a record).
+
+**notify** - e.g. "every morning, email members with overdue loans":
 
 ```yaml
 schedules:
@@ -684,8 +730,32 @@ schedules:
       body: "Your loan is overdue, please return the book."
 ```
 
-**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and a
-`notify` block with a valid recipient.
+**generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
+EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
+saved through the target's generated repository, so its create-time logic (document numbering, status
+init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
+`entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
+`now` or a literal. The target may live in another model via `uses:` (same as `generates`).
+
+```yaml
+schedules:
+  - name: monthlyTimesheets
+    cron: "0 0 1 1 * ?"                  # Spring cron: 00:00 on day 1 of every month
+    entity: Employee
+    where:
+      - { field: status, op: eq, value: ACTIVE }
+    generate:
+      to: EmployeeTimesheet             # add `uses: <alias>` if the target is in another model
+      map:
+        Employee: id                    # target.Employee = the employee row's id (FK back-reference)
+      defaults:
+        Period: now
+```
+
+**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and
+**exactly one** of `notify` (valid recipient) / `generate` (a declared/cross-model `to`, a `map` over
+the row's fields/to-one relations). Composition-item cloning is **not** available on a schedule (it
+needs a selected document) - use an on-demand `generates` action for document-to-document cloning.
 
 ### integrations - outbound HTTP on a data change
 
@@ -813,12 +883,13 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
-- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" -> **generates**
+- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" (on a button, per selected record) -> **generates**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
-- "every day/hour, check X and notify" -> **schedules**
+- "every day/hour, check X and notify" -> **schedules** (`notify`)
+- "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**
 - "let an external system create X" -> **inbound**
 - "keep a running count of children on the parent" -> **rollups**

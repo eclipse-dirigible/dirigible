@@ -85,7 +85,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
-        List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings);
+        List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
@@ -669,7 +669,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildSchedules(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> schedules = new ArrayList<>();
         for (ScheduleIntent schedule : model.getSchedules()) {
             if (schedule.getName() == null || schedule.getName()
@@ -677,36 +677,77 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             String entity = schedule.getEntity();
-            if (entity == null || !byName.containsKey(entity) || schedule.getNotify() == null) {
+            if (entity == null || !byName.containsKey(entity)) {
                 continue;
+            }
+            boolean generates = schedule.getGenerate() != null;
+            if (!generates && schedule.getNotify() == null) {
+                continue; // parser already reported "no notify/generate action"
             }
             if (!settings.shouldGenerate("schedules", schedule.getName())) {
                 LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
                 continue;
             }
-            // The per-row action reuses the notification machinery against the queried row entity.
-            NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName, compositionParents);
-            if (plan == null) {
-                LOGGER.warn("Schedule [{}] notify recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
-                        schedule.getName(), schedule.getNotify()
-                                                    .getTo(),
-                        entity);
-                continue;
-            }
+
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", schedule.getName());
-            entry.put("className", IntentNaming.pascalCase(schedule.getName()));
+            // pascalIdentifier (not pascalCase) so a hyphenated schedule name yields a valid Java class.
+            entry.put("className", IntentNaming.pascalIdentifier(schedule.getName()));
             entry.put("cron", schedule.getCron());
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
-            entry.put("relationLoads", relationLoads(plan));
-            entry.put("toExpression", plan.toExpression());
-            entry.put("subjectExpression", plan.subjectExpression());
-            entry.put("bodyExpression", plan.bodyExpression());
+
+            if (generates) {
+                // Scheduled record generation: the queried row is the source, so its create-from maps the
+                // loop variable (named "entity" in the job template) onto a fresh target and saves through
+                // the target's repository. Item cloning is out of scope here (see parser validation).
+                GeneratesIntent g = schedule.getGenerate();
+                g.setFrom(entity);
+                boolean crossModel = g.getUses() != null && !g.getUses()
+                                                              .isBlank();
+                UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
+                CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
+                String toPerspective =
+                        target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+                String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
+                entry.put("action", "generate");
+                entry.put("genCrossModel", crossModel);
+                entry.put("genToEntity", g.getTo());
+                entry.put("genToModel", crossModel ? g.getUses() : "");
+                entry.put("genToPerspective", toPerspective);
+                entry.put("genToPk", toPk);
+                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity"));
+            } else {
+                // The per-row action reuses the notification machinery against the queried row entity.
+                NotificationSupport.Plan plan =
+                        NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName, compositionParents);
+                if (plan == null) {
+                    LOGGER.warn("Schedule [{}] notify recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
+                            schedule.getName(), schedule.getNotify()
+                                                        .getTo(),
+                            entity);
+                    continue;
+                }
+                entry.put("action", "notify");
+                entry.put("relationLoads", relationLoads(plan));
+                entry.put("toExpression", plan.toExpression());
+                entry.put("subjectExpression", plan.subjectExpression());
+                entry.put("bodyExpression", plan.bodyExpression());
+            }
             schedules.add(entry);
         }
         return schedules;
+    }
+
+    /**
+     * Test hook: build the {@code schedules} glue collection without a repository (a null context makes
+     * a cross-model generate target fall back to naming-convention defaults, enough to assert the
+     * mapping and action shape).
+     */
+    static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
+        return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {

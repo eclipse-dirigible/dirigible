@@ -76,6 +76,17 @@ public final class IntentParser {
     /** Numeric field types a sum roll-up (its field / {@code of} / capacity / balance) may use. */
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
+    /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
+    private static final Set<String> ENTITY_FUNCTIONS = Set.of("document", "documentitem", "master", "detail", "list", "setting");
+    /**
+     * Entity {@code function} values whose template is reserved but not yet shipped (gated with a
+     * message).
+     */
+    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
+    /** Implemented field {@code function} values (lower-cased). */
+    private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
+    /** Implemented relation {@code function} values (lower-cased). */
+    private static final Set<String> RELATION_FUNCTIONS = Set.of("documentstatus");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
@@ -154,6 +165,7 @@ public final class IntentParser {
         List<String> issues = new ArrayList<>();
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
+        validateFunctions(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -164,7 +176,7 @@ public final class IntentParser {
         validateSeeds(model, entityNames, issues);
         validateLanguages(model, issues);
         validateNotifications(model, entityNames, issues);
-        validateSchedules(model, entityNames, issues);
+        validateSchedules(model, entityNames, usesAliases, issues);
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateRollups(model, issues);
@@ -172,6 +184,97 @@ public final class IntentParser {
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
         }
+    }
+
+    /**
+     * Validate the explicit {@code function} presentation role on entities, fields and relations: a
+     * value known for its level, reserved-but-unimplemented values ({@code Calendar}, ...) gated with a
+     * clear message, and the two consistency checks that keep the layout resolvable - a
+     * {@code DocumentItem} must actually be a composition child, and a {@code Document} must resolve a
+     * line-items child (a flagged / {@code *Item} child, or a single composition child).
+     */
+    private static void validateFunctions(IntentModel model, List<String> issues) {
+        Map<String, String> compositionParent = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() == null) {
+                continue;
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isComposition() && relation.getTo() != null) {
+                    compositionParent.put(entity.getName(), relation.getTo());
+                    break;
+                }
+            }
+        }
+        for (EntityIntent entity : model.getEntities()) {
+            String name = entity.getName();
+            if (name == null) {
+                continue;
+            }
+            String fn = entity.getFunction();
+            if (fn != null && !fn.isBlank()) {
+                String key = fn.trim()
+                               .toLowerCase(Locale.ROOT);
+                if (ENTITY_FUNCTIONS_RESERVED.contains(key)) {
+                    issues.add("entity [" + name + "] function [" + fn
+                            + "] is reserved for an upcoming template and is not yet available in this version");
+                } else if (!ENTITY_FUNCTIONS.contains(key)) {
+                    issues.add("entity [" + name + "] has unknown function [" + fn
+                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting)");
+                } else if (entity.isDocumentItem() && !compositionParent.containsKey(name)) {
+                    issues.add("entity [" + name
+                            + "] function: DocumentItem must be a composition child (a manyToOne/oneToOne relation with composition: true)");
+                } else if (entity.isDocument() && !hasItemsChild(model, compositionParent, name)) {
+                    issues.add("entity [" + name
+                            + "] function: Document has no line-items child - flag one composition child with function: DocumentItem"
+                            + " (or give it a single composition child)");
+                }
+            }
+            for (FieldIntent field : entity.getFields()) {
+                String ff = field.getFunction();
+                if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
+                                                                               .toLowerCase(Locale.ROOT))) {
+                    issues.add("entity [" + name + "] field [" + field.getName() + "] has unknown function [" + ff
+                            + "] (valid: DocumentTitle)");
+                }
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                String rf = relation.getFunction();
+                if (rf == null || rf.isBlank()) {
+                    continue;
+                }
+                if (!RELATION_FUNCTIONS.contains(rf.trim()
+                                                   .toLowerCase(Locale.ROOT))) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName() + "] has unknown function [" + rf
+                            + "] (valid: DocumentStatus)");
+                } else if (relation.isDocumentStatus()
+                        && !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName()
+                            + "] function: DocumentStatus must be a manyToOne/oneToOne relation");
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether {@code master} has a resolvable document line-items child: a composition child flagged
+     * {@code function: DocumentItem} or named {@code *Item}, or a single composition child overall.
+     */
+    private static boolean hasItemsChild(IntentModel model, Map<String, String> compositionParent, String master) {
+        int compositionChildren = 0;
+        boolean flagged = false;
+        for (EntityIntent entity : model.getEntities()) {
+            String child = entity.getName();
+            if (child == null || !master.equals(compositionParent.get(child))) {
+                continue;
+            }
+            compositionChildren++;
+            if (entity.isDocumentItem() || child.endsWith("Item")) {
+                flagged = true;
+            }
+        }
+        return flagged || compositionChildren == 1;
     }
 
     /**
@@ -311,7 +414,13 @@ public final class IntentParser {
      * Each schedule must have a unique name, a cron expression, an entity to query, supported
      * {@code where} operators, and a notify action with a valid recipient.
      */
-    private static void validateSchedules(IntentModel model, Set<String> entityNames, List<String> issues) {
+    private static void validateSchedules(IntentModel model, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         Set<String> names = new HashSet<>();
         for (ScheduleIntent schedule : model.getSchedules()) {
             String name = schedule.getName();
@@ -326,8 +435,11 @@ public final class IntentParser {
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
             }
+            EntityIntent source = null;
             if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
                 issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+            } else {
+                source = byName.get(schedule.getEntity());
             }
             for (ScheduleConditionIntent condition : schedule.getWhere()) {
                 if (condition.getField() == null || condition.getField()
@@ -339,9 +451,14 @@ public final class IntentParser {
                             + "] (supported: eq/ne/gt/ge/lt/le/like)");
                 }
             }
-            if (schedule.getNotify() == null) {
-                issues.add("schedule [" + name + "] has no notify action");
-            } else {
+            // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
+            boolean hasNotify = schedule.getNotify() != null;
+            boolean hasGenerate = schedule.getGenerate() != null;
+            if (hasNotify && hasGenerate) {
+                issues.add("schedule [" + name + "] has both notify and generate - a schedule performs exactly one per-row action");
+            } else if (!hasNotify && !hasGenerate) {
+                issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
+            } else if (hasNotify) {
                 String to = schedule.getNotify()
                                     .getTo();
                 if (to == null || to.isBlank()) {
@@ -351,7 +468,44 @@ public final class IntentParser {
                                                   .count() >= 2) {
                     issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
                 }
+            } else {
+                validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
             }
+        }
+    }
+
+    /**
+     * A schedule's {@code generate} action creates one target record per matching row. The row is the
+     * source, so {@code from} is implicit (the schedule's {@code entity}); the author declares
+     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field
+     * or to-one relation of the row) and {@code defaults}. Composition-item cloning is out of scope
+     * here - it needs a selected document, so it belongs to an on-demand {@code generates} action.
+     */
+    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Set<String> entityNames,
+            Set<String> usesAliases, List<String> issues) {
+        String name = schedule.getName();
+        GeneratesIntent g = schedule.getGenerate();
+        if (g.getTo() == null || g.getTo()
+                                  .isBlank()) {
+            issues.add("schedule [" + name + "] generate has no to entity");
+        }
+        boolean crossModel = g.getUses() != null && !g.getUses()
+                                                      .isBlank();
+        if (crossModel) {
+            if (!usesAliases.contains(g.getUses())) {
+                issues.add("schedule [" + name + "] generate uses unknown model alias [" + g.getUses()
+                        + "] (declare it under the model's uses:)");
+            }
+        } else if (g.getTo() != null && !g.getTo()
+                                          .isBlank()
+                && !entityNames.contains(g.getTo())) {
+            issues.add("schedule [" + name + "] generate to references unknown entity [" + g.getTo()
+                    + "] (add a uses: alias if the target lives in another model)");
+        }
+        validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
+        if (g.getItems() != null) {
+            issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
+                    + " use an on-demand generates action for document-to-document cloning");
         }
     }
 
@@ -1221,7 +1375,7 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
-            validateMapSource(source, g.getMap(), name, "map", issues);
+            validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
@@ -1237,7 +1391,7 @@ public final class IntentParser {
                                                   .isBlank()) {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
-                validateMapSource(itemSource, items.getMap(), name, "items map", issues);
+                validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
             }
         }
     }
@@ -1247,24 +1401,24 @@ public final class IntentParser {
      * {@code relation.field} path is rejected (not yet supported). Skipped when the source is unknown -
      * that error is already reported.
      */
-    private static void validateMapSource(EntityIntent source, Map<String, String> map, String name, String role, List<String> issues) {
+    private static void validateMapSource(EntityIntent source, Map<String, String> map, String subject, String role, List<String> issues) {
         if (source == null || map == null) {
             return;
         }
         for (Map.Entry<String, String> entry : map.entrySet()) {
             String sourceProp = entry.getValue();
             if (sourceProp == null || sourceProp.isBlank()) {
-                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] has no source property");
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] has no source property");
                 continue;
             }
             if (sourceProp.indexOf('.') >= 0) {
-                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
                         + "] which is not yet supported - map a direct field or to-one relation of [" + source.getName() + "]");
                 continue;
             }
             if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
-                issues.add("generates [" + name + "] " + role + " source [" + sourceProp + "] is not a field or to-one relation of ["
-                        + source.getName() + "]");
+                issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of [" + source.getName()
+                        + "]");
             }
         }
     }

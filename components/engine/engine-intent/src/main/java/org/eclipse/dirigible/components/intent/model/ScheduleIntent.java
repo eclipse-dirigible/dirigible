@@ -18,9 +18,19 @@ import java.util.List;
  *
  * <p>
  * Generates a client-Java {@code @Scheduled} {@code JobHandler} that queries {@link #entity} with a
- * typed {@code Criteria} built from {@link #where} and, for each row, performs {@link #notify}
- * (reusing the notification machinery against the row entity). The notify's {@code event}/
- * {@code channel} are unused here - the cron + {@code where} are the trigger and filter.
+ * typed {@code Criteria} built from {@link #where} and, for each matching row, performs exactly one
+ * action:
+ * <ul>
+ * <li>{@link #notify} - send a mail per row (reusing the notification machinery against the row
+ * entity); the notify's {@code event}/{@code channel} are unused here - the cron + {@code where}
+ * are the trigger and filter; or</li>
+ * <li>{@link #generate} - create a new record per row ("scheduled record generation"): map the row
+ * onto a fresh target entity and save through the target's generated repository, so its create-time
+ * logic (document numbering, status init, calculated fields) fires. The row is the source, so the
+ * reused {@link GeneratesIntent#getFrom()} is the schedule's {@link #entity}; item cloning is out
+ * of scope here (use an on-demand {@code generates} action for document-to-document cloning).</li>
+ * </ul>
+ * Exactly one of {@code notify} / {@code generate} must be set.
  */
 public class ScheduleIntent {
 
@@ -29,6 +39,7 @@ public class ScheduleIntent {
     private String entity;
     private List<ScheduleConditionIntent> where = new ArrayList<>();
     private NotificationIntent notify;
+    private GeneratesIntent generate;
 
     public String getName() {
         return name;
@@ -68,5 +79,13 @@ public class ScheduleIntent {
 
     public void setNotify(NotificationIntent notify) {
         this.notify = notify;
+    }
+
+    public GeneratesIntent getGenerate() {
+        return generate;
+    }
+
+    public void setGenerate(GeneratesIntent generate) {
+        this.generate = generate;
     }
 }
