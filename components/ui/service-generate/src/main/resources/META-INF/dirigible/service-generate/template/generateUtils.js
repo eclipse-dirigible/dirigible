@@ -209,6 +209,7 @@ export function generateFiles(model, parameters, templateSources) {
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
     const daoModels = model.entities.filter(e => e.type !== "PROJECTION");
     annotateDocumentModels(model.entities);
+    annotateGuardedRollups(model.entities);
     // A human-readable singular label for every entity. The intent generator (EdmIntentGenerator)
     // bakes `entityLabel`; a hand-authored .edm carries none, so derive it the same way the i18n
     // catalog does. Without this the templates' `${entityLabel}` fallback renders literally (e.g. the
@@ -965,6 +966,19 @@ function getGenerationEngine(template) {
  * package, the FK column, the master PK, and the aggregate fields the child also carries by name; the
  * child gets `documentItem` = its parent entity, package and FK. The DAO template reads these.
  */
+// Capacity guard: EdmIntentGenerator stamps `rollupGuard` (parent/FK/capacity/of) onto a child of a
+// capacity-bearing (balance-pattern) roll-up. The child's parent perspective arrives as the raw
+// perspective name; sanitize it to the Java data-folder segment the DAO template imports from
+// (gen.<genFolder>.data.<parentPerspective>.<parentEntity>). Repository.java.template's #rollupGuardCheck
+// reads it and rejects a create/update that would drive the parent's balance negative.
+function annotateGuardedRollups(entities) {
+    for (const e of entities) {
+        if (e.rollupGuard && e.rollupGuard.parentPerspective) {
+            e.rollupGuard.parentPerspective = sanitizeJavaIdentifier(e.rollupGuard.parentPerspective);
+        }
+    }
+}
+
 function annotateDocumentModels(entities) {
     const byName = {};
     for (const e of entities) {
