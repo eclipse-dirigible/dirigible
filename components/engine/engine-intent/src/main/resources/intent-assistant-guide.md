@@ -784,6 +784,20 @@ rollups:
       capacity: total, balance: balance, status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
 ```
 
+**Transitive (chained) roll-ups.** Roll-ups compose across a multi-level composition: if the parent of
+one roll-up is itself the child of another, a change flows all the way up. Declare one roll-up per
+level and the chain maintains itself - e.g. a 3-level timesheet:
+```yaml
+rollups:
+  # day allocations -> employee timesheet -> project timesheet (both totals stay live)
+  - { name: allocationTotals, entity: EmployeeDayAllocation, via: EmployeeTimesheet, field: total, op: sum, of: total }
+  - { name: timesheetTotals,  entity: EmployeeTimesheet,     via: ProjectTimesheet,  field: total, op: sum, of: total }
+```
+Editing a leaf allocation recomputes its `EmployeeTimesheet.total`, which in turn recomputes the
+`ProjectTimesheet.total`. Recomputation is skipped when a rolled-up value does not actually change, so
+the cascade stops at rest and never loops (composition is an acyclic tree). No UI is needed beyond the
+standard per-level master-detail: each level is its own record with its own detail rows.
+
 **Rules:** `via` must be a to-one (`manyToOne` / `oneToOne`) relation of the child entity; `field`
 must be an existing field on the parent (**integer** for `count`, **numeric** for `sum`). For the sum
 extras: `capacity`/`balance` are numeric parent fields, `status` a to-one relation of the parent, and
