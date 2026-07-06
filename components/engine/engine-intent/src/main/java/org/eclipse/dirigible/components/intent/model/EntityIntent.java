@@ -27,6 +27,15 @@ public class EntityIntent {
      * default) means a regular managed entity.
      */
     private String kind;
+
+    /**
+     * Explicit presentation role that selects the entity's UI template - {@code Document},
+     * {@code DocumentItem}, {@code Master}, {@code Detail}, {@code List}, {@code Setting} (and reserved
+     * future templates such as {@code Calendar}). Authoritative when set; otherwise the role is
+     * inferred from structure and the legacy flags ({@code kind: setting}, an {@code *Item}-named
+     * child).
+     */
+    private String function;
     /**
      * Optional icon for the entity's navigation entry. A short icon name (e.g. {@code book},
      * {@code user}); the Harmonia UI renders it as a Lucide icon and the EDM generator also maps it to
@@ -109,12 +118,38 @@ public class EntityIntent {
         this.kind = kind;
     }
 
+    public String getFunction() {
+        return function;
+    }
+
+    public void setFunction(String function) {
+        this.function = function;
+    }
+
+    /** Case-insensitive test that the entity's {@code function} equals the given role. */
+    private boolean functionIs(String role) {
+        return function != null && role.equalsIgnoreCase(function.trim());
+    }
+
     /**
-     * Whether this entity is declared as a setting / nomenclature (case-insensitive
-     * {@code kind: setting}).
+     * Whether this entity is declared as a setting / nomenclature - the explicit
+     * {@code function: Setting}, or the legacy {@code kind: setting}.
      */
     public boolean isSetting() {
-        return "setting".equalsIgnoreCase(kind);
+        return functionIs("Setting") || "setting".equalsIgnoreCase(kind);
+    }
+
+    /** Whether this entity is explicitly declared a document master ({@code function: Document}). */
+    public boolean isDocument() {
+        return functionIs("Document");
+    }
+
+    /**
+     * Whether this entity is explicitly declared the line-items of its composition parent document
+     * ({@code function: DocumentItem}) - the explicit form of the legacy {@code *Item} naming.
+     */
+    public boolean isDocumentItem() {
+        return functionIs("DocumentItem");
     }
 
     public String getDescription() {
