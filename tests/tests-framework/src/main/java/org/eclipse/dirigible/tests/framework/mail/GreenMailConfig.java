@@ -31,9 +31,21 @@ public class GreenMailConfig {
     private static final String MAIL_PASSWORD = "mailPassword";
     private static final int MAIL_PORT = PortUtil.getFreeRandomPort();
 
+    /**
+     * GreenMail's default server-startup timeout is 2000ms - the socket must be confirmed up within it
+     * or {@link GreenMail#start()} throws, failing this bean and (because Spring caches context-load
+     * failures with a threshold of 1) cascading an {@code ApplicationContext} load failure across the
+     * UI ITs that share the context. On a loaded CI runner the 2s window is intermittently missed,
+     * which is the single largest source of integration-test flakiness. Give startup generous headroom;
+     * it only ever waits this long on failure - a healthy server returns as soon as the socket is
+     * listening.
+     */
+    private static final long SERVER_STARTUP_TIMEOUT_MS = 30_000L;
+
     @Bean
     GreenMail provideGreenMailServer() {
         ServerSetup serverSetup = new ServerSetup(MAIL_PORT, "localhost", "smtp");
+        serverSetup.setServerStartupTimeout(SERVER_STARTUP_TIMEOUT_MS);
         GreenMail greenMail = new GreenMail(serverSetup);
         greenMail.start();
         greenMail.setUser(MAIL_USER, MAIL_PASSWORD);
