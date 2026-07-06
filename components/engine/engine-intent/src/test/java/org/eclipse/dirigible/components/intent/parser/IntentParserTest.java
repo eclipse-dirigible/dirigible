@@ -564,4 +564,110 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("has unknown kind [chart]")),
                 "expected an unknown-kind issue, got: " + ex.getIssues());
     }
+
+    private static final String SCHEDULE_GEN_HEAD = """
+            name: hr
+            entities:
+              - name: Employee
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: status, type: string }
+              - name: EmployeeTimesheet
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: Employee, kind: manyToOne, to: Employee }
+            schedules:
+              - name: monthly-timesheets
+                cron: "0 0 1 1 * ?"
+                entity: Employee
+            """;
+
+    @Test
+    void scheduleGenerateParsesWithoutIssues() {
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                """;
+        // A well-formed scheduled generation validates cleanly (no exception).
+        IntentParser.parse(yaml);
+    }
+
+    @Test
+    void scheduleWithBothNotifyAndGenerateIsRejected() {
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    notify:
+                      to: status
+                      subject: "x"
+                      body: "y"
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has both notify and generate")),
+                "expected a both-actions issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void scheduleWithNoActionIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(SCHEDULE_GEN_HEAD));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has no action")),
+                "expected a no-action issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void scheduleGenerateWithUnknownTargetIsRejected() {
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    generate:
+                      to: Nonexistent
+                      map:
+                        Employee: id
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("generate to references unknown entity [Nonexistent]")),
+                "expected an unknown-target issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void scheduleGenerateWithItemsIsRejected() {
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                      items:
+                        from: Employee
+                        to: EmployeeTimesheet
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("item cloning is not supported for a scheduled generation")),
+                "expected an items-not-supported issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void scheduleGenerateWithBadMapSourceIsRejected() {
+        String yaml = SCHEDULE_GEN_HEAD + """
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: nonexistentField
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("generate map source [nonexistentField] is not a field or to-one relation of [Employee]")),
+                "expected a bad-map-source issue, got: " + ex.getIssues());
+    }
 }

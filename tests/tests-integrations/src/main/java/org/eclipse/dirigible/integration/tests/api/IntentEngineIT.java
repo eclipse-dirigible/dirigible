@@ -676,6 +676,60 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void scheduled_generation_emits_a_create_from_job_not_a_mail_notification() {
+        // A schedule with a `generate` action (scheduled record generation) runs the create-from mapping
+        // per matching row on the cron tick: it builds a fresh target through the target's repository (so
+        // numbering / status init / calculated fields fire), rather than sending mail. The queried row is
+        // the source, so map/defaults render against the job's loop variable "entity".
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: name,   type: string }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id,     type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: date }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    where:
+                      - { field: status, op: eq, value: ACTIVE }
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "hr.glue");
+
+        String job = contentOf("gen/events/MonthlyTimesheetsJob.java");
+        assertTrue(job.contains("class MonthlyTimesheetsJob implements JobHandler"),
+                "a hyphenated schedule name should still yield a valid Java class (pascalIdentifier)");
+        assertTrue(job.contains("new EmployeeRepository().findAll("), "the job should query the source rows");
+        assertTrue(job.contains(".eq(\"Status\", \"ACTIVE\")"), "the where filter should render as a typed criteria");
+        assertTrue(job.contains("for (EmployeeEntity entity : rows)"), "the job should loop the matching rows");
+        assertTrue(job.contains(".EmployeeTimesheetEntity target ="), "the job should build a fresh target per row");
+        assertTrue(job.contains("target.Employee = entity.Id;"), "map copies the row's field onto the target property");
+        assertTrue(job.contains("target.Period = java.time.LocalDate.now();"), "a `now` default renders as today's date");
+        assertTrue(job.contains(".EmployeeTimesheetRepository().save(target);"),
+                "the target is saved through its generated repository so create-time logic fires");
+        assertFalse(job.contains("Mail.send"), "a generate schedule must not emit the notify (mail) path");
+    }
+
+    @Test
     void process_trigger_on_update_with_a_guard_generates_a_suffixed_guarded_listener() {
         String yaml = """
                 name: shipping

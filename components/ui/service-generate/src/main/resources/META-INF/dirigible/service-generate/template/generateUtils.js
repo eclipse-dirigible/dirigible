@@ -541,25 +541,38 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "schedules":
                     // Schedules (intent layer): one @Scheduled JobHandler per schedule - query the entity
-                    // via a typed Criteria and notify per matching row. Not entity-shaped, own loop.
+                    // via a typed Criteria and, per matching row, either notify (mail) or generate a
+                    // target record (create-from). Not entity-shaped, own loop. The generate branch's
+                    // target gen folder / perspective are lowercased (sanitized) like the create-from
+                    // controller; the field assignment expressions are pre-rendered by the glue generator.
                     if (model.schedules) {
                         for (let s = 0; s < model.schedules.length; s++) {
+                            const sc = model.schedules[s];
+                            const isGenerate = sc.action === "generate";
                             const scheduleParameters = {
                                 ...parameters,
-                                name: model.schedules[s].name,
-                                className: model.schedules[s].className,
-                                cron: model.schedules[s].cron,
-                                entity: model.schedules[s].entity,
-                                perspective: model.schedules[s].perspective,
-                                javaPerspective: sanitizeJavaIdentifier(model.schedules[s].perspective),
-                                criteriaExpression: model.schedules[s].criteriaExpression,
-                                relationLoads: (model.schedules[s].relationLoads || []).map(load => ({
+                                name: sc.name,
+                                className: sc.className,
+                                cron: sc.cron,
+                                entity: sc.entity,
+                                perspective: sc.perspective,
+                                javaPerspective: sanitizeJavaIdentifier(sc.perspective),
+                                criteriaExpression: sc.criteriaExpression,
+                                action: sc.action || "notify",
+                                relationLoads: (sc.relationLoads || []).map(load => ({
                                     ...load,
                                     javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
                                 })),
-                                toExpression: model.schedules[s].toExpression,
-                                subjectExpression: model.schedules[s].subjectExpression,
-                                bodyExpression: model.schedules[s].bodyExpression
+                                toExpression: sc.toExpression,
+                                subjectExpression: sc.subjectExpression,
+                                bodyExpression: sc.bodyExpression,
+                                genToEntity: sc.genToEntity,
+                                genToPk: sc.genToPk,
+                                genFieldAssignments: sc.genFieldAssignments,
+                                genToGenFolder: isGenerate
+                                    ? (sc.genCrossModel ? sanitizeJavaIdentifier(sc.genToModel) : parameters.javaGenFolderName)
+                                    : "",
+                                genToJavaPerspective: isGenerate ? sanitizeJavaIdentifier(sc.genToPerspective) : ""
                             };
                             const cleanScheduleParameters = cleanData(scheduleParameters);
                             generatedFiles.push({

@@ -164,7 +164,7 @@ public final class IntentParser {
         validateSeeds(model, entityNames, issues);
         validateLanguages(model, issues);
         validateNotifications(model, entityNames, issues);
-        validateSchedules(model, entityNames, issues);
+        validateSchedules(model, entityNames, usesAliases, issues);
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateRollups(model, issues);
@@ -311,7 +311,13 @@ public final class IntentParser {
      * Each schedule must have a unique name, a cron expression, an entity to query, supported
      * {@code where} operators, and a notify action with a valid recipient.
      */
-    private static void validateSchedules(IntentModel model, Set<String> entityNames, List<String> issues) {
+    private static void validateSchedules(IntentModel model, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
         Set<String> names = new HashSet<>();
         for (ScheduleIntent schedule : model.getSchedules()) {
             String name = schedule.getName();
@@ -326,8 +332,11 @@ public final class IntentParser {
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
             }
+            EntityIntent source = null;
             if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
                 issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+            } else {
+                source = byName.get(schedule.getEntity());
             }
             for (ScheduleConditionIntent condition : schedule.getWhere()) {
                 if (condition.getField() == null || condition.getField()
@@ -339,9 +348,14 @@ public final class IntentParser {
                             + "] (supported: eq/ne/gt/ge/lt/le/like)");
                 }
             }
-            if (schedule.getNotify() == null) {
-                issues.add("schedule [" + name + "] has no notify action");
-            } else {
+            // A schedule performs exactly one per-row action: notify (mail) or generate (create-from).
+            boolean hasNotify = schedule.getNotify() != null;
+            boolean hasGenerate = schedule.getGenerate() != null;
+            if (hasNotify && hasGenerate) {
+                issues.add("schedule [" + name + "] has both notify and generate - a schedule performs exactly one per-row action");
+            } else if (!hasNotify && !hasGenerate) {
+                issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
+            } else if (hasNotify) {
                 String to = schedule.getNotify()
                                     .getTo();
                 if (to == null || to.isBlank()) {
@@ -351,7 +365,44 @@ public final class IntentParser {
                                                   .count() >= 2) {
                     issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
                 }
+            } else {
+                validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
             }
+        }
+    }
+
+    /**
+     * A schedule's {@code generate} action creates one target record per matching row. The row is the
+     * source, so {@code from} is implicit (the schedule's {@code entity}); the author declares
+     * {@code to} (this model, or another via {@code uses:}), a {@code map} (target property -> a field
+     * or to-one relation of the row) and {@code defaults}. Composition-item cloning is out of scope
+     * here - it needs a selected document, so it belongs to an on-demand {@code generates} action.
+     */
+    private static void validateScheduleGenerate(ScheduleIntent schedule, EntityIntent source, Set<String> entityNames,
+            Set<String> usesAliases, List<String> issues) {
+        String name = schedule.getName();
+        GeneratesIntent g = schedule.getGenerate();
+        if (g.getTo() == null || g.getTo()
+                                  .isBlank()) {
+            issues.add("schedule [" + name + "] generate has no to entity");
+        }
+        boolean crossModel = g.getUses() != null && !g.getUses()
+                                                      .isBlank();
+        if (crossModel) {
+            if (!usesAliases.contains(g.getUses())) {
+                issues.add("schedule [" + name + "] generate uses unknown model alias [" + g.getUses()
+                        + "] (declare it under the model's uses:)");
+            }
+        } else if (g.getTo() != null && !g.getTo()
+                                          .isBlank()
+                && !entityNames.contains(g.getTo())) {
+            issues.add("schedule [" + name + "] generate to references unknown entity [" + g.getTo()
+                    + "] (add a uses: alias if the target lives in another model)");
+        }
+        validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
+        if (g.getItems() != null) {
+            issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
+                    + " use an on-demand generates action for document-to-document cloning");
         }
     }
 
@@ -1221,7 +1272,7 @@ public final class IntentParser {
             if (!"entity".equals(scope) && !"page".equals(scope)) {
                 issues.add("generates [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
             }
-            validateMapSource(source, g.getMap(), name, "map", issues);
+            validateMapSource(source, g.getMap(), "generates [" + name + "]", "map", issues);
             if (g.getItems() != null) {
                 GeneratesItemsIntent items = g.getItems();
                 EntityIntent itemSource = null;
@@ -1237,7 +1288,7 @@ public final class IntentParser {
                                                   .isBlank()) {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
-                validateMapSource(itemSource, items.getMap(), name, "items map", issues);
+                validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
             }
         }
     }
@@ -1247,24 +1298,24 @@ public final class IntentParser {
      * {@code relation.field} path is rejected (not yet supported). Skipped when the source is unknown -
      * that error is already reported.
      */
-    private static void validateMapSource(EntityIntent source, Map<String, String> map, String name, String role, List<String> issues) {
+    private static void validateMapSource(EntityIntent source, Map<String, String> map, String subject, String role, List<String> issues) {
         if (source == null || map == null) {
             return;
         }
         for (Map.Entry<String, String> entry : map.entrySet()) {
             String sourceProp = entry.getValue();
             if (sourceProp == null || sourceProp.isBlank()) {
-                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] has no source property");
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] has no source property");
                 continue;
             }
             if (sourceProp.indexOf('.') >= 0) {
-                issues.add("generates [" + name + "] " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
+                issues.add(subject + " " + role + " [" + entry.getKey() + "] maps a relation.field path [" + sourceProp
                         + "] which is not yet supported - map a direct field or to-one relation of [" + source.getName() + "]");
                 continue;
             }
             if (fieldByName(source, sourceProp) == null && toOneRelationByName(source, sourceProp) == null) {
-                issues.add("generates [" + name + "] " + role + " source [" + sourceProp + "] is not a field or to-one relation of ["
-                        + source.getName() + "]");
+                issues.add(subject + " " + role + " source [" + sourceProp + "] is not a field or to-one relation of [" + source.getName()
+                        + "]");
             }
         }
     }
