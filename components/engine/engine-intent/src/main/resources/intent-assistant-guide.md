@@ -709,10 +709,12 @@ notifications:
 **Rules:** exactly one event referencing a declared entity; `channel` is `email`; `to` follows the
 recipient rule (literal / field / one-hop `relation.field`).
 
-### schedules - run on a cron and notify
+### schedules - run on a cron and notify or generate records
 
-**Use when:** something must run **on a schedule** (cron), find records matching conditions, and
-notify about them (e.g. "every morning, email members with overdue loans").
+**Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
+matching row, perform **exactly one** per-row action: `notify` (email) or `generate` (create a record).
+
+**notify** - e.g. "every morning, email members with overdue loans":
 
 ```yaml
 schedules:
@@ -728,8 +730,32 @@ schedules:
       body: "Your loan is overdue, please return the book."
 ```
 
-**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and a
-`notify` block with a valid recipient.
+**generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
+EmployeeTimesheet for each active employee". Per matching row, a new target record is created and
+saved through the target's generated repository, so its create-time logic (document numbering, status
+init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
+`entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
+`now` or a literal. The target may live in another model via `uses:` (same as `generates`).
+
+```yaml
+schedules:
+  - name: monthlyTimesheets
+    cron: "0 0 1 1 * ?"                  # Spring cron: 00:00 on day 1 of every month
+    entity: Employee
+    where:
+      - { field: status, op: eq, value: ACTIVE }
+    generate:
+      to: EmployeeTimesheet             # add `uses: <alias>` if the target is in another model
+      map:
+        Employee: id                    # target.Employee = the employee row's id (FK back-reference)
+      defaults:
+        Period: now
+```
+
+**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and
+**exactly one** of `notify` (valid recipient) / `generate` (a declared/cross-model `to`, a `map` over
+the row's fields/to-one relations). Composition-item cloning is **not** available on a schedule (it
+needs a selected document) - use an on-demand `generates` action for document-to-document cloning.
 
 ### integrations - outbound HTTP on a data change
 
@@ -857,12 +883,13 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
-- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" -> **generates**
+- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" (on a button, per selected record) -> **generates**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
-- "every day/hour, check X and notify" -> **schedules**
+- "every day/hour, check X and notify" -> **schedules** (`notify`)
+- "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**
 - "let an external system create X" -> **inbound**
 - "keep a running count of children on the parent" -> **rollups**

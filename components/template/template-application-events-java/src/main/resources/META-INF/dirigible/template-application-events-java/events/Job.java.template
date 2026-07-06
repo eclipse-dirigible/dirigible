@@ -1,14 +1,18 @@
 package gen.events;
 
-import java.util.HashMap;
 import java.util.List;
+#if($action != "generate")
+import java.util.HashMap;
 import java.util.Map;
+#end
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
+#if($action != "generate")
 import org.eclipse.dirigible.sdk.core.Configurations;
-import org.eclipse.dirigible.sdk.job.JobHandler;
 import org.eclipse.dirigible.sdk.mail.Mail;
+#end
+import org.eclipse.dirigible.sdk.job.JobHandler;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
@@ -18,10 +22,13 @@ import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.target
 #end
 
 /**
- * Runs the ${name} schedule: on each cron tick, query ${entity} and notify per matching row.
+ * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, either notify
+ * (mail) or generate a target record (create-from, saved through the target's generated repository so
+ * its numbering / status init / calculated fields fire).
  *
  * Generated from the intent schedules block - do not edit; it is re-generated with the application.
- * The sender address comes from the DIRIGIBLE_MAIL_SENDER configuration.
+ * Entity access goes ONLY through the generated repositories. The mail sender comes from the
+ * DIRIGIBLE_MAIL_SENDER configuration.
  */
 @Component
 public class ${className}Job implements JobHandler {
@@ -35,6 +42,14 @@ public class ${className}Job implements JobHandler {
     public void run() {
         List<${entity}Entity> rows = new ${entity}Repository().findAll(${criteriaExpression});
         for (${entity}Entity entity : rows) {
+#if($action == "generate")
+            gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity target =
+                    new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Entity();
+#foreach($a in $genFieldAssignments)
+            target.${a.targetProp} = ${a.expr};
+#end
+            new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
+#else
 #foreach($load in $relationLoads)
             ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
@@ -54,6 +69,7 @@ public class ${className}Job implements JobHandler {
             } catch (Exception ex) {
                 throw new RuntimeException("Failed to send schedule ${name}", ex);
             }
+#end
         }
     }
 }
