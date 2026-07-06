@@ -514,14 +514,14 @@ class IntentEngineIT extends IntegrationTest {
         // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
         // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
         // from a single app.intent.
-        String rollupCreate = contentOf("gen/events/CustomerOrderCountRollupOnCreate.java");
+        String rollupCreate = contentOf("gen/events/OrderCustomerRollupOnCreate.java");
         assertTrue(
                 rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
                         && rollupCreate.contains(
                                 "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
                         && rollupCreate.contains("parent.OrderCount = count"),
                 "the rollup create-listener should recompute the parent count via Criteria");
-        assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
+        assertTrue(contentOf("gen/events/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
 
         // The print feeder (Order is a document master via the OrderItem composition child): a @Controller
@@ -808,8 +808,8 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "library.glue");
 
-        String onCreate = contentOf("gen/events/MemberLoanCountRollupOnCreate.java");
-        assertTrue(onCreate.contains("class MemberLoanCountRollupOnCreate implements MessageHandler"),
+        String onCreate = contentOf("gen/events/LoanMemberRollupOnCreate.java");
+        assertTrue(onCreate.contains("class LoanMemberRollupOnCreate implements MessageHandler"),
                 "the create-side rollup listener should be generated");
         assertTrue(onCreate.contains("@Component") && onCreate.contains("return \"intent-test-Loan-Loan\""),
                 "the create listener (self-describing @Component) binds the child's base topic via destination()");
@@ -820,7 +820,7 @@ class IntentEngineIT extends IntegrationTest {
                         && onCreate.contains("parent.LoanCount = count"),
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
-        String onDelete = contentOf("gen/events/MemberLoanCountRollupOnDelete.java");
+        String onDelete = contentOf("gen/events/LoanMemberRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
     }
@@ -864,7 +864,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "billing.glue");
 
-        String onCreate = contentOf("gen/events/BillPaidRollupOnCreate.java");
+        String onCreate = contentOf("gen/events/BillPaymentBillRollupOnCreate.java");
         assertTrue(onCreate.contains("parent.Paid = sum"), "the sum roll-up should write the summed field");
         assertTrue(onCreate.contains("parent.Balance = capacity.subtract(sum)"),
                 "with a capacity + balance, it should keep balance = capacity - sum");
@@ -1511,7 +1511,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
                 "glue should carry the ingestOrder inbound webhook with its path");
         // Rollups: the two recompute listeners for the customerOrderCount counter.
-        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"CustomerOrderCountRollupOnCreate\"")
+        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"OrderCustomerRollupOnCreate\"")
                 && glue.contains("\"countField\": \"OrderCount\""), "glue should carry the customerOrderCount rollup listeners");
     }
 

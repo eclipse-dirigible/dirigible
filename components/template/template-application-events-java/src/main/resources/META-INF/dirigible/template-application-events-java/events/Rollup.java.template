@@ -5,9 +5,6 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.messaging.ListenerKind;
 import org.eclipse.dirigible.sdk.messaging.MessageHandler;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if($op == "sum")
-import java.math.BigDecimal;
-#end
 
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
@@ -15,11 +12,14 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Ent
 import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
 
 /**
- * Maintains the ${parentEntity}.${countField} roll-up over ${childEntity} rows.
+ * Maintains the ${parentEntity} roll-up field(s) over ${childEntity} rows.
  *
- * Generated from the intent rollups block - do not edit; it is re-generated with the application.
- * On each ${childEntity} event the value for the affected parent is recomputed from the store (so it
- * self-heals); under heavy write concurrency it is eventually consistent, not transactionally exact.
+ * Generated from the intent rollups block - do not edit; it is re-generated with the application. Every
+ * roll-up that shares this child entity + parent relation is COALESCED into this single handler, so one
+ * child event does exactly ONE read-modify-write of the parent - separate handlers writing the whole
+ * parent row would otherwise clobber each other's fields (lost update). The affected parent's totals are
+ * recomputed from the store on each event (self-healing); the write + the "-updated" event fire only when
+ * a value actually changes, which bounds the transitive cascade so it terminates at rest.
  */
 @Component
 public class ${className} implements MessageHandler {
@@ -45,46 +45,11 @@ public class ${className} implements MessageHandler {
         if (parent == null) {
             return;
         }
-#if($op == "sum")
-        BigDecimal sum = BigDecimal.ZERO;
-        for (${childEntity}Entity row : new ${childEntity}Repository().findAll(${criteriaExpression})) {
-            if (row.${sumField} != null) {
-                sum = sum.add(row.${sumField});
-            }
+        java.util.List<${childEntity}Entity> rows = new ${childEntity}Repository().findAll(${criteriaExpression});
+        boolean changed = false;
+${aggregateBlock}
+        if (changed) {
+            parents.update(parent);
         }
-        // Skip when the rolled-up total has not moved: no redundant write, and - crucially - no event.
-        // This bounds the roll-up cascade (a parent whose total is unchanged raises nothing further) so
-        // transitive roll-ups over an acyclic composition tree always terminate.
-        if (parent.${countField} != null && parent.${countField}.compareTo(sum) == 0) {
-            return;
-        }
-        parent.${countField} = sum;
-#if($capacityField != "")
-        BigDecimal capacity = parent.${capacityField} == null ? BigDecimal.ZERO : parent.${capacityField};
-#if($balanceField != "")
-        // Outstanding balance = capacity - sum.
-        parent.${balanceField} = capacity.subtract(sum);
-#end
-#if($statusField != "")
-        // Derive status: fully consumed -> whenFull, partially -> whenPartial (unchanged at zero).
-        if (sum.signum() > 0) {
-            parent.${statusField} = sum.compareTo(capacity) >= 0 ? ${statusWhenFull} : ${statusWhenPartial};
-        }
-#end
-#end
-        // A change to a rolled-up total is a real change to the parent - publish the normal update event
-        // so a higher-level roll-up (and any other update listener) sees it. This is what makes roll-ups
-        // transitive across a composition chain: grandchild -> child -> parent (e.g. day allocations ->
-        // employee timesheet -> project timesheet). The change-guard above stops the cascade at rest.
-        parents.update(parent);
-#else
-        int count = new ${childEntity}Repository().findAll(${criteriaExpression}).size();
-        // Same change-guard on the count path: only persist + emit when the count actually moved.
-        if (parent.${countField} != null && parent.${countField} == count) {
-            return;
-        }
-        parent.${countField} = count;
-        parents.update(parent);
-#end
     }
 }
