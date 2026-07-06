@@ -17,6 +17,11 @@ document.addEventListener('alpine:init', () => {
     // <restBase>/<perspective>/<Entity>Controller (the master's own controller).
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
+    // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
+    // at this view. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
+    // call in the template would emit any nested ${...} verbatim.
+    caView: '${name}',
+
     state: 'loading',          // loading | error | empty | default
     masters: [],
     page: 1,

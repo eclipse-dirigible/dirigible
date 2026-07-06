@@ -404,6 +404,33 @@ paths / relations.
   `decision` that branches on the chosen `action` (e.g. `if: "action == 'approve'"`). For a task that
   just continues linearly, use a **single action** (e.g. `actions: [issue]`) and no decision.
 
+### actions - on-demand action buttons
+
+**Use when:** a generated entity view needs a developer-defined button that opens a custom page - a
+whole-view toolbar action (import, a wizard, a report launcher) or a per-record action (open a portal,
+a related view). This is the UI escape hatch for on-demand actions; it is distinct from a form's task
+`actions` (which complete a BPM user task).
+
+```yaml
+actions:
+  - name: OpenPortal            # unique id; also names the generated contribution files
+    forEntity: Order            # the entity whose generated view shows the button
+    scope: entity               # 'entity' (per-record) or 'page' (whole-view toolbar)
+    label: Open Portal          # button label (defaults to a humanized name)
+    icon: external-link         # optional Lucide icon
+    order: 10                   # optional ordering among a view's actions
+    page: /services/web/myapp/custom/portal.html   # same-origin path opened in the app-wide dialog
+```
+
+**Rules:** unique `name`; `forEntity` must be a declared entity; `scope` is `entity` or `page`
+(default `entity`); `page` is a required same-origin path. Each action generates a contribution to the
+app's `<project>-custom-action` extension point (a `<name>-action.extension` + a `<name>-action.js`
+module), which the generated Harmonia views render through the shared `customActions` store - a
+`page` action becomes a toolbar button, an `entity` action a per-record button that passes the
+selected record's id to the opened page (as `?id=`). External projects may contribute to the same
+point; the app's own declared actions and third-party contributions render through one path. The
+opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent.
+
 ### reports - read-only aggregations
 
 **Use when:** the user needs a read-only view, list, or aggregation across records.
@@ -718,6 +745,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "store / manage X" -> **entities**
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
+- "a button on X's view that opens a custom page / action" -> **actions**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**

@@ -44,6 +44,11 @@ document.addEventListener('alpine:init', () => {
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
+    // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
+    // at this view. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
+    // call in the template would emit any nested ${...} verbatim.
+    caView: '${name}',
+
     async init() {
       await this.load();
       this.loadLookups();

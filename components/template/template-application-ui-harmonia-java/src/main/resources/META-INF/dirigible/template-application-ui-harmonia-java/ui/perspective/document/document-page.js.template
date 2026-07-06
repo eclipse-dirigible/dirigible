@@ -157,6 +157,11 @@ document.addEventListener('alpine:init', () => {
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
 
+    // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
+    // at this document. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
+    // call in the template would emit any nested ${...} verbatim.
+    caView: '${name}',
+
     get isEdit() { return this.mode === 'edit'; },
     get isPreview() { return this.mode === 'preview'; },
     get errorCount() { return Object.keys(this.errors).filter(k => this.errors[k]).length; },

@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -154,6 +155,7 @@ public final class IntentParser {
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
+        validateActions(model, entityNames, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
         validateSeeds(model, entityNames, issues);
@@ -1114,6 +1116,42 @@ public final class IntentParser {
             }
             validateFormRelationFields(form, bound, byName, issues);
             validateFormEditable(form, bound, issues);
+        }
+    }
+
+    /**
+     * Validate the {@code actions} block: each on-demand action needs a unique name, a known
+     * {@code forEntity}, a {@code scope} of {@code entity} or {@code page}, and a same-origin
+     * {@code page} to open. The generator contributes each into the app's
+     * {@code <project>-custom-action} extension point so it renders on the entity's view (see the
+     * ActionIntentGenerator).
+     */
+    private static void validateActions(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Set<String> actionNames = new HashSet<>();
+        for (ActionIntent action : model.getActions()) {
+            if (action.getName() == null || action.getName()
+                                                  .isBlank()) {
+                issues.add("action has no name");
+                continue;
+            }
+            String name = action.getName();
+            if (!actionNames.add(name)) {
+                issues.add("duplicate action [" + name + "]");
+            }
+            if (action.getForEntity() == null || action.getForEntity()
+                                                       .isBlank()) {
+                issues.add("action [" + name + "] has no forEntity");
+            } else if (!entityNames.contains(action.getForEntity())) {
+                issues.add("action [" + name + "] references unknown entity [" + action.getForEntity() + "]");
+            }
+            String scope = action.getScope();
+            if (!"entity".equals(scope) && !"page".equals(scope)) {
+                issues.add("action [" + name + "] has invalid scope [" + scope + "] (expected 'entity' or 'page')");
+            }
+            if (action.getPage() == null || action.getPage()
+                                                  .isBlank()) {
+                issues.add("action [" + name + "] has no page (a same-origin path to open)");
+            }
         }
     }
 
