@@ -1134,7 +1134,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(dashboard.contains("tkey: '" + PROJECT + ":orders-model.t.widgetSystemHealth'"),
                 "the custom widget label should carry the model-catalog translation key");
         // ... and its label lands in the model translation catalog.
-        String modelCatalog = contentOf("translations/en-US/orders.model.json");
+        String modelCatalog = contentOf("i18n/en-US/orders.model.json");
         assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
                 "the custom widget's label should land in the model catalog");
 
@@ -1149,7 +1149,7 @@ class IntentEngineIT extends IntegrationTest {
                                                          + "?path=OrdersByMonth.report")
                                                  .then()
                                                  .statusCode(201));
-        String catalog = contentOf("translations/en-US/OrdersByMonth.report.json");
+        String catalog = contentOf("i18n/en-US/OrdersByMonth.report.json");
         assertTrue(catalog.contains("\"OrdersByMonth-report\""), "the catalog should be keyed by the report translation prefix");
         assertTrue(catalog.contains("\"widgetOrdersByMonth\": \"Revenue (this month)\""),
                 "the KPI widget's tile label should land in the report catalog");

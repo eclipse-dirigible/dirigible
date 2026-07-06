@@ -189,7 +189,7 @@ export function generateGeneric(model, parameters, templateSources) {
             }
             generatedFiles.push({
                 content: JSON.stringify({ [cleanTemplateParameters['tprefix']]: translations }, null, 2),
-                path: `translations/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
+                path: `i18n/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
             });
         } else {
             generatedFiles.push({
@@ -884,7 +884,7 @@ export function generateFiles(model, parameters, templateSources) {
             }
             generatedFiles.push({
                 content: JSON.stringify({ [parameters['tprefix']]: translations }, null, 2),
-                path: `translations/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
+                path: `i18n/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`
             });
         }
     }

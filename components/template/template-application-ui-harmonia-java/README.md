@@ -40,7 +40,7 @@ number ranges, boolean, text contains) from generation-time column metadata, app
 reflect the active filters. UI **labels** remain untranslated — the Harmonia
 framework itself has no i18n API (verified against 1.24.2: only breakpoint +
 colour-scheme helpers), so label i18n is a documented follow-up on top of the locale
-store; the generated `translations/en-US/*.json` catalogs already exist for it. Remaining items are refinements — see the checklist + the
+store; the generated `i18n/en-US/*.json` catalogs already exist for it. Remaining items are refinements — see the checklist + the
 repo-root `HARMONIA_RUNTIME_PLAN.md` "Implementation status" + "Follow-ups".
 
 ## Architecture (how it differs from the Angular module)

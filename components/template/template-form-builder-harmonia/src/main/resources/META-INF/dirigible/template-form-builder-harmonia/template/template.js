@@ -23,7 +23,7 @@ export function getTemplate(parameters) {
         sources: [
             {
                 location: "/template-form-builder-harmonia/ui/translations.json.template",
-                path: "translations/en-US/translations.json",
+                path: "i18n/en-US/translations.json",
                 action: "translate",
             },
             {
