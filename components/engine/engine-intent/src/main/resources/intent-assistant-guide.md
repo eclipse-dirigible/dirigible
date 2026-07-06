@@ -101,11 +101,13 @@ composition is opt-in.
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
   read-only automatically — you don't need this on them.)
-- `documentTitle: true` (on a field) / `documentStatus: true` (on a to-one relation) - **document layout
-  roles** for a document (header-items) entity. The `documentTitle` field shows in the form's title (e.g.
-  `SALES INVOICE 00001231` = the document name + the number) and the `documentStatus` relation shows as a
-  read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the number
-  field is `documentTitle`, the workflow-managed status FK is `documentStatus`.
+- `function: DocumentTitle` (on a field) / `function: DocumentStatus` (on a to-one relation) - **document
+  layout roles** for a document (header-items) entity. The `DocumentTitle` field shows in the form's title
+  (e.g. `SALES INVOICE 00001231` = the document name + the number) and the `DocumentStatus` relation shows
+  as a read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the
+  number field is `DocumentTitle`, the workflow-managed status FK is `DocumentStatus`. (The older
+  `documentTitle: true` / `documentStatus: true` booleans still work but `function` is preferred - see the
+  **function** section below.)
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
@@ -273,6 +275,48 @@ across many invoices, each link carrying its partial `amount`:
       - { name: SalesInvoice,    kind: manyToOne, to: SalesInvoice, composition: true, required: true }
       - { name: CustomerPayment, kind: manyToOne, to: CustomerPayment, model: customer-payments, required: true }
 ```
+
+### function - the entity's presentation role (explicit template selection)
+
+**Use when:** you want to state *explicitly* how an entity (or a field / relation) is presented, instead
+of relying on structure or naming. `function` is optional and **authoritative when set**; when absent,
+the role is still inferred (composition structure, `kind: setting`, an `*Item`-named child), so nothing
+existing breaks.
+
+**Entity `function`** picks the UI template:
+
+| `function:` | meaning | inferred equivalent |
+|---|---|---|
+| `Document` | header + line-items + status pill + totals | had an `*Item` child |
+| `DocumentItem` | the document's line-items (rendered inline under its parent) | was the `*Item` child |
+| `Master` | master-detail master | had composition children |
+| `Detail` | a plain composition detail | was a composition child |
+| `List` | plain searchable list | had no composition children |
+| `Setting` | nomenclature under Settings | `kind: setting` |
+
+**Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
+`DocumentStatus` (the read-only status pill).
+
+```yaml
+entities:
+  - name: ProjectTimesheet
+    function: Document
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: number, type: string, function: DocumentTitle }
+    relations:
+      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: DocumentStatus, init: 1 }
+  - name: EmployeeTimesheet          # the items - no "*Item" name needed
+    function: DocumentItem
+    relations:
+      - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet, composition: true, required: true }
+```
+
+**Rules:** a `DocumentItem` must be a composition child; a `Document` must resolve a line-items child
+(a `DocumentItem`/`*Item` child, or a single composition child). Prefer `function` over the legacy
+`*Item` naming and the `documentTitle`/`documentStatus`/`kind: setting` flags (all still accepted).
+Reserved values for upcoming templates (e.g. `Calendar`) are recognised but rejected with a clear
+"not yet available" message until the template ships.
 
 ### processes - workflows and approvals
 
