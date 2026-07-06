@@ -45,11 +45,11 @@ function getTranslations(lang, commonPath) {
 	translations['common'] = JSON.parse(registry.getText(commonPath));
 	for (let p = 0; p < modules.length; p++) {
 		if (namespaces && !namespaces.includes(modules[p])) continue;
-		const langDir = root.getDirectory(`${modules[p]}/translations/${lang}`);
+		const langDir = root.getDirectory(`${modules[p]}/i18n/${lang}`);
 		if (langDir.exists()) {
 			const jsons = langDir.getArtefactsNames();
 			for (let j = 0; j < jsons.length; j++) {
-				const translationPath = `/${modules[p]}/translations/${lang}/${jsons[j]}`;
+				const translationPath = `/${modules[p]}/i18n/${lang}/${jsons[j]}`;
 				if (translationPath !== commonPath) {
 					if (translations[modules[p]]) Object.assign(translations[modules[p]], JSON.parse(registry.getText(translationPath)));
 					else translations[modules[p]] = JSON.parse(registry.getText(translationPath));

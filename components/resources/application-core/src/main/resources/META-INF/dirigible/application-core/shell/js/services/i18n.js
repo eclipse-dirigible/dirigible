@@ -12,7 +12,7 @@
 /*
  * i18n — UI-label translations for the Harmonia stack, REUSING the platform's existing i18next
  * machinery end-to-end: the i18next webjar (self-loaded below), the `locales.js` extension service
- * that aggregates every project's `translations/<locale>/*.json` catalogs from the registry, the
+ * that aggregates every project's `i18n/<locale>/*.json` catalogs from the registry, the
  * `platform-locales` + `application-locales` extension points that register the available locales,
  * and the very same catalogs/keys the `translate` generation action emits for the AngularJS stack.
  *
