@@ -33,6 +33,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
@@ -152,6 +153,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // "Item" (SalesInvoice -> SalesInvoiceItem) renders as a document - header form, inline items
         // table, totals footer - rather than the default master-detail. Maps master -> its items entity.
         Map<String, String> documentItems = documentMasters(entities, compositionParents);
+        // Capacity guard: a child of a capacity-bearing (balance-pattern) roll-up rejects a create/update
+        // that would drive the parent's balance negative. Stamp the guard metadata onto the child so its
+        // generated DAO enforces it synchronously (the DAO is generated from this .model, which otherwise
+        // does not see the roll-ups - those live in the .glue).
+        Map<String, Map<String, Object>> rollupGuards = buildRollupGuards(model, byName, compositionParents);
         int perspectiveOrder = 1;
 
         for (EntityIntent entity : entities) {
@@ -171,6 +177,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
             if (notBlank(entity.getGroup())) {
                 entityMap.put("perspectiveNavId", entity.getGroup());
+            }
+            if (rollupGuards.containsKey(name)) {
+                entityMap.put("rollupGuard", rollupGuards.get(name));
             }
             // A document master keeps its own perspective/nav but swaps the master-detail layout for the
             // document layout; it names its line-items entity so the document page renders that child as
@@ -347,6 +356,40 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * The perspective an entity (or relation target) lives under: the global {@code Settings}
      * perspective for a setting entity, otherwise its composition-resolved perspective.
      */
+    /**
+     * Build the capacity-guard metadata per child entity from the model's roll-ups. A guard applies to
+     * a child of a capacity-bearing sum roll-up (one carrying {@code capacity} + {@code of}); it
+     * rejects a create/update that would push the parent's balance below zero. Keyed by child entity
+     * name; the DAO template ({@code #rollupGuardCheck}) reads {@code rollupGuard} off the entity.
+     */
+    private static Map<String, Map<String, Object>> buildRollupGuards(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents) {
+        Map<String, Map<String, Object>> guards = new HashMap<>();
+        for (RollupIntent rollup : model.getRollups()) {
+            if (!"sum".equals(rollup.getOp()) || rollup.getCapacity() == null || rollup.getCapacity()
+                                                                                       .isBlank()
+                    || rollup.getOf() == null || rollup.getOf()
+                                                       .isBlank()) {
+                continue;
+            }
+            EntityIntent child = byName.get(rollup.getEntity());
+            RelationIntent via = child == null ? null : toOneRelationByName(child, rollup.getVia());
+            EntityIntent parent = via == null ? null : byName.get(via.getTo());
+            if (parent == null || guards.containsKey(rollup.getEntity())) {
+                continue;
+            }
+            Map<String, Object> guard = new LinkedHashMap<>();
+            guard.put("parentEntity", parent.getName());
+            guard.put("parentPerspective", resolvePerspective(parent.getName(), compositionParents));
+            guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
+            guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
+            guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
+            guard.put("childIdField", "Id");
+            guards.put(rollup.getEntity(), guard);
+        }
+        return guards;
+    }
+
     private static String perspectiveFor(String entityName, Map<String, String> compositionParents, Set<String> settingEntities) {
         if (settingEntities.contains(entityName)) {
             return SETTINGS_PERSPECTIVE;

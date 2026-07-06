@@ -42,6 +42,33 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #macro(actionAssign $property $action)
         entity.${property.name} = Beans.get(${action}.class).calculate(entity);
 #end
+## Capacity guard: reject a create/update that would drive the parent's balance negative. Derived from a
+## capacity-bearing roll-up (child -> parent via FK; parent.capacity vs sum of the children's `of` field).
+## Recomputed synchronously from the store (not the async-maintained balance field), excluding this row.
+#macro(rollupGuardCheck)
+#if($rollupGuard)
+        if (entity.${rollupGuard.fkProperty} != null) {
+            ${rollupGuard.parentEntity}Entity guardParent = new ${rollupGuard.parentEntity}Repository().findById(entity.${rollupGuard.fkProperty});
+            if (guardParent != null && guardParent.${rollupGuard.capacityField} != null) {
+                java.math.BigDecimal guardConsumed = java.math.BigDecimal.ZERO;
+                for (${name}Entity guardRow : findAll(Criteria.create().eq("${rollupGuard.fkProperty}", entity.${rollupGuard.fkProperty}))) {
+                    if (entity.${rollupGuard.childIdField} != null && entity.${rollupGuard.childIdField}.equals(guardRow.${rollupGuard.childIdField})) {
+                        continue;
+                    }
+                    if (guardRow.${rollupGuard.ofField} != null) {
+                        guardConsumed = guardConsumed.add(guardRow.${rollupGuard.ofField});
+                    }
+                }
+                java.math.BigDecimal guardIncoming = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : entity.${rollupGuard.ofField};
+                if (guardConsumed.add(guardIncoming).compareTo(guardParent.${rollupGuard.capacityField}) > 0) {
+                    throw new IllegalStateException("${rollupGuard.parentEntity} capacity exceeded (id " + entity.${rollupGuard.fkProperty}
+                            + "): capacity " + guardParent.${rollupGuard.capacityField} + ", already consumed " + guardConsumed
+                            + ", requested " + guardIncoming);
+                }
+            }
+        }
+#end
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
@@ -67,6 +94,13 @@ import java.math.BigDecimal;
 import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Entity;
 import gen.${javaGenFolderName}.data.${documentMaster.javaChildPerspective}.${documentMaster.childEntity}Repository;
 #end
+#if($rollupGuard)
+#if(!$documentMaster && $multilingual != "true")
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
+import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Entity;
+import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGuard.parentEntity}Repository;
+#end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
 #end
@@ -84,6 +118,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity save(${name}Entity entity) {
+#rollupGuardCheck()
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
@@ -108,6 +143,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     @Override
     public ${name}Entity update(${name}Entity entity) {
+#rollupGuardCheck()
 #if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
