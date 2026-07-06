@@ -329,7 +329,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     : "");
             // Recompute the value for the affected parent from the store on each child event.
             base.put("criteriaExpression", "Criteria.create().eq(\"" + fkProperty + "\", entity." + fkProperty + ")");
-            String className = IntentNaming.pascalCase(rollup.getName());
+            // Handler name derives from the coalescing key (childEntity + parent-fk), NOT the roll-up name:
+            // generateUtils groups every roll-up sharing (childEntity, fkProperty, event) into one handler, so
+            // the name must be shared across the group. Two roll-ups on the same child+fk+event collapse into
+            // this one class.
+            String className = rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
             if (sum) {
                 // A line edit changes the sum, so a sum roll-up must also recompute on update.

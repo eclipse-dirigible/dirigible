@@ -1511,7 +1511,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"inbound\"") && glue.contains("\"name\": \"ingestOrder\"") && glue.contains("\"path\": \"/ingest\""),
                 "glue should carry the ingestOrder inbound webhook with its path");
         // Rollups: the two recompute listeners for the customerOrderCount counter.
-        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"CustomerOrderCountRollupOnCreate\"")
+        assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"OrderCustomerRollupOnCreate\"")
                 && glue.contains("\"countField\": \"OrderCount\""), "glue should carry the customerOrderCount rollup listeners");
     }
 

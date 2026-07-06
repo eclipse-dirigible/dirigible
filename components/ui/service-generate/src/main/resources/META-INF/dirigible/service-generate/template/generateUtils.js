@@ -648,8 +648,6 @@ export function generateFiles(model, parameters, templateSources) {
                             if (!rollupGroups[key]) { rollupGroups[key] = []; rollupOrder.push(key); }
                             rollupGroups[key].push(ru);
                         }
-                        const rollupSuffixName = (s) => s === "-updated" ? "RollupOnUpdate"
-                            : (s === "-deleted" ? "RollupOnDelete" : "RollupOnCreate");
                         for (let gi = 0; gi < rollupOrder.length; gi++) {
                             const group = rollupGroups[rollupOrder[gi]];
                             const first = group[0];
@@ -659,7 +657,7 @@ export function generateFiles(model, parameters, templateSources) {
                             }
                             const rollupParameters = {
                                 ...parameters,
-                                className: first.childEntity + first.fkProperty + rollupSuffixName(first.topicSuffix || ""),
+                                className: first.className,
                                 childEntity: first.childEntity,
                                 childPerspective: first.childPerspective,
                                 javaChildPerspective: sanitizeJavaIdentifier(first.childPerspective),
