@@ -439,6 +439,51 @@ selected record's id to the opened page (as `?id=`). External projects may contr
 point; the app's own declared actions and third-party contributions render through one path. The
 opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent.
 
+### generates - create one document from another (create-from)
+
+**Use when:** a record should spawn a new record of another type - often a document in another model:
+generate a `SalesInvoice` from a `ProjectTimesheet`, an `Order` from a `Quote`. It adds a button on the
+source view that, on click, clones the selected record on the server and toasts the result.
+
+```yaml
+generates:
+  - name: invoice-from-timesheet   # unique id; also names the contribution files + the controller class
+    from: ProjectTimesheet         # source entity in THIS model (loaded by the selected record's id)
+    to: SalesInvoice               # target entity to create
+    uses: sales                    # model alias (from uses:) the target lives in; omit if same model
+    forEntity: ProjectTimesheet    # view that shows the button (defaults to `from`)
+    label: Generate Invoice        # button label (defaults to a humanized name)
+    icon: file-plus                # optional Lucide icon
+    scope: entity                  # 'entity' (per-record, default) or 'page'
+    map:                           # target property <- source property (a field or to-one relation)
+      Customer: Customer
+      Currency: Currency
+    defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
+      InvoiceDate: now
+      Note: "Generated from timesheet"
+    items:                         # optional: clone the source document's composition items too
+      from: ProjectTimesheetItem
+      to: SalesInvoiceItem
+      map:
+        Description: Description
+        Amount: Amount
+```
+
+**Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
+entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared
+entity; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
+to-one relation** of the source entity - one-hop `relation.field` paths are not yet supported. `map`
+copies a source value; `defaults` sets a constant (`now` = today's date, or a literal). Do **not** map
+the target's identity, document number, status or the item->master foreign key: they are left for the
+target to mint - the clone is saved through the **target's** generated repository, so its create-time
+logic (numbering, status init, calculated fields) fires naturally.
+
+Two halves are generated: a client button (a `<name>-generate-action.extension` + `.js` contribution
+to the app's `<project>-custom-action` point, carrying an `endpoint`) and a server-side Java
+`@Controller` (`<ClassName>Generate`, via the `.glue` file) served at
+`/services/java/<project>/gen/events/<ClassName>Generate/run`. The shared `customActions` store POSTs
+the selected id to that endpoint and toasts the created record (no page dialog).
+
 ### reports - read-only aggregations
 
 **Use when:** the user needs a read-only view, list, or aggregation across records.
@@ -754,6 +799,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
+- "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" -> **generates**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**

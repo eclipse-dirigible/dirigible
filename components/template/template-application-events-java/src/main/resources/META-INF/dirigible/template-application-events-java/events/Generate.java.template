@@ -1,0 +1,59 @@
+package gen.events;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Create-from ${name}: builds a new ${toEntity} from an existing ${fromEntity} (loaded by the id in
+ * the posted body), maps the declared fields, and saves it through the target's generated repository -
+ * so the target's create-time logic (document numbering, status init, calculated fields) fires. Any
+ * composition items are cloned and re-pointed at the new master.
+ *
+ * Generated from the intent generates block - do not edit; it is re-generated with the application.
+ * Entity access goes ONLY through the generated repositories (validations / events / numbering).
+ * The endpoint is served under /services/java/<project>/gen/events/${className}Generate/run.
+ */
+@Controller
+public class ${className}Generate {
+
+    public static class Request {
+        public Integer id;
+    }
+
+    @Post("/run")
+    public String run(@Body Request req) {
+        if (req == null || req.id == null) {
+            return "{\"error\": \"missing source id\"}";
+        }
+        gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
+        if (source == null) {
+            return "{\"error\": \"source ${fromEntity} not found\"}";
+        }
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity target =
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity();
+#foreach($a in $fieldAssignments)
+        target.${a.targetProp} = ${a.expr};
+#end
+        gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
+                new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
+#if($hasItems)
+        for (gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromItemEntity}Entity srcItem :
+                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromItemEntity}Repository()
+                        .findAll(Criteria.create()
+                                         .eq("${srcFkProperty}", req.id))) {
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+#foreach($a in $itemFieldAssignments)
+            item.${a.targetProp} = ${a.expr};
+#end
+            item.${toFkProperty} = saved.${toPk};
+            new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
+        }
+#end
+        return Json.stringify(saved);
+    }
+}

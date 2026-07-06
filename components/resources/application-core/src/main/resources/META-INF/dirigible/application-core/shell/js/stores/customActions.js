@@ -20,6 +20,10 @@
  *   'page' (or omitted) - a toolbar button acting on the whole view
  *   'entity'            - a per-record button that needs a selected row (its id is passed to the page)
  *
+ * A descriptor's action decides what the button does: an `endpoint` descriptor POSTs the selected id to
+ * a server controller (a create-from / generate action) and toasts the result; a `path` descriptor opens
+ * the page in the app-wide dialog.
+ *
  * It is a global Alpine store so every generated view reads it the same way:
  *   $store.customActions.getActions(perspective, view, 'page')    -> the view's toolbar actions
  *   $store.customActions.getActions(perspective, view, 'entity')  -> the view's per-record actions
@@ -90,12 +94,19 @@ document.addEventListener('alpine:init', () => {
                            : (a.type === 'page' || a.type === undefined || a.type === null)));
     },
 
-    // Open the contributed action page in the app-wide dialog. An entity action carries the selected
-    // record's primary key as `id` (the contributed page reads it from its query string), mirroring the
-    // AngularJS Dialogs.showWindow({ params: { id } }) dispatch. The view knows its own primary key, so
-    // it passes the id value here rather than the whole row.
+    // Trigger a contributed action. Two flavours, decided by the descriptor:
+    //   - `endpoint` present: POST the selected record's id to a server endpoint (a create-from /
+    //     generate action), then toast the result and raise `harmonia:action-done`. No dialog opens.
+    //   - otherwise (`path`): open the contributed page in the app-wide dialog.
+    // An entity action carries the selected record's primary key as `id`; the view knows its own primary
+    // key so it passes the id value here rather than the whole row.
     trigger(action, id) {
-      if (!action || !action.path) return;
+      if (!action) return;
+      if (action.endpoint) {
+        this.runEndpoint(action, id);
+        return;
+      }
+      if (!action.path) return;
       let url = action.path;
       if (id !== undefined && id !== null && id !== '') {
         url += (url.indexOf('?') >= 0 ? '&' : '?') + 'id=' + encodeURIComponent(id);
@@ -103,6 +114,40 @@ document.addEventListener('alpine:init', () => {
       this.dialogUrl = url;
       this.dialogTitle = action.label || 'Action';
       this.dialogOpen = true;
+    },
+
+    // POST { id } to the action's endpoint (a generated create-from controller). The server clones the
+    // source record into a new target record and returns it; we surface a success/error notification and
+    // raise `harmonia:action-done` so the originating view can refresh. The endpoint is an absolute
+    // same-origin path (it targets gen/events, not the entity api base), so we prepend no baseUrl.
+    async runEndpoint(action, id) {
+      const label = action.label || 'Action';
+      const body = {};
+      if (id !== undefined && id !== null && id !== '') body.id = id;
+      try {
+        const created = await App.services.api.post(action.endpoint, body, { baseUrl: '' });
+        const ref = created && (created.Number || created.Name || created.Id || created.id);
+        this.notify(label, ref ? 'Created ' + ref : 'Completed', 'positive');
+        window.dispatchEvent(new CustomEvent('harmonia:action-done'));
+      } catch (e) {
+        const msg = (App.services.apiErrors && App.services.apiErrors.messageFor)
+          ? App.services.apiErrors.messageFor(e, 'Action failed')
+          : 'Action failed';
+        this.notify(label, msg, 'negative');
+      }
+    },
+
+    // Surface a notification through the shared notifications store (the shell's notification centre),
+    // degrading to the console when it is unavailable so an action never fails silently.
+    notify(title, description, variant) {
+      try {
+        const store = window.Alpine && Alpine.store('notifications');
+        if (store && typeof store.add === 'function') {
+          store.add({ title: title, description: description, variant: variant });
+          return;
+        }
+      } catch (e) { /* fall through to the console */ }
+      console.log('customActions: ' + title + (description ? ' - ' + description : ''));
     },
 
     closeDialog() {

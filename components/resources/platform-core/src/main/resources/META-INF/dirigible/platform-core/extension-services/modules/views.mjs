@@ -38,8 +38,10 @@ export async function getViews(extensionPoints = [], type) {
 			console.error(`View ['${view.label || view.path}'] does not have an id.`);
 		} else if (!view.label) {
 			console.error(`View ['${view.id}'] does not have a label.`);
-		} else if (!view.path) {
-			console.error(`View ['${view.id}'] does not have a path.`);
+		} else if (!view.path && !view.endpoint) {
+			// A view contribution must carry a target: a `path` to open, or an `endpoint` to call (an
+			// on-demand action button that POSTs rather than opening a page - see the customActions store).
+			console.error(`View ['${view.id}'] does not have a path or an endpoint.`);
 		} else {
 			for (let v = 0; v < views.length; v++) {
 				if (views[v].id === view.id) {
