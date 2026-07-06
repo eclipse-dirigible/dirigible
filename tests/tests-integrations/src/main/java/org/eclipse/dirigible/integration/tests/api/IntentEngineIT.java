@@ -365,10 +365,9 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("project", equalTo(PROJECT))
-                                                 .body("written",
-                                                         hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
-                                                                 "OrdersByCustomer.report", "orders.roles", "orders.glue",
-                                                                 "countries.csvim", "countries.csv", "Order.print"))
+                                                 .body("written", hasItems("orders.edm", "orders.model", "OrderApproval.bpmn",
+                                                         "ApproveOrder.form", "OrdersByCustomer.report", "orders.roles", "orders.glue",
+                                                         "countries.csvim", "countries.csv", "doc/Templates/Order/Print/en/standard.print"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
                                                  // recipe in .settings, naming the template + parameters.
@@ -524,6 +523,28 @@ class IntentEngineIT extends IntegrationTest {
                 "the rollup create-listener should recompute the parent count via Criteria");
         assertTrue(contentOf("gen/events/CustomerOrderCountRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
+
+        // The print feeder (Order is a document master via the OrderItem composition child): a @Controller
+        // that loads the document + its related graph through the repositories and returns the nested
+        // { document, items } payload the .print template binds - exercises the generateUtils.js
+        // "printFeeders" collection case end to end. This class IS the audit of what a print receives.
+        assertTrue(contentOf("orders.glue").contains("\"printFeeders\""), "the glue should carry a printFeeders collection");
+        String feeder = contentOf("gen/events/OrderPrintFeeder.java");
+        assertTrue(feeder.contains("@Controller") && feeder.contains("class OrderPrintFeeder") && feeder.contains("@Get(\"/{id}\")"),
+                "the feeder should be a @Controller exposing GET /{id}");
+        assertTrue(feeder.contains("new gen.orders.data.order.OrderRepository().findById(id)"),
+                "the feeder should load the document master through its generated repository");
+        assertTrue(feeder.contains("document.put(\"Total\", root.Total)"), "the feeder should project the master's own fields");
+        // A same-model relation (customer) is materialised as a nested object with __label so a bare
+        // {{document.Customer}} still renders the label while {{document.Customer.<Field>}} descends.
+        assertTrue(
+                feeder.contains("new gen.orders.data.customer.CustomerRepository().findById(root.Customer)")
+                        && feeder.contains("customerMap.put(\"__label\""),
+                "the feeder should load a to-one relation and carry its label under __label");
+        assertTrue(feeder.contains("document.put(\"Customer\", customerMap)"), "the relation node should be attached to the document map");
+        assertTrue(feeder.contains("new gen.orders.data.order.OrderItemRepository().findAll(Criteria.create().eq(\"Order\", id))"),
+                "the feeder should load the line items by the composition FK");
+        assertTrue(feeder.contains("return Json.stringify(payload)"), "the feeder should return the { document, items } payload as JSON");
     }
 
     @Test

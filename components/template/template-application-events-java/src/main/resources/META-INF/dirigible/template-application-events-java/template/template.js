@@ -94,6 +94,13 @@ export function getTemplate(parameters) {
                 collection: "rollups"
             },
             {
+                location: "/template-application-events-java/events/PrintFeeder.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}PrintFeeder.java",
+                engine: "velocity",
+                collection: "printFeeders"
+            },
+            {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
                 rename: "gen/events/{{name}}OnPayment.java",

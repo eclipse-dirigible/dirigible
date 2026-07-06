@@ -91,10 +91,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && settlements.isEmpty() && generates.isEmpty()) {
+                && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -112,6 +113,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("rollups", rollups);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
+        glue.put("printFeeders", printFeeders);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
                 "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] writer(s), [{}] setter(s),"

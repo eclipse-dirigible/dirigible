@@ -27,12 +27,22 @@ import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 /**
- * Emits one {@code <Entity>.print} standard print template per document (header-items) entity — the
- * document-template DSL counterpart of the entity's Harmonia document view. The template is an
- * authoring artifact at the project root: on publish the {@code PrintTemplateSynchronizer} seeds it
- * into the CMS under {@code Templates/<Entity>/Print/<lang>/} where business users download and
- * upload customizations through the Documents perspective; the generated file is only the
- * never-customized default.
+ * Emits one standard print template per document (header-items) entity — the document-template DSL
+ * counterpart of the entity's Harmonia document view. The file is written into the project's
+ * {@code doc/} folder at the exact path it must occupy in the CMS
+ * ({@code doc/Templates/<Entity>/Print/en/standard.print}): on publish the generic
+ * {@code CmsSeedSynchronizer} mirrors everything under {@code doc/} into the tenant-scoped CMS
+ * (create-if-absent), so this becomes {@code Templates/<Entity>/Print/en/standard.print} where
+ * business users download and upload customizations through the Documents perspective; the
+ * generated file is only the never-customized default.
+ *
+ * <p>
+ * The template is written <b>once and never regenerated over</b> (via
+ * {@link IntentGenerationContext#writeModelFileIfAbsent(String, String)}, like the developer-owned
+ * {@code .settings} file): a printed business document is a formatted, audited artifact the
+ * developer adapts by hand, so a later Generate must not overwrite it — and a new model field must
+ * not silently appear on an already-designed invoice. The emitted file is deliberately a minimal
+ * starting point (a per-tenant CMS seed to be adapted), not a ready-to-use layout.
  *
  * <p>
  * Document masters are detected exactly like the EDM generator's document layout: an entity is a
@@ -60,10 +70,11 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
         IntentModel model = context.getModel();
         Map<EntityIntent, EntityIntent> masters = documentMasters(model);
         for (Map.Entry<EntityIntent, EntityIntent> master : masters.entrySet()) {
-            String fileName = master.getKey()
-                                    .getName()
-                    + ".print";
-            context.writeModelFile(fileName, buildTemplate(master.getKey(), master.getValue()));
+            // The CMS-mirroring path under doc/: Templates/<Entity>/Print/en/standard.print.
+            String fileName = "doc/Templates/" + master.getKey()
+                                                       .getName()
+                    + "/Print/en/standard.print";
+            context.writeModelFileIfAbsent(fileName, buildTemplate(master.getKey(), master.getValue()));
             LOGGER.debug("Generated standard print template [{}]", fileName);
         }
     }
@@ -76,7 +87,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
      * @param model the parsed intent model
      * @return master entity to items entity, in declaration order
      */
-    static Map<EntityIntent, EntityIntent> documentMasters(IntentModel model) {
+    public static Map<EntityIntent, EntityIntent> documentMasters(IntentModel model) {
         Map<String, EntityIntent> byName = new LinkedHashMap<>();
         for (EntityIntent entity : model.getEntities()) {
             if (entity.getName() != null) {
