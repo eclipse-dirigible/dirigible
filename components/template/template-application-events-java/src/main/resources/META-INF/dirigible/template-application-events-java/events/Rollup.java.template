@@ -52,6 +52,12 @@ public class ${className} implements MessageHandler {
                 sum = sum.add(row.${sumField});
             }
         }
+        // Skip when the rolled-up total has not moved: no redundant write, and - crucially - no event.
+        // This bounds the roll-up cascade (a parent whose total is unchanged raises nothing further) so
+        // transitive roll-ups over an acyclic composition tree always terminate.
+        if (parent.${countField} != null && parent.${countField}.compareTo(sum) == 0) {
+            return;
+        }
         parent.${countField} = sum;
 #if($capacityField != "")
         BigDecimal capacity = parent.${capacityField} == null ? BigDecimal.ZERO : parent.${capacityField};
@@ -66,10 +72,17 @@ public class ${className} implements MessageHandler {
         }
 #end
 #end
-        // System-managed denormalization - persist without re-publishing the parent "-updated" event.
-        parents.updateWithoutEvent(parent);
+        // A change to a rolled-up total is a real change to the parent - publish the normal update event
+        // so a higher-level roll-up (and any other update listener) sees it. This is what makes roll-ups
+        // transitive across a composition chain: grandchild -> child -> parent (e.g. day allocations ->
+        // employee timesheet -> project timesheet). The change-guard above stops the cascade at rest.
+        parents.update(parent);
 #else
         int count = new ${childEntity}Repository().findAll(${criteriaExpression}).size();
+        // Same change-guard on the count path: only persist + emit when the count actually moved.
+        if (parent.${countField} != null && parent.${countField} == count) {
+            return;
+        }
         parent.${countField} = count;
         parents.update(parent);
 #end
