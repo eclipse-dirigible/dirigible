@@ -13,5 +13,5 @@ exports.getLocale = () => ({
     id: 'bg-BG',
     label: 'Bulgarian',
     secondary: 'Български',
-    common: '/dashboard/translations/bg-BG/common.json'
+    common: '/dashboard/i18n/bg-BG/common.json'
 });
