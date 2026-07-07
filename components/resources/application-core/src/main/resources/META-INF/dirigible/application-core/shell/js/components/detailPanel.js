@@ -82,24 +82,9 @@ function detailPanel(def, masterId) {
       return this.displayValue(v, col.date);
     },
 
-    // Render a cell value. Jackson serializes java.time as arrays (LocalDate [y,m,d],
-    // LocalDateTime [y,m,d,h,mi,s,ns]); show those as readable date strings.
+    // Render a date/datetime cell value through the instance Date/Timestamp patterns (services/format.js).
     displayValue(v, isDate) {
-      if (v === null || v === undefined || v === '') return '—';
-      const p = (n) => String(n).padStart(2, '0');
-      if (Array.isArray(v)) {
-        if (v.length === 3) return v[0] + '-' + p(v[1]) + '-' + p(v[2]);
-        if (v.length >= 5) return v[0] + '-' + p(v[1]) + '-' + p(v[2]) + ' ' + p(v[3]) + ':' + p(v[4]);
-        return v.join(', ');
-      }
-      // A date/time-typed numeric is an epoch Instant/Timestamp (seconds or millis).
-      if (isDate && typeof v === 'number') {
-        const d = new Date(v < 1e11 ? v * 1000 : v);
-        if (!isNaN(d.getTime())) {
-          return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + ' ' + p(d.getHours()) + ':' + p(d.getMinutes());
-        }
-      }
-      return v;
+      return window.HarmoniaFormat.value(v, isDate);
     },
 
     async load() {

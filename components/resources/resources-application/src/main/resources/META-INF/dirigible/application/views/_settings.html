@@ -57,6 +57,30 @@
             </div>
           </div>
         </div>
+        <!-- Display formats: instance-wide patterns for dates, timestamps and floating-point numbers,
+             persisted per user in localStorage (like the language flag) and applied across every app on
+             this origin. Number pattern controls the grouping/decimal separators; each field keeps its
+             own decimal count. Apply reloads so all views re-format at once. -->
+        <div class="vbox gap-1">
+          <span class="text-base font-medium" x-text="T('application-core:shell.settings.formats', 'Display formats')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.')"></span>
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.dateFormat', 'Date format')"></span>
+          <input x-h-input x-model="$store.formats.date" placeholder="yyyy-MM-dd" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.timestampFormat', 'Timestamp format')"></span>
+          <input x-h-input x-model="$store.formats.dateTime" placeholder="yyyy-MM-dd HH:mm:ss" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberFormat', 'Number format')"></span>
+          <input x-h-input x-model="$store.formats.number" placeholder="### ### ### ##0.00" />
+        </div>
+        <div class="hbox gap-2">
+          <button x-h-button data-variant="emphasized" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="outline" @click="$store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
+        </div>
         <template x-if="languageWarnings().length > 0">
           <div class="vbox gap-2">
             <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Missing translations')"></span>

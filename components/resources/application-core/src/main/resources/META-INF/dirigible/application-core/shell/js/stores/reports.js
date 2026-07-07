@@ -163,20 +163,10 @@ document.addEventListener('alpine:init', () => {
     },
     widgetAlignClass(c) { return c.align === 'right' ? 'text-right' : ''; },
 
+    // Decimals from the column pattern, separators from the instance Number setting (services/format.js);
+    // empty cells stay blank ('') rather than showing a dash.
     displayNumber(v, pattern) {
-      if (v === null || v === undefined || v === '') return '';
-      const n = Number(v);
-      if (isNaN(n)) return v;
-      let decimals = 2;
-      let groupSep = ' ';
-      if (pattern) {
-        const dot = pattern.lastIndexOf('.');
-        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
-        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
-      }
-      const parts = n.toFixed(decimals).split('.');
-      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
-      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+      return window.HarmoniaFormat.number(v, pattern, '');
     },
 
     // Translated display labels. Reports ship per-project catalogs under the '<Name>-report'
