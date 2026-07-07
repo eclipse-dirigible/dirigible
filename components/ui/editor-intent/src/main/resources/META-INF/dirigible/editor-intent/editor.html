@@ -154,6 +154,8 @@
         <bk-toolbar compact="true" has-title="false">
             <span>Intent</span>
             <bk-toolbar-spacer></bk-toolbar-spacer>
+            <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh — re-parse and re-validate (e.g. after generating a dependency project)" aria-label="Refresh" ng-click="refresh()" ng-disabled="state.isBusy"></bk-button>
+            <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--save" title="Save" aria-label="Save" ng-click="save()" ng-disabled="!changed || state.isBusy"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="emphasized" glyph="sap-icon--generate-shortcut" label="Generate" title="Generate the model files into the project" aria-label="Generate" ng-click="generate()" ng-disabled="state.isBusy || issues.length"></bk-button>

@@ -229,7 +229,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     };
 
     const refreshPreview = () => {
-        $http.post(PARSE_URL, $scope.text || '', { headers: { 'Content-Type': 'text/plain' } }).then((response) => {
+        return $http.post(PARSE_URL, $scope.text || '', { headers: { 'Content-Type': 'text/plain' } }).then((response) => {
             $scope.issues = [];
             $scope.model = normalize(response.data);
             render();
@@ -242,6 +242,17 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                     console.error(response);
                 }
             });
+        });
+    };
+
+    // Re-parse and re-validate the current buffer on demand. Generate resolves cross-model
+    // dependencies against other projects' already-generated .model files; when one is missing it
+    // fails with issues that stay pinned (blocking Generate) until the buffer is re-parsed. After
+    // generating the dependency project, Refresh clears those stale issues and re-renders — no browser
+    // reload needed.
+    $scope.refresh = () => {
+        refreshPreview().then(() => {
+            statusBarHub.showMessage('Re-validated the intent');
         });
     };
 
