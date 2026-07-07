@@ -123,11 +123,23 @@
 #elseif($property.widgetType == "TEXTAREA")
         <textarea x-h-textarea id="f_${property.name}" rows="3" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end></textarea>
 #elseif($property.widgetType == "DATE")
-        <input x-h-input type="date" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
+        <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces). -->
+        <div x-h-date-picker>
+          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <button x-h-date-picker-trigger aria-label="Choose date"></button>
+          <div x-h-date-picker-popup x-model="form.${property.name}"></div>
+        </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
-        <input x-h-input type="datetime-local" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
+        <div x-h-datetime-picker>
+          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+          <div x-h-datetime-picker-popup x-model="form.${property.name}"></div>
+        </div>
 #elseif($property.widgetType == "TIME")
-        <input x-h-input type="time" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
+        <div x-h-time-picker>
+          <input type="text" x-h-time-picker-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <div x-h-time-picker-popup></div>
+        </div>
 #elseif($property.widgetType == "EMAIL")
         <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
 #else
@@ -376,10 +388,18 @@
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>
               </template>
               <template x-if="col.widget === 'DATE'">
-                <input x-h-input type="date" x-model="draft[col.name]" :readonly="col.readonly" />
+                <div x-h-date-picker.table>
+                  <input type="text" :disabled="col.readonly" />
+                  <button x-h-date-picker-trigger aria-label="Choose date"></button>
+                  <div x-h-date-picker-popup x-model="draft[col.name]"></div>
+                </div>
               </template>
               <template x-if="col.widget === 'DATETIME-LOCAL'">
-                <input x-h-input type="datetime-local" x-model="draft[col.name]" :readonly="col.readonly" />
+                <div x-h-datetime-picker.table>
+                  <input type="text" :disabled="col.readonly" />
+                  <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+                  <div x-h-datetime-picker-popup x-model="draft[col.name]"></div>
+                </div>
               </template>
               <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
                 <input x-h-input type="text" x-model="draft[col.name]" :readonly="col.readonly" />

@@ -54,9 +54,17 @@
                 <label class="text-xs text-muted-foreground" x-text="col.key"></label>
                 <template x-if="col.kind === 'date'">
                   <div class="hbox gap-1 items-center">
-                    <input x-h-input type="date" x-model="filters[col.key].from" @keydown.enter="applyFilters()" />
+                    <div x-h-date-picker>
+                      <input type="text" @keydown.enter="applyFilters()" />
+                      <button x-h-date-picker-trigger aria-label="From date"></button>
+                      <div x-h-date-picker-popup x-model="filters[col.key].from"></div>
+                    </div>
                     <span x-h-text.muted>&ndash;</span>
-                    <input x-h-input type="date" x-model="filters[col.key].to" @keydown.enter="applyFilters()" />
+                    <div x-h-date-picker>
+                      <input type="text" @keydown.enter="applyFilters()" />
+                      <button x-h-date-picker-trigger aria-label="To date"></button>
+                      <div x-h-date-picker-popup x-model="filters[col.key].to"></div>
+                    </div>
                   </div>
                 </template>
                 <template x-if="col.kind === 'number'">
