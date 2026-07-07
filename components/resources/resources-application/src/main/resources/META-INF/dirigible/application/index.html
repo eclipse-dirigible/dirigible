@@ -21,10 +21,12 @@
   built-in pages (Dashboard/Inbox/Documents/Reports) and aggregates the `application-perspectives`
   extension point for the domain apps, which it hosts in an iframe (their generated SPA, embedded).
 -->
-<html lang="en">
+<!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
+<html lang="en" data-brand-title>
 
   <head>
     <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Applications</title>
@@ -54,10 +56,15 @@
       <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
            data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
         <div x-h-sidebar x-ref="sidebar">
+          <!-- Instance brand mark (DIRIGIBLE_BRANDING_LOGO / _NAME / _SUBTITLE via the `branding` store),
+               the Harmonia counterpart of the AngularJS shell header. -->
           <div x-h-sidebar-header>
             <div class="hbox items-center gap-2 p-1">
-              <i role="img" data-lucide="layout-grid" class="size-5 text-primary"></i>
-              <span class="font-bold" x-text="T('application-core:shell.nav.applications', 'Applications')"></span>
+              <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
+              <div class="vbox gap-0">
+                <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
+                <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
+              </div>
             </div>
           </div>
 
@@ -298,6 +305,11 @@
     <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/format.js" defer></script>
+    <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform
+         service sets top.PlatformBranding; the adapter applies the favicon/title and exposes it as the
+         Alpine `branding` store. Load the source before the adapter. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/branding.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
