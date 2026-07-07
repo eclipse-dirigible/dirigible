@@ -38,12 +38,18 @@
   <!-- Loading (edit) -->
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
 
-  <!-- Form -->
-  <form x-show="state !== 'loading' && state !== 'load-failure'" @submit.prevent="save()"
+  <!-- Form area: the main column holds the field form, the detail collections and the action footer
+       (in that order, so the Save/Cancel bar is the LAST thing on the page - below the panels, like
+       the document view); the read-only/audit sidebar is the second column of this hbox. -->
+  <div x-show="state !== 'loading' && state !== 'load-failure'"
         class="hbox gap-6 py-6 px-8 w-full items-start">
     <!-- Main content column -->
     <div class="vbox gap-4 grow min-w-0" style="max-width: 42rem;">
 
+    <!-- The header form holds the editable fields only. The Save button lives in the footer below
+         (outside this form, beneath the detail panels) so the footer can sit at the very bottom; it
+         calls save() directly, while @submit.prevent keeps Enter-to-save working inside a field. -->
+    <form @submit.prevent="save()" class="vbox gap-4 w-full">
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
       <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
@@ -169,7 +175,81 @@
 #end
     </div>
     </fieldset>
+    </form>
 
+    <!-- Detail collections (masters only; App.detailsFor returns [] otherwise): the same generic
+         detail panels the master browse view renders, so the record's children are visible and
+         manageable while editing. Rendered INSIDE the main column, above the footer, so the
+         Save/Cancel bar stays at the very bottom of the page. Outside the <form> on purpose (the
+         panel's buttons must not submit it). Add/Edit/Delete route back to THIS page (returnTo
+         override); in preview the panels are read-only. -->
+    <div class="vbox gap-4 w-full"
+         x-show="(isEdit || isPreview) && detailDefs.length && state !== 'loading' && state !== 'load-failure'">
+      <template x-for="d in detailDefs" :key="d.entity + ':' + id">
+        <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
+          <div x-h-card-header>
+            <h3 x-h-card-title x-text="d.label"></h3>
+            <div x-h-card-action x-show="!isPreview">
+              <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+            </div>
+          </div>
+          <div x-h-card-content>
+            <div x-show="state === 'loading'"><div x-h-spinner></div></div>
+            <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
+            <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+            <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+              <table x-h-table data-borders="rows">
+                <thead x-h-table-header>
+                  <tr x-h-table-row>
+                    <template x-for="col in def.columns" :key="col.name">
+                      <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
+                    </template>
+                    <th x-h-table-head scope="col" x-show="!isPreview"></th>
+                  </tr>
+                </thead>
+                <tbody x-h-table-body>
+                  <template x-for="row in rows" :key="row[def.primaryKey]">
+                    <tr x-h-table-row data-hoverable="true">
+                      <template x-for="col in def.columns" :key="col.name">
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                      </template>
+                      <td x-h-table-cell data-row-actions x-show="!isPreview">
+                        <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
+                        <ul x-h-menu data-align="bottom-end">
+                          <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+                          <li x-h-menu-item @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                          <li x-h-menu-separator></li>
+                          <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+                        </ul>
+                      </td>
+                    </tr>
+                  </template>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Detail delete confirmation -->
+          <div x-h-dialog-overlay :data-open="deleteOpen">
+            <div x-h-dialog>
+              <div x-h-dialog-header>
+                <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
+                <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+              </div>
+              <div x-h-dialog-content><p>Are you sure? This cannot be undone.</p></div>
+              <div x-h-dialog-footer>
+                <button type="button" x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+                <button type="button" x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Action footer at the very bottom of the main column (below the detail panels), matching the
+         document view. BPM user-task buttons on the LEFT; Cancel + Save/Create on the RIGHT. Save is
+         type=button @click=save() because it lives outside the header <form>. -->
     <div x-h-toolbar.footer>
 #if($hasProcess)
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
@@ -186,7 +266,7 @@
         <i role="img" data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button type="submit" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving'">
+      <button type="button" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
         <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
@@ -223,75 +303,6 @@
       </div>
     </div>
 #end
-  </form>
-
-  <!-- Detail collections (masters only; App.detailsFor returns [] otherwise): the same generic
-       detail panels the master browse view renders, so the record's children are visible and
-       manageable while editing - previously they showed ONLY on the browse view's details pane.
-       Outside the <form> on purpose (the panel's buttons must not submit it). Add/Edit/Delete
-       route back to THIS page (returnTo override); in preview the panels are read-only. -->
-  <div class="vbox gap-4 px-8 pb-6 w-full" style="max-width: 42rem;"
-       x-show="(isEdit || isPreview) && detailDefs.length && state !== 'loading' && state !== 'load-failure'">
-    <template x-for="d in detailDefs" :key="d.entity + ':' + id">
-      <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
-        <div x-h-card-header>
-          <h3 x-h-card-title x-text="d.label"></h3>
-          <div x-h-card-action x-show="!isPreview">
-            <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
-          </div>
-        </div>
-        <div x-h-card-content>
-          <div x-show="state === 'loading'"><div x-h-spinner></div></div>
-          <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
-          <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
-          <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
-            <table x-h-table data-borders="rows">
-              <thead x-h-table-header>
-                <tr x-h-table-row>
-                  <template x-for="col in def.columns" :key="col.name">
-                    <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label || col.name)"></th>
-                  </template>
-                  <th x-h-table-head scope="col" x-show="!isPreview"></th>
-                </tr>
-              </thead>
-              <tbody x-h-table-body>
-                <template x-for="row in rows" :key="row[def.primaryKey]">
-                  <tr x-h-table-row data-hoverable="true">
-                    <template x-for="col in def.columns" :key="col.name">
-                      <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
-                    </template>
-                    <td x-h-table-cell data-row-actions x-show="!isPreview">
-                      <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
-                      <ul x-h-menu data-align="bottom-end">
-                        <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                        <li x-h-menu-item @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                        <li x-h-menu-separator></li>
-                        <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
-                      </ul>
-                    </td>
-                  </tr>
-                </template>
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        <!-- Detail delete confirmation -->
-        <div x-h-dialog-overlay :data-open="deleteOpen">
-          <div x-h-dialog>
-            <div x-h-dialog-header>
-              <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
-              <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
-            </div>
-            <div x-h-dialog-content><p>Are you sure? This cannot be undone.</p></div>
-            <div x-h-dialog-footer>
-              <button type="button" x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-              <button type="button" x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
-            </div>
-          </div>
-        </div>
-      </div>
-    </template>
   </div>
 
 </div>
