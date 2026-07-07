@@ -486,21 +486,9 @@
       </div>
     </div>
 
-    <!-- React to a theme switch from the parent window: when this shell is embedded in an iframe (the
-         application shell, or an FK "Add new" dialog) and the parent flips the shared colour-scheme key,
-         the `storage` event fires here; re-apply it (Harmonia reads the key only at load), so every
-         routed view (list / manage / master-detail / document) follows the parent's light/dark switch.
-         Track the last applied scheme rather than gating on Harmonia.getColorScheme(), which already
-         holds the new value (gating there would always skip and nothing would re-apply). -->
-    <script>
-      var __harmoniaScheme = null;
-      window.addEventListener('storage', (e) => {
-        if (e.key === 'codbex.harmonia.colorMode' && window.Harmonia) {
-          const scheme = e.newValue || 'light';
-          if (scheme !== __harmoniaScheme) { __harmoniaScheme = scheme; Harmonia.setColorScheme(scheme); }
-        }
-      });
-    </script>
+    <!-- Cross-frame / cross-tab colour-scheme sync is handled by Harmonia itself: harmonia.min.js
+         registers its own `storage` listener and re-applies the shared `codbex.harmonia.colorMode`
+         key (without re-persisting) whenever the parent shell or another tab flips the theme. -->
   </body>
 
 </html>
