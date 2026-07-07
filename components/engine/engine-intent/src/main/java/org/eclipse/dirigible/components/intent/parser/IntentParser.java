@@ -282,8 +282,8 @@ public final class IntentParser {
     /**
      * Validate the optional entity {@code view} selector. Only {@code calendar} is supported today, and
      * it requires a {@code calendar.start} naming a declared date/timestamp field of the entity (the
-     * timeline the events sit on). {@code end}/{@code title}/{@code color}, when present, must also name
-     * declared properties.
+     * timeline the events sit on). {@code end}/{@code title}/{@code color}, when present, must also
+     * name declared properties.
      */
     private static void validateViews(IntentModel model, List<String> issues) {
         for (EntityIntent entity : model.getEntities()) {
@@ -304,9 +304,10 @@ public final class IntentParser {
                 }
                 fieldNames.add(field.getName()
                                     .toLowerCase());
-                String type = field.getType() == null ? "" : field.getType()
-                                                                   .trim()
-                                                                   .toLowerCase();
+                String type = field.getType() == null ? ""
+                        : field.getType()
+                               .trim()
+                               .toLowerCase();
                 if ("date".equals(type) || "timestamp".equals(type)) {
                     dateFieldNames.add(field.getName()
                                             .toLowerCase());
@@ -328,8 +329,7 @@ public final class IntentParser {
             if (!dateFieldNames.contains(cal.getStart()
                                             .trim()
                                             .toLowerCase())) {
-                issues.add("entity [" + name + "] calendar.start [" + cal.getStart()
-                        + "] is not a declared date/timestamp field");
+                issues.add("entity [" + name + "] calendar.start [" + cal.getStart() + "] is not a declared date/timestamp field");
             }
             if (cal.getEnd() != null && !cal.getEnd()
                                             .isBlank()

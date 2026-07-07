@@ -11,8 +11,8 @@ package org.eclipse.dirigible.components.intent.model;
 
 /**
  * Calendar-view configuration for an entity rendered with {@code view: calendar}. The entity's
- * records become events on a Harmonia {@code x-h-calendar}; this block names which fields supply each
- * part of an event. Only {@link #start} is required.
+ * records become events on a Harmonia {@code x-h-calendar}; this block names which fields supply
+ * each part of an event. Only {@link #start} is required.
  *
  * <pre>
  * view: calendar
@@ -28,9 +28,14 @@ public class CalendarIntent {
 
     /** The date or datetime field placed on the timeline (required). */
     private String start;
-    /** Optional end date/datetime field; when absent the event is a point / all-day on {@link #start}. */
+    /**
+     * Optional end date/datetime field; when absent the event is a point / all-day on {@link #start}.
+     */
     private String end;
-    /** Field or to-one relation whose label titles the event pill; defaults to the document title / name. */
+    /**
+     * Field or to-one relation whose label titles the event pill; defaults to the document title /
+     * name.
+     */
     private String title;
     /** Field or to-one relation the event colour is keyed by (categorical palette). */
     private String color;

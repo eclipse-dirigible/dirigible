@@ -204,8 +204,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         entityMap.put("calendarColorProperty", IntentNaming.pascalCase(cal.getColor()));
                     }
                     entityMap.put("calendarInitialView", notBlank(cal.getInitialView()) ? cal.getInitialView()
-                                                                                                .trim()
-                                                                                                .toLowerCase()
+                                                                                             .trim()
+                                                                                             .toLowerCase()
                             : "month");
                 } else {
                     entityMap.put("calendarInitialView", "month");
