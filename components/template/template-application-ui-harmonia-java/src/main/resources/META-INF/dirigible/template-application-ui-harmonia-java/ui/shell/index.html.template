@@ -14,10 +14,13 @@
       served version-less at /webjars/pinecone-router/dist/router.min.js.
   Script load order is load-bearing: plugins -> app code (defer, document order) -> Alpine -> Harmonia -> Lucide.
 -->
-<html lang="en">
+<!-- data-brand-title-suffix: services/branding.js appends " | <brand>" to the app title (like the
+     AngularJS shell's "<perspective> | <name>"); the app keeps its own name + icon as its identity. -->
+<html lang="en" data-brand-title-suffix>
 
   <head>
     <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>${appTitle}</title>
@@ -403,6 +406,11 @@
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/formValidation.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/format.js" defer></script>
+    <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform
+         service sets top.PlatformBranding; the adapter applies the favicon + " | <brand>" title suffix
+         and exposes the Alpine `branding` store. Load the source before the adapter. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/branding.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/layout/appShell.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>
