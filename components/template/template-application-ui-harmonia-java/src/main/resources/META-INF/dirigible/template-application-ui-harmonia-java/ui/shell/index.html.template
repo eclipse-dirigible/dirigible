@@ -402,6 +402,7 @@
     <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/formValidation.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/format.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/layout/appShell.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/baseFormPage.js" defer></script>

@@ -425,34 +425,9 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // Convert a value to the fixed shape its <input> needs — NOT pattern-driven (shell format.js).
     toDateInput(value, widget) {
-      if (value === null || value === undefined || value === '') return '';
-      const pad = (n) => String(n).padStart(2, '0');
-      let y, mo = 1, da = 1, h = 0, mi = 0;
-      if (Array.isArray(value)) {
-        y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
-      } else if (typeof value === 'number') {
-        const d = new Date(value * 1000);
-        if (isNaN(d.getTime())) return '';
-        y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
-      } else {
-        const s = String(value);
-        switch (widget) {
-          case 'DATE': return s.slice(0, 10);
-          case 'DATETIME-LOCAL': return s.slice(0, 16);
-          case 'TIME': return s.slice(0, 5);
-          case 'MONTH': return s.slice(0, 7);
-          default: return s;
-        }
-      }
-      const date = y + '-' + pad(mo) + '-' + pad(da);
-      switch (widget) {
-        case 'DATE': return date;
-        case 'DATETIME-LOCAL': return date + 'T' + pad(h) + ':' + pad(mi);
-        case 'TIME': return pad(h) + ':' + pad(mi);
-        case 'MONTH': return y + '-' + pad(mo);
-        default: return date;
-      }
+      return window.HarmoniaFormat.toDateInput(value, widget);
     },
 
     toPayload() {
@@ -649,15 +624,9 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 
+    // Render a line-item date/datetime value through the instance Date/Timestamp patterns (shell format.js).
     displayDate(v) {
-      const p = (n) => String(n).padStart(2, '0');
-      if (Array.isArray(v)) {
-        if (v.length === 3) return v[0] + '-' + p(v[1]) + '-' + p(v[2]);
-        if (v.length >= 5) return v[0] + '-' + p(v[1]) + '-' + p(v[2]) + ' ' + p(v[3]) + ':' + p(v[4]);
-        return v.join(', ');
-      }
-      if (typeof v === 'number') { const d = new Date(v < 1e11 ? v * 1000 : v); if (!isNaN(d.getTime())) return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()); }
-      return String(v);
+      return window.HarmoniaFormat.value(v, true);
     },
 
     // ----- Add / edit line dialog ----------------------------------------------------------------
@@ -762,22 +731,9 @@ document.addEventListener('alpine:init', () => {
     // the master's own save, so the loaded record is authoritative (re-fetched after each item change).
     totalValue(name, pattern) { return this.displayNumber(this.record[name], pattern); },
 
-    // Format a float using a DecimalFormat-style pattern (decimals from the part after '.', grouping
-    // from the pattern's separator). Defaults to grouped thousands with two decimals.
+    // Decimals from the field pattern, separators from the instance Number setting (shell format.js).
     displayNumber(v, pattern) {
-      if (v === null || v === undefined || v === '') return '—';
-      const n = Number(v);
-      if (isNaN(n)) return v;
-      let decimals = 2;
-      let groupSep = ' ';
-      if (pattern) {
-        const dot = pattern.lastIndexOf('.');
-        decimals = dot >= 0 ? (pattern.length - dot - 1) : 0;
-        groupSep = pattern.indexOf(' ') >= 0 ? ' ' : (pattern.indexOf(',') >= 0 ? ',' : '');
-      }
-      const parts = n.toFixed(decimals).split('.');
-      if (groupSep) parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, groupSep);
-      return parts.length > 1 ? parts[0] + '.' + parts[1] : parts[0];
+      return window.HarmoniaFormat.number(v, pattern);
     },
 
     backToList() { window.PineconeRouter.navigate('/${name}'); },

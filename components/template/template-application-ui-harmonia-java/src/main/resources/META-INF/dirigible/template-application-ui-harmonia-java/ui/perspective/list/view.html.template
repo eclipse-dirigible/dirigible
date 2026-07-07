@@ -65,7 +65,7 @@
               <tr x-h-table-row>
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true" @click="cycleSort('${property.name}')">
+                <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
                     <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
@@ -89,6 +89,8 @@
                   <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                   <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
+#elseif($property.isFloatType)
+                  <td x-h-table-cell class="text-right" x-text="formatNumber(row.${property.name}, '${property.formatPattern}')"></td>
 #else
                   <td x-h-table-cell x-text="displayValue(row.${property.name})"></td>
 #end
@@ -155,6 +157,8 @@
             <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
             <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
+#elseif($property.isFloatType)
+            <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>
 #else
             <span x-text="displayValue(selected?.${property.name}, $isDate)"></span>
 #end

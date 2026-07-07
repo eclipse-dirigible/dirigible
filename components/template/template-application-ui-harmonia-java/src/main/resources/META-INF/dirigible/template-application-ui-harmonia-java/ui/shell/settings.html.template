@@ -31,6 +31,26 @@
             </div>
           </div>
         </div>
+        <!-- Display formats: instance-wide patterns for dates, timestamps and floating-point numbers,
+             persisted per user in localStorage (shell format.js) and applied across every app on this
+             origin. The number pattern sets the grouping/decimal separators; each field keeps its own
+             decimals. Apply reloads so every view re-formats at once. -->
+        <div class="vbox gap-1">
+          <span x-h-text.muted x-text="T('application-core:shell.settings.dateFormat', 'Date format')"></span>
+          <input x-h-input x-model="${dollar}store.formats.date" placeholder="yyyy-MM-dd" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted x-text="T('application-core:shell.settings.timestampFormat', 'Timestamp format')"></span>
+          <input x-h-input x-model="${dollar}store.formats.dateTime" placeholder="yyyy-MM-dd HH:mm" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted x-text="T('application-core:shell.settings.numberFormat', 'Number format')"></span>
+          <input x-h-input x-model="${dollar}store.formats.number" placeholder="#[[### ### ### ##0.00]]#" />
+        </div>
+        <div class="hbox gap-2">
+          <button x-h-button data-variant="emphasized" @click="${dollar}store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="outline" @click="${dollar}store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
+        </div>
         <span x-h-text.muted x-text="T('application-core:shell.settings.configFor', 'Configuration and nomenclature for ${projectName}.', { name: '${projectName}' })"></span>
 #foreach($entity in $models)
 #if($entity.type == "SETTING")

@@ -146,6 +146,9 @@
     <!-- Standalone form: form.js is self-contained (its own fetch client), so it does NOT depend on
          the SPA shell's window.App. A BPM task form is opened directly (iframe/dialog), where the
          shell assets are not present at a predictable relative path. -->
+    <!-- The single shared value formatter (dates/numbers). Self-contained + dependency-free, so it loads
+         by absolute URL even in the standalone task-form iframe where the shell assets are absent. -->
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <script src="./form.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
