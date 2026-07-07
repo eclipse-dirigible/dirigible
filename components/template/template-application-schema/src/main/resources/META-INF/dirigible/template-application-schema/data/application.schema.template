@@ -106,6 +106,16 @@
 #end
 #end
 #end
+## name -> model lookup, built once. Each entity is added the first time it is seen and skipped if
+## already present, so a foreign key resolves its referenced table/PK by lookup - including a
+## self-reference (the owning model is in the map), which the previous per-FK scan (which excluded the
+## owning model) missed and left with a dangling comma.
+#set ($modelsByName = {})
+#foreach ($relationModel in $models)
+#if($relationModel.type != "REPORT" && $relationModel.type != "FILTER" && !$modelsByName.containsKey($relationModel.name))
+#set ($discard = $modelsByName.put($relationModel.name, $relationModel))
+#end
+#end
 #foreach ($model in $models)
 #if($model.type != "REPORT" && $model.type != "FILTER")
 #foreach ($property in $model.properties)
@@ -117,16 +127,10 @@
                 "table": "${tablePrefix}${model.dataName}",
                 "constraintName": "${property.relationshipName}",
                 "columns": "${property.dataName}",
-#foreach ($relationModel in $models)
-#if($relationModel.type != "REPORT" && $relationModel.type != "FILTER" && $relationModel.name != $model.name)
-#foreach ($relationProperty in $relationModel.properties)
-#if($property.relationshipEntityName == $relationModel.name)
-                "referencedTable": "${tablePrefix}${relationModel.dataName}",
-                "referencedColumns": "#foreach ($relationIdProperty in $relationModel.properties)#if ($relationIdProperty.dataPrimaryKey || $relationIdProperty.dataPrimaryKey == "true")${relationIdProperty.dataName}#end#end"
-#break
-#end
-#end
-#end
+#set ($referencedModel = $modelsByName.get($property.relationshipEntityName))
+#if($referencedModel)
+                "referencedTable": "${tablePrefix}${referencedModel.dataName}",
+                "referencedColumns": "#foreach ($relationIdProperty in $referencedModel.properties)#if ($relationIdProperty.dataPrimaryKey || $relationIdProperty.dataPrimaryKey == "true")${relationIdProperty.dataName}#end#end"
 #end
 #if($foreignKeysCount >= 1)
             },
