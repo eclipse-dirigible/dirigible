@@ -46,6 +46,14 @@ public class Configuration {
     private static final Pattern MULTIVARIABLE_PATTERN = Pattern.compile(MULTIVARIABLE_REGEX);
     /** The Constant RUNTIME_VARIABLES. */
     private static final Map<String, String> RUNTIME_VARIABLES = Collections.synchronizedMap(new HashMap<>());
+    /**
+     * Thread-scoped configuration overrides. Populated by higher layers (e.g. the per-tenant
+     * configuration loader) for the duration of a single execution and consulted right after the
+     * runtime variables. This class intentionally holds only the neutral thread-local mechanism - no
+     * knowledge of tenants, database, or the source of these values - so that commons-config keeps its
+     * place at the bottom of the dependency graph.
+     */
+    private static final ThreadLocal<Map<String, String>> THREAD_VARIABLES = new ThreadLocal<>();
     /** The Constant ENVIRONMENT_VARIABLES. */
     private static final Map<String, String> ENVIRONMENT_VARIABLES = Collections.synchronizedMap(new HashMap<>());
     /** The Constant DEPLOYMENT_VARIABLES. */
@@ -454,8 +462,11 @@ public class Configuration {
      */
     public static String get(String key, String defaultValue) {
         String value = null;
+        Map<String, String> threadVariables = THREAD_VARIABLES.get();
         if (RUNTIME_VARIABLES.containsKey(key)) {
             value = RUNTIME_VARIABLES.get(key);
+        } else if (threadVariables != null && threadVariables.containsKey(key)) {
+            value = threadVariables.get(key);
         } else if (ENVIRONMENT_VARIABLES.containsKey(key)) {
             value = ENVIRONMENT_VARIABLES.get(key);
         } else if (DEPLOYMENT_VARIABLES.containsKey(key)) {
@@ -508,6 +519,41 @@ public class Configuration {
     }
 
     /**
+     * Sets the thread-scoped configuration overrides for the current thread. These values take
+     * precedence over the environment, deployment and module configurations, but not over the runtime
+     * variables set programmatically via {@link #set(String, String)}. A {@code null} or empty map
+     * clears any previously set thread configuration. The map is defensively copied.
+     *
+     * @param configuration the thread-scoped configuration, or {@code null} to clear
+     */
+    public static void setThreadConfiguration(Map<String, String> configuration) {
+        if (configuration == null || configuration.isEmpty()) {
+            THREAD_VARIABLES.remove();
+        } else {
+            THREAD_VARIABLES.set(new HashMap<>(configuration));
+        }
+    }
+
+    /**
+     * Removes the thread-scoped configuration overrides for the current thread. This has to be called
+     * in a finally block by whoever set them, so the values do not leak into unrelated executions
+     * reusing the same thread.
+     */
+    public static void removeThreadConfiguration() {
+        THREAD_VARIABLES.remove();
+    }
+
+    /**
+     * Getter for the thread-scoped configuration overrides of the current thread.
+     *
+     * @return a copy of the thread-scoped configuration, never {@code null}
+     */
+    public static Map<String, String> getThreadConfiguration() {
+        Map<String, String> threadVariables = THREAD_VARIABLES.get();
+        return (threadVariables != null) ? new HashMap<>(threadVariables) : new HashMap<>();
+    }
+
+    /**
      * Getter for all the keys.
      *
      * @return the keys
@@ -515,6 +561,10 @@ public class Configuration {
     public static String[] getKeys() {
         Set<String> keys = new HashSet<>();
         keys.addAll(RUNTIME_VARIABLES.keySet());
+        Map<String, String> threadVariables = THREAD_VARIABLES.get();
+        if (threadVariables != null) {
+            keys.addAll(threadVariables.keySet());
+        }
         keys.addAll(ENVIRONMENT_VARIABLES.keySet());
         keys.addAll(DEPLOYMENT_VARIABLES.keySet());
         keys.addAll(MODULE_VARIABLES.keySet());

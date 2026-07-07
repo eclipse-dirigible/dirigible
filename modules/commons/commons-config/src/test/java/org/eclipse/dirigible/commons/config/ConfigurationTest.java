@@ -11,6 +11,9 @@ package org.eclipse.dirigible.commons.config;
 
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.Map;
+
 import static org.junit.Assert.*;
 
 /**
@@ -174,6 +177,84 @@ public class ConfigurationTest {
         assertEquals("s3", o.s3);
         assertEquals("jdbc:mariadb://localhost:3306/bitnami_opencart", o.s4);
         assertEquals("my-test-project ${projectVersion} - Application View", o.s5);
+    }
+
+    /**
+     * Thread-scoped configuration sits between the runtime variables and the rest: a runtime variable
+     * still wins, but the thread configuration provides a value when nothing else does.
+     */
+    @Test
+    public void threadConfigPrecedenceTest() {
+        String key = "TENANT_CFG_TEST_KEY";
+        Configuration.remove(key);
+        Configuration.removeThreadConfiguration();
+
+        // nothing set anywhere
+        assertNull(Configuration.get(key));
+        assertEquals("def", Configuration.get(key, "def"));
+
+        Configuration.setThreadConfiguration(Map.of(key, "thread"));
+        try {
+            // thread configuration provides the value
+            assertEquals("thread", Configuration.get(key));
+
+            // a runtime variable takes precedence over the thread configuration
+            Configuration.set(key, "runtime");
+            assertEquals("runtime", Configuration.get(key));
+
+            // removing the runtime variable exposes the thread configuration again
+            Configuration.remove(key);
+            assertEquals("thread", Configuration.get(key));
+        } finally {
+            Configuration.removeThreadConfiguration();
+        }
+
+        // cleared -> gone
+        assertNull(Configuration.get(key));
+    }
+
+    /**
+     * Thread-scoped configuration overrides values coming from the loaded properties (module) source.
+     */
+    @Test
+    public void threadConfigOverridesPropertiesTest() {
+        Configuration.loadModuleConfig("/test.properties");
+        String key = "DIRIGIBLE_TEST_PROPERTY";
+        Configuration.remove(key);
+        Configuration.removeThreadConfiguration();
+        assertEquals("test", Configuration.get(key));
+
+        Configuration.setThreadConfiguration(Map.of(key, "thread"));
+        try {
+            assertEquals("thread", Configuration.get(key));
+        } finally {
+            Configuration.removeThreadConfiguration();
+        }
+
+        // fall back to the module value once the thread configuration is cleared
+        assertEquals("test", Configuration.get(key));
+    }
+
+    /**
+     * The thread configuration is exposed via the getter and contributes to the aggregated keys.
+     */
+    @Test
+    public void getThreadConfigurationTest() {
+        Configuration.removeThreadConfiguration();
+        assertTrue(Configuration.getThreadConfiguration()
+                                .isEmpty());
+
+        Configuration.setThreadConfiguration(Map.of("TENANT_CFG_TEST_A", "1"));
+        try {
+            assertEquals("1", Configuration.getThreadConfiguration()
+                                           .get("TENANT_CFG_TEST_A"));
+            assertTrue(Arrays.asList(Configuration.getKeys())
+                             .contains("TENANT_CFG_TEST_A"));
+        } finally {
+            Configuration.removeThreadConfiguration();
+        }
+        assertTrue(Configuration.getThreadConfiguration()
+                                .isEmpty());
     }
 
 }

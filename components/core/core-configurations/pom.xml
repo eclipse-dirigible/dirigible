@@ -20,7 +20,13 @@
 	    	<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-core-base</artifactId>
     	</dependency>
-		
+
+    	<!-- Data Sources - for the tenant-routed default datasource backing the per-tenant configuration table -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-data-sources</artifactId>
+    	</dependency>
+
     </dependencies>
 
 	<properties>
