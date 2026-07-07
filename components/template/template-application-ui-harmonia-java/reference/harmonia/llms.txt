@@ -1,0 +1,89 @@
+# Harmonia
+
+> A UI component library for Alpine.js (@codbex/harmonia). Components are `x-h-*` directives added to plain HTML. Full usage per component is in the linked reference files; start from SKILL.md.
+
+## Components
+
+- [Accordion](references/accordion.md): Organizes related content into expandable and collapsible sections, allowing users to reveal or hide information as needed while keeping the interface clean and compact.
+- [Alert](references/alert.md): Communicates important information to the user about a situation or task that requires attention.
+- [Avatar](references/avatar.md): Represents a person, entity, or object using an image, icon, or text, such as a user photo, initials, or symbolic graphic.
+- [Badge](references/badge.md): Displays a short label used to convey the semantic status of an object.
+- [Breadcrumb](references/breadcrumb.md): Displays the current page's location within a navigational hierarchy, helping users understand where they are and navigate back to parent pages.
+- [Button](references/button.md): Buttons can trigger an action or navigate the user to another location.
+- [Button Group](references/button-group.md): Groups related buttons into a single container to present them as a unified set of actions.
+- [Calendar](references/calendar.md): A full multi-view event calendar with month, week, day, and year views.
+- [Card](references/card.md): A flexible container that organizes content into distinct sections, typically including a header, main content area, and footer.
+- [Checkbox](references/checkbox.md): Allows users to select or deselect an option, representing a binary choice (true/false).
+- [Chip](references/chip.md): A compact, interactive element used to represent an applied filter, a selected item, or a categorization.
+- [Date Picker](references/date-picker.md): Allows users to enter a date either by typing it directly or by selecting it from a calendar popover.
+- [Date Time Picker](references/datetime-picker.md): Lets users pick a date and a time together.
+- [Dialog](references/dialog.md): A modal container that appears in response to a user action, temporarily interrupting the current workflow to request information or confirmation.
+- [Expansion Panel](references/expansion-panel.md): The Expansion Panel is a container component that manages multiple collapsible panels within a layout.
+- [Fieldset](references/fieldset.md): A container that groups related form elements, including labels, controls, and helper text, to create accessible and organized input sections.
+- [File Upload](references/file-upload.md): Lets users choose one or more files for upload.
+- [Icon](references/icon.md): Renders an SVG graphic, either from a link or a set of built-in icons, that can represent an action, status, or decorative element.
+- [Info Page](references/info-page.md): Provides a structured layout to display instructional content, messages, or status information, such as empty states or error notifications.
+- [Inline Calendar](references/inline-calendar.md): A compact calendar for selecting a single date or a date range within a monthly context.
+- [Input](references/input.md): Provides a single-line field for users to enter text or color values.
+- [Input Group](references/input-group.md): Combines an input or textarea field with related elements, such as buttons, icons, or labels, to create a cohesive and interactive form control.
+- [Input Number](references/input-number.md): Allows users to enter numeric values with built-in validation and step controls.
+- [Label](references/label.md): Provides an accessible caption for a user interface element, most commonly paired with input controls.
+- [List](references/list.md): A container that displays a collection of related items in a structured format.
+- [Listbox](references/listbox.md): A single-selection list component with support for grouped options, functionally similar to an HTML `<select>` element.
+- [Menu](references/menu.md): A structured list of options, optionally including headers, used to create navigational menus, context menus, or dropdowns.
+- [Navigation Menu](references/navigation-menu.md): A horizontal navigation bar where items are either direct links or triggers that open a dropdown Menu.
+- [Notifications](references/notifications.md): The Notification component is used to present important system feedback, status updates, or contextual information to the user.
+- [Pagination](references/pagination.md): Divides content into discrete pages, allowing users to navigate large datasets or collections more easily.
+- [Popover](references/popover.md): Displays supplementary information or content in a compact overlay without navigating away from the current page.
+- [Progress](references/progress.md): Visually represents the completion status of an ongoing operation, providing users with feedback on progress and expected duration.
+- [Radio](references/radio.md): A single-choice input that allows users to select one option from a set.
+- [Range](references/range.md): Allows users to select a value, or a range of values, by dragging a handle along a track.
+- [Rating](references/rating.md): Lets users view and set a star rating.
+- [Select](references/select.md): Allows users to choose one or more items from a predefined list of options.
+- [Separator](references/separator.md): A simple visual divider used to separate content or sections within an interface.
+- [Sheet](references/sheet.md): The sheet component is a side panel that overlays the window content and is shown on one side of the screen.
+- [Sidebar](references/sidebar.md): A vertical navigation panel used to present top-level application links or sections.
+- [Skeleton](references/skeleton.md): A placeholder component used to indicate that content is loading.
+- [Slot Picker](references/slot-picker.md): An inline calendar that shows three consecutive days, each with a grid of selectable time slots.
+- [Spinner](references/spinner.md): A visual indicator that signals an ongoing operation or process.
+- [Step Indicator](references/step-indicator.md): Communicates progress through a sequence of steps, showing which steps are completed, which one is active, and which are still ahead.
+- [Switch](references/switch.md): Allows users to toggle a binary state, such as true/false or on/off.
+- [Table](references/table.md): Organizes data into rows and columns, with each row representing a single item and each column representing a specific attribute.
+- [Tabs](references/tabs.md): Organizes content into multiple sections, displaying only one section at a time while keeping others easily accessible through a tabbed navigation interface.
+- [Tag](references/tag.md): A compact element used to display small pieces of information, labels, or metadata.
+- [Text](references/text.md): Applies consistent typography styles to headings, paragraphs, single lines, and code blocks, ensuring a cohesive visual hierarchy and readability across the interface.
+- [Textarea](references/textarea.md): Provides a multi-line input field for users to enter longer text.
+- [Tile](references/tile.md): A container that presents content, previews, or shortcuts in a compact, visually distinct format.
+- [Time Picker](references/time-picker.md): Allows users to select a specific time, providing a controlled and consistent input method for hours, minutes and seconds.
+- [Toolbar](references/toolbar.md): A container that groups actions (like buttons, inputs, or popovers) relevant to the current view.
+- [Tooltip](references/tooltip.md): A small pop-up that provides additional information or context about an interface element, displayed on hover.
+- [Tree](references/tree.md): Displays hierarchical data in a structured, expandable format, allowing users to explore nested items efficiently.
+
+## Charts
+
+- [Bar Chart](references/bar.md): `x-h-chart-bar` draws a bar chart from a single reactive configuration object.
+- [Doughnut Chart](references/doughnut.md): `x-h-chart-doughnut` draws a doughnut chart (a pie with a hole in the middle) from a single reactive configuration object.
+- [Line Chart](references/line.md): `x-h-chart-line` draws a line chart from a single reactive configuration object.
+- [Pie Chart](references/pie.md): `x-h-chart-pie` draws a pie chart from a single reactive configuration object.
+- [Scatter Chart](references/scatter.md): `x-h-chart-scatter` draws a scatter chart from a single reactive configuration object: the same plot as a line chart, but with only the points and no connecting lines.
+
+## Layouts
+
+- [Split](references/split.md): The split component provides a flexible layout for dividing content into resizable panels.
+
+## Utilities
+
+- [Breakpoint Listener](references/breakpoint-listener.md): Creates a listener that triggers actions when the viewport reaches specified breakpoint.
+- [Date Format](references/date-format.md): A behavior-only directive that renders a date value as a locale-aware date string into the element's text content.
+- [Focus](references/focus.md): A behavior-only directive that programmatically sets focus on an element based on a specified condition.
+- [Include](references/include.md): The include directive makes it easy to fetch and insert an external HTML fragment inside an element.
+- [Template](references/template.md): The template directive makes it easy to insert and initialize an Alpine.js snippet inside a referenced `<template>` element.
+- [Theme](references/theme.md): Utility functions for retrieving and updating the color scheme.
+
+## Plugins
+
+- [Lucide](references/lucide.md): An optional plugin that keeps [Lucide](https://lucide.dev) icons in sync with the Alpine/Harmonia lifecycle.
+
+## Utility classes
+
+- [Utility classes](references/utility-classes.md): The complete allowlist of Tailwind utility classes available in harmonia.css (not the full Tailwind set).

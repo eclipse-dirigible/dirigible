@@ -92,7 +92,7 @@
       <div x-show="state === 'error'" x-h-alert data-variant="negative" role="alert" class="m-4"><div x-h-alert-description x-text="error"></div></div>
       <div x-show="state === 'empty'" x-h-info-page class="p-4">
         <div x-h-info-page-header>
-          <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+          <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
           <div x-h-info-page-title>No data</div>
           <div x-h-info-page-description>The ${name} report returned no rows.</div>
         </div>
@@ -138,6 +138,8 @@
     <!-- Chart.js (webjar): drives the ${chart} chart rendering for this report page. -->
     <script src="/webjars/chart.js/dist/chart.umd.js"></script>
 #end
+    <!-- Value formatter (window.HarmoniaFormat): report.js formats numeric cells through it; must load before Alpine inits. -->
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <script src="./report.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>

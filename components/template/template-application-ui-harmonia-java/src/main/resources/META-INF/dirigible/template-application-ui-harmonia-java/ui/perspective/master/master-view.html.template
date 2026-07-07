@@ -11,7 +11,7 @@
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
       <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="page = 1; refreshIcons()" />
-      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
+      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg></div>
     </div>
     <button x-h-button data-variant="primary" @click="newMaster()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
     <!-- Developer-contributed page actions for this view (customActions extension point). -->
@@ -87,7 +87,7 @@
     <div x-h-split-panel data-size="40%" :data-hidden="!selectedId">
       <div x-show="!selectedId" x-h-info-page class="p-4">
         <div x-h-info-page-header>
-          <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+          <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
           <div x-h-info-page-title x-text="T('$projectName:${tprefix}.defaults.selectTitle', 'Select a ${name}', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></div>
           <div x-h-info-page-description>Choose a record on the left to see and manage its details.</div>
         </div>
