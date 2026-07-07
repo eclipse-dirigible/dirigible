@@ -100,8 +100,22 @@ document.addEventListener('alpine:init', () => {
       return palette[h % palette.length];
     },
 
-    // Empty-cell click -> create (Phase 1: no date prefill yet); event click -> edit that record.
-    onDateClick() { window.PineconeRouter.navigate('/${name}/create'); },
+    // Empty-cell click -> create, prefilling the start field from the clicked day (and the slot time in
+    // week/day views). The shared form presets any field whose name matches a query param on create, so
+    // ?${calendarStartProperty}=<value> lands on the date/datetime input; a datetime start also gets the
+    // clicked HH:MM.
+    onDateClick(e) {
+      const d = e && e.detail ? e.detail.date : null;
+      let qs = '';
+      if (d instanceof Date && !isNaN(d.getTime())) {
+        const p = n => String(n).padStart(2, '0');
+        let val = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+        const time = e.detail.time;
+        if (time) val += 'T' + time;
+        qs = '?${calendarStartProperty}=' + encodeURIComponent(val);
+      }
+      window.PineconeRouter.navigate('/${name}/create' + qs);
+    },
     onEventClick(e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (id) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
