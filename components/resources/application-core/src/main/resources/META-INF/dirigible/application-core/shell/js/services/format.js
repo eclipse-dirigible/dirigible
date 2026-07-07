@@ -43,7 +43,7 @@
   // ISO-style dates. Date/datetime use DateTimeFormatter-style tokens; number uses DecimalFormat style.
   const DEFAULTS = {
     date: 'yyyy-MM-dd',
-    dateTime: 'yyyy-MM-dd HH:mm',
+    dateTime: 'yyyy-MM-dd HH:mm:ss',
     number: '###' + SPACE + '###' + SPACE + '###' + SPACE + '##0.00',
   };
 
