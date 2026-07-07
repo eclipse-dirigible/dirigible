@@ -25,7 +25,7 @@
   <div x-show="state === 'load-failure'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
       <div x-h-info-page-media.icon>
-        <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
+        <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>
       </div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="loadFailureMessage"></div>
@@ -52,7 +52,7 @@
     <form @submit.prevent="save()" class="vbox gap-4 w-full">
     <!-- Error summary banner: save failure or unmatched 422 causes -->
     <div x-show="saveFailureMessage || errors.__summary" x-h-alert data-variant="negative" role="alert">
-      <svg x-h-icon.circle-error role="img" aria-label="error"></svg>
+      <svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg>
       <div x-h-alert-title x-text="T('$projectName:${tprefix}.messages.error.saving', 'Could not save')"></div>
       <div x-h-alert-description>
         <span x-show="saveFailureMessage" x-text="saveFailureMessage"></span>

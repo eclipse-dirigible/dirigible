@@ -183,7 +183,7 @@
                 <template x-for="n in $store.notifications.items" :key="n.id">
                   <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'"
                       :class="n.task ? 'cursor-pointer' : ''" @click="openNotification(n)">
-                    <div x-h-notification-media><svg x-h-icon.circle-info class="size-5" role="img" aria-label="info"></svg></div>
+                    <div x-h-notification-media><svg x-h-icon data-icon="circle-info" class="size-5" role="img" aria-label="info"></svg></div>
                     <div class="vbox flex-1">
                       <h1 x-h-notification-title x-text="n.title"></h1>
                       <p x-h-notification-description x-text="n.description"></p>
@@ -263,15 +263,15 @@
         <li x-h-notification.floating data-variant="toast" class="hbox items-center gap-3 min-w-3xs max-w-md">
           <div x-h-notification-media>
             <span x-h-avatar class="rounded-full" :data-variant="variant">
-              <template x-if="variant === 'positive'"><svg x-h-icon.circle-success role="img" aria-label="success"></svg></template>
-              <template x-if="variant === 'negative'"><svg x-h-icon.circle-error role="img" aria-label="error"></svg></template>
-              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon.circle-info role="img" aria-label="info"></svg></template>
+              <template x-if="variant === 'positive'"><svg x-h-icon data-icon="circle-success" role="img" aria-label="success"></svg></template>
+              <template x-if="variant === 'negative'"><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></template>
+              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
             </span>
           </div>
           <span x-h-notification-title class="flex-1" x-text="message"></span>
           <div x-h-notification-actions data-orientation="vertical">
             <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
-              <svg x-h-icon.close role="img" aria-label="close"></svg>
+              <svg x-h-icon data-icon="close" role="img" aria-label="close"></svg>
             </button>
           </div>
         </li>
@@ -304,7 +304,7 @@
     <script src="/services/web/application-core/shell/js/services/i18n.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
-    <script src="/services/web/application-core/shell/js/services/format.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform
          service sets top.PlatformBranding; the adapter applies the favicon/title and exposes it as the
          Alpine `branding` store. Load the source before the adapter. -->

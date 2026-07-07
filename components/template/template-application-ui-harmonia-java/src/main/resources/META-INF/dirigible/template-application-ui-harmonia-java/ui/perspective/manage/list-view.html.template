@@ -12,7 +12,7 @@
       <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${menuLabel}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"
              x-model="searchTerm" @input="onSearchChange()" />
       <div x-h-input-group-addon data-align="inline-start">
-        <svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg>
+        <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
     <button x-h-button data-variant="primary" @click="newEntity()">
@@ -33,7 +33,7 @@
   <!-- Error -->
   <div x-show="displayState === 'error'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><svg x-h-icon.circle-error role="img" aria-label="error"></svg></div>
+      <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.error.loading', 'Could not load')"></div>
       <div x-h-info-page-description x-text="error"></div>
     </div>
@@ -158,7 +158,7 @@
     <div x-h-split-panel data-size="40%" :data-hidden="!selected">
       <div x-show="!selected" x-h-info-page class="p-4">
         <div x-h-info-page-header>
-          <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+          <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
           <div x-h-info-page-title x-text="T('$projectName:${tprefix}.defaults.selectTitle', 'Select a ${entityLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
           <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.detailSelectRecord', 'Choose a row to see all its details#if($hasProcess) and pending tasks#end.')"></div>
         </div>

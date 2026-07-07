@@ -48,7 +48,7 @@
   <!-- Search-in-folder bar (toggled) -->
   <div x-show="search.show" class="px-4 pb-2">
     <div x-h-input-group data-size="sm">
-      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon.search class="size-4" role="img" aria-label="search"></svg></div>
+      <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg></div>
       <input x-h-input.group type="search" :placeholder="T('application-core:shell.documents.findInFolder', 'Find in folder')" x-model="search.filterBy" @input="clearSelection(); refreshIcons()" />
     </div>
   </div>
@@ -62,7 +62,7 @@
       <div class="vbox size-full" style="position: relative;" @dragover="onDragOver($event)" @dragleave="onDragLeave()" @drop="onDrop($event)">
         <div x-show="showDropZone" x-h-info-page class="size-full" style="position:absolute; inset:0; z-index:5; background:var(--background); opacity:0.96;">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><svg x-h-icon.upload role="img" aria-label="upload"></svg></div>
+            <div x-h-info-page-media.icon><svg x-h-icon data-icon="import" role="img" aria-label="upload"></svg></div>
             <div x-h-info-page-title x-text="T('application-core:shell.documents.dropFiles', 'Drop files here')"></div>
           </div>
         </div>
@@ -140,7 +140,7 @@
         <!-- Empty / not previewable -->
         <div x-show="!selectedFile || !canPreview" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><svg x-h-icon.eye role="img" aria-label="preview"></svg></div>
+            <div x-h-info-page-media.icon><i data-lucide="eye" role="img" aria-label="preview"></i></div>
             <div x-h-info-page-title x-text="T('application-core:shell.documents.filePreview', 'File Preview')"></div>
             <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? 'This file cannot be previewed.' : 'Click on a file to see its preview.'"></div>
           </div>

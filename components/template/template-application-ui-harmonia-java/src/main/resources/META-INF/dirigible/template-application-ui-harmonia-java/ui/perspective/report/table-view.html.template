@@ -11,7 +11,7 @@
   <div x-show="state === 'error'" x-h-alert data-variant="negative" role="alert" class="m-4"><div x-h-alert-description x-text="error"></div></div>
   <div x-show="state === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+      <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
       <div x-h-info-page-title>No data</div>
       <div x-h-info-page-description>The ${name} report returned no rows.</div>
     </div>

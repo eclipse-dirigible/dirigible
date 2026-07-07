@@ -19,7 +19,7 @@
   <!-- No report selected (e.g. /reports opened directly). -->
   <div x-show="!$store.reports.selected" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><svg x-h-icon.circle-info role="img" aria-label="info"></svg></div>
+      <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
       <div x-h-info-page-title x-text="T('application-core:shell.reports.select', 'Select a report')"></div>
       <div x-h-info-page-description x-text="T('application-core:shell.reports.selectHint', 'Choose a report from the sidebar to view it here.')"></div>
     </div>
