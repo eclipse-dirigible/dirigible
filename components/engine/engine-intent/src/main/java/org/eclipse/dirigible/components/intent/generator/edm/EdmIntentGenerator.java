@@ -27,6 +27,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -181,10 +182,39 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (rollupGuards.containsKey(name)) {
                 entityMap.put("rollupGuard", rollupGuards.get(name));
             }
+            // A calendar entity renders its records as events on a Harmonia x-h-calendar instead of a
+            // list/manage table. It keeps its own perspective/nav; the calendar page reuses the generated
+            // REST controller (fetch) and the generated create/edit form (opened in a dialog on
+            // date-click / event-click). The property names are PascalCased to match the .model property
+            // (and the Jackson-serialized controller row) the calendar page reads.
+            if (entity.isCalendar()) {
+                CalendarIntent cal = entity.getCalendar();
+                entityMap.put("layoutType", "MANAGE_CALENDAR");
+                if (cal != null) {
+                    if (notBlank(cal.getStart())) {
+                        entityMap.put("calendarStartProperty", IntentNaming.pascalCase(cal.getStart()));
+                    }
+                    if (notBlank(cal.getEnd())) {
+                        entityMap.put("calendarEndProperty", IntentNaming.pascalCase(cal.getEnd()));
+                    }
+                    if (notBlank(cal.getTitle())) {
+                        entityMap.put("calendarTitleProperty", IntentNaming.pascalCase(cal.getTitle()));
+                    }
+                    if (notBlank(cal.getColor())) {
+                        entityMap.put("calendarColorProperty", IntentNaming.pascalCase(cal.getColor()));
+                    }
+                    entityMap.put("calendarInitialView", notBlank(cal.getInitialView()) ? cal.getInitialView()
+                                                                                             .trim()
+                                                                                             .toLowerCase()
+                            : "month");
+                } else {
+                    entityMap.put("calendarInitialView", "month");
+                }
+            }
             // A document master keeps its own perspective/nav but swaps the master-detail layout for the
             // document layout; it names its line-items entity so the document page renders that child as
             // the inline table (and any other composition children as ordinary detail panels).
-            if (documentItems.containsKey(name)) {
+            else if (documentItems.containsKey(name)) {
                 String itemsEntity = documentItems.get(name);
                 entityMap.put("layoutType", "MANAGE_DOCUMENT");
                 entityMap.put("documentItemsEntity", itemsEntity);

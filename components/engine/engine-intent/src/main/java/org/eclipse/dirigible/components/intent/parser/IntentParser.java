@@ -20,6 +20,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
+import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -166,6 +167,7 @@ public final class IntentParser {
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
+        validateViews(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -275,6 +277,77 @@ public final class IntentParser {
             }
         }
         return flagged || compositionChildren == 1;
+    }
+
+    /**
+     * Validate the optional entity {@code view} selector. Only {@code calendar} is supported today, and
+     * it requires a {@code calendar.start} naming a declared date/timestamp field of the entity (the
+     * timeline the events sit on). {@code end}/{@code title}/{@code color}, when present, must also
+     * name declared properties.
+     */
+    private static void validateViews(IntentModel model, List<String> issues) {
+        for (EntityIntent entity : model.getEntities()) {
+            String view = entity.getView();
+            if (view == null || view.isBlank()) {
+                continue;
+            }
+            String name = entity.getName();
+            if (!"calendar".equalsIgnoreCase(view.trim())) {
+                issues.add("entity [" + name + "] has unknown view [" + view + "] (supported: calendar)");
+                continue;
+            }
+            Set<String> fieldNames = new HashSet<>();
+            Set<String> dateFieldNames = new HashSet<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.getName() == null) {
+                    continue;
+                }
+                fieldNames.add(field.getName()
+                                    .toLowerCase());
+                String type = field.getType() == null ? ""
+                        : field.getType()
+                               .trim()
+                               .toLowerCase();
+                if ("date".equals(type) || "timestamp".equals(type)) {
+                    dateFieldNames.add(field.getName()
+                                            .toLowerCase());
+                }
+            }
+            Set<String> relationNames = new HashSet<>();
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.getName() != null) {
+                    relationNames.add(relation.getName()
+                                              .toLowerCase());
+                }
+            }
+            CalendarIntent cal = entity.getCalendar();
+            if (cal == null || cal.getStart() == null || cal.getStart()
+                                                            .isBlank()) {
+                issues.add("entity [" + name + "] view: calendar requires calendar.start naming a date/timestamp field");
+                continue;
+            }
+            if (!dateFieldNames.contains(cal.getStart()
+                                            .trim()
+                                            .toLowerCase())) {
+                issues.add("entity [" + name + "] calendar.start [" + cal.getStart() + "] is not a declared date/timestamp field");
+            }
+            if (cal.getEnd() != null && !cal.getEnd()
+                                            .isBlank()
+                    && !dateFieldNames.contains(cal.getEnd()
+                                                   .trim()
+                                                   .toLowerCase())) {
+                issues.add("entity [" + name + "] calendar.end [" + cal.getEnd() + "] is not a declared date/timestamp field");
+            }
+            for (String ref : new String[] {cal.getTitle(), cal.getColor()}) {
+                if (ref != null && !ref.isBlank()) {
+                    String key = ref.trim()
+                                    .toLowerCase();
+                    if (!fieldNames.contains(key) && !relationNames.contains(key)) {
+                        issues.add("entity [" + name + "] calendar references [" + ref + "] which is not a declared field or relation");
+                    }
+                }
+            }
+        }
     }
 
     /**

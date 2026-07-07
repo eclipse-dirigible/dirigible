@@ -254,6 +254,11 @@ export function generateFiles(model, parameters, templateSources) {
     // from its registration); other composition children render as ordinary detail panels.
     const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
 
+    // UI Calendar: a PRIMARY entity rendered as a Harmonia x-h-calendar (set by EdmIntentGenerator as
+    // layoutType MANAGE_CALENDAR from `view: calendar`) - its records become events on a month/week/day
+    // calendar; create/edit reuse the shared manage form on date-click / event-click.
+    const uiCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.type === "PRIMARY");
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -317,6 +322,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "uiDocumentModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiDocumentModels, parameters));
+                    break;
+                case "uiCalendarModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiCalendarModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
