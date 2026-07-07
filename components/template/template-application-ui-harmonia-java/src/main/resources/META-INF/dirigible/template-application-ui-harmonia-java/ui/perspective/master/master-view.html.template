@@ -122,7 +122,10 @@
           </template>
         </div>
 
-        <!-- The selected ${name}'s own fields — all properties (the table shows only the major ones). -->
+        <!-- The selected ${name}'s own fields (the table shows only the major ones). Labels are
+             translated like everywhere else; read-only / system fields (audit, uuid, ProcessId,
+             read-only) are shown only when populated - matching the edit form's read-only sidebar -
+             so empty audit columns don't render as blank labelled rows. -->
         <div x-h-card>
           <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
           <div x-h-card-content>
@@ -131,8 +134,12 @@
 #if(!$property.dataAutoIncrement)
 #if($property.widgetLabel)#set($plabel = $property.widgetLabel)#else#set($plabel = $property.name)#end
 #if($property.isDateType)#set($isDate = "true")#else#set($isDate = "false")#end
+#if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))
+              <div class="vbox gap-0" x-show="selected?.${property.name} !== null && selected?.${property.name} !== undefined && selected?.${property.name} !== ''">
+#else
               <div class="vbox gap-0">
-                <span x-h-text.muted class="text-xs">${plabel}</span>
+#end
+                <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
                 <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
@@ -154,9 +161,6 @@
           <div x-data="detailPanel(d, selectedId)" x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title x-text="d.label"></h3>
-              <div x-h-card-action>
-                <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
-              </div>
             </div>
             <div x-h-card-content>
               <div x-show="state === 'loading'"><div x-h-spinner></div></div>
@@ -178,40 +182,22 @@
                         <template x-for="col in def.columns" :key="col.name">
                           <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
                         </template>
+                        <!-- Read-only browse pane: children are added/edited/deleted from the record's
+                             Edit form (where these same panels are editable), NOT here. Only the
+                             actionable user tasks (e.g. a triggered review) and a read-only Preview
+                             remain. -->
                         <td x-h-table-cell data-row-actions>
-                          <!-- This detail record's actionable user tasks (e.g. a triggered review), one button each. -->
                           <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
                             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
                               <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
                             </button>
                           </template>
-                          <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
-                          <ul x-h-menu data-align="bottom-end">
-                            <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
-                            <li x-h-menu-item @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
-                            <li x-h-menu-separator></li>
-                            <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
-                          </ul>
+                          <button x-h-button data-variant="transparent" data-size="sm" aria-label="Preview" @click="previewRow(row)"><i role="img" data-lucide="eye"></i></button>
                         </td>
                       </tr>
                     </template>
                   </tbody>
                 </table>
-              </div>
-            </div>
-
-            <!-- Detail delete confirmation -->
-            <div x-h-dialog-overlay :data-open="deleteOpen">
-              <div x-h-dialog>
-                <div x-h-dialog-header>
-                  <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
-                  <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
-                </div>
-                <div x-h-dialog-content><p>Are you sure? This cannot be undone.</p></div>
-                <div x-h-dialog-footer>
-                  <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-                  <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
-                </div>
               </div>
             </div>
           </div>
