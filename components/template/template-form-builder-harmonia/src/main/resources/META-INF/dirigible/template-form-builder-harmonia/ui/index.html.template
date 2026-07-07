@@ -44,17 +44,28 @@
 #elseif($el.controlId == "input-date")
         <div x-h-field>
           <label x-h-label for="$el.id">$!el.label</label>
-          <input x-h-input type="date" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
+          <div x-h-date-picker>
+            <input type="text" id="$el.id"#if($el.readonly) disabled#end />
+            <button x-h-date-picker-trigger aria-label="Choose date"></button>
+            <div x-h-date-picker-popup x-model="model.$el.model"></div>
+          </div>
         </div>
 #elseif($el.controlId == "input-datetime-local")
         <div x-h-field>
           <label x-h-label for="$el.id">$!el.label</label>
-          <input x-h-input type="datetime-local" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
+          <div x-h-datetime-picker>
+            <input type="text" id="$el.id"#if($el.readonly) disabled#end />
+            <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+            <div x-h-datetime-picker-popup x-model="model.$el.model"></div>
+          </div>
         </div>
 #elseif($el.controlId == "input-time")
         <div x-h-field>
           <label x-h-label for="$el.id">$!el.label</label>
-          <input x-h-input type="time" id="$el.id" x-model="model.$el.model"#if($el.readonly) readonly#end />
+          <div x-h-time-picker>
+            <input type="text" x-h-time-picker-input id="$el.id" x-model="model.$el.model"#if($el.readonly) disabled#end />
+            <div x-h-time-picker-popup></div>
+          </div>
         </div>
 #elseif($el.controlId == "input-color")
         <div x-h-field>
