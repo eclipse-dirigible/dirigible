@@ -517,9 +517,8 @@ class IntentEngineIT extends IntegrationTest {
         String rollupCreate = contentOf("gen/events/OrderCustomerRollupOnCreate.java");
         assertTrue(
                 rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
-                        && rollupCreate.contains(
-                                "new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer)).size()")
-                        && rollupCreate.contains("parent.OrderCount = count"),
+                        && rollupCreate.contains("new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))")
+                        && rollupCreate.contains("int count = rows.size();") && rollupCreate.contains("parent.OrderCount = count"),
                 "the rollup create-listener should recompute the parent count via Criteria");
         assertTrue(contentOf("gen/events/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
@@ -816,8 +815,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onCreate.contains("MemberEntity parent = parents.findById(entity.Member)"),
                 "it should load the parent via the child's FK");
         assertTrue(
-                onCreate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member)).size()")
-                        && onCreate.contains("parent.LoanCount = count"),
+                onCreate.contains("new LoanRepository().findAll(Criteria.create().eq(\"Member\", entity.Member))")
+                        && onCreate.contains("int count = rows.size();") && onCreate.contains("parent.LoanCount = count"),
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
         String onDelete = contentOf("gen/events/LoanMemberRollupOnDelete.java");
