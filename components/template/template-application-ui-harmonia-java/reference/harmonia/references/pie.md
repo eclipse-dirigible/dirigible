@@ -4,6 +4,10 @@
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Give the chart a container with an explicit height (charts fill their parent). Provide the `slices` to draw, each with a `label` and a `value`. Use a pie chart to show how parts make up a whole; to compare discrete categories use a Bar Chart, and for trends over an ordered sequence use a Line Chart.
+
 ## Directive
 
 - `x-h-chart-pie`
@@ -55,7 +59,9 @@ Each event's `detail` is:
 
 Clicking or tapping a data point pins its tooltip open (useful on touchscreens, where there is no hover). The pinned tooltip stays until another point is clicked or a press lands elsewhere.
 
-## Example
+## Examples
+
+### Basic
 
 ```html
 <div
@@ -72,7 +78,25 @@ Clicking or tapping a data point pins its tooltip open (useful on touchscreens, 
 ></div>
 ```
 
-More examples in the docs site: Labels outside the slices.
+### Labels outside the slices
+
+```html
+<div
+  class="aspect-square h-full"
+  style="max-height: 20rem"
+  x-h-chart-pie="{
+    labelPosition: 'outside',
+    slices: [
+      { label: 'Direct', value: 40 },
+      { label: 'Referral', value: 25 },
+      { label: 'Social', value: 20 },
+      { label: 'Other', value: 15 }
+    ]
+  }"
+></div>
+```
+
+Full docs: https://www.codbex.com/harmonia/charts/pie.html
 
 ## Notes
 

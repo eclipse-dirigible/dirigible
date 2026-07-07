@@ -4,17 +4,23 @@ A visual indicator that signals an ongoing operation or process. Unlike a progre
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use spinners to indicate loading, processing, or other indefinite tasks where the duration is unknown. Avoid using spinners for very short operations, as brief displays can be distracting or unnecessary. Pair with text or context when needed to clarify what is loading.
+
 ## Directive
 
 - `x-h-spinner`
 
-## Example
+## Examples
 
 ```html
 <span x-h-spinner></span>
 <span x-h-spinner class="size-8"></span>
 <span x-h-spinner class="size-12"></span>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/spinner.html
 
 ## Notes
 

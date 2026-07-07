@@ -4,9 +4,13 @@ Allows users to choose one or more items from a predefined list of options. This
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the Select component without a search option when there are a limited number of options, ideally 12 or fewer. For longer lists, enable the search feature.
+
 ## Directives
 
-`x-h-select` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-select` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-select`
 - `x-h-select-input`
@@ -62,11 +66,71 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | -------- | ------------------------------------------- |
 | table    | Use when the select input is inside a table |
 
+## Keyboard Handling
+
+The user can use the following keyboard shortcuts in order to navigate through the select:
+
+- `Up` / `Down` - Moves focus to the previous or next option.
+- `Home` / `Page Up` - Moves focus to the first option.
+- `End` / `Page Down` - Moves focus to the last option.
+- `Enter` / `Space` - Selects the focused option. If the list is closed, opens it.
+- `Esc` - Closes the list without changing the current selection.
+- `Tab` - Closes the list and moves focus to the next focusable element.
+- `Character keys (A-Z)` - Moves focus to the next option whose label starts with the typed character.
+
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
+
+### With model
+
+```html
+<div x-data="selectData">
+  <div x-h-select>
+    <input x-h-select-input :placeholder="placeholder" x-model="selected" />
+    <div x-h-select-content>
+      <div x-h-select-search></div>
+      <div x-h-select-group>
+        <div x-h-select-label>Fruits</div>
+        <template x-for="option in items">
+          <div x-h-select-option="option.label" :data-value="option.value"></div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  Alpine.data('selectData', () => ({
+    getOriginalItems() {
+      return [
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Blueberry', value: 'blueberry' },
+        { label: 'Grapes', value: 'grapes' },
+        { label: 'Pineapple', value: 'pineapple' },
+        { label: 'Jamaican tangelo', value: 'jamaicanTangelo' },
+      ];
+    },
+    selected: 'banana',
+    placeholder: 'Select',
+    items: [],
+    addFromSearch(event) {
+      let nItems = this.getOriginalItems();
+      nItems.forEach((element) => {
+        element.label = `${event.target.value}${element.label}`;
+      });
+      this.items = nItems;
+    },
+    init() {
+      this.items = this.getOriginalItems();
+    },
+  }));
+</script>
+```
+
+### Clearable
 
 ```html
 <div x-data="{ selected: 'opt-1' }">
@@ -81,7 +145,92 @@ Binds through Alpine `x-model`. See the Example for the expected value shape.
 </div>
 ```
 
-More examples in the docs site: With model, Multiple, No model, With groups.
+### Multiple
+
+The input automatically switches modes based on the model. If you want to select multiple items, pass an array as the model.
+
+```html
+<div x-data="selectMultipleData">
+  <div x-h-select>
+    <input x-h-select-input :placeholder="placeholder" x-model="selected" />
+    <div x-h-select-content>
+      <div x-h-select-search></div>
+      <div x-h-select-group>
+        <div x-h-select-label>Fruits</div>
+        <template x-for="option in items">
+          <div x-h-select-option="option.label" :data-value="option.value"></div>
+        </template>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  Alpine.data('selectMultipleData', () => ({
+    getOriginalItems() {
+      return [
+        { label: 'Apple', value: 'apple' },
+        { label: 'Banana', value: 'banana' },
+        { label: 'Blueberry', value: 'blueberry' },
+        { label: 'Grapes', value: 'grapes' },
+        { label: 'Pineapple', value: 'pineapple' },
+        { label: 'Jamaican tangelo', value: 'jamaicanTangelo' },
+      ];
+    },
+    selected: ['apple', 'banana'],
+    placeholder: 'Select',
+    items: [],
+    addFromSearch(event) {
+      let nItems = this.getOriginalItems();
+      nItems.forEach((element) => {
+        element.label = `${event.target.value}${element.label}`;
+      });
+      this.items = nItems;
+    },
+    init() {
+      this.items = this.getOriginalItems();
+    },
+  }));
+</script>
+```
+
+### No model
+
+```html
+<div x-h-select>
+  <input x-h-select-input placeholder="Select" />
+  <div x-h-select-content>
+    <div x-h-select-option="'Option 1'" data-value="1"></div>
+    <div x-h-select-option="'Option 2'" data-value="2"></div>
+    <div x-h-select-option="'Option 3'" data-value="3"></div>
+    <div x-h-select-option="'Option 4'" data-value="4" data-disabled="true"></div>
+    <div x-h-select-option="'Option 5'" data-value="5"></div>
+  </div>
+</div>
+```
+
+### With groups
+
+```html
+<div x-h-select>
+  <input x-h-select-input placeholder="Select" />
+  <div x-h-select-content>
+    <div x-h-select-group>
+      <div x-h-select-label>First two options</div>
+      <div x-h-select-option="'Option 1'" data-value="1"></div>
+      <div x-h-select-option="'Option 2'" data-value="2"></div>
+    </div>
+    <div x-h-select-group>
+      <div x-h-select-label>The rest</div>
+      <div x-h-select-option="'Option 3'" data-value="3"></div>
+      <div x-h-select-option="'Option 4'" data-value="4"></div>
+      <div x-h-select-separator></div>
+      <div x-h-select-option="'Option 5'" data-value="5"></div>
+    </div>
+  </div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/select.html
 
 ## Notes
 

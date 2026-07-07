@@ -4,9 +4,13 @@ Displays hierarchical data in a structured, expandable format, allowing users to
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use tree components for file systems, category hierarchies, or any dataset with nested relationships. Avoid overly deep or complex trees that could overwhelm users or reduce usability.
+
 ## Directives
 
-`x-h-tree` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-tree` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-tree`
 - `x-h-tree-item`
@@ -42,7 +46,20 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | --------- | ------- | -------- | -------------------------------- |
 | expanded  | boolean | false    | Sets the default expanded state. |
 
-## Example
+## Keyboard Handling
+
+The user can use the following keyboard shortcuts in order to navigate through the tree:
+
+- `Up` / `Down` - Moves focus to the previous or next visible item in the tree.
+- `Right` - Expands the focused node to reveal its children. If expanded, moves focus to the first child.
+- `Left` - Collapses the focused node and moves focus to its parent.
+- `Enter` / `Space` - Selects the focused item.
+
+## Examples
+
+### File browser
+
+<br />
 
 ```html
 <ul x-h-tree>
@@ -116,6 +133,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </li>
 </ul>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/tree.html
 
 ## Notes
 

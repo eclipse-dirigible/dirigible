@@ -4,6 +4,10 @@
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Give the chart a container with an explicit height (charts fill their parent). Provide the `slices` to draw, each with a `label` and a `value`. A doughnut reads the same as a Pie Chart; use it when you prefer the lighter ring style or want to leave the center open. To compare discrete categories use a Bar Chart, and for trends over an ordered sequence use a Line Chart.
+
 ## Directive
 
 - `x-h-chart-doughnut`
@@ -34,7 +38,9 @@ The chart is exposed to assistive technologies as a `figure` with a visually-hid
 
 When `tooltip` is enabled, hovering and clicking slices emit bubbling `CustomEvent`s on the chart element. See the events reference for the shared `detail` shape.
 
-## Example
+## Examples
+
+### Basic
 
 ```html
 <div
@@ -51,7 +57,25 @@ When `tooltip` is enabled, hovering and clicking slices emit bubbling `CustomEve
 ></div>
 ```
 
-More examples in the docs site: Thinner ring.
+### Thinner ring
+
+```html
+<div
+  class="aspect-square h-full"
+  style="max-height: 20rem"
+  x-h-chart-doughnut="{
+    cutout: 0.8,
+    slices: [
+      { label: 'Direct', value: 40 },
+      { label: 'Referral', value: 25 },
+      { label: 'Social', value: 20 },
+      { label: 'Other', value: 15 }
+    ]
+  }"
+></div>
+```
+
+Full docs: https://www.codbex.com/harmonia/charts/doughnut.html
 
 ## Notes
 

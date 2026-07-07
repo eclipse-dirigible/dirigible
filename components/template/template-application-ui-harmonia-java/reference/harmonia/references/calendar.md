@@ -4,6 +4,10 @@ A full multi-view event calendar with month, week, day, and year views. Events a
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use `x-h-calendar` when users need to view and navigate a schedule - appointments, team calendars, project timelines, and so on.
+
 ## Directive
 
 - `x-h-calendar`
@@ -63,13 +67,130 @@ Each item in the `events` array supports the following fields:
 | status      | string  | false    | Pill style: `confirmed` (default) renders a filled pill; `unconfirmed` renders an outlined pill.             |
 | description | string  | false    | Shown as a tooltip on event pills.                                                                           |
 
-## Example
+## Keyboard Handling
+
+In the month view (and within each year-view mini-month) the day cells form an ARIA grid with roving focus:
+
+- `Up` / `Down` - Move focus a week earlier/later.
+- `Left` / `Right` - Move focus to the previous/next day (crossing month boundaries).
+- `Home` / `End` - Move focus to the first/last day of the month.
+- `PageUp` / `PageDown` - Move focus to the previous/next month.
+- `Enter` / `Space` - Fire `date-click` for the focused day (year view: open that day in day view).
+
+Events are buttons in the tab order; activate them to fire `event-click`. In the month view, the "+N more" overflow opens a dialog that moves focus to its event list and returns focus to the trigger on `Escape`.
+
+## Accessibility
+
+The calendar is a labeled `group` (default name "Calendar"; set an `aria-label` attribute to override). The toolbar period heading is an `aria-live` region; the month grid uses `role="grid"`/`row`/`gridcell` with `aria-current="date"` on today and full keyboard navigation; events are `button`s whose accessible label includes the title, time (or "all day"), and status (e.g. "unconfirmed"). The week/day time grid's empty-slot "click to pick a time" is a pointer-only convenience.
+
+## Examples
+
+### Month view
 
 ```html
-<div x-h-calendar="calConfig" style="height: 600px"></div>
+<div
+  x-data="{
+  cal: {},
+  init() {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().slice(0, 10);
+    this.cal = {
+      view: 'month',
+      events: [
+        { id: '1', title: 'Team Sync', start: today + 'T10:00:00', end: today + 'T11:00:00', color: 'blue' },
+        { id: '2', title: 'Company Meeting', start: today + 'T10:00:00', end: today + 'T11:00:00', status: 'unconfirmed', color: 'blue' },
+        { id: '3', title: 'All Hands', start: today, allDay: true, color: 'green' },
+        { id: '4', title: 'Off-site', start: today + 'T08:00:00', end: tomorrow + 'T18:00:00', color: 'purple' },
+      ],
+    };
+  }
+}"
+  x-h-calendar="cal"
+  style="height: 560px"
+  @event-click="console.log('event clicked:', $event.detail.event)"
+  @date-click="console.log('date clicked:', $event.detail.date)"
+></div>
 ```
 
-More examples in the docs site: Month view, Week view, Day view, Year view.
+### Week view
+
+```html
+<div
+  x-data="{
+  cal: {},
+  init() {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(new Date().setDate(new Date().getDate() + 1)).toISOString().slice(0, 10);
+    this.cal = {
+      view: 'week',
+      events: [
+        { id: '1', title: 'Team Sync', start: today + 'T09:00:00', end: today + 'T10:00:00', color: 'blue' },
+        { id: '2', title: 'Design Review', start: today + 'T09:30:00', end: today + 'T10:30:00', color: 'purple' },
+        { id: '3', title: 'Lunch with Client', start: today + 'T12:00:00', end: today + 'T13:30:00', color: 'green' },
+        { id: '4', title: 'Off-site', start: today, end: tomorrow, allDay: true, color: 'orange' },
+        { id: '5', title: 'Budget Review', start: today + 'T15:00:00', end: today + 'T16:00:00', color: 'red', status: 'unconfirmed' },
+      ],
+    };
+  }
+}"
+  x-h-calendar="cal"
+  style="height: 560px"
+  @event-click="console.log('event clicked:', $event.detail.event)"
+  @date-click="console.log('date clicked:', $event.detail.date, $event.detail.time)"
+></div>
+```
+
+### Day view
+
+```html
+<div
+  x-data="{
+  cal: {},
+  init() {
+    const today = new Date().toISOString().slice(0, 10);
+    this.cal = {
+      view: 'day',
+      events: [
+        { id: '1', title: 'Stand-up', start: today + 'T09:00:00', end: today + 'T09:15:00', color: 'blue' },
+        { id: '2', title: 'Sprint Planning', start: today + 'T10:00:00', end: today + 'T12:00:00', color: 'indigo' },
+        { id: '3', title: 'Lunch', start: today + 'T12:00:00', end: today + 'T13:00:00', color: 'green' },
+        { id: '4', title: '1:1 with Manager', start: today + 'T14:00:00', end: today + 'T14:30:00', color: 'teal' },
+        { id: '5', title: 'Code Review', start: today + 'T14:00:00', end: today + 'T15:00:00', color: 'orange' },
+        { id: '6', title: 'Release Call', start: today + 'T16:00:00', end: today + 'T17:00:00', color: 'red', status: 'unconfirmed' },
+      ],
+    };
+  }
+}"
+  x-h-calendar="cal"
+  style="height: 560px"
+  @event-click="console.log('event clicked:', $event.detail.event)"
+  @date-click="console.log('date clicked:', $event.detail.date, $event.detail.time)"
+></div>
+```
+
+### Year view
+
+```html
+<div
+  x-data="{
+  cal: {},
+  init() {
+    const today = new Date().toISOString().slice(0, 10);
+    this.cal = {
+      view: 'year',
+      events: [
+        { id: '1', title: 'Team Sync', start: today + 'T10:00:00', end: today + 'T11:00:00', color: 'blue' },
+        { id: '2', title: 'All Hands', start: today, allDay: true, color: 'green' },
+      ],
+    };
+  }
+}"
+  x-h-calendar="cal"
+  style="height: 560px"
+></div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/calendar.html
 
 ## Notes
 

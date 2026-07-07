@@ -4,11 +4,15 @@ A single-choice input that allows users to select one option from a set.
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use radio buttons when users must choose only one option from a group. All options must be clearly labeled and grouped logically. Avoid using radio buttons for independent yes/no choices as checkboxes are more appropriate in that case.
+
 ## Directive
 
 - `x-h-radio`
 
-## Example
+## Examples
 
 ```html
 <form class="flex flex-col gap-3">
@@ -32,6 +36,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </div>
 </form>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/radio.html
 
 ## Notes
 

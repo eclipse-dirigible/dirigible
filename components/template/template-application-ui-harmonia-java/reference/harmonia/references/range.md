@@ -4,6 +4,10 @@ Allows users to select a value, or a range of values, by dragging a handle along
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use range sliders for selecting numeric values within a defined range, such as volume, price, or time intervals. Avoid using sliders for exact numeric input as precision can be difficult with dragging alone.
+
 ## Directive
 
 - `x-h-range`
@@ -16,9 +20,9 @@ Please refer to the [noUiSlider documentation](https://refreshless.com/nouislide
 
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
 
 ```html
 <div x-h-range="config" x-data="rangeData" auto-hide-tips="true" x-model="range"></div>
@@ -37,6 +41,8 @@ Binds through Alpine `x-model`. See the Example for the expected value shape.
   }));
 </script>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/range.html
 
 ## Notes
 

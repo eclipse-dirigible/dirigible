@@ -4,6 +4,13 @@ The template directive makes it easy to insert and initialize an Alpine.js snipp
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the template directive to reuse HTML snippets and generate repeated or nested content efficiently. The template should be clearly structured and maintainable. Avoid overcomplicating recursive structures, as deeply nested templates can impact performance and readability.
+
+> **Note:**
+> Similar to Alpine's `x-for` directive, the referenced `<template>` element MUST contain only one root element.
+
 ## Directive
 
 - `x-h-template`
@@ -17,7 +24,9 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | `self`    | `$ref.<template>` | true     | Reference to the template that contains the code that should be inserted and initialized.        |
 | x-data    | object            | true     | The properties defined in an x-data directive will be available to the rendered tempate element. |
 
-## Example
+## Examples
+
+### Tree with recursive rendering
 
 ```html
 <div x-data="app">
@@ -114,6 +123,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   }));
 </script>
 ```
+
+Full docs: https://www.codbex.com/harmonia/utilities/template.html
 
 ## Notes
 

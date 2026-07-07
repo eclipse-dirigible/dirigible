@@ -4,9 +4,13 @@ A modal container that appears in response to a user action, temporarily interru
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use dialogs to capture critical decisions, confirmations, or inputs that demand immediate attention. Avoid overusing dialogs for non-essential interactions, as frequent interruptions can disrupt the user experience.
+
 ## Directives
 
-`x-h-dialog-overlay` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-dialog-overlay` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-dialog-overlay`
 - `x-h-dialog`
@@ -16,7 +20,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 - `x-h-dialog-description`
 - `x-h-dialog-footer`
 
-## Example
+## Examples
 
 ```html
 <div x-data="{ showDialog: false }">
@@ -49,6 +53,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </div>
 </div>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/dialog.html
 
 ## Notes
 

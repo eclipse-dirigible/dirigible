@@ -4,6 +4,10 @@ A placeholder component used to indicate that content is loading. Skeletons prov
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use skeletons to temporarily fill the space of content that is being fetched or rendered. Make sure the placeholder visually resembles the final content layout to maintain context. Avoid overusing skeletons for static or instant-loading content, as this can create unnecessary visual noise.
+
 ## Directive
 
 - `x-h-skeleton`
@@ -24,7 +28,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | card     | Takes the shape of a card or tile.                      |
 | avatar   | Takes the shape of an avatar component.                 |
 
-## Example
+## Examples
 
 ```html
 <div class="flex flex-col gap-2">
@@ -34,6 +38,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   <div x-h-skeleton class="h-12 w-full"></div>
 </div>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/skeleton.html
 
 ## Notes
 

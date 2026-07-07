@@ -4,6 +4,10 @@ Lets users choose one or more files for upload. It looks like a regular input wi
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the File Upload when a form needs the user to attach files, such as a document, an avatar image, or supporting evidence. Constrain the selection to what you actually accept: set `accept` to limit file types and add `multiple` only when several files are genuinely allowed. Pair it with a clear label describing what to upload and any size or format requirements, and prefer it over a bare native file input when you want the selection to stay visible and on-brand. For a single short text value, use a plain Input instead.
+
 ## Directive
 
 - `x-h-file-upload`
@@ -24,7 +28,9 @@ The `<input type="file">` keeps its native attributes - set `multiple`, `accept`
 
 There is no `x-model`. The native `<input type="file">` is the source of truth: listen to its `change` event and read its `.files`, exactly as you would with a plain file input.
 
-## Example
+## Examples
+
+### Single file
 
 ```html
 <div x-h-input-group x-h-file-upload>
@@ -38,7 +44,37 @@ There is no `x-model`. The native `<input type="file">` is the source of truth: 
 </div>
 ```
 
-More examples in the docs site: Multiple files with a custom placeholder, Reacting to selection.
+### Multiple files with a custom placeholder
+
+```html
+<div x-h-input-group x-h-file-upload data-placeholder="Select images...">
+  <input type="file" multiple accept="image/*" />
+  <div x-h-input-group-addon data-align="inline-start">
+    <div x-h-tag-group></div>
+  </div>
+  <div x-h-input-group-addon data-align="inline-end">
+    <button type="button" x-h-button.addon>Browse</button>
+  </div>
+</div>
+```
+
+### Reacting to selection
+
+Listen to the native `change` event on the file input to react to the chosen files.
+
+```html
+<div x-h-input-group x-h-file-upload x-data>
+  <input type="file" multiple @change="console.log([...$event.target.files].map((f) => f.name))" />
+  <div x-h-input-group-addon data-align="inline-start">
+    <div x-h-tag-group></div>
+  </div>
+  <div x-h-input-group-addon data-align="inline-end">
+    <button type="button" x-h-button.addon>Browse</button>
+  </div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/file-upload.html
 
 ## Notes
 

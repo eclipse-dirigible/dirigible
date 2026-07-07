@@ -4,6 +4,10 @@ A simple visual divider used to separate content or sections within an interface
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use separators to distinguish between related groups of elements, such as menu items, form sections, or content blocks. Avoid overusing separators, as excessive dividers can clutter the interface and reduce visual hierarchy.
+
 ## Directive
 
 - `x-h-separator`
@@ -16,7 +20,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | ---------------- | ---------------------------- | -------- | ----------------------------------------- |
 | data-orientation | `horizontal`<br />`vertical` | false    | Changes the orientation of the separator. |
 
-## Example
+## Examples
 
 ```html
 <div class="flex flex-col gap-3">
@@ -37,6 +41,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </div>
 </div>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/separator.html
 
 ## Notes
 

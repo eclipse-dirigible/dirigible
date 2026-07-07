@@ -4,9 +4,13 @@ Allows users to enter a date either by typing it directly or by selecting it fro
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the Date Picker when users need to input a specific date while providing both manual entry and visual selection options. For scenarios requiring only simple date selection, a Calendar Inline alone may suffice.
+
 ## Directives
 
-`x-h-date-picker` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-date-picker` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-date-picker`
 - `x-h-date-picker-trigger`
@@ -94,21 +98,82 @@ In range mode the model value is an object with `start` and `end` keys (each a `
 
 By default this control shows native-constraint errors (for example `required`) only after the user interacts with it or attempts to submit, not on page load. To validate on load instead, set `data-validate="immediate"` on a wrapping `x-h-fieldset`, `x-h-field`, or any ancestor element. Setting `aria-invalid="true"` yourself always shows the error immediately. See Fieldset for details.
 
+## Keyboard Handling
+
+The user can use the following keyboard shortcuts in order to navigate trough the date picker:
+
+- `Up` / `Down` - Moves focus to the day above/below the current day.
+- `Right` - Moves focus to the next day.
+- `Left` - Moves focus to the previous day.
+- `Enter` / `Space` - Shows and moves focus the calendar. If already shown, selects the focused day.
+- `Home` - Selects the first day of the month.
+- `End` - Selects the last day of the month.
+- `PageUp` - Selects the same or closest day of the previous month.
+- `PageDown` - Selects the same or closest day of the next month.
+- `Esc` - Closes the date picker calendar.
+
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
 
 ```html
-<div x-h-date-picker ...>
-  <input type="text" />
+<div
+  x-h-date-picker
+  x-data="{
+  date: '',
+  init() {
+    const d = new Date();
+    this.date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}"
+>
+  <input type="text" id="date-input-1" />
   <button x-h-date-picker-trigger aria-label="Choose date"></button>
-  <div x-h-date-picker-popup="{ options: { day: '2-digit', month: '2-digit', year: 'numeric' } }" x-model="date"></div>
+  <div x-h-date-picker-popup x-model="date"></div>
 </div>
 ```
 
-More examples in the docs site: Range selection, Examples, With locale, With custom display format.
+### With locale
+
+```html
+<div
+  x-h-date-picker
+  x-data="{
+  date: '',
+  init() {
+    const d = new Date();
+    this.date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}"
+>
+  <input type="text" id="date-input-1" />
+  <button x-h-date-picker-trigger aria-label="Choose date"></button>
+  <div x-h-date-picker-popup="{ locale: 'bg-BG', firstDay: 1 }" x-model="date"></div>
+</div>
+```
+
+### With custom display format
+
+```html
+<div
+  x-h-date-picker
+  x-data="{
+  date: '',
+  init() {
+    const d = new Date();
+    this.date = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}"
+>
+  <input type="text" id="date-input-2" />
+  <button x-h-date-picker-trigger aria-label="Choose date"></button>
+  <div x-h-date-picker-popup="{ options: { day: '2-digit', month: 'long', year: 'numeric' }, order: 'DMY' }" x-model="date"></div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/date-picker.html
 
 ## Notes
 

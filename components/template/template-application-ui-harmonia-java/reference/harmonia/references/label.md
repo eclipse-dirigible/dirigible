@@ -4,11 +4,15 @@ Provides an accessible caption for a user interface element, most commonly paire
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use labels to clearly describe form fields, controls, or interactive elements. Each label should be concise, descriptive, and associated with its corresponding element to support screen readers and assistive technologies. Avoid using visual cues alone to indicate the purpose of a control.
+
 ## Directive
 
 - `x-h-label`
 
-## Example
+## Examples
 
 ```html
 <div x-h-field>
@@ -16,6 +20,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   <input x-h-input id="labelExmpl" name="name" placeholder="Ivan Strashimechkarov" />
 </div>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/label.html
 
 ## Notes
 

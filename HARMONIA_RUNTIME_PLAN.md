@@ -362,7 +362,7 @@ Process Inbox (`/inbox`) and Documents (`/documents`).
 
 ### Embedding (Phase 1 — no CDN)
 
-Alpine `3.15.11`, Harmonia `2.0.3`, Lucide `1.8.0`, chart.js `4.4.3` are **webjars** (served
+Alpine `3.15.11`, Harmonia `2.1.0`, Lucide `1.8.0`, chart.js `4.4.3` are **webjars** (served
 version-less via webjars-locator at `/webjars/...`); Pinecone Router (no webjar) is **vendored** under
 `application-core/.../vendor/` (license-excluded). The generated `index.html` references only these
 local URLs.

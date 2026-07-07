@@ -4,9 +4,13 @@ The sheet component is a side panel that overlays the window content and is show
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use sheets to present supplementary information or interactive content without navigating away from the main interface. Avoid overloading sheets with too much content, as the available space is limited.
+
 ## Directives
 
-`x-h-sheet` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-sheet` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-sheet`
 - `x-h-sheet-overlay`
@@ -27,7 +31,62 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | ---------- | ----------------------------------------- | -------- | ------------------------------------------------------------ |
 | data-align | `top`<br/>`right`<br/>`bottom`<br/>`left` | false    | Aligns the sheet to one side of the screen. Default is left. |
 
-## Example
+## Examples
+
+### Sheet with Sidebar
+
+```html
+<div x-data="SheetController">
+  <div x-h-sheet-overlay="isOpen">
+    <div x-h-sheet :data-align="side">
+      <div x-h-sidebar>
+        <div x-h-sidebar-content>
+          <div x-h-sidebar-group>
+            <div x-h-sidebar-group-label>Application</div>
+            <div x-h-sidebar-group-content>
+              <ul x-h-sidebar-menu>
+                <li x-h-sidebar-menu-item>
+                  <button x-h-sidebar-menu-button data-active="false" @click="isOpen = false">
+                    <i x-h-lucide role="img" data-lucide="house"></i>
+                    <span>Home</span>
+                    <span x-h-sidebar-menu-badge>11</span>
+                  </button>
+                </li>
+                <li x-h-sidebar-menu-item>
+                  <button x-h-sidebar-menu-button data-active="false" @click="isOpen = false">
+                    <i x-h-lucide role="img" data-lucide="file-text"></i>
+                    <span>Documents</span>
+                  </button>
+                </li>
+                <li x-h-sidebar-menu-item>
+                  <button x-h-sidebar-menu-button data-active="false" @click="isOpen = false">
+                    <i x-h-lucide role="img" data-lucide="blocks"></i>
+                    <span>Extensions</span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <button x-h-button @click="openSheet()">Open Sheet</button>
+</div>
+
+<script type="text/javascript">
+  Alpine.data('SheetController', () => ({
+    isOpen: false,
+    side: 'left',
+    openSheet() {
+      this.isOpen = true;
+    },
+  }));
+</script>
+```
+
+### Alignment
 
 ```html
 <div x-data="{ isOpen: false, side: 'left' }">
@@ -47,7 +106,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 </div>
 ```
 
-More examples in the docs site: Sheet with Sidebar.
+Full docs: https://www.codbex.com/harmonia/components/sheet.html
 
 ## Notes
 

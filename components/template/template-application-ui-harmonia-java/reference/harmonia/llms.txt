@@ -1,6 +1,6 @@
 # Harmonia
 
-> A UI component library for Alpine.js (@codbex/harmonia). Components are `x-h-*` directives added to plain HTML. Full usage per component is in the linked reference files; start from SKILL.md.
+> A UI component library for Alpine.js (@codbex/harmonia). Components are `x-h-*` directives added to plain HTML. Full usage per component is in the linked reference files; start from SKILL.md. Docs site: https://www.codbex.com/harmonia/
 
 ## Components
 
@@ -82,6 +82,7 @@
 
 ## Plugins
 
+- [i18next](references/i18next.md): An optional plugin that binds the [i18next](https://www.i18next.com/) internationalization library to Alpine and Harmonia.
 - [Lucide](references/lucide.md): An optional plugin that keeps [Lucide](https://lucide.dev) icons in sync with the Alpine/Harmonia lifecycle.
 
 ## Utility classes

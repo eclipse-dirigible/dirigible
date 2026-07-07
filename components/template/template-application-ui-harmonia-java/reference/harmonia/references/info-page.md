@@ -4,9 +4,13 @@ Provides a structured layout to display instructional content, messages, or stat
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use Info Pages to guide users, explain empty states, or report errors in a visually distinct and informative way. Include clear messaging and actionable steps when appropriate, and avoid overloading the page with unnecessary details.
+
 ## Directives
 
-`x-h-info-page` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-info-page` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-info-page`
 - `x-h-info-page-header`
@@ -25,7 +29,30 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | -------- | --------------------------------------------------------------------------- |
 | icon     | Applies styles for inline svg icons. Do not activate when using an img tag. |
 
-## Example
+## Examples
+
+### With inline SVG icon
+
+```html
+<div x-h-info-page>
+  <div x-h-info-page-header>
+    <div x-h-info-page-media.icon>
+      <i x-h-lucide role="img" data-lucide="folder"></i>
+    </div>
+    <div x-h-info-page-title>No Projects Yet</div>
+    <div x-h-info-page-description>You haven't created any projects yet. Get started by creating your first project.</div>
+  </div>
+  <div x-h-info-page-content>
+    <div class="flex gap-2">
+      <button x-h-button data-variant="primary">Create Project</button>
+      <button x-h-button data-variant="outline">Import Project</button>
+    </div>
+  </div>
+  <a href="#" x-h-button data-size="sm" data-variant="link">Learn More<i x-h-lucide role="img" data-lucide="arrow-up-right"></i></a>
+</div>
+```
+
+### With image
 
 ```html
 <div x-h-info-page>
@@ -42,7 +69,24 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 </div>
 ```
 
-More examples in the docs site: With inline SVG icon, With border.
+### With border
+
+```html
+<div x-h-info-page class="border">
+  <div x-h-info-page-header>
+    <div x-h-info-page-media>
+      <i x-h-lucide role="img" data-lucide="upload"></i>
+    </div>
+    <div x-h-info-page-title>Upload file(s)</div>
+    <div x-h-info-page-description>Drag & drop your file(s) or use the button below</div>
+  </div>
+  <div x-h-info-page-content>
+    <button x-h-button data-variant="primary">Upload</button>
+  </div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/info-page.html
 
 ## Notes
 

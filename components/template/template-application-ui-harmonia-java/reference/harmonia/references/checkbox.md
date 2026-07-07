@@ -4,11 +4,15 @@ Allows users to select or deselect an option, representing a binary choice (true
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use checkboxes for independent options where multiple selections are allowed. For mutually exclusive choices, use a Radio button.
+
 ## Directive
 
 - `x-h-checkbox`
 
-## Example
+## Examples
 
 ```html
 <div class="flex items-center gap-3">
@@ -19,7 +23,25 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 </div>
 ```
 
-More examples in the docs site: Examples.
+```html
+<div class="flex items-center gap-3">
+  <span x-h-checkbox>
+    <input type="checkbox" id="checked" checked />
+  </span>
+  <label x-h-label for="checked">Checked</label>
+</div>
+```
+
+```html
+<div class="flex items-center gap-3">
+  <span x-h-checkbox>
+    <input type="checkbox" id="checked" x-ref="inter" x-data="{ init() { this.$refs.inter.indeterminate = true } }" />
+  </span>
+  <label x-h-label for="checked">Indeterminate</label>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/checkbox.html
 
 ## Notes
 

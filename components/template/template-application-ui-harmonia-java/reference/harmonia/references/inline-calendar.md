@@ -4,6 +4,10 @@ A compact calendar for selecting a single date or a date range within a monthly 
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the inline calendar when users need to choose specific dates, such as scheduling events but do not need a date input or a fullscreen calendar. For filtering data by date, use a Date Picker. Make sure it is paired with clear labels and context to prevent confusion, especially when selecting critical dates.
+
 ## Directive
 
 - `x-h-calendar-inline`
@@ -59,11 +63,30 @@ Example:
 | order     | Custom display order of the date parts as a three-character string of `Y` (year), `M` (month), `D` (day) (e.g. `"MDY"` for month-day-year). Defaults to the locale's natural order. Does not affect the model value. |
 | range     | When `true`, the calendar selects a start-and-end date range instead of a single date. See Range selection.                                                                               |
 
+## Keyboard Handling
+
+The user can use the following keyboard shortcuts in order to navigate through the calendar:
+
+- `Up` / `Down` - Moves focus to the day above/below the current day.
+- `Right` - Moves focus to the next day.
+- `Left` - Moves focus to the previous day.
+- `Enter` / `Space` - Selects the focused day.
+- `Home` - Selects the first day of the month.
+- `End` - Selects the last day of the month.
+- `PageUp` - Selects the same or closest day of the previous month.
+- `PageDown` - Selects the same or closest day of the next month.
+
+## Accessibility
+
+The calendar is exposed as an ARIA date grid: the month/year heading names the grid (announced via `aria-live` as it changes), weekday columns are column headers, and each day is a grid cell with roving focus and `aria-selected` / `aria-disabled` / `aria-current="date"` (today) state. Navigation buttons are labeled (override the defaults with the `data-aria-*` attributes below).
+
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
+
+### Change event
 
 ```html
 <div x-data>
@@ -71,7 +94,39 @@ Binds through Alpine `x-model`. See the Example for the expected value shape.
 </div>
 ```
 
-More examples in the docs site: Configuration, Locale and first day config, Range selection {#range-selection-inline}.
+### Locale and first day config
+
+```html
+<div
+  x-data="{
+  caldate: '',
+  init() {
+    const d = new Date();
+    this.caldate = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+}"
+>
+  <div x-h-calendar-inline="{ locale: 'en-US', firstDay: 1 }" x-model="caldate"></div>
+</div>
+```
+
+### Range selection {#range-selection-inline}
+
+Set `range: true` to let the user pick a date range. The first selection sets the start, the second completes the range (picks are ordered automatically). With the keyboard, press `Enter` once to set the start and again to set the end.
+
+In range mode the `x-model` value is an object with `start` and `end` keys (each a `YYYY-MM-DD` string), and the `change` event detail is `{ start, end }` (`Date` objects):
+
+```js
+{ start: '2025-06-09', end: '2025-06-16' }
+```
+
+```html
+<div x-data="{ dateRange: { start: '', end: '' } }">
+  <div x-h-calendar-inline="{ range: true, firstDay: 1 }" x-model="dateRange"></div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/inline-calendar.html
 
 ## Notes
 

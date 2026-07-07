@@ -4,6 +4,10 @@
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Give the chart a container with an explicit height (charts fill their parent). Provide one or more `series`, each a list of numeric `data` points, and a matching `labels` array naming the categories. Use multiple series to compare values side by side (grouped) or as parts of a total (`stacked`). Use a bar chart to compare discrete categories; for trends over an ordered sequence use a Line Chart, and for parts of a whole use a Pie Chart.
+
 ## Directive
 
 - `x-h-chart-bar`
@@ -37,13 +41,67 @@ The chart is exposed to assistive technologies as a `figure` with a visually-hid
 
 When `tooltip` is enabled, hovering and clicking bars emit bubbling `CustomEvent`s on the chart element: `chart-hover`, `chart-leave`, and `chart-click`. See the events reference for the shared `detail` shape.
 
-## Example
+## Examples
+
+### Basic
 
 ```html
 <div style="height: 20rem" x-h-chart-bar="{ labels: ['Jan', 'Feb', 'Mar', 'Apr'], series: [{ name: 'Revenue', data: [12, 19, 7, 15] }] }"></div>
 ```
 
-More examples in the docs site: Grouped, Stacked, Horizontal, Value labels, Handling events.
+### Grouped
+
+```html
+<div
+  style="height: 20rem"
+  x-h-chart-bar="{
+    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+    series: [
+      { name: 'Revenue', data: [12, 19, 7, 15] },
+      { name: 'Cost', data: [8, 11, 5, 9] }
+    ]
+  }"
+></div>
+```
+
+### Stacked
+
+```html
+<div
+  style="height: 20rem"
+  x-h-chart-bar="{
+    stacked: true,
+    labels: ['Q1', 'Q2', 'Q3', 'Q4'],
+    series: [
+      { name: 'Revenue', data: [12, 19, 7, 15] },
+      { name: 'Cost', data: [8, 11, 5, 9] }
+    ]
+  }"
+></div>
+```
+
+### Horizontal
+
+```html
+<div style="height: 20rem" x-h-chart-bar="{ orientation: 'horizontal', labels: ['Jan', 'Feb', 'Mar', 'Apr'], series: [{ name: 'Revenue', data: [12, 19, 7, 15] }] }"></div>
+```
+
+### Value labels
+
+```html
+<div style="height: 20rem" x-h-chart-bar="{ dataLabels: true, labels: ['Jan', 'Feb', 'Mar', 'Apr'], series: [{ name: 'Revenue', data: [12, 19, 7, 15] }] }"></div>
+```
+
+### Handling events
+
+```html
+<div class="vbox items-center gap-2" x-data="{ lastClicked: 'Click on a bar' }">
+  <span x-text="lastClicked"></span>
+  <div style="height: 18rem" x-h-chart-bar="{ labels: ['Jan', 'Feb', 'Mar', 'Apr'], series: [{ name: 'Revenue', data: [12, 19, 7, 15] }] }" @chart-click="lastClicked = $event.detail.label + ': ' + $event.detail.value"></div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/charts/bar.html
 
 ## Notes
 

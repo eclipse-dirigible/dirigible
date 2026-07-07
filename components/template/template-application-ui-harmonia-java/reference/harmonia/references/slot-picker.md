@@ -4,6 +4,12 @@ An inline calendar that shows three consecutive days, each with a grid of select
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the Slot Picker when users need to book or choose one or more time slots from an upcoming schedule, for example booking appointments, selecting meeting windows, or configuring availability.
+
+Navigate between days with the previous/next buttons (which move three days at a time) or jump straight to any date with the calendar button in the toolbar; the chosen date becomes the first of the three visible days, which avoids paging far ahead one step at a time.
+
 ## Directive
 
 - `x-h-slot-picker`
@@ -67,17 +73,192 @@ When used with `x-model`, the bound value follows the selection mode:
 | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | slot-click | Dispatched on every slot click (including deselection). `event.detail.slot` contains `date`, `start`, `end`, `available`, and `selected` (the new state after the click). |
 
+## Accessibility
+
+The picker is a labeled `group` (default name "Time slot picker"; set an `aria-label` attribute to override). Each day is its own `group` labeled by its header, so the day is announced for the slots inside it. Available slots are toggle `button`s with a day + time `aria-label` and `aria-pressed` reflecting selection; unavailable slots are marked `aria-disabled` with a hidden "Not available" note. Selecting a slot updates the cell in place rather than re-rendering, so keyboard focus stays on the chosen slot. The calendar button opens a `dialog` containing a fully keyboard-navigable date grid; picking a date moves the visible range and returns focus to the button, and `Esc` closes it.
+
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
+
+### Basic (single select)
 
 ```html
-<div x-h-slot-picker="myConfig"></div>
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: null,
+    init() {
+      const today = new Date().toISOString().slice(0, 10);
+      this.config = { date: today, start: '09:00', end: '17:00', step: 60 };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
 ```
 
-More examples in the docs site: Basic (single select), Multi-select with 30-minute slots, Explicit slots with availability and icon badges, Default schedule with per-day overrides, Disabled weekdays and date ranges, Start and end day bounds.
+### Multi-select with 30-minute slots
+
+```html
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: [],
+    init() {
+      const today = new Date().toISOString().slice(0, 10);
+      this.config = { date: today, start: '08:00', end: '12:00', step: 30, multiple: true };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
+```
+
+### Explicit slots with availability and icon badges
+
+```html
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: null,
+    init() {
+      const dateIn = (days) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      this.config = {
+        date: dateIn(0),
+        multiple: true,
+        slots: [
+          { date: dateIn(0), start: '09:00', end: '09:30', available: true },
+          { date: dateIn(0), start: '09:30', end: '10:00', available: false },
+          { date: dateIn(0), start: '10:00', end: '10:30', available: true, icon: { url: '/harmonia/logo/harmonia-circle.svg', alt: 'Harmonia' } },
+          { date: dateIn(0), start: '10:30', end: '11:00', available: true },
+          { date: dateIn(1), start: '09:00', end: '09:30', available: true },
+          { date: dateIn(1), start: '09:30', end: '10:00', available: true, icon: { url: '/harmonia/logo/harmonia-circle.svg', alt: 'Harmonia' } },
+          { date: dateIn(1), start: '10:00', end: '10:30', available: false },
+          { date: dateIn(1), start: '10:30', end: '11:00', available: true },
+          { date: dateIn(2), start: '09:00', end: '09:30', available: false },
+          { date: dateIn(2), start: '09:30', end: '10:00', available: true },
+          { date: dateIn(2), start: '10:00', end: '10:30', available: true },
+          { date: dateIn(2), start: '10:30', end: '11:00', available: false },
+        ],
+      };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
+```
+
+### Default schedule with per-day overrides
+
+Provide `start`, `end`, and `step` for the default daily schedule, list `slots` only for the days you want to customize, and set `fillEmptyDays: true` so every other day still shows the default slots. A day that appears in `slots` shows only its explicit slots (it is not merged with the default schedule).
+
+```html
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: null,
+    init() {
+      const dateIn = (days) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      this.config = {
+        date: dateIn(0),
+        start: '09:00',
+        end: '17:00',
+        step: 60,
+        fillEmptyDays: true,
+        slots: [
+          { date: dateIn(0), start: '10:00', end: '10:30', available: true },
+          { date: dateIn(0), start: '10:30', end: '11:00', available: true },
+          { date: dateIn(0), start: '11:00', end: '11:30', available: false },
+        ],
+      };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
+```
+
+### Disabled weekdays and date ranges
+
+Use `disabledDays` to block recurring days (e.g. weekends) and `disabledDates` for specific dates or ranges.
+
+```html
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: null,
+    init() {
+      const dateIn = (days) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      this.config = {
+        date: dateIn(0),
+        start: '09:00',
+        end: '17:00',
+        step: 60,
+        disabledDays: [0, 6],
+        disabledDates: [
+          dateIn(5),
+          { from: dateIn(5), to: dateIn(10) },
+        ],
+      };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
+```
+
+### Start and end day bounds
+
+Set `minDate` to a start day and/or `maxDate` to an end day to stop the user paging outside a window. The two options are independent, so you can set just one. The previous/next buttons disable at the edges, and jumping via the calendar is clamped so the visible range always stays within the bounds.
+
+```html
+<div
+  x-h-slot-picker="config"
+  x-data="{
+    config: {},
+    selected: null,
+    init() {
+      const dateIn = (days) => {
+        const d = new Date();
+        d.setDate(d.getDate() + days);
+        return d.toISOString().slice(0, 10);
+      };
+      this.config = {
+        date: dateIn(0),
+        start: '09:00',
+        end: '17:00',
+        step: 60,
+        minDate: dateIn(0),
+        maxDate: dateIn(10),
+      };
+    }
+  }"
+  x-model="selected"
+  class="rounded-md"
+></div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/slot-picker.html
 
 ## Notes
 

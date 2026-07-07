@@ -4,9 +4,13 @@ Divides content into discrete pages, allowing users to navigate large datasets o
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use pagination for tables, card grids, lists, or other content-heavy interfaces where displaying all items at once would overwhelm the user. Avoid excessive page counts without additional navigation aids, such as "jump to page" or filtering options.
+
 ## Directives
 
-`x-h-pagination` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-pagination` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-pagination`
 - `x-h-pagination-content`
@@ -34,7 +38,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | previous | Used when the link will lead to the previous page instead of a specific one. |
 | next     | Used when the link will lead to the next page instead of a specific one.     |
 
-## Example
+## Examples
 
 ```html
 <nav x-h-pagination>
@@ -66,6 +70,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </ul>
 </nav>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/pagination.html
 
 ## Notes
 

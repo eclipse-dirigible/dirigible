@@ -9,9 +9,11 @@ description: How to build UIs with the Harmonia Alpine.js component library (@co
 
 Harmonia is a UI component library for [Alpine.js](https://alpinejs.dev/), built with Tailwind CSS. Components are Alpine directives: you add `x-h-*` attributes to plain HTML elements and the library upgrades them. There is no JSX and no component-tag syntax.
 
+Full documentation: https://www.codbex.com/harmonia/
+
 ## How to use this skill
 
-Find the component in the index below and open its file under `references/`. Each reference lists the directive set, its attributes, whether it binds with `x-model`, and a minimal working example you can adapt. Load only the reference(s) you need.
+Find the component in the index below and open its file under `references/`. Each reference lists the directive set, its attributes, whether it binds with `x-model`, and working examples you can adapt. Load only the reference(s) you need.
 
 ## Setup
 
@@ -141,6 +143,7 @@ Import the CSS (`@codbex/harmonia/dist/harmonia.css`) too. For selective registr
 
 | Name | Description | Reference |
 | ---- | ----------- | --------- |
+| i18next | An optional plugin that binds the [i18next](https://www.i18next.com/) internationalization library to Alpine and Harmonia. | [i18next](references/i18next.md) |
 | Lucide | An optional plugin that keeps [Lucide](https://lucide.dev) icons in sync with the Alpine/Harmonia lifecycle. | [lucide](references/lucide.md) |
 
 ### Utility classes

@@ -4,9 +4,13 @@ Allows users to select a specific time, providing a controlled and consistent in
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use the Time Picker when users need to input or select a time value, such as setting alarms.
+
 ## Directives
 
-`x-h-time-picker` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-time-picker` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-time-picker`
 - `x-h-time-picker-input`
@@ -76,11 +80,26 @@ Example:
 
 By default this control shows native-constraint errors (for example `required`) only after the user interacts with it or attempts to submit, not on page load. To validate on load instead, set `data-validate="immediate"` on a wrapping `x-h-fieldset`, `x-h-field`, or any ancestor element. Setting `aria-invalid="true"` yourself always shows the error immediately. See Fieldset for details.
 
+## Keyboard Handling
+
+The user can use the following keyboard shortcuts in order to navigate through the time picker:
+
+- `Up` / `Down` - Moves focus to the next/previous column item.
+- `Tab` - Moves focus to the next column (hour -> minute -> second -> day period). If the "Now" button is enabled, it will move focus to it first before looping back to the first column.
+- `Shift` + `Tab` - Moves focus to the previous column.
+- `Right` - Moves focus to the next column. Focuses the first item or the last focused/selected one.
+- `Left` - Moves focus to the previous column. Focuses the first item or the last focused/selected one.
+- `Enter` - Shows and moves focus the time picker popover. If already shown, selects the focused item from the first column.
+- `Space` - Selects the focused item.
+- `PageUp` / `Home` - Selects the first item in the column.
+- `PageDown` / `End` - Selects the last item in the column.
+- `Esc` - Closes the time picker popover.
+
 ## Binding
 
-Binds through Alpine `x-model`. See the Example for the expected value shape.
+Binds through Alpine `x-model`. See the Examples for the expected value shape.
 
-## Example
+## Examples
 
 ```html
 <div x-data="{ timeConfig: { seconds: true, is12Hour: true } }" x-h-time-picker="timeConfig">
@@ -89,7 +108,14 @@ Binds through Alpine `x-model`. See the Example for the expected value shape.
 </div>
 ```
 
-More examples in the docs site: Configuration, Examples.
+```html
+<div x-data="{ time: '13:33' }" x-h-time-picker>
+  <input type="text" id="tpi-2" x-model="time" x-h-time-picker-input />
+  <div x-h-time-picker-popup></div>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/time-picker.html
 
 ## Notes
 

@@ -4,14 +4,18 @@ A small pop-up that provides additional information or context about an interfac
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use tooltips to clarify controls, explain icons, or provide contextual hints. Keep the content concise and relevant, and avoid placing critical information exclusively in tooltips, as they may be inaccessible on touch devices or overlooked by users.
+
 ## Directives
 
-`x-h-tooltip` is the root. The directives compose one component and must be nested as shown in the Example below (the library throws at runtime when a required ancestor is missing):
+`x-h-tooltip` is the root. The directives compose one component and must be nested as shown in the Examples below (the library throws at runtime when a required ancestor is missing):
 
 - `x-h-tooltip`
 - `x-h-tooltip-trigger`
 
-## Example
+## Examples
 
 ```html
 <button x-h-button x-h-tooltip-trigger>Button</button>
@@ -24,6 +28,8 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
   </div>
 </div>
 ```
+
+Full docs: https://www.codbex.com/harmonia/components/tooltip.html
 
 ## Notes
 

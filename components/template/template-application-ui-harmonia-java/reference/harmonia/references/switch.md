@@ -4,6 +4,10 @@ Allows users to toggle a binary state, such as true/false or on/off. Functionall
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Use switches for settings or options that can be turned on or off instantly, especially when the change takes effect immediately. Make sure the associated label clearly indicates the action. Avoid using switches for independent yes/no choices that do not have immediate effect. Checkboxes are more appropriate in that case.
+
 ## Directive
 
 - `x-h-switch`
@@ -16,7 +20,7 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 | --------- | ------------------ | -------- | ---------------------------- |
 | data-size | `default`<br/>`sm` | false    | Sets the size of the switch. |
 
-## Example
+## Examples
 
 ```html
 <div class="flex items-center gap-3">
@@ -27,7 +31,16 @@ Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-
 </div>
 ```
 
-More examples in the docs site: Examples.
+```html
+<div class="flex items-center gap-3">
+  <span x-h-switch data-size="sm">
+    <input type="checkbox" id="sws" />
+  </span>
+  <label x-h-label for="sws">Just switch</label>
+</div>
+```
+
+Full docs: https://www.codbex.com/harmonia/components/switch.html
 
 ## Notes
 

@@ -4,6 +4,10 @@
 
 Part of the Harmonia Alpine.js component library. Every directive uses the `x-h-` prefix.
 
+## Usage
+
+Give the chart a container with an explicit height (charts fill their parent). Provide one or more `series`, each a list of numeric `data` points, and a matching `labels` array naming the points along the axis. Use a scatter chart to show individual data points without implying a connection between them; when a trend across an ordered sequence matters, use a Line Chart.
+
 ## Directive
 
 - `x-h-chart-scatter`
@@ -35,13 +39,30 @@ The chart is exposed to assistive technologies as a `figure` with a visually-hid
 
 When `tooltip` is enabled, hovering and clicking points emit bubbling `CustomEvent`s on the chart element: `chart-hover`, `chart-leave`, and `chart-click`. See the events reference for the shared `detail` shape.
 
-## Example
+## Examples
+
+### Basic
 
 ```html
 <div style="height: 20rem" x-h-chart-scatter="{ labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'], series: [{ name: 'Visitors', data: [120, 200, 150, 280, 240] }] }"></div>
 ```
 
-More examples in the docs site: Multiple series.
+### Multiple series
+
+```html
+<div
+  style="height: 20rem"
+  x-h-chart-scatter="{
+    labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    series: [
+      { name: 'Visitors', data: [120, 200, 150, 280, 240] },
+      { name: 'Signups', data: [40, 60, 55, 90, 80] }
+    ]
+  }"
+></div>
+```
+
+Full docs: https://www.codbex.com/harmonia/charts/scatter.html
 
 ## Notes
 
