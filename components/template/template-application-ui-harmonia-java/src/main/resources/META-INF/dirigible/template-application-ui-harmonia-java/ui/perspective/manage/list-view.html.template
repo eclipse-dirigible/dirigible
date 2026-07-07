@@ -16,7 +16,7 @@
       </div>
     </div>
     <button x-h-button data-variant="primary" @click="newEntity()">
-      <i role="img" data-lucide="plus"></i>
+      <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
     <!-- Developer-contributed page actions for this view (customActions extension point). -->
@@ -45,7 +45,7 @@
   <!-- Empty -->
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><i role="img" data-lucide="inbox"></i></div>
+      <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="inbox"></i></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${menuLabel} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') })"></div>
       <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.getStarted', 'Get started by creating the first record.')"></div>
     </div>
@@ -71,9 +71,9 @@
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isNumberType && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS") class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
-                    <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
-                    <i role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></i>
-                    <i role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></i>
+                    <svg x-h-lucide role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
+                    <svg x-h-lucide role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
+                    <svg x-h-lucide role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
                   </div>
                 </th>
 #end
@@ -102,7 +102,7 @@
                 <th x-h-table-head scope="col" class="text-center">
                   <button type="button" x-show="hasActiveColumnFilters" @click="clearColumnFilters()"
                           :title="T('$projectName:${tprefix}.defaults.clearFilters', 'Clear filters')" class="text-muted-foreground hover:text-foreground">
-                    <i role="img" data-lucide="filter-x" class="size-4"></i>
+                    <i role="img" x-h-lucide data-lucide="filter-x" class="size-4"></i>
                   </button>
                 </th>
               </tr>
@@ -130,7 +130,7 @@
 #end
                   <td x-h-table-cell data-row-actions @click.stop>
                     <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
-                      <i role="img" data-lucide="ellipsis"></i>
+                      <i role="img" x-h-lucide data-lucide="ellipsis"></i>
                     </button>
                     <ul x-h-menu data-align="bottom-end">
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
@@ -146,9 +146,9 @@
         </div>
 
         <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
           <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" data-lucide="chevron-right"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
       </div>
     </div>
@@ -168,9 +168,9 @@
         <div x-h-toolbar data-variant="transparent" data-size="sm">
           <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
-          <button x-h-button data-variant="outline" data-size="sm" @click="previewEntity(selected)"><i role="img" data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
-          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
-          <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" data-lucide="trash-2"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="previewEntity(selected)"><i role="img" x-h-lucide data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
+          <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
         </div>
 
 #if($hasProcess)
@@ -178,7 +178,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
             </button>
           </template>
         </div>

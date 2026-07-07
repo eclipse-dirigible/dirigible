@@ -22,13 +22,9 @@
  */
 function basePage() {
   return {
-    refreshIcons() {
-      this.$nextTick(() => {
-        if (window.lucide && typeof window.lucide.createIcons === 'function') {
-          window.lucide.createIcons();
-        }
-      });
-    },
+    // No-op: Lucide icons now render via the x-h-lucide directive (harmonia-lucide bundle), which
+    // upgrades icons on init and inside dynamically loaded views - no manual createIcons scan needed.
+    refreshIcons() {},
 
     /**
      * Format a floating-point value for display: decimals from the field's DecimalFormat pattern, the

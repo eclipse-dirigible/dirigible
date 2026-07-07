@@ -103,8 +103,8 @@
               </template>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.relationshipEntityName}')"><i x-h-lucide data-lucide="plus" class="size-4"></i> New ${property.relationshipEntityName}</button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#else :data-disabled="isPreview"#end>
@@ -148,7 +148,7 @@
       <div x-h-toolbar data-variant="transparent">
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
-        <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+        <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
@@ -167,7 +167,7 @@
               </template>
               <td x-h-table-cell data-row-actions x-show="!isPreview" @click.stop>
                 <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
-                  <i role="img" data-lucide="ellipsis"></i>
+                  <i role="img" x-h-lucide data-lucide="ellipsis"></i>
                 </button>
                 <ul x-h-menu data-align="bottom-end">
                   <li x-h-menu-item @click="openRowDialog(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
@@ -210,7 +210,7 @@
         <div x-h-card-header>
           <h3 x-h-card-title x-text="T(d.tkey, d.label)"></h3>
           <div x-h-card-action x-show="masterId && !isPreview">
-            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+            <button x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
           </div>
         </div>
         <div x-h-card-content>
@@ -234,7 +234,7 @@
                       <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
                     </template>
                     <td x-h-table-cell data-row-actions x-show="!isPreview">
-                      <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" data-lucide="trash-2"></i></button>
+                      <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
                     </td>
                   </tr>
                 </template>
@@ -266,7 +266,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
         </button>
       </template>
 #end
@@ -276,12 +276,12 @@
            language when several exist. Stays available in preview (printing is read-only). -->
       <button type="button" x-h-button data-variant="outline" x-show="isEdit || isPreview" :disabled="printBusy" @click="openPrint()">
         <span x-show="printBusy" x-h-spinner></span>
-        <i role="img" data-lucide="printer" x-show="!printBusy"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+        <svg x-h-lucide role="img" data-lucide="printer" x-show="!printBusy"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
       </button>
 #if($duplicable)
       <!-- Built-in Duplicate action: clones this document (header + items) into a new draft and opens it. -->
       <button type="button" x-h-button data-variant="outline" x-show="isEdit || isPreview" :disabled="state === 'saving'" @click="duplicate()">
-        <i role="img" data-lucide="copy"></i><span x-text="T('$projectName:${tprefix}.defaults.duplicate', 'Duplicate')"></span>
+        <i role="img" x-h-lucide data-lucide="copy"></i><span x-text="T('$projectName:${tprefix}.defaults.duplicate', 'Duplicate')"></span>
       </button>
 #end
       <!-- Developer-contributed per-record actions for this document (customActions extension point).
@@ -294,12 +294,12 @@
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
-        <i role="img" data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+        <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+        <svg x-h-lucide role="img" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
     </div>
     </div>
@@ -364,8 +364,8 @@
                   </div>
                   <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
                   <div class="hbox gap-1 mt-1" x-show="col.lookup && col.lookup.creatable && !col.readonly">
-                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i data-lucide="plus" class="size-4"></i> <span x-text="'New ' + (col.lookup && col.lookup.entity)"></span></button>
-                    <button type="button" x-h-button data-variant="transparent" aria-label="Refresh" @click="refreshItemOptions(col)"><i data-lucide="refresh-cw" class="size-4"></i></button>
+                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="'New ' + (col.lookup && col.lookup.entity)"></span></button>
+                    <button type="button" x-h-button data-variant="transparent" aria-label="Refresh" @click="refreshItemOptions(col)"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
                   </div>
                 </div>
               </template>
@@ -425,7 +425,7 @@
         <div class="vbox gap-2">
           <template x-for="lang in printLanguages" :key="lang.code">
             <button type="button" x-h-button data-variant="outline" @click="printLangOpen = false; printDoc(lang.code)">
-              <i role="img" data-lucide="printer"></i><span x-text="lang.name"></span>
+              <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="lang.name"></span>
             </button>
           </template>
         </div>

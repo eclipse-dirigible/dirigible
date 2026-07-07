@@ -15,13 +15,13 @@
       <button x-h-button data-variant="outline" class="justify-start"
               :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
               @click="selectSetting({ id: 'region-language' })">
-        <i role="img" data-lucide="globe"></i>
+        <i role="img" x-h-lucide data-lucide="globe"></i>
         <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
       </button>
       <template x-for="item in settingsItems" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
-          <i role="img" data-lucide="settings"></i>
+          <i role="img" x-h-lucide data-lucide="settings"></i>
           <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
         </button>
       </template>

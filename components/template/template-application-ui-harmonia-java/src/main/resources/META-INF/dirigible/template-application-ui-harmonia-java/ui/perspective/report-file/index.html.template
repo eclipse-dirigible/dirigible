@@ -29,17 +29,18 @@
         <div x-h-toolbar-spacer></div>
 #if($chart)
         <button x-h-button data-variant="outline" data-size="sm" @click="toggleView()">
-          <i role="img" :data-lucide="view === 'chart' ? 'table-2' : 'bar-chart-3'"></i>
+          <svg x-h-lucide role="img" data-lucide="table-2" x-show="view === 'chart'"></svg>
+          <svg x-h-lucide role="img" data-lucide="bar-chart-3" x-show="view !== 'chart'"></svg>
           <span x-text="view === 'chart' ? 'Table' : 'Chart'"></span>
         </button>
 #end
         <button x-h-button data-variant="outline" data-size="sm" @click="showFilters = !showFilters; refreshIcons()">
-          <i role="img" data-lucide="filter"></i><span>Filters</span>
+          <i role="img" x-h-lucide data-lucide="filter"></i><span>Filters</span>
           <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
         </button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" data-lucide="refresh-cw"></i><span>Refresh</span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" data-lucide="download"></i><span>Export</span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" data-lucide="printer"></i><span>Print</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span>Refresh</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" x-h-lucide data-lucide="download"></i><span>Export</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" x-h-lucide data-lucide="printer"></i><span>Print</span></button>
       </div>
 
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
@@ -82,8 +83,8 @@
             </template>
           </div>
           <div class="hbox gap-2">
-            <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" data-lucide="check"></i><span>Apply</span></button>
-            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><i role="img" data-lucide="x"></i><span>Clear</span></button>
+            <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span>Apply</span></button>
+            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><i role="img" x-h-lucide data-lucide="x"></i><span>Clear</span></button>
           </div>
         </div>
       </div>
@@ -124,9 +125,9 @@
         </div>
 
         <div x-show="!preview" class="hbox items-center gap-2">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="prev()"><i role="img" data-lucide="chevron-left"></i><span>Prev</span></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="prev()"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span>Prev</span></button>
           <span x-h-text.muted x-text="'Page ' + page + ' / ' + totalPages"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span>Next</span><i role="img" data-lucide="chevron-right"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span>Next</span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
 #if($chart)
         </div>
@@ -144,20 +145,9 @@
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
-    <script>
-      document.addEventListener('alpine:initialized', () => { if (window.lucide) window.lucide.createIcons(); }, { once: true });
-      // Re-apply the colour scheme when the shell (parent window) switches theme. Harmonia applies the
-      // shared localStorage key only at load; the `storage` event fires in this iframe when the parent
-      // changes it, so without this the embedded report (e.g. a dashboard tile) stays on the old theme
-      // until a full refresh. (Can't gate on Harmonia.getColorScheme() — it reads the same key, which
-      // already holds the new value — so track the last applied scheme to re-apply once and avoid loops.)
-      var __harmoniaScheme = null;
-      window.addEventListener('storage', (e) => {
-        if (e.key === 'codbex.harmonia.colorMode' && window.Harmonia) {
-          const scheme = e.newValue || 'light';
-          if (scheme !== __harmoniaScheme) { __harmoniaScheme = scheme; Harmonia.setColorScheme(scheme); }
-        }
-      });
-    </script>
+    <!-- opt-in Harmonia Lucide plugin: registers x-h-lucide (renders Lucide icons + keeps them in sync); needs window.lucide (above). -->
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+    <!-- Lucide icons render via x-h-lucide (harmonia-lucide bundle above). Cross-frame/tab colour-scheme
+         sync is handled by Harmonia itself (its own storage listener), so no extra script is needed. -->
   </body>
 </html>

@@ -391,6 +391,6 @@ document.addEventListener('alpine:init', () => {
 
     openSideNav() { this.isOpen = true; },
     closeSideNav() { if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false; },
-    refreshIcons() { if (window.lucide && typeof window.lucide.createIcons === 'function') window.lucide.createIcons(); },
+    refreshIcons() {}, // no-op: Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle)
   }));
 }, { once: true });

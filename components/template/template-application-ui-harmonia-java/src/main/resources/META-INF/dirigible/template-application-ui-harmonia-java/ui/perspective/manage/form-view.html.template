@@ -109,8 +109,8 @@
               </template>
             </div>
           </div>
-          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')"><i data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>&nbsp;<span x-text="T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"></span></button>
-          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i data-lucide="refresh-cw" class="size-4"></i></button>
+          <button type="button" x-h-button data-variant="outline" class="shrink-0" x-show="!isPreview" @click="addRelated('${property.name}', '${property.widgetDropdownAppUrl}', '${property.relationshipEntityName}')"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>&nbsp;<span x-text="T('$projectName:${tprefix}.t.${property.relationshipEntityName}', '${property.relationshipEntityName}')"></span></button>
+          <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
         <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#else :data-disabled="isPreview"#end>
@@ -190,7 +190,7 @@
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
             <div x-h-card-action x-show="!isPreview">
-              <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+              <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
           <div x-h-card-content>
@@ -214,7 +214,7 @@
                         <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
                       </template>
                       <td x-h-table-cell data-row-actions x-show="!isPreview">
-                        <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" data-lucide="ellipsis"></i></button>
+                        <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                         <ul x-h-menu data-align="bottom-end">
                           <li x-h-menu-item @click="previewRow(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
                           <li x-h-menu-item @click="editRow(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
@@ -255,7 +255,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
         </button>
       </template>
 #end
@@ -263,12 +263,12 @@
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
-        <i role="img" data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
+        <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="!isPreview" :disabled="state === 'saving'" @click="save()">
         <span x-show="state === 'saving'" x-h-spinner></span>
-        <i role="img" data-lucide="save" x-show="state !== 'saving'"></i><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
+        <svg x-h-lucide role="img" data-lucide="save" x-show="state !== 'saving'"></svg><span x-text="isEdit ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.create', 'Create')"></span>
       </button>
     </div>
     </div>

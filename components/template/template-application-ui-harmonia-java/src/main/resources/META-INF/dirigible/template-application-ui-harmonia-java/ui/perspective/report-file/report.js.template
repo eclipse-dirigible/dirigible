@@ -280,8 +280,6 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    refreshIcons() {
-      this.${dollar}nextTick(() => { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); });
-    },
+    refreshIcons() {}, // no-op: Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle)
   }));
 }, { once: true });

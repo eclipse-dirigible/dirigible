@@ -19,9 +19,9 @@
 <div x-data="documentsPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasBack()" @click="goBack()" aria-label="Back"><i role="img" data-lucide="arrow-left"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasForward()" @click="goForward()" aria-label="Forward"><i role="img" data-lucide="arrow-right"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="refresh()" aria-label="Refresh"><i role="img" data-lucide="refresh-cw"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasBack()" @click="goBack()" aria-label="Back"><i role="img" x-h-lucide data-lucide="arrow-left"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasForward()" @click="goForward()" aria-label="Forward"><i role="img" x-h-lucide data-lucide="arrow-right"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="refresh()" aria-label="Refresh"><i role="img" x-h-lucide data-lucide="refresh-cw"></i></button>
     <nav x-h-breadcrumb data-overflow="scroll" class="px-1">
       <ol x-h-breadcrumb-list>
         <template x-for="(c, i) in breadcrumbs" :key="c.path + ':' + i">
@@ -33,11 +33,11 @@
       </ol>
     </nav>
     <div x-h-toolbar-spacer></div>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="search.show" @click="toggleSearch()" aria-label="Find item"><i role="img" data-lucide="search"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askNewFolder()" aria-label="New folder"><i role="img" data-lucide="folder-plus"></i></button>
-    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!anySelected()" @click="askDeleteSelected()" aria-label="Delete selected"><i role="img" data-lucide="trash-2"></i></button>
-    <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><i role="img" data-lucide="folder-down"></i></a>
-    <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><i role="img" data-lucide="upload"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="search.show" @click="toggleSearch()" aria-label="Find item"><i role="img" x-h-lucide data-lucide="search"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askNewFolder()" aria-label="New folder"><i role="img" x-h-lucide data-lucide="folder-plus"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!anySelected()" @click="askDeleteSelected()" aria-label="Delete selected"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+    <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><i role="img" x-h-lucide data-lucide="folder-down"></i></a>
+    <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><i role="img" x-h-lucide data-lucide="upload"></i></button>
     <ul x-h-menu data-align="bottom-end">
       <li x-h-menu-item @click="triggerUpload(false)" x-text="T('application-core:shell.documents.uploadFiles', 'Upload files')"></li>
       <li x-h-menu-item @click="triggerUpload(true)" x-text="T('application-core:shell.documents.uploadZip', 'Upload zip contents')"></li>
@@ -91,11 +91,11 @@
                   </td>
                   <th x-h-table-head scope="row">
                     <button x-h-button data-variant="link" class="justify-start" @click="onRowClick(item)">
-                      <i role="img" :data-lucide="fileIcon(item)"></i><span x-text="item.name"></span>
+                      <i role="img" x-h-lucide :data-lucide="fileIcon(item)"></i><span x-text="item.name"></span>
                     </button>
                   </th>
                   <td x-h-table-cell data-row-actions>
-                    <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><i role="img" data-lucide="ellipsis"></i></button>
+                    <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Item actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                     <ul x-h-menu data-align="bottom-end">
                       <li x-show="isDocument(item)" x-h-menu-item @click="copyLink(item)" x-text="T('application-core:shell.documents.copyLink', 'Copy link')"></li>
                       <li x-h-menu-item @click="askRename(item)" x-text="T('application-core:shell.documents.rename', 'Rename')"></li>
@@ -140,7 +140,7 @@
         <!-- Empty / not previewable -->
         <div x-show="!selectedFile || !canPreview" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><i data-lucide="eye" role="img" aria-label="preview"></i></div>
+            <div x-h-info-page-media.icon><i x-h-lucide data-lucide="eye" role="img" aria-label="preview"></i></div>
             <div x-h-info-page-title x-text="T('application-core:shell.documents.filePreview', 'File Preview')"></div>
             <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? 'This file cannot be previewed.' : 'Click on a file to see its preview.'"></div>
           </div>

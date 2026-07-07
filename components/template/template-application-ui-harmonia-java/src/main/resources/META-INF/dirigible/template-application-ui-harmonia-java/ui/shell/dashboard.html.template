@@ -12,14 +12,14 @@
          tile opens the full report. -->
     <div class="vbox gap-3" x-show="kpis.length > 0 || customKpis.length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="gauge" class="size-4"></i><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
+        <i role="img" x-h-lucide data-lucide="gauge" class="size-4"></i><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <template x-for="w in customKpis" :key="w.name">
           <div x-h-card>
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" :data-lucide="w.icon" class="size-4"></i><span x-text="T(w.tkey, w.label)"></span>
+                <i role="img" x-h-lucide :data-lucide="w.icon" class="size-4"></i><span x-text="T(w.tkey, w.label)"></span>
               </div>
             </div>
             <div x-h-card-content>
@@ -36,7 +36,7 @@
                @click="openReport(r)" @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
+                <i role="img" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
               </div>
             </div>
             <div x-h-card-content>
@@ -87,7 +87,7 @@
           <div x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2">
-                <i role="img" :data-lucide="w.icon" class="size-4"></i><span x-text="T(w.tkey, w.label)"></span>
+                <i role="img" x-h-lucide :data-lucide="w.icon" class="size-4"></i><span x-text="T(w.tkey, w.label)"></span>
               </h3>
             </div>
             <div x-h-card-content class="vbox gap-2">
@@ -103,18 +103,18 @@
     <!-- Reports -->
     <div class="vbox gap-3" x-show="reports.length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
+        <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in reports" :key="r.url">
           <div x-h-card>
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer" @click="openReport(r)">
-                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
+                <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="openReport(r)" aria-label="Open report">
-                  <i role="img" data-lucide="arrow-up-right"></i>
+                  <i role="img" x-h-lucide data-lucide="arrow-up-right"></i>
                 </button>
               </div>
             </div>

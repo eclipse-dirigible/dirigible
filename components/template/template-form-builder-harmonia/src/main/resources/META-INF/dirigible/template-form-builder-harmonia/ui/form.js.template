@@ -240,8 +240,6 @@ document.addEventListener('alpine:init', () => {
       return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 
-    refreshIcons() {
-      this.$nextTick(() => { if (window.lucide && window.lucide.createIcons) window.lucide.createIcons(); });
-    },
+    refreshIcons() {}, // no-op: Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle)
   }));
 }, { once: true });
