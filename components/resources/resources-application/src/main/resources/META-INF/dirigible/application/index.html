@@ -76,17 +76,17 @@
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/dashboard')" @click="navigate('/dashboard')">
-                      <i role="img" data-lucide="layout-dashboard"></i><span x-text="T('application-core:shell.nav.dashboard', 'Dashboard')"></span>
+                      <i role="img" x-h-lucide data-lucide="layout-dashboard"></i><span x-text="T('application-core:shell.nav.dashboard', 'Dashboard')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/inbox')" @click="navigate('/inbox')">
-                      <i role="img" data-lucide="inbox"></i><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
+                      <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
                     </button>
                   </li>
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/documents')" @click="navigate('/documents')">
-                      <i role="img" data-lucide="folder"></i><span x-text="T('application-core:shell.nav.documents', 'Documents')"></span>
+                      <i role="img" x-h-lucide data-lucide="folder"></i><span x-text="T('application-core:shell.nav.documents', 'Documents')"></span>
                     </button>
                   </li>
                 </ul>
@@ -108,7 +108,7 @@
                         <button x-h-sidebar-menu-button :data-active="isAppActive(item)" @click="openApp(item)">
                           <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
                           <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
-                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" :data-lucide="item.icon || 'box'"></i></template>
+                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" x-h-lucide :data-lucide="item.icon || 'box'"></i></template>
                           <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
                         </button>
                       </li>
@@ -127,7 +127,7 @@
                   <template x-for="r in $store.reports.items" :key="r.url">
                     <li x-h-sidebar-menu-item>
                       <button x-h-sidebar-menu-button :data-active="isReportActive(r)" @click="openReport(r)">
-                        <i role="img" data-lucide="bar-chart-3"></i><span x-text="$store.reports.displayLabel(r)"></span>
+                        <i role="img" x-h-lucide data-lucide="bar-chart-3"></i><span x-text="$store.reports.displayLabel(r)"></span>
                       </button>
                     </li>
                   </template>
@@ -141,7 +141,7 @@
             <ul x-h-sidebar-menu>
               <li x-h-sidebar-menu-item x-show="settingsItems.length > 0">
                 <button x-h-sidebar-menu-button :data-active="settingsMode" @click="openSettings()">
-                  <i role="img" data-lucide="settings"></i><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
+                  <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
                 </button>
               </li>
             </ul>
@@ -155,19 +155,19 @@
           <div x-h-toolbar data-variant="transparent" x-cloak>
             <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
-              <i role="img" data-lucide="menu"></i>
+              <i role="img" x-h-lucide data-lucide="menu"></i>
             </button>
             <span x-h-toolbar-title x-text="T('application-core:shell.nav.applications', 'Applications')"></span>
             <div x-h-toolbar-spacer></div>
             <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
                     :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
-              <i x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></i>
-              <i x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></i>
+              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
+              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
             </button>
 
             <!-- Notifications: the bell shows the unread count; the popover lists them. -->
             <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications" class="relative">
-              <i role="img" data-lucide="bell"></i>
+              <i role="img" x-h-lucide data-lucide="bell"></i>
               <span x-show="$store.notifications.unreadCount > 0" class="absolute" x-text="$store.notifications.unreadCount"
                     style="right:-2px; bottom:-2px; min-width:15px; height:15px; padding:0 3px; border-radius:9999px; background:#e01b24; color:#fff; font-size:9px; line-height:15px; text-align:center; font-weight:700;"></span>
             </button>
@@ -176,7 +176,7 @@
                 <span x-h-toolbar-title class="shrink-0" x-text="T('application-core:shell.notifications.title', 'Notifications') + ' (' + $store.notifications.unreadCount + ')'"></span>
                 <div x-h-toolbar-spacer></div>
                 <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
-                        title="Mark all as read" aria-label="Mark all as read"><i role="img" data-lucide="check-check"></i></button>
+                        title="Mark all as read" aria-label="Mark all as read"><i role="img" x-h-lucide data-lucide="check-check"></i></button>
               </div>
               <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.notifications.caughtUp', 'You\u2019re all caught up.')"></div>
               <ol x-show="$store.notifications.items.length" x-h-notification-list>
@@ -196,18 +196,18 @@
             <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
             <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
-              <i role="img" data-lucide="circle-user"></i>
+              <i role="img" x-h-lucide data-lucide="circle-user"></i>
             </button>
             <ul x-h-menu aria-label="User menu" data-align="bottom-end">
               <div x-h-tile class="mb-1">
-                <div x-h-tile-media><i role="img" data-lucide="circle-user" class="size-6"></i></div>
+                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
                 <div x-h-tile-content>
                   <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
                 </div>
               </div>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
-                <i role="img" data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
+                <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>
           </div>
@@ -328,10 +328,10 @@
 
     <!-- 4. Lucide icons -->
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
-    <script>
-      document.addEventListener('alpine:initialized', () => { if (window.lucide) window.lucide.createIcons(); }, { once: true });
-      document.addEventListener('pinecone:end', () => { if (window.lucide) window.lucide.createIcons(); });
-    </script>
+    <!-- opt-in Harmonia Lucide plugin: registers x-h-lucide (renders Lucide icons + keeps them in sync); needs window.lucide (above). -->
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+    <!-- Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle above): it upgrades
+         icons on init and inside router-swapped views, so no manual createIcons scan is needed. -->
   </body>
 
 </html>

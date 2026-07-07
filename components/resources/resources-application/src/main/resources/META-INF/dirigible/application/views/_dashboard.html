@@ -7,7 +7,7 @@
   x-data="app" scope, so it reads `navigate` / `refreshIcons` and the `reports` store directly.
   KPI-tile style mirrors the standalone per-app dashboard.
 -->
-<div class="vbox size-full overflow-auto" x-init="$nextTick(() => { if (window.lucide) window.lucide.createIcons(); })">
+<div class="vbox size-full overflow-auto">
   <div class="vbox gap-6 p-6">
     <div class="vbox gap-1">
       <h1 class="text-2xl font-bold" x-text="T('application-core:shell.nav.dashboard', 'Dashboard')"></h1>
@@ -21,10 +21,9 @@
     <!-- Key Indicators: report-attached KPI widgets (reports[].widget) aggregated from every published
          app. A count/value widget is a compact number tile; a list widget is a top-N mini table.
          Clicking a tile opens the full report. Values come from the shared reports store. -->
-    <div class="vbox gap-3" x-show="$store.reports.kpiReports().length > 0" x-cloak
-         x-effect="$store.reports.kpiReports().length; $nextTick(() => refreshIcons())">
+    <div class="vbox gap-3" x-show="$store.reports.kpiReports().length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="gauge" class="size-4"></i><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
+        <i role="img" x-h-lucide data-lucide="gauge" class="size-4"></i><span x-text="T('application-core:shell.dashboard.kpis', 'Key Indicators')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <template x-for="r in $store.reports.kpiReports()" :key="r.name">
@@ -34,7 +33,7 @@
                @keydown.enter.prevent="openReport(r)">
             <div x-h-card-header>
               <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
-                <i role="img" :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
+                <i role="img" x-h-lucide :data-lucide="r.widget.icon" class="size-4"></i><span x-text="$store.reports.widgetLabel(r)"></span>
               </div>
             </div>
             <div x-h-card-content>
@@ -81,7 +80,7 @@
          above; the sidebar Reports section still lists them all). -->
     <div class="vbox gap-3" x-show="$store.reports.previewReports().length > 0" x-cloak>
       <div class="hbox items-center gap-2 text-xs font-bold uppercase text-muted-foreground">
-        <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
+        <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="T('application-core:shell.nav.reports', 'Reports')"></span>
       </div>
       <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <template x-for="r in $store.reports.previewReports()" :key="r.url">
@@ -89,12 +88,12 @@
             <div x-h-card-header>
               <h3 x-h-card-title class="hbox items-center gap-2 cursor-pointer"
                   @click="openReport(r)">
-                <i role="img" data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
+                <i role="img" x-h-lucide data-lucide="bar-chart-3" class="size-4"></i><span x-text="$store.reports.displayLabel(r)"></span>
               </h3>
               <div x-h-card-action>
                 <button x-h-button data-variant="transparent" data-size="icon-sm"
                         @click="openReport(r)" aria-label="Open report">
-                  <i role="img" data-lucide="arrow-up-right"></i>
+                  <i role="img" x-h-lucide data-lucide="arrow-up-right"></i>
                 </button>
               </div>
             </div>

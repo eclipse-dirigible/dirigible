@@ -148,10 +148,8 @@ document.addEventListener('alpine:init', () => {
       if (window.matchMedia('(max-width: 1024px)').matches) this.isOpen = false;
     },
 
-    refreshIcons() {
-      if (window.lucide && typeof window.lucide.createIcons === 'function') {
-        window.lucide.createIcons();
-      }
-    },
+    // No-op: Lucide icons now render via the x-h-lucide directive (harmonia-lucide bundle), which
+    // upgrades icons on init and inside dynamically loaded views - no manual createIcons scan needed.
+    refreshIcons() {},
   }));
 }, { once: true });

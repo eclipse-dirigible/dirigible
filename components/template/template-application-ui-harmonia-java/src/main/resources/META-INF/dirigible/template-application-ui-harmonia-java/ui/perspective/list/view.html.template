@@ -45,7 +45,7 @@
   <!-- Empty -->
   <div x-show="displayState === 'empty'" x-h-info-page class="p-4">
     <div x-h-info-page-header>
-      <div x-h-info-page-media.icon><i role="img" data-lucide="inbox"></i></div>
+      <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="inbox"></i></div>
       <div x-h-info-page-title x-text="T('$projectName:${tprefix}.messages.noDataYet', 'No ${name} yet', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></div>
       <div x-h-info-page-description x-text="T('$projectName:${tprefix}.messages.noData', 'There is nothing to show here.')"></div>
     </div>
@@ -68,9 +68,9 @@
                 <th x-h-table-head scope="col" data-hoverable="true" data-activable="true"#if($property.isFloatType) class="text-right"#end @click="cycleSort('${property.name}')">
                   <div class="hbox items-center justify-between">
                     <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${property.name}')"></span>
-                    <i role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></i>
-                    <i role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></i>
-                    <i role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></i>
+                    <svg x-h-lucide role="img" data-lucide="arrow-up"      class="size-4" x-show="isSortedAsc('${property.name}')"></svg>
+                    <svg x-h-lucide role="img" data-lucide="arrow-down"    class="size-4" x-show="isSortedDesc('${property.name}')"></svg>
+                    <svg x-h-lucide role="img" data-lucide="arrow-up-down" class="size-4" x-show="isUnsorted('${property.name}')"></svg>
                   </div>
                 </th>
 #end
@@ -103,9 +103,9 @@
         </div>
 
         <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
           <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" data-lucide="chevron-right"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
       </div>
     </div>
@@ -131,7 +131,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
             </button>
           </template>
         </div>

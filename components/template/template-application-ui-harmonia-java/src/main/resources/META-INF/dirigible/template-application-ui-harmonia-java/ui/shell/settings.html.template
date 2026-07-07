@@ -57,7 +57,7 @@
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="selected === '${entity.name}' ? 'selected' : ''"
                 @click="select('${entity.name}', './views/${entity.perspectiveName}/${entity.name}-manage-list.html')">
-          <i role="img" data-lucide="settings"></i><span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', '${entity.name}')"></span>
+          <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('$projectName:${tprefix}.t.${entity.dataName}', '${entity.name}')"></span>
         </button>
 #end
 #end

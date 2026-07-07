@@ -22,9 +22,10 @@
     <span x-show="lastUpdated" x-h-text.muted x-text="'Updated ' + fmtTime(lastUpdated)"></span>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="autoRefresh"
             @click="toggleAuto()" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'">
-      <i role="img" :data-lucide="autoRefresh ? 'pause' : 'play'"></i>
+      <svg x-h-lucide role="img" data-lucide="pause" x-show="autoRefresh"></svg>
+      <svg x-h-lucide role="img" data-lucide="play" x-show="!autoRefresh"></svg>
     </button>
-    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="refresh()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.inbox.refresh', 'Refresh')"></span></button>
   </div>
 
   <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
@@ -41,7 +42,7 @@
 
         <div x-show="filtered.length === 0" x-h-info-page class="p-4">
           <div x-h-info-page-header>
-            <div x-h-info-page-media.icon><i data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+            <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
             <div x-h-info-page-title x-text="T('application-core:shell.inbox.noTasks', 'No tasks')"></div>
             <div x-h-info-page-description x-text="T('application-core:shell.inbox.noTasksHint', 'You have no pending tasks.')"></div>
           </div>
@@ -92,12 +93,12 @@
         <div x-show="selected && !selected.mine" class="vbox gap-3 items-start p-4">
           <div x-h-info-page>
             <div x-h-info-page-header>
-              <div x-h-info-page-media.icon><i data-lucide="inbox" role="img" aria-label="inbox"></i></div>
+              <div x-h-info-page-media.icon><i x-h-lucide data-lucide="inbox" role="img" aria-label="inbox"></i></div>
               <div x-h-info-page-title x-text="T('application-core:shell.inbox.claimTask', 'Claim this task')"></div>
               <div x-h-info-page-description x-text="T('application-core:shell.inbox.claimHint', 'This task is available to your group. Claim it to open and complete its form.')"></div>
             </div>
           </div>
-          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" data-lucide="hand"></i><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
+          <button x-h-button data-variant="primary" :disabled="busy" @click="claim(selected)"><i role="img" x-h-lucide data-lucide="hand"></i><span x-text="T('application-core:shell.inbox.claimOpen', 'Claim & open')"></span></button>
         </div>
 
         <!-- Claimed + has a form: render the standalone form inline. -->
