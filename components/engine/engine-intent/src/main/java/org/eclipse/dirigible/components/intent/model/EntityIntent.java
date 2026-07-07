@@ -91,11 +91,40 @@ public class EntityIntent {
      * order, then to-one relations), which pushes all relations to the end.
      */
     private List<String> order = new ArrayList<>();
+    /**
+     * Optional UI view type for this entity. {@code calendar} renders its records as events on a
+     * Harmonia calendar (see {@link #calendar}); absent → the default list / manage / document layout
+     * inferred from structure.
+     */
+    private String view;
+    /** Calendar-view configuration; used when {@code view: calendar}. */
+    private CalendarIntent calendar;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
     public String getName() {
         return name;
+    }
+
+    public String getView() {
+        return view;
+    }
+
+    public void setView(String view) {
+        this.view = view;
+    }
+
+    /** Whether this entity is rendered as a calendar ({@code view: calendar}). */
+    public boolean isCalendar() {
+        return "calendar".equalsIgnoreCase(view == null ? null : view.trim());
+    }
+
+    public CalendarIntent getCalendar() {
+        return calendar;
+    }
+
+    public void setCalendar(CalendarIntent calendar) {
+        this.calendar = calendar;
     }
 
     public List<String> getOrder() {
