@@ -379,7 +379,7 @@ Treat `modules/commons/commons-config/src/main/java/org/eclipse/dirigible/common
 
 The full Selenide UI suite takes ~1.5h per DB, so it does **not** run on every PR:
 
-- **`pull-request.yml`** (every PR) runs `code-style`, unit `tests`, `docker-build`, and a single fast **`smoke-tests`** job on H2: `mvn clean install -P integration-tests -Dit.groups="!ui | smoke"`. The tag expression selects the HTTP-level ITs (untagged, so `!ui`) plus the few UI journeys explicitly marked `@Tag("smoke")` - including two full clone->generate->validate app lifecycles (`IntentEditorLoadsIT`, `JavaEntityDecoratorsSampleProjectIT`).
+- **`pull-request.yml`** (every PR) runs `code-style`, unit `tests`, `docker-build`, and a single fast **`smoke-tests`** job on H2: `mvn clean install -P integration-tests -Dit.groups="!ui | smoke"`. The tag expression selects the HTTP-level ITs (untagged, so `!ui`) plus the few UI journeys explicitly marked `@Tag("smoke")` - including one full clone->generate->validate app lifecycle (`IntentEditorLoadsIT`, the intent Generate flow). Keep the smoke set small so the PR gate stays fast.
 - **`nightly.yml`** (cron `0 2 * * *` + `workflow_dispatch`) and **push to master** (`build.yml`) run the **full** suite on H2 + PostgreSQL.
 
 **Test tagging convention (JUnit 5 `@Tag`, wired to failsafe via the `${it.groups}` / `${it.excludedGroups}` properties in the root `pom.xml`):**

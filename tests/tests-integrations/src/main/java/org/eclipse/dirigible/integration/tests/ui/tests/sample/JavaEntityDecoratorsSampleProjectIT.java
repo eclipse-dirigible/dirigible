@@ -9,7 +9,6 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests.sample;
 
-import org.junit.jupiter.api.Tag;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 
@@ -19,7 +18,6 @@ import static org.hamcrest.Matchers.containsString;
  * CSVIM-seeded country CRUD and OpenAPI registration, plus the Spring-style DI showcase
  * (constructor injection and the {@code Beans} facade).
  */
-@Tag("smoke")
 public class JavaEntityDecoratorsSampleProjectIT extends SampleProjectRepositoryIT {
 
     private static final String PROJECT = "sample-java-entity-decorators";
