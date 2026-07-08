@@ -295,7 +295,13 @@ public class SchemaExportImportIT extends IntegrationTest {
         DirigibleDataSource dataSource = dataSourcesManager.getDataSource(dataSourceName);
         List<String> createdTables = DatabaseMetadataUtil.getTablesInSchema(dataSource, schema);
 
-        assertThat(createdTables).hasSize(expectedTablesCount);
+        // The tenant-configuration store creates its DIRIGIBLE_CONFIGURATIONS table in every tenant
+        // schema on first request (create-if-absent) - platform infrastructure, not part of the
+        // exported/imported user schema this test asserts.
+        List<String> userTables = createdTables.stream()
+                                               .filter(table -> !"DIRIGIBLE_CONFIGURATIONS".equals(table))
+                                               .toList();
+        assertThat(userTables).hasSize(expectedTablesCount);
     }
 
     @Test

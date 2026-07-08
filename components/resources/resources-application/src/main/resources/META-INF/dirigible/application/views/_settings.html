@@ -18,6 +18,14 @@
         <i role="img" x-h-lucide data-lucide="globe"></i>
         <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
       </button>
+      <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
+           per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
+      <button x-h-button data-variant="outline" class="justify-start"
+              :data-state="isSettingActive({ id: 'tenant-configuration' }) ? 'selected' : ''"
+              @click="selectSetting({ id: 'tenant-configuration' })">
+        <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
+        <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+      </button>
       <template x-for="item in settingsItems" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
@@ -28,7 +36,7 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language'" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
@@ -90,6 +98,41 @@
                      x-text="T('application-core:shell.settings.missingWarning', warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.', { app: warn.app, missing: warn.missing.join(', ') })"></div>
               </div>
             </template>
+          </div>
+        </template>
+      </div>
+    </div>
+    <!-- Tenant Configuration detail: rendered locally (no iframe) - the predefined, per-tenant
+         overridable properties (branding for now), read from and written to the platform endpoint
+         /services/core/configurations/tenant. An empty value means the property is not overridden and
+         falls back to the platform default. -->
+    <div x-show="settingsSelected === 'tenant-configuration'" class="size-full overflow-auto">
+      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+        <div class="vbox gap-1">
+          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.tenantConfigHint', 'Per-tenant overrides for the predefined branding properties. Leave a value empty to fall back to the platform default.')"></span>
+        </div>
+        <template x-if="tenantConfigError">
+          <div x-h-alert data-variant="warning" role="alert">
+            <div x-h-alert-description
+                 x-text="tenantConfigError === 'forbidden' ? T('application-core:shell.settings.tenantConfigForbidden', 'You do not have permission to view or change the tenant configuration.') : T('application-core:shell.settings.tenantConfigFailed', 'Something went wrong. Please try again.')"></div>
+          </div>
+        </template>
+        <template x-if="tenantConfigLoading">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
+        </template>
+        <template x-if="!tenantConfigLoading && tenantConfigError !== 'forbidden'">
+          <div class="vbox gap-4">
+            <template x-for="entry in tenantConfig" :key="entry.key">
+              <div class="vbox gap-1">
+                <span x-h-text.muted class="text-sm" x-text="tenantConfigLabel(entry.key)"></span>
+                <input x-h-input x-model="entry.value" :placeholder="entry.key" />
+              </div>
+            </template>
+            <div class="hbox gap-2">
+              <button x-h-button data-variant="emphasized" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+              <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+            </div>
           </div>
         </template>
       </div>

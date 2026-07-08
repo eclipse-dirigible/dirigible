@@ -13,23 +13,19 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import org.eclipse.dirigible.components.configurations.service.ConfigurationsService;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.ComponentScan;
 
 /**
  * The Class ConfigurationsEndpointTest.
+ *
+ * {@link ConfigurationsService} is dependency-free (it only reads the static
+ * {@link org.eclipse.dirigible.commons.config.Configuration} sources), so it is exercised directly
+ * here without booting a Spring context. The end-to-end wiring of the configuration endpoints
+ * together with the tenant context and datasources is covered by the integration tests.
  */
-@SpringBootTest
-@AutoConfigureMockMvc
-@ComponentScan(basePackages = {"org.eclipse.dirigible.components.*"})
 public class ConfigurationsEndpointTest {
 
     /** The configurations service. */
-    @Autowired
-    private ConfigurationsService configurationsService;
+    private final ConfigurationsService configurationsService = new ConfigurationsService();
 
     /**
      * Find all.
@@ -37,12 +33,5 @@ public class ConfigurationsEndpointTest {
     @Test
     public void findAll() {
         assertNotNull(configurationsService.findAll());
-    }
-
-    /**
-     * The Class TestConfiguration.
-     */
-    @SpringBootApplication
-    static class TestConfiguration {
     }
 }

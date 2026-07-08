@@ -1,0 +1,212 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml" ng-app="tenantConfigurations" ng-controller="TenantConfigurationsController">
+
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
+        <title config-title></title>
+        <script type="text/javascript" src="/services/web/view-configurations/configs/tenant-configurations-view.js"></script>
+        <meta name="platform-links" category="ng-view">
+    </head>
+
+    <body class="bk-vbox">
+        <bk-bar compact="true">
+            <bk-bar-left>
+                <bk-bar-element>
+                    <bk-button label="New" glyph="sap-icon--add" ng-click="newEntry()"></bk-button>
+                </bk-bar-element>
+                <bk-bar-element>
+                    <bk-button state="transparent" glyph="sap-icon--refresh" title="Refresh" aria-label="Refresh" ng-click="load()"></bk-button>
+                </bk-bar-element>
+            </bk-bar-left>
+            <bk-bar-middle>
+                <bk-bar-element full-width="true" style="max-width: 480px">
+                    <bk-input type="search" placeholder="Search" ng-keyup="search($event)" ng-model="searchField.text"></bk-input>
+                </bk-bar-element>
+            </bk-bar-middle>
+        </bk-bar>
+        <div bk-scrollbar class="bk-full-height">
+            <bk-message-page glyph="sap-icon--filter-fields" ng-if="!configurations.length">
+                <bk-message-page-title>No tenant configurations</bk-message-page-title>
+                <bk-message-page-subtitle>Use the New button to add a configuration for the current tenant.</bk-message-page-subtitle>
+            </bk-message-page>
+            <table bk-table display-mode="compact" outer-borders="none" ng-if="configurations.length">
+                <thead bk-table-header sticky="true" interactive="false">
+                    <tr bk-table-row>
+                        <th bk-table-header-cell>#</th>
+                        <th bk-table-header-cell>Key</th>
+                        <th bk-table-header-cell>Value</th>
+                        <th bk-table-header-cell fit-content="true">Actions</th>
+                    </tr>
+                </thead>
+                <tbody bk-table-body>
+                    <tr bk-table-row ng-repeat="config in configurations track by config.key" hoverable="true" activable="false" ng-hide="config.hidden">
+                        <td bk-table-cell fit-content="true">{{$index + 1}}</td>
+                        <td bk-table-cell>{{::config.key}}</td>
+                        <td bk-table-cell>{{config.display}}</td>
+                        <td bk-table-cell fit-content="true">
+                            <bk-button state="transparent" glyph="sap-icon--edit" title="Edit" aria-label="Edit" ng-click="editEntry(config)"></bk-button>
+                            <bk-button state="transparent" glyph="sap-icon--delete" title="Delete" aria-label="Delete" ng-click="deleteEntry(config)"></bk-button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <script type="text/javascript">
+            angular.module('tenantConfigurations', ['platformView', 'blimpKit'])
+                .constant('Dialogs', new DialogHub())
+                .controller('TenantConfigurationsController', ($timeout, $scope, $http, Dialogs, ButtonStates) => {
+                    const API = '/services/core/configurations/tenant';
+                    $scope.searchField = { text: '' };
+                    $scope.configurations = [];
+
+                    function isSecret(key) {
+                        const k = key.toLowerCase();
+                        return k.includes('password') || k.includes('secret') || k.includes('token');
+                    }
+
+                    function toDisplay(key, value) {
+                        return (value && value.length && isSecret(key)) ? '********' : value;
+                    }
+
+                    $scope.load = () => {
+                        $http.get(API).then((response) => {
+                            $scope.configurations = response.data.map((entry) => ({
+                                key: entry.key,
+                                value: entry.value,
+                                display: toDisplay(entry.key, entry.value),
+                                hidden: false
+                            }));
+                        }, (error) => {
+                            console.error(error);
+                            Dialogs.showAlert({
+                                title: 'Error while loading configurations',
+                                message: 'Please look at the console for more information.',
+                                type: AlertTypes.Error,
+                                preformatted: false
+                            });
+                        });
+                    };
+                    $scope.load();
+
+                    let to = 0;
+                    $scope.search = (event) => {
+                        if (to) $timeout.cancel(to);
+                        if (event.originalEvent.key === 'Escape') {
+                            $scope.searchField.text = '';
+                        }
+                        to = $timeout(() => {
+                            const term = $scope.searchField.text.toLowerCase();
+                            for (let i = 0; i < $scope.configurations.length; i++) {
+                                const c = $scope.configurations[i];
+                                c.hidden = !(`${c.key}${c.value ?? ''}`.toLowerCase().includes(term));
+                            }
+                        }, 200);
+                    };
+
+                    function store(key, value) {
+                        $http.put(API, JSON.stringify({ key: key, value: value })).then(() => {
+                            $scope.load();
+                        }, (response) => {
+                            console.error(response);
+                            Dialogs.showAlert({
+                                title: 'Error while saving configuration',
+                                message: (response.data && response.data.message) || 'Please look at the console for more information.',
+                                type: AlertTypes.Error,
+                                preformatted: false
+                            });
+                        });
+                    }
+
+                    $scope.newEntry = () => {
+                        Dialogs.showFormDialog({
+                            title: 'New configuration',
+                            form: {
+                                'key': {
+                                    label: 'Key',
+                                    controlType: 'input',
+                                    type: 'text',
+                                    placeholder: 'e.g. DIRIGIBLE_TENANT_MY_SETTING',
+                                    minlength: 1,
+                                    maxlength: 255,
+                                    focus: true,
+                                    required: true
+                                },
+                                'value': {
+                                    label: 'Value',
+                                    controlType: 'input',
+                                    type: 'text',
+                                    placeholder: 'Enter value'
+                                }
+                            },
+                            submitLabel: 'Save',
+                            cancelLabel: 'Cancel'
+                        }).then((form) => {
+                            if (form) store(form['key'].trim(), form['value']);
+                        });
+                    };
+
+                    $scope.editEntry = (config) => {
+                        Dialogs.showFormDialog({
+                            title: `Edit "${config.key}"`,
+                            form: {
+                                'value': {
+                                    label: 'Value',
+                                    controlType: 'input',
+                                    type: 'text',
+                                    placeholder: 'Enter value',
+                                    value: config.value,
+                                    focus: true
+                                }
+                            },
+                            submitLabel: 'Update',
+                            cancelLabel: 'Cancel'
+                        }).then((form) => {
+                            if (form) store(config.key, form['value']);
+                        });
+                    };
+
+                    $scope.deleteEntry = (config) => {
+                        Dialogs.showDialog({
+                            title: 'Delete configuration',
+                            message: `Are you sure you want to delete "${config.key}"?`,
+                            buttons: [
+                                { id: 'delete', label: 'Delete', state: ButtonStates.Negative },
+                                { id: 'cancel', label: 'Cancel', state: ButtonStates.Transparent }
+                            ]
+                        }).then((buttonId) => {
+                            if (buttonId === 'delete') {
+                                $http.delete(`${API}?key=${encodeURIComponent(config.key)}`).then(() => {
+                                    $scope.load();
+                                }, (response) => {
+                                    console.error(response);
+                                    Dialogs.showAlert({
+                                        title: 'Error while deleting configuration',
+                                        message: (response.data && response.data.message) || 'Please look at the console for more information.',
+                                        type: AlertTypes.Error,
+                                        preformatted: false
+                                    });
+                                });
+                            }
+                        });
+                    };
+                });
+        </script>
+        <theme></theme>
+    </body>
+
+</html>

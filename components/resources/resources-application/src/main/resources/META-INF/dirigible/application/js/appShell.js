@@ -41,6 +41,81 @@ document.addEventListener('alpine:init', () => {
     // developers know where translations are still needed (data falls back to the default language).
     language: 'en',
     appLanguages: [],
+    // Tenant Configuration: a built-in settings entry showing the predefined, per-tenant-overridable
+    // properties (the branding properties for now). Backed by the platform endpoint
+    // /services/core/configurations/tenant; requires ADMINISTRATOR/OPERATOR (a 403 is surfaced as a
+    // read-only notice). Each entry is { key, value }; an empty value means "not overridden".
+    tenantConfig: [],
+    tenantConfigLoading: false,
+    tenantConfigSaving: false,
+    tenantConfigError: null,
+
+    /** A human-friendly label for a predefined key, derived from its DIRIGIBLE_BRANDING_* name. */
+    tenantConfigLabel(key) {
+      return key.replace(/^DIRIGIBLE_BRANDING_/, '')
+                .toLowerCase()
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, (c) => c.toUpperCase());
+    },
+
+    /** Load the predefined properties and the current tenant's value for each. */
+    async loadTenantConfig() {
+      this.tenantConfigLoading = true;
+      this.tenantConfigError = null;
+      try {
+        const res = await fetch('/services/core/configurations/tenant/predefined', {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.status === 403) {
+          this.tenantConfig = [];
+          this.tenantConfigError = 'forbidden';
+          return;
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        this.tenantConfig = data.map((e) => ({ key: e.key, value: e.value == null ? '' : e.value }));
+      } catch (e) {
+        console.error('tenant-configuration: failed to load', e);
+        this.tenantConfig = [];
+        this.tenantConfigError = 'load';
+      } finally {
+        this.tenantConfigLoading = false;
+        this.refreshIcons();
+      }
+    },
+
+    /** Persist the edited values: a non-empty value is stored (PUT), an emptied one is cleared (DELETE). */
+    async saveTenantConfig() {
+      this.tenantConfigSaving = true;
+      this.tenantConfigError = null;
+      try {
+        for (const entry of this.tenantConfig) {
+          const value = (entry.value || '').trim();
+          if (value.length) {
+            const res = await fetch('/services/core/configurations/tenant', {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key: entry.key, value: value })
+            });
+            if (!res.ok) throw new Error('PUT ' + entry.key + ' -> HTTP ' + res.status);
+          } else {
+            const res = await fetch('/services/core/configurations/tenant?key=' + encodeURIComponent(entry.key), {
+              method: 'DELETE',
+              credentials: 'same-origin'
+            });
+            if (!res.ok && res.status !== 404) throw new Error('DELETE ' + entry.key + ' -> HTTP ' + res.status);
+          }
+        }
+        await this.loadTenantConfig();
+      } catch (e) {
+        console.error('tenant-configuration: failed to save', e);
+        this.tenantConfigError = 'save';
+      } finally {
+        this.tenantConfigSaving = false;
+      }
+    },
 
     // Language coverage of the embedded apps: which languages each generated app PROVIDES
     // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
@@ -197,7 +272,11 @@ document.addEventListener('alpine:init', () => {
           const rest = p.indexOf('/settings/') === 0 ? p.slice('/settings/'.length) : '';
           if (rest) {
             const item = this.findSettingItem(decodeURIComponent(rest));
-            if (item) { this.settingsSelected = item.id; this.settingsUrl = item.path || ''; }
+            if (item) {
+              this.settingsSelected = item.id;
+              this.settingsUrl = item.path || '';
+              if (item.id === 'tenant-configuration') this.loadTenantConfig();
+            }
           }
         } else {
           this.settingsMode = false;
@@ -348,6 +427,7 @@ document.addEventListener('alpine:init', () => {
         if (window.location.hash !== url && window.history && window.history.replaceState) {
           window.history.replaceState(window.history.state, '', url);
         }
+        if (item.id === 'tenant-configuration') this.loadTenantConfig();
         this.refreshIcons();
       }
     },
@@ -358,6 +438,7 @@ document.addEventListener('alpine:init', () => {
      *  (the platform language preference) - it has no app path; its detail renders locally. */
     findSettingItem(id) {
       if (id === 'region-language') return { id: 'region-language' };
+      if (id === 'tenant-configuration') return { id: 'tenant-configuration' };
       return (this.settingsItems || []).find(i => i.id === id) || null;
     },
 
