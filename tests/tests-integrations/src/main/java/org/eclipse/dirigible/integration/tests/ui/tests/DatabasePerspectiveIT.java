@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.junit.jupiter.api.Tag;
 import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.database.DatabaseSystem;
 import org.eclipse.dirigible.database.sql.ISqlDialect;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 
 import java.sql.SQLException;
 
+@Tag("smoke")
 public class DatabasePerspectiveIT extends UserInterfaceIntegrationTest {
 
     private static final String TEST_TABLE_NAME = "STUDENT";

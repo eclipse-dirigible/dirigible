@@ -274,6 +274,12 @@
              the "testcontainers" profile runs only them (see surefire config below). -->
         <surefire.groups></surefire.groups>
         <surefire.excludedGroups>testcontainers</surefire.excludedGroups>
+        <!-- Integration-test (failsafe) tag selection. Empty by default so `-P integration-tests`
+             runs every *IT (the nightly/master full suite). The PR "smoke" job overrides it with a
+             JUnit tag expression, e.g. -Dit.groups="!ui | smoke", to run only the fast HTTP-level ITs
+             plus the few explicitly-smoke UI journeys. -->
+        <it.groups></it.groups>
+        <it.excludedGroups></it.excludedGroups>
     </properties>
 
     <build>
@@ -395,6 +401,8 @@
                         <includes>
                             <include>**/*IT.java</include>
                         </includes>
+                        <groups>${it.groups}</groups>
+                        <excludedGroups>${it.excludedGroups}</excludedGroups>
                     </configuration>
                     <executions>
                         <execution>
