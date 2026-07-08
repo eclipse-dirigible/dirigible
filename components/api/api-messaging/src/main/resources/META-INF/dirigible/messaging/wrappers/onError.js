@@ -9,13 +9,20 @@
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  */
+let handlerPath = __context.get("handler");
+if (!handlerPath || typeof handlerPath !== "string") {
+    throw new Error("Invalid handler path");
+}
+if (handlerPath.includes("..") || handlerPath.includes("//") || handlerPath.startsWith("/")) {
+    throw new Error("Invalid handler path: " + handlerPath);
+}
+
 let handler;
 
 try {
-    // Fallback to require()
-    handler = dirigibleRequire(__context.get("handler"));
+    handler = dirigibleRequire(handlerPath);
 } catch (e) {
-    handler = await import(__context.get("handler"));
+    handler = await import(handlerPath);
 }
 
 handler.onError(__context.get("error"));
