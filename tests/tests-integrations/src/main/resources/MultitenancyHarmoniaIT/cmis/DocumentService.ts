@@ -1,5 +1,5 @@
 import { Controller, Get, Post, Delete } from "@aerokit/sdk/http"
-import { cmis, Document } from "@aerokit/sdk/cms";
+import { cmis, Document, Folder } from "@aerokit/sdk/cms";
 import { streams } from "@aerokit/sdk/io";
 import { response } from "@aerokit/sdk/http";
 
@@ -43,7 +43,7 @@ class DocumentService {
         try {
             const id = ctx.pathParameters.id;
             const cmisSession = cmis.getSession();
-            const doc: Document = cmisSession.getObjectByPath(id);
+            const doc = cmisSession.getObjectByPath(id) as Document;
 
             const inputStream = doc.getContentStream()?.getStream();
             const outputStream = streams.createByteArrayOutputStream();
