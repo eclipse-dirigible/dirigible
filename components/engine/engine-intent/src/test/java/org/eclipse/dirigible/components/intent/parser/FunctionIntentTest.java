@@ -18,9 +18,10 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Coverage for the explicit {@code function} presentation role at entity / field / relation level,
- * and its back-compat with the legacy {@code documentTitle} / {@code documentStatus} /
- * {@code kind: setting} flags, the pre-rename {@code function: DocumentStatus} spelling, and the
- * {@code *Item} naming.
+ * its back-compat with the legacy {@code documentTitle} / {@code kind: setting} flags and the
+ * {@code *Item} naming, and the hard rename of the status role: the pre-rename
+ * {@code function: DocumentStatus} and {@code documentStatus: true} are rejected with a migration
+ * message.
  */
 class FunctionIntentTest {
 
@@ -69,7 +70,7 @@ class FunctionIntentTest {
     }
 
     @Test
-    void legacyBooleanFlagsStillResolveTheSameRoles() {
+    void legacyDocumentTitleBooleanStillResolvesButTheStatusBooleanIsRejected() {
         String yaml = """
                 name: sales
                 entities:
@@ -78,7 +79,7 @@ class FunctionIntentTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: number, type: string, documentTitle: true }
                     relations:
-                      - { name: Status, kind: manyToOne, to: SalesInvoiceStatus, documentStatus: true }
+                      - { name: Status, kind: manyToOne, to: SalesInvoiceStatus, function: EntityStatus }
                   - name: SalesInvoiceItem
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -104,10 +105,12 @@ class FunctionIntentTest {
         assertTrue(model.getEntities()
                         .get(2)
                         .isSetting());
+        assertIssue(yaml.replace("function: EntityStatus", "documentStatus: true"),
+                "uses documentStatus: true - the status role was renamed; use function: EntityStatus");
     }
 
     @Test
-    void entityStatusIsValidOnANonDocumentEntityAndTheOldSpellingStillParses() {
+    void entityStatusIsValidOnANonDocumentEntityAndTheOldSpellingIsRejected() {
         String yaml = """
                 name: vacations
                 entities:
@@ -127,7 +130,8 @@ class FunctionIntentTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
                 """;
-        IntentModel model = IntentParser.parse(yaml);
+        assertIssue(yaml, "uses function: DocumentStatus - the status role was renamed; use function: EntityStatus");
+        IntentModel model = IntentParser.parse(yaml.replace("function: DocumentStatus", "function: EntityStatus"));
         assertTrue(model.getEntities()
                         .get(0)
                         .getRelations()
@@ -139,7 +143,7 @@ class FunctionIntentTest {
                         .getRelations()
                         .get(0)
                         .isEntityStatus(),
-                "pre-rename function: DocumentStatus still resolves while consumers migrate");
+                "the flipped relation resolves the same role");
     }
 
     @Test

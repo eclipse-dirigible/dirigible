@@ -87,12 +87,8 @@ public final class IntentParser {
     private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
     /** Implemented field {@code function} values (lower-cased). */
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
-    /**
-     * Implemented relation {@code function} values (lower-cased). {@code entitystatus} is the canonical
-     * status role, valid on any entity; {@code documentstatus} is the pre-rename spelling, accepted for
-     * one release while the sample and consumer intents migrate - it then becomes a validation error.
-     */
-    private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus", "documentstatus");
+    /** Implemented relation {@code function} values (lower-cased). */
+    private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
@@ -247,8 +243,18 @@ public final class IntentParser {
                 }
             }
             for (RelationIntent relation : entity.getRelations()) {
+                if (relation.isLegacyDocumentStatus()) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName()
+                            + "] uses documentStatus: true - the status role was renamed; use function: EntityStatus");
+                }
                 String rf = relation.getFunction();
                 if (rf == null || rf.isBlank()) {
+                    continue;
+                }
+                if ("documentstatus".equals(rf.trim()
+                                              .toLowerCase(Locale.ROOT))) {
+                    issues.add("entity [" + name + "] relation [" + relation.getName()
+                            + "] uses function: DocumentStatus - the status role was renamed; use function: EntityStatus");
                     continue;
                 }
                 if (!RELATION_FUNCTIONS.contains(rf.trim()

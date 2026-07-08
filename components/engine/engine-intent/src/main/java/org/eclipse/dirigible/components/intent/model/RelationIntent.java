@@ -32,8 +32,9 @@ public class RelationIntent {
      */
     private String model;
     /**
-     * Legacy boolean form of the status role - kept only so old {@code documentStatus: true} intents
-     * parse; the canonical form is {@code function: EntityStatus}.
+     * Pre-rename boolean form of the status role - REJECTED by the parser with a clear migration
+     * message; kept as a field only so the validator can detect it. Author {@code function:
+     * EntityStatus} instead.
      */
     private boolean documentStatus;
 
@@ -151,20 +152,17 @@ public class RelationIntent {
     }
 
     /**
-     * Whether this to-one relation is the entity's status badge - the canonical
-     * {@code function: EntityStatus}, the pre-rename {@code function: DocumentStatus} (still accepted
-     * for one release while the sample/consumer intents migrate), or the legacy
-     * {@code documentStatus: true}.
+     * Whether this to-one relation is the entity's status badge - {@code function: EntityStatus}. The
+     * pre-rename {@code function: DocumentStatus} and the {@code documentStatus: true} boolean are
+     * rejected at parse time with a migration message.
      */
     public boolean isEntityStatus() {
-        if (documentStatus) {
-            return true;
-        }
-        if (function == null) {
-            return false;
-        }
-        String f = function.trim();
-        return "EntityStatus".equalsIgnoreCase(f) || "DocumentStatus".equalsIgnoreCase(f);
+        return function != null && "EntityStatus".equalsIgnoreCase(function.trim());
+    }
+
+    /** Whether the pre-rename {@code documentStatus: true} boolean was authored (parse-rejected). */
+    public boolean isLegacyDocumentStatus() {
+        return documentStatus;
     }
 
     public void setDocumentStatus(boolean documentStatus) {
