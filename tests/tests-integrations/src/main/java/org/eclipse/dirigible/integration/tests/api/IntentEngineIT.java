@@ -1156,6 +1156,86 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void expansion_generates_the_span_handlers_and_the_status_badge_stack() {
+        // A non-document master with an EntityStatus badge, a date-function calculated field and a
+        // month expansion spreading the principal across generated installments.
+        String loanYaml =
+                """
+                        name: loans
+                        entities:
+                          - name: LoanStatus
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 100 }
+                          - name: Loan
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 100 }
+                              - { name: startDate, type: date, required: true }
+                              - { name: endDate, type: date, required: true }
+                              - { name: principal, type: decimal, required: true }
+                              - { name: months, type: decimal, scale: 0, readOnly: true, calculatedOnCreate: "monthsBetween(StartDate, EndDate)", calculatedOnUpdate: "monthsBetween(StartDate, EndDate)" }
+                              - { name: periods, type: integer, readOnly: true }
+                            relations:
+                              - { name: Status, kind: manyToOne, to: LoanStatus, function: EntityStatus, init: 1 }
+                          - name: LoanInstallment
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: dueDate, type: date }
+                              - { name: amount, type: decimal }
+                            relations:
+                              - { name: Loan, kind: manyToOne, to: Loan, composition: true, required: true }
+                        expansions:
+                          - name: installments
+                            from: Loan
+                            into: LoanInstallment
+                            unit: month
+                            between: { start: startDate, end: endDate }
+                            map: { dueDate: period }
+                            spread: { total: principal, into: amount, round: 2 }
+                            count: periods
+                        """;
+        writeIntent(loanYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The glue carries the two per-event expansion handlers with the pre-rendered Java pieces.
+        String glue = contentOf("loans.glue");
+        assertTrue(glue.contains("\"expansions\""), "the .glue should carry the expansions collection");
+        assertTrue(glue.contains("InstallmentsExpansionOnCreate"), "an OnCreate handler entry is expected");
+        assertTrue(glue.contains("InstallmentsExpansionOnUpdate"), "an OnUpdate handler entry is expected");
+
+        // The EntityStatus relation lands as the DOCUMENT_STATUS widget on a NON-document entity.
+        String model = contentOf("loans.model");
+        assertTrue(model.contains("\"widgetType\": \"DOCUMENT_STATUS\""), "the EntityStatus FK should carry the status widget type");
+
+        // Events template: the generated handler owns the child set, spreads with a last-row
+        // remainder and writes the count back without an event.
+        generateFromModel("template-application-events-java/template/template.js", "loans.glue");
+        String onCreate = contentOf("gen/events/InstallmentsExpansionOnCreate.java");
+        assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
+        assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
+        assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
+        assertTrue(onCreate.contains("masters.updateWithoutEvent(master)"), "the count write-back must not re-fire events");
+        String onUpdate = contentOf("gen/events/InstallmentsExpansionOnUpdate.java");
+        assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
+
+        // Harmonia UI: the status renders as the title-bar badge (not an editable input) and the
+        // calculated field previews live via the calc evaluator with the date functions.
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "loans.model");
+        String formView = contentOf("gen/loans/views/Loan/Loan-form.html");
+        assertTrue(formView.contains("statusVariant(statusText())"), "the form should render the status badge");
+        assertFalse(formView.contains("f_Status"), "the status must not render as an editable input");
+        String formJs = contentOf("gen/loans/js/components/pages/Loan/LoanFormPage.js");
+        assertTrue(formJs.contains("harmoniaCalcEval"), "the form should carry the live calc evaluator");
+        assertTrue(formJs.contains("monthsBetween"), "the evaluator should include the date functions");
+        assertTrue(formJs.contains("recalcCalculated"), "the form should recompute calculated fields live");
+    }
+
+    @Test
     void multilingual_entity_generates_the_translation_stack() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
