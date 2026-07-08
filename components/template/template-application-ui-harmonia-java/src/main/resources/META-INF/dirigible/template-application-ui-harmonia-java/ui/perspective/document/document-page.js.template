@@ -40,9 +40,27 @@ function harmoniaCalcEval(expr, vars, scale) {
     const sign = x < 0 ? -1 : 1;
     return sign * Math.floor(Math.abs(x) * f + 0.5) / f;
   };
+  // Date support (mirrors the Java Calc exactly): a date-shaped identifier reads as its EPOCH DAY,
+  // which the *Between functions consume. businessDaysBetween counts Mon-Fri in the CLOSED interval.
+  const businessDaysBetween = (from, to) => {
+    from = Math.floor(from); to = Math.floor(to);
+    if (to < from) return 0;
+    const days = to - from + 1;
+    let count = Math.floor(days / 7) * 5;
+    const startWeekday = ((from + 3) % 7 + 7) % 7; // Monday = 0 ... Sunday = 6 (epoch day 0 = Thursday)
+    for (let k = 0; k < days % 7; k++) if ((startWeekday + k) % 7 < 5) count++;
+    return count;
+  };
+  const monthsBetween = (from, to) => {
+    const a = new Date(Math.floor(from) * 86400000), b = new Date(Math.floor(to) * 86400000);
+    return (b.getUTCFullYear() - a.getUTCFullYear()) * 12 + (b.getUTCMonth() - a.getUTCMonth());
+  };
   const fns = {
     round: (x, n) => roundHalfUp(x, n == null ? 0 : Math.trunc(n)),
     abs: Math.abs, min: Math.min, max: Math.max, ceil: Math.ceil, floor: Math.floor,
+    daysBetween: (a, b) => Math.floor(b) - Math.floor(a),
+    businessDaysBetween: businessDaysBetween,
+    monthsBetween: monthsBetween,
   };
   const s = String(expr == null ? '' : expr);
   let i = 0;
@@ -94,7 +112,13 @@ function harmoniaCalcEval(expr, vars, scale) {
     const raw = vars ? vars[name] : undefined;
     if (raw === null || raw === undefined || raw === '') return 0;
     const n = Number(raw);
-    return isNaN(n) ? 0 : n;
+    if (!isNaN(n)) return n;
+    // Date-shaped value (HTML date/datetime input string or a Jackson [y,m,d...] array) -> epoch day,
+    // matching the Java Calc's coercion so the date functions preview identically.
+    if (Array.isArray(raw) && raw.length >= 3) return Math.floor(Date.UTC(raw[0], raw[1] - 1, raw[2]) / 86400000);
+    const m = /^\d{4}-\d{2}-\d{2}/.exec(String(raw).trim());
+    if (m) { const d = new Date(m[0] + 'T00:00:00Z'); if (!isNaN(d.getTime())) return Math.floor(d.getTime() / 86400000); }
+    return 0;
   }
   const result = parseExpr();
   return roundHalfUp(isFinite(result) ? result : 0, scale == null ? 2 : scale);
