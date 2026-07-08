@@ -41,6 +41,13 @@ public class CalendarIntent {
     private String color;
     /** Initial view: {@code month} (default), {@code week} or {@code day}. */
     private String initialView;
+    /**
+     * Optional to-one relation the calendar is scoped by. When set, the calendar filters its events to
+     * the record whose id arrives as {@code ?<Scope>=<id>} (e.g. opened from a parent), and prefills
+     * that FK on create - so the calendar shows/creates only children of one parent (e.g. day
+     * allocations of one timesheet). Without the query param it shows all records.
+     */
+    private String scope;
 
     public String getStart() {
         return start;
@@ -80,5 +87,13 @@ public class CalendarIntent {
 
     public void setInitialView(String initialView) {
         this.initialView = initialView;
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 }

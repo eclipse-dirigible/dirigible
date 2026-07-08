@@ -97,8 +97,10 @@ public class EntityIntent {
      * inferred from structure.
      */
     private String view;
-    /** Calendar-view configuration; used when {@code view: calendar}. */
+    /** Calendar-view configuration; used when {@code view: calendar} or {@code view: range}. */
     private CalendarIntent calendar;
+    /** Slots-view configuration; used when {@code view: slots}. */
+    private SlotsIntent slots;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
 
@@ -114,9 +116,28 @@ public class EntityIntent {
         this.view = view;
     }
 
-    /** Whether this entity is rendered as a calendar ({@code view: calendar}). */
+    private boolean viewIs(String role) {
+        return view != null && role.equalsIgnoreCase(view.trim());
+    }
+
+    /**
+     * Whether this entity uses the calendar renderer ({@code view: calendar} or {@code view: range}).
+     */
     public boolean isCalendar() {
-        return "calendar".equalsIgnoreCase(view == null ? null : view.trim());
+        return viewIs("calendar") || viewIs("range");
+    }
+
+    /**
+     * Whether this entity is a date-range/span calendar ({@code view: range}) - events span start..end,
+     * all-day.
+     */
+    public boolean isRange() {
+        return viewIs("range");
+    }
+
+    /** Whether this entity is rendered as a slot picker ({@code view: slots}). */
+    public boolean isSlots() {
+        return viewIs("slots");
     }
 
     public CalendarIntent getCalendar() {
@@ -125,6 +146,14 @@ public class EntityIntent {
 
     public void setCalendar(CalendarIntent calendar) {
         this.calendar = calendar;
+    }
+
+    public SlotsIntent getSlots() {
+        return slots;
+    }
+
+    public void setSlots(SlotsIntent slots) {
+        this.slots = slots;
     }
 
     public List<String> getOrder() {

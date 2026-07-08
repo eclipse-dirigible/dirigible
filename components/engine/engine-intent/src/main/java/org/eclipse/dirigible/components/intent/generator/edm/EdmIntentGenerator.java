@@ -35,6 +35,7 @@ import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
@@ -203,12 +204,53 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     if (notBlank(cal.getColor())) {
                         entityMap.put("calendarColorProperty", IntentNaming.pascalCase(cal.getColor()));
                     }
+                    if (notBlank(cal.getScope())) {
+                        entityMap.put("calendarScopeProperty", IntentNaming.pascalCase(cal.getScope()));
+                    }
                     entityMap.put("calendarInitialView", notBlank(cal.getInitialView()) ? cal.getInitialView()
                                                                                              .trim()
                                                                                              .toLowerCase()
                             : "month");
                 } else {
                     entityMap.put("calendarInitialView", "month");
+                }
+                // A range entity is a span (start..end) - events render as all-day multi-day bars.
+                if (entity.isRange()) {
+                    entityMap.put("calendarRange", "true");
+                }
+            }
+            // A slots entity renders as a Harmonia x-h-slot-picker for appointment/booking: free time
+            // slots are bookable and open the create form prefilled with the chosen datetime. Reuses the
+            // generated controller (existing records mark their slots taken) and the shared form.
+            else if (entity.isSlots()) {
+                SlotsIntent slotsCfg = entity.getSlots();
+                entityMap.put("layoutType", "MANAGE_SLOTS");
+                if (slotsCfg != null) {
+                    if (notBlank(slotsCfg.getStart())) {
+                        entityMap.put("slotStartProperty", IntentNaming.pascalCase(slotsCfg.getStart()));
+                    }
+                    entityMap.put("slotOpen", notBlank(slotsCfg.getOpen()) ? slotsCfg.getOpen()
+                                                                                     .trim()
+                            : "08:00");
+                    entityMap.put("slotClose", notBlank(slotsCfg.getClose()) ? slotsCfg.getClose()
+                                                                                       .trim()
+                            : "18:00");
+                    entityMap.put("slotStep", Integer.toString(slotsCfg.getStep() == null ? 30 : slotsCfg.getStep()));
+                    if (slotsCfg.getDisabledDays() != null && !slotsCfg.getDisabledDays()
+                                                                       .isEmpty()) {
+                        StringBuilder days = new StringBuilder();
+                        for (Integer d : slotsCfg.getDisabledDays()) {
+                            if (days.length() > 0) {
+                                days.append(",");
+                            }
+                            days.append(d);
+                        }
+                        entityMap.put("slotDisabledDays", days.toString());
+                    }
+                } else {
+                    entityMap.put("slotOpen", "08:00");
+                    entityMap.put("slotClose", "18:00");
+                    entityMap.put("slotStep", "30");
                 }
             }
             // A document master keeps its own perspective/nav but swaps the master-detail layout for the

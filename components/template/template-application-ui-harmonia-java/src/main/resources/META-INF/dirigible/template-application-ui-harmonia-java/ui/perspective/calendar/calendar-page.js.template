@@ -22,8 +22,26 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}Controller',
     // Entity name for developer-contributed custom actions ($store.customActions).
     caView: '${name}',
+#if($calendarScopeProperty)
+    // Scope: when opened as /${name}?${calendarScopeProperty}=<id> the calendar shows/creates only the
+    // records of that parent (e.g. day allocations of one timesheet). Read from the hash query.
+    scopeId: null,
+    readScope() {
+      const q = window.location.hash.includes('?') ? window.location.hash.split('?')[1] : '';
+      const v = new URLSearchParams(q).get('${calendarScopeProperty}');
+      this.scopeId = (v === null || v === '') ? null : v;
+    },
+    // Append the active scope so the create form presets the parent FK alongside the date.
+    withScope(qs) {
+      if (!this.scopeId) return qs;
+      return qs + (qs ? '&' : '?') + '${calendarScopeProperty}=' + encodeURIComponent(this.scopeId);
+    },
+#end
 
     async init() {
+#if($calendarScopeProperty)
+      this.readScope();
+#end
       await this.load();
     },
 
@@ -31,7 +49,13 @@ document.addEventListener('alpine:init', () => {
       this.state = 'loading';
       this.error = null;
       try {
+#if($calendarScopeProperty)
+        this.items = this.scopeId
+          ? await App.services.api.post(this.apiPath + '/search', { conditions: [{ propertyName: '${calendarScopeProperty}', operator: 'EQ', value: isNaN(Number(this.scopeId)) ? this.scopeId : Number(this.scopeId) }] })
+          : await App.services.api.getAll(this.apiPath);
+#else
         this.items = await App.services.api.getAll(this.apiPath);
+#end
         this.calCfg = { view: '${calendarInitialView}', events: this.buildEvents() };
         this.state = 'default';
       } catch (e) {
@@ -50,7 +74,7 @@ document.addEventListener('alpine:init', () => {
           id: String(row.${primaryKeysString}),
           title: this.titleFor(row),
           start: start,
-          allDay: this.isDateOnly(row.${calendarStartProperty})
+          allDay: #if($calendarRange)true#{else}this.isDateOnly(row.${calendarStartProperty})#end
         };
 #if($calendarEndProperty)
         const end = this.toISO(row.${calendarEndProperty});
@@ -83,7 +107,9 @@ document.addEventListener('alpine:init', () => {
         return date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
       }
       if (typeof v === 'number') {
-        try { return new Date(v).toISOString(); } catch (e) { return ''; }
+        // Jackson serializes Instant/Timestamp as epoch SECONDS (with nanos); JS Date wants millis.
+        const ms = v < 1e12 ? v * 1000 : v;
+        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
       }
       return String(v);
     },
@@ -114,12 +140,12 @@ document.addEventListener('alpine:init', () => {
         if (time) val += 'T' + time;
         qs = '?${calendarStartProperty}=' + encodeURIComponent(val);
       }
-      window.PineconeRouter.navigate('/${name}/create' + qs);
+      window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope(qs)#{else}qs#end);
     },
     onEventClick(e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (id) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
     },
-    newEntity() { window.PineconeRouter.navigate('/${name}/create'); }
+    newEntity() { window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope('')#{else}''#end); }
   }));
 }, { once: true });

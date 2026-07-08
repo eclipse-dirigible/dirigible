@@ -259,6 +259,9 @@ export function generateFiles(model, parameters, templateSources) {
     // calendar; create/edit reuse the shared manage form on date-click / event-click.
     const uiCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.type === "PRIMARY");
 
+    // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
+    const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -325,6 +328,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "uiCalendarModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiCalendarModels, parameters));
+                    break;
+                case "uiSlotsModels":
+                    generatedFiles.push(...generateCollection(location, content, template, uiSlotsModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));

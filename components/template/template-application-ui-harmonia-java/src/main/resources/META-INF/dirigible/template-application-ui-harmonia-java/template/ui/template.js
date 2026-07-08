@@ -16,6 +16,7 @@ import * as settingTemplate from "template-application-ui-harmonia-java/template
 import * as masterDetailTemplate from "template-application-ui-harmonia-java/template/ui/masterDetail";
 import * as documentTemplate from "template-application-ui-harmonia-java/template/ui/document";
 import * as calendarTemplate from "template-application-ui-harmonia-java/template/ui/calendar";
+import * as slotsTemplate from "template-application-ui-harmonia-java/template/ui/slots";
 import * as reportTemplate from "template-application-ui-harmonia-java/template/ui/report";
 import * as navigation from "template-application-ui-harmonia-java/template/ui/navigation";
 
@@ -35,6 +36,7 @@ export function getSources(parameters) {
         ...masterDetailTemplate.getSources(parameters),
         ...documentTemplate.getSources(parameters),
         ...calendarTemplate.getSources(parameters),
+        ...slotsTemplate.getSources(parameters),
         ...reportTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
     ];
