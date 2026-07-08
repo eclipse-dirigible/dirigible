@@ -401,8 +401,6 @@
                         <includes>
                             <include>**/*IT.java</include>
                         </includes>
-                        <groups>${it.groups}</groups>
-                        <excludedGroups>${it.excludedGroups}</excludedGroups>
                     </configuration>
                     <executions>
                         <execution>
