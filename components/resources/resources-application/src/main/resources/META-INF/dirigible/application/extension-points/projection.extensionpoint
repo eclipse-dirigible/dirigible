@@ -1,0 +1,4 @@
+{
+    "name": "application-projections",
+    "description": "Extension Point for the Application Projection Providers (named lenses over the deployed module set for the application shell's product switcher)"
+}

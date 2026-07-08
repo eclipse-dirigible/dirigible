@@ -26,7 +26,7 @@
         <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
         <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
       </button>
-      <template x-for="item in settingsItems" :key="item.id">
+      <template x-for="item in visibleSettingsItems()" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
           <i role="img" x-h-lucide data-lucide="settings"></i>

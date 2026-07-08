@@ -11,6 +11,9 @@
  * e.g. the old Settings - are intentionally excluded; this is the pure-Harmonia application layer).
  */
 const PERSPECTIVES_URL = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-perspectives';
+const PROJECTIONS_URL = '/services/js/platform-core/extension-services/projections.js?extensionPoints=application-projections';
+// Last selected projection, persisted like the theme/language flags (shared localStorage convention).
+const PROJECTION_KEY = 'codbex.harmonia.projection';
 
 document.addEventListener('alpine:init', () => {
   window.PineconeRouter.settings({
@@ -24,6 +27,12 @@ document.addEventListener('alpine:init', () => {
     currentPath: '/dashboard',
     loading: true,
     groups: [],
+    // Projections: named lenses over the deployed module set (the `application-projections`
+    // extension point). With 2+ the sidebar header becomes a Harmonia product switcher and the
+    // selected projection filters the sidebar groups / reports / dashboard tiles / settings.
+    // With 0 or 1 no switcher is shown (a single projection still filters).
+    projections: [],
+    projectionId: '',
     // The currently hosted domain app (a perspective). When set, the iframe is shown instead of #app.
     hostedUrl: '',
     hostedId: '',
@@ -162,6 +171,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async init() {
+      const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });
         if (res.ok) {
@@ -225,6 +235,7 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         console.error('Failed to load application perspectives', e);
       }
+      await projectionsLoaded;
       this.loading = false;
 
       // Mirror the shared locale store so the Settings picker has a plain bindable property;
@@ -457,6 +468,108 @@ document.addEventListener('alpine:init', () => {
         if (item) return item;
       }
       return null;
+    },
+
+    /** Load the application-projections extension point and restore the persisted selection.
+     *  Role-gated projections are filtered server-side, so what arrives here is what may be offered. */
+    async loadProjections() {
+      try {
+        const res = await fetch(PROJECTIONS_URL, { headers: { 'Accept': 'application/json' } });
+        if (res.ok) {
+          const data = await res.json();
+          this.projections = Array.isArray(data.projections) ? data.projections : [];
+        }
+      } catch (e) {
+        console.error('Failed to load application projections', e);
+      }
+      let saved = '';
+      try { saved = localStorage.getItem(PROJECTION_KEY) || ''; } catch (e) { /* no storage */ }
+      this.projectionId = this.projections.some(p => p.id === saved)
+        ? saved
+        : (this.projections.length ? this.projections[0].id : '');
+    },
+
+    /** The currently selected projection entry (for the product-switch header), or null. */
+    selectedProjection() { return this.projections.find(p => p.id === this.projectionId) || null; },
+
+    /** The projection that FILTERS the shell: null when none is selected or the selected one is
+     *  the declared "everything" entry (all: true), in which case nothing is filtered. */
+    activeProjection() {
+      const p = this.selectedProjection();
+      return p && !p.all ? p : null;
+    },
+
+    /** Switch the product-switch selection; persist it and leave a now-hidden hosted app. */
+    selectProjection(p) {
+      if (this.projectionId === p.id) return;
+      this.projectionId = p.id;
+      try { localStorage.setItem(PROJECTION_KEY, p.id); } catch (e) { /* no storage */ }
+      if (this.hostedId && !this.visibleGroups().some(g => (g.items || []).some(i => i.id === this.hostedId))) {
+        this.navigate('/dashboard');
+      }
+      this.refreshIcons();
+    },
+
+    projectionLabel() {
+      const p = this.selectedProjection();
+      return p ? (p.tkey ? T(p.tkey, p.label) : p.label) : '';
+    },
+
+    /** Second line under the product name; the instance brand is the default. */
+    projectionSubtitle() {
+      const p = this.selectedProjection();
+      return (p && p.description) || Alpine.store('branding').name || '';
+    },
+
+    /** The sidebar groups the active projection keeps: listed groups wholesale, plus any group
+     *  reduced to its cherry-picked `items` (Employee-Portal-style selections keep their familiar
+     *  group heading); empty groups vanish. No active projection = everything. */
+    visibleGroups() {
+      const proj = this.activeProjection();
+      if (!proj) return this.groups;
+      const groupIds = proj.groups || [];
+      const itemIds = proj.items || [];
+      const visible = [];
+      for (const g of this.groups) {
+        if (groupIds.includes(g.id)) {
+          visible.push(g);
+          continue;
+        }
+        const picked = (g.items || []).filter(i => itemIds.includes(i.id));
+        if (picked.length) visible.push(Object.assign({}, g, { items: picked }));
+      }
+      return visible;
+    },
+
+    /** The projects contributing the visible perspectives — the projection's reach, used to scope
+     *  reports, dashboard tiles and settings to the apps actually shown. */
+    projectionProjects() {
+      const projects = new Set();
+      this.visibleGroups().forEach(g => (g.items || []).forEach(item => {
+        const match = typeof item.path === 'string' && item.path.match(/^\/services\/web\/([^/]+)\//);
+        if (match) projects.add(match[1]);
+      }));
+      return projects;
+    },
+
+    /** Whether a URL (report page, setting entity) belongs to a project inside the active
+     *  projection. Unattributable URLs stay visible — filtering must not hide what it can't place. */
+    inProjection(url) {
+      if (!this.activeProjection()) return true;
+      const match = typeof url === 'string' && url.match(/^\/services\/web\/([^/]+)\//);
+      return match ? this.projectionProjects().has(match[1]) : true;
+    },
+
+    visibleReports() { return Alpine.store('reports').items.filter(r => this.inProjection(r.url)); },
+    dashKpiReports() { return Alpine.store('reports').kpiReports().filter(r => this.inProjection(r.url)); },
+    dashPreviewReports() { return Alpine.store('reports').previewReports().filter(r => this.inProjection(r.url)); },
+
+    /** Settings entities scoped to the projection: explicitly cherry-picked ones always show. */
+    visibleSettingsItems() {
+      const proj = this.activeProjection();
+      if (!proj) return this.settingsItems;
+      const itemIds = proj.items || [];
+      return this.settingsItems.filter(it => itemIds.includes(it.id) || this.inProjection(it.path));
     },
 
     isBuiltinActive(route) { return !this.hostedUrl && this.currentPath === route; },

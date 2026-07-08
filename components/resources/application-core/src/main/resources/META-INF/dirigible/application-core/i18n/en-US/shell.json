@@ -79,6 +79,9 @@
     "apps": {
       "loading": "Loading applications...",
       "empty": "No applications published yet."
+    },
+    "projections": {
+      "title": "Applications"
     }
   }
 }
