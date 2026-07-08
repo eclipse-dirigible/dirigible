@@ -32,6 +32,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
@@ -292,8 +293,9 @@ public final class IntentParser {
                 continue;
             }
             String name = entity.getName();
-            if (!"calendar".equalsIgnoreCase(view.trim())) {
-                issues.add("entity [" + name + "] has unknown view [" + view + "] (supported: calendar)");
+            String v = view.trim();
+            if (!"calendar".equalsIgnoreCase(v) && !"range".equalsIgnoreCase(v) && !"slots".equalsIgnoreCase(v)) {
+                issues.add("entity [" + name + "] has unknown view [" + view + "] (supported: calendar, range, slots)");
                 continue;
             }
             Set<String> fieldNames = new HashSet<>();
@@ -320,10 +322,25 @@ public final class IntentParser {
                                               .toLowerCase());
                 }
             }
+            if ("slots".equalsIgnoreCase(v)) {
+                SlotsIntent slotsCfg = entity.getSlots();
+                if (slotsCfg == null || slotsCfg.getStart() == null || slotsCfg.getStart()
+                                                                               .isBlank()) {
+                    issues.add("entity [" + name + "] view: slots requires slots.start naming a date/timestamp field");
+                    continue;
+                }
+                if (!dateFieldNames.contains(slotsCfg.getStart()
+                                                     .trim()
+                                                     .toLowerCase())) {
+                    issues.add("entity [" + name + "] slots.start [" + slotsCfg.getStart() + "] is not a declared date/timestamp field");
+                }
+                continue;
+            }
+            // calendar or range
             CalendarIntent cal = entity.getCalendar();
             if (cal == null || cal.getStart() == null || cal.getStart()
                                                             .isBlank()) {
-                issues.add("entity [" + name + "] view: calendar requires calendar.start naming a date/timestamp field");
+                issues.add("entity [" + name + "] view: " + v + " requires calendar.start naming a date/timestamp field");
                 continue;
             }
             if (!dateFieldNames.contains(cal.getStart()
@@ -346,6 +363,13 @@ public final class IntentParser {
                         issues.add("entity [" + name + "] calendar references [" + ref + "] which is not a declared field or relation");
                     }
                 }
+            }
+            if (cal.getScope() != null && !cal.getScope()
+                                              .isBlank()
+                    && !relationNames.contains(cal.getScope()
+                                                  .trim()
+                                                  .toLowerCase())) {
+                issues.add("entity [" + name + "] calendar.scope [" + cal.getScope() + "] is not a declared to-one relation");
             }
         }
     }
