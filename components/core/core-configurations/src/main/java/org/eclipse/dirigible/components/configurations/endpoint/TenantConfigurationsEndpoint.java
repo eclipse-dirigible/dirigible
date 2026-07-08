@@ -59,6 +59,21 @@ public class TenantConfigurationsEndpoint extends BaseEndpoint {
     }
 
     /**
+     * Lists the predefined (overridable) configuration keys with the current tenant's value for each
+     * ({@code value} is {@code null} when unset). This is the fixed set the settings UI renders.
+     *
+     * @return the predefined entries
+     */
+    @GetMapping("/predefined")
+    public ResponseEntity<List<TenantConfiguration>> findPredefined() {
+        try {
+            return ResponseEntity.ok(tenantConfigurationService.listPredefinedForCurrentTenant());
+        } catch (SQLException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to read tenant configuration", ex);
+        }
+    }
+
+    /**
      * Inserts or updates a configuration entry of the current tenant.
      *
      * @param configuration the entry to store

@@ -19,18 +19,36 @@ import org.springframework.stereotype.Component;
  * Decides which configuration keys a tenant is allowed to override through its per-tenant
  * configuration.
  * <p>
- * This is an explicit white-list: a key is injectable only when it matches one of the allowed
- * prefixes. Everything else is stored but inert, so a tenant can never shadow infrastructure keys
- * (database, repository, security, multi-tenancy plumbing, ...). For now only the branding
- * properties are exposed; extend {@link #ALLOWED_PREFIXES} as more keys become safe to override per
- * tenant.
+ * This is an explicit white-list of full configuration keys (exact match, no wildcards). A key is
+ * injectable only when it is one of {@link #ALLOWED_KEYS}; everything else is stored but inert, so
+ * a tenant can never shadow infrastructure keys (database, repository, security, multi-tenancy
+ * plumbing, ...). For now only the branding properties are exposed; add concrete keys to
+ * {@link #ALLOWED_KEYS} as more become safe to override per tenant.
  */
 @Component
 class TenantConfigurationKeyPolicy {
 
-    /** Prefixes of the configuration keys a tenant is allowed to override. */
-    private static final List<String> ALLOWED_PREFIXES = List.of( //
-            "DIRIGIBLE_BRANDING_");
+    /**
+     * The full configuration keys a tenant is allowed to override - the branding properties for now.
+     */
+    private static final List<String> ALLOWED_KEYS = List.of( //
+            "DIRIGIBLE_BRANDING_NAME", //
+            "DIRIGIBLE_BRANDING_SUBTITLE", //
+            "DIRIGIBLE_BRANDING_BRAND", //
+            "DIRIGIBLE_BRANDING_BRAND_URL", //
+            "DIRIGIBLE_BRANDING_FAVICON", //
+            "DIRIGIBLE_BRANDING_THEME", //
+            "DIRIGIBLE_BRANDING_PREFIX", //
+            "DIRIGIBLE_BRANDING_ANALYTICS");
+
+    /**
+     * The full list of configuration keys a tenant may override, in display order.
+     *
+     * @return the allowed keys
+     */
+    List<String> allowedKeys() {
+        return ALLOWED_KEYS;
+    }
 
     /**
      * Returns the subset of the given entries whose keys the tenant is permitted to override.
@@ -49,21 +67,13 @@ class TenantConfigurationKeyPolicy {
     }
 
     /**
-     * Checks whether a single key is injectable, i.e. matches the allowed white-list.
+     * Checks whether a single key is one of the allowed keys.
      *
      * @param key the configuration key
      * @return true if the tenant may override the key
      */
     boolean isInjectable(String key) {
-        if (key == null || key.isBlank()) {
-            return false;
-        }
-        for (String prefix : ALLOWED_PREFIXES) {
-            if (key.startsWith(prefix)) {
-                return true;
-            }
-        }
-        return false;
+        return key != null && ALLOWED_KEYS.contains(key);
     }
 
 }

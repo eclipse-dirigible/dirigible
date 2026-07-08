@@ -42,6 +42,24 @@ class TenantConfigurationKeyPolicyTest {
     }
 
     @Test
+    void matchIsExactNotByPrefix() {
+        // a branding-prefixed but non-predefined key is NOT injectable (no wildcards)
+        assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_UNKNOWN"));
+        assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_"));
+        assertFalse(policy.isInjectable("DIRIGIBLE_BRANDING_NAME_SUFFIX"));
+    }
+
+    @Test
+    void allowedKeysAreTheBrandingProperties() {
+        assertTrue(policy.allowedKeys()
+                         .contains("DIRIGIBLE_BRANDING_NAME"));
+        assertTrue(policy.allowedKeys()
+                         .contains("DIRIGIBLE_BRANDING_THEME"));
+        assertFalse(policy.allowedKeys()
+                          .isEmpty());
+    }
+
+    @Test
     void blankKeyIsNotInjectable() {
         assertFalse(policy.isInjectable(null));
         assertFalse(policy.isInjectable(""));

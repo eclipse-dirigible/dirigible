@@ -79,6 +79,23 @@ public class TenantConfigurationService {
     }
 
     /**
+     * Lists the predefined (allow-listed) configuration keys together with the current tenant's stored
+     * value for each - {@code value} is {@code null} when the tenant has not set that key. This is what
+     * the settings UI renders: the fixed set of overridable properties, not just the ones already
+     * stored.
+     *
+     * @return one entry per allowed key, in the policy's display order
+     * @throws SQLException if the read fails
+     */
+    public List<TenantConfiguration> listPredefinedForCurrentTenant() throws SQLException {
+        Map<String, String> stored = load();
+        return keyPolicy.allowedKeys()
+                        .stream()
+                        .map(key -> new TenantConfiguration(key, stored.get(key)))
+                        .toList();
+    }
+
+    /**
      * Inserts or updates a configuration entry of the current tenant.
      *
      * @param key the configuration key
