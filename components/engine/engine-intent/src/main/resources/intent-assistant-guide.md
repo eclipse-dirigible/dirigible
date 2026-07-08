@@ -108,8 +108,9 @@ composition is opt-in.
   forms, badge pills in the list tables - never as an editable input. The value is managed by the
   platform (an `init:` seed, a workflow `setRelationField`, a roll-up status); an entity whose status
   must be hand-set simply does not mark the relation. Typical pairing on a document: the number field
-  is `DocumentTitle`, the workflow-managed status FK is `EntityStatus`. (`DocumentStatus` is the
-  pre-rename spelling of `EntityStatus` and is being removed - always author `EntityStatus`.)
+  is `DocumentTitle`, the workflow-managed status FK is `EntityStatus`. (`DocumentStatus` /
+  `documentStatus: true` are the pre-rename spellings and are rejected with a migration message -
+  always author `EntityStatus`.)
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
