@@ -616,9 +616,9 @@ document.addEventListener('alpine:init', () => {
     statusVariant(text) {
       const t = String(text || '').toLowerCase();
       if (/draft/.test(t)) return 'outline';
-      if (/(cancel|reject|declin|void|fail|overdue)/.test(t)) return 'negative';
-      if (/(pending|await|hold|review)/.test(t)) return 'warning';
-      if (/(approv|accept|activ|complet|paid|done)/.test(t)) return 'positive';
+      if (/(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)/.test(t)) return 'negative';
+      if (/(pending|await|hold|review|partial)/.test(t)) return 'warning';
+      if (/(approv|accept|activ|complet|paid|done|available)/.test(t)) return 'positive';
       if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
       return 'default';
     },

@@ -19,7 +19,8 @@ import org.junit.jupiter.api.Test;
 /**
  * Coverage for the explicit {@code function} presentation role at entity / field / relation level,
  * and its back-compat with the legacy {@code documentTitle} / {@code documentStatus} /
- * {@code kind: setting} flags and the {@code *Item} naming.
+ * {@code kind: setting} flags, the pre-rename {@code function: DocumentStatus} spelling, and the
+ * {@code *Item} naming.
  */
 class FunctionIntentTest {
 
@@ -33,7 +34,7 @@ class FunctionIntentTest {
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: number, type: string, function: DocumentTitle }
                 relations:
-                  - { name: Status, kind: manyToOne, to: TimesheetStatus, function: DocumentStatus, init: 1 }
+                  - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
               - name: EmployeeTimesheet
                 function: DocumentItem
                 fields:
@@ -63,8 +64,8 @@ class FunctionIntentTest {
                 "function: DocumentTitle -> isDocumentTitle");
         assertTrue(master.getRelations()
                          .get(0)
-                         .isDocumentStatus(),
-                "function: DocumentStatus -> isDocumentStatus");
+                         .isEntityStatus(),
+                "function: EntityStatus -> isEntityStatus");
     }
 
     @Test
@@ -99,10 +100,46 @@ class FunctionIntentTest {
                         .get(0)
                         .getRelations()
                         .get(0)
-                        .isDocumentStatus());
+                        .isEntityStatus());
         assertTrue(model.getEntities()
                         .get(2)
                         .isSetting());
+    }
+
+    @Test
+    void entityStatusIsValidOnANonDocumentEntityAndTheOldSpellingStillParses() {
+        String yaml = """
+                name: vacations
+                entities:
+                  - name: VacationEntitlement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntitlementStatus, function: EntityStatus, init: 1 }
+                  - name: LegacyRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntitlementStatus, function: DocumentStatus }
+                  - name: EntitlementStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertTrue(model.getEntities()
+                        .get(0)
+                        .getRelations()
+                        .get(0)
+                        .isEntityStatus(),
+                "function: EntityStatus on a plain (non-document) entity");
+        assertTrue(model.getEntities()
+                        .get(1)
+                        .getRelations()
+                        .get(0)
+                        .isEntityStatus(),
+                "pre-rename function: DocumentStatus still resolves while consumers migrate");
     }
 
     @Test

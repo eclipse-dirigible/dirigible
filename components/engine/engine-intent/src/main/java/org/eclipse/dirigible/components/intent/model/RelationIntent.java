@@ -32,13 +32,19 @@ public class RelationIntent {
      */
     private String model;
     /**
-     * Document role: marks this to-one relation as the document's <b>status</b> (widget {@code
-     * DOCUMENT_STATUS}). In the document (header-items) layout it renders as a read-only coloured pill
-     * in the form's title bar instead of an editable dropdown - typically a workflow-managed status.
+     * Legacy boolean form of the status role - kept only so old {@code documentStatus: true} intents
+     * parse; the canonical form is {@code function: EntityStatus}.
      */
     private boolean documentStatus;
 
-    /** Explicit relation role selecting a document slot - currently {@code DocumentStatus}. */
+    /**
+     * Explicit relation role - currently {@code EntityStatus}: marks this to-one relation as the
+     * entity's system-managed <b>status</b> (widget {@code DOCUMENT_STATUS}). Valid on ANY entity, not
+     * only documents. It renders as a read-only coloured badge (title-bar pill in the document and
+     * shared manage forms, badge pills in the list tables) instead of an editable dropdown - the value
+     * is managed by the platform (an {@code init:} seed, a workflow step, a roll-up status), never
+     * typed by the user. An entity whose status must be hand-set simply does not mark the relation.
+     */
     private String function;
     /**
      * Optional initial value for this to-one relation's FK: the integer id of a seed row of the target
@@ -145,11 +151,20 @@ public class RelationIntent {
     }
 
     /**
-     * Whether this to-one relation is the document's status pill - the explicit
-     * {@code function: DocumentStatus} or the legacy {@code documentStatus: true}.
+     * Whether this to-one relation is the entity's status badge - the canonical
+     * {@code function: EntityStatus}, the pre-rename {@code function: DocumentStatus} (still accepted
+     * for one release while the sample/consumer intents migrate), or the legacy
+     * {@code documentStatus: true}.
      */
-    public boolean isDocumentStatus() {
-        return documentStatus || (function != null && "DocumentStatus".equalsIgnoreCase(function.trim()));
+    public boolean isEntityStatus() {
+        if (documentStatus) {
+            return true;
+        }
+        if (function == null) {
+            return false;
+        }
+        String f = function.trim();
+        return "EntityStatus".equalsIgnoreCase(f) || "DocumentStatus".equalsIgnoreCase(f);
     }
 
     public void setDocumentStatus(boolean documentStatus) {

@@ -140,7 +140,9 @@
               <div class="vbox gap-0">
 #end
                 <span x-h-text.muted class="text-xs" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '${plabel}')"></span>
-#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
+#if($property.widgetType == "DOCUMENT_STATUS")
+                <span><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', selected?.${property.name}))" x-show="lookupText('${property.name}', selected?.${property.name})" x-text="lookupText('${property.name}', selected?.${property.name})"></span></span>
+#elseif($property.widgetType == "DROPDOWN")
                 <span x-text="lookupText('${property.name}', selected?.${property.name})"></span>
 #elseif($property.isFloatType)
                 <span x-text="formatNumber(selected?.${property.name}, '${property.formatPattern}')"></span>

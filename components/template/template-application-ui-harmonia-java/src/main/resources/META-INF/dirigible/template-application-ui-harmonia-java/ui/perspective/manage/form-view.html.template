@@ -6,6 +6,12 @@
   to Close + Edit. On edit/preview the entity's registered detail collections (masters) render as
   panels below the form - the same panels as the master browse view.
 -->
+## The EntityStatus relation (widget DOCUMENT_STATUS) renders as a read-only coloured badge in the
+## title bar (same treatment as the document layout), never as an editable input.
+#set($statusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
+#end
 <div x-data="${name}FormPage" class="vbox size-full">
 
   <!-- Hidden ONLY inside the FK "Add" iframe dialog (?dialog=1), which provides its own header. The
@@ -18,6 +24,11 @@
          on the create/edit form, NOT on the list/master browse views. -->
     <span class="text-2xl font-normal tracking-tight shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}').toUpperCase()"></span>
     <div x-h-toolbar-spacer></div>
+#if($statusProp != "")
+    <!-- EntityStatus badge, right-aligned like the document view's pill; shown once the record's
+         status resolves (edit/preview - a new record has no status until the DB default applies). -->
+    <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
+#end
     <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
@@ -72,7 +83,8 @@
 ## Read-only / system fields (ProcessId, audit columns, uuid, any field marked read-only) are not
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
 ## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
-#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+## The EntityStatus FK (DOCUMENT_STATUS) is excluded too - it renders as the title-bar badge above.
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.auditType && $property.auditType != "NONE"))
 #set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
