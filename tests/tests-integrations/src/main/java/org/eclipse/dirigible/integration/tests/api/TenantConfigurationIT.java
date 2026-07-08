@@ -11,7 +11,6 @@ package org.eclipse.dirigible.integration.tests.api;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
@@ -33,10 +32,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  */
 class TenantConfigurationIT extends IntegrationTest {
 
-    /** Matches the default allow-list ({@code DIRIGIBLE_TENANT_*}). */
-    private static final String ALLOWED_KEY = "DIRIGIBLE_TENANT_IT_FEATURE";
+    /** A white-listed key (branding is the only injectable namespace for now). */
+    private static final String ALLOWED_KEY = "DIRIGIBLE_BRANDING_NAME";
 
-    /** A real configuration key that is NOT in the default allow-list, so it must not be injected. */
+    /** A real configuration key that is NOT white-listed, so it must not be injected. */
     private static final String NON_ALLOWLISTED_KEY = "DIRIGIBLE_MAIL_SMTPS_HOST";
 
     @Autowired
@@ -61,19 +60,22 @@ class TenantConfigurationIT extends IntegrationTest {
     @Test
     void allowlistedTenantConfigResolvesWithPrecedenceAndClears() throws Exception {
         tenantContext.execute(defaultTenant, () -> {
-            tenantConfigurationService.set(ALLOWED_KEY, "tenant-value");
+            // the white-listed key may carry a platform default; capture it so we can assert restoration
+            String original = Configuration.get(ALLOWED_KEY);
+
+            tenantConfigurationService.set(ALLOWED_KEY, "Tenant Brand");
 
             Map<String, String> injectable = tenantConfigurationService.resolveInjectableForCurrentTenant();
-            assertEquals("tenant-value", injectable.get(ALLOWED_KEY));
+            assertEquals("Tenant Brand", injectable.get(ALLOWED_KEY));
 
             Configuration.setThreadConfiguration(injectable);
             try {
-                assertEquals("tenant-value", Configuration.get(ALLOWED_KEY));
+                assertEquals("Tenant Brand", Configuration.get(ALLOWED_KEY));
             } finally {
                 Configuration.removeThreadConfiguration();
             }
-            // once the thread configuration is cleared, the value is no longer resolvable
-            assertNull(Configuration.get(ALLOWED_KEY));
+            // once the thread configuration is cleared, the original value is resolved again
+            assertEquals(original, Configuration.get(ALLOWED_KEY));
             return null;
         });
     }

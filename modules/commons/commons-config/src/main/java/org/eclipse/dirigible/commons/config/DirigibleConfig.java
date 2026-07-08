@@ -156,16 +156,7 @@ public enum DirigibleConfig {
     INTENT_AI_MAX_TOKENS("DIRIGIBLE_INTENT_AI_MAX_TOKENS", "8192"),
 
     /** Anthropic API version header sent by the Intent assistant. */
-    INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01"),
-
-    /**
-     * Comma-separated allow-list of configuration keys a tenant is permitted to override through its
-     * per-tenant configuration. Each entry is either an exact key or a prefix pattern ending with
-     * {@code *} (e.g. {@code DIRIGIBLE_TENANT_*}). Only keys matching this allow-list are injected into
-     * the thread-scoped configuration; protected infrastructure keys are never overridable regardless
-     * of this setting.
-     */
-    TENANT_CONFIGURATION_ALLOWED_KEYS("DIRIGIBLE_TENANT_CONFIGURATION_ALLOWED_KEYS", "DIRIGIBLE_TENANT_*");
+    INTENT_AI_VERSION("DIRIGIBLE_INTENT_AI_VERSION", "2023-06-01");
 
     /** The Constant LOGGER. */
     private static final Logger LOGGER = LoggerFactory.getLogger(DirigibleConfig.class);
