@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.junit.jupiter.api.Tag;
 import java.util.concurrent.TimeUnit;
 
 import org.awaitility.Awaitility;
@@ -48,6 +49,7 @@ import org.openqa.selenium.By;
  * The diagram uses fixed brand colours that read on both the light and dark themes (like the
  * EDM/schema modelers), so it renders identically in either theme and needs no theme-switch probe.
  */
+@Tag("smoke")
 public class IntentEditorLoadsIT extends UserInterfaceIntegrationTest {
 
     private static final String REPOSITORY_URL = "https://github.com/dirigiblelabs/sample-intent-model.git";

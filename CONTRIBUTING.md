@@ -88,3 +88,11 @@ If you want to contribute in any way, you must go through the following steps:
 10. In case multiple modules get updated, use `git status` to see all changes and then use `git add /path/to/changed/file` to add ONLY the changes in the module which you are responsible for.
 11. Commit and push your changes.
 12. Create a PR to the master branch in `eclipse/dirigible` by giving it a short but descriptive name and mention the issue number/numbers in the description (See [closing issues via PR](https://github.blog/2013-05-14-closing-issues-via-pull-requests/)).
+
+### Integration tests: smoke on PRs, full suite nightly
+
+The browser-driven (Selenide) integration suite is heavy, so on every pull request only a fast **smoke** subset runs (`mvn clean install -P integration-tests -Dit.groups="!ui | smoke"`); the full suite runs nightly and on every push to master. Tagging rules for new `*IT` tests:
+
+- A UI test extends `UserInterfaceIntegrationTest`, which is `@Tag("ui")` - it is automatically excluded from the PR smoke run (no action needed).
+- An HTTP-level test extends `IntegrationTest` directly - it carries no tag and is always part of the smoke run. Prefer this style when the feature can be exercised over HTTP (it is far faster and needs no browser).
+- If a UI test must run on every PR, add `@Tag("smoke")` to it - but keep that set small so the PR gate stays fast.
