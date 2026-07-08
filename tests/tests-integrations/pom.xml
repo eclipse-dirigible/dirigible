@@ -122,6 +122,23 @@
                 <configuration>
                     <groups>${it.groups}</groups>
                     <excludedGroups>${it.excludedGroups}</excludedGroups>
+                    <!-- Fresh JVM per test class. Every IT boots a full Dirigible context per test
+                         method (@DirtiesContext AFTER_EACH_TEST_METHOD) and closed contexts do not
+                         release all their heap (schedulers, engine pools, statics), so a single
+                         shared fork accumulates the leak across the ~85 IT classes and OOMs late in
+                         the full run (the -Xmx6g fork died at DependsOnHarmoniaIT). Per-class forks
+                         bound the accumulation at one class; JVM startup is noise next to the
+                         per-method Spring boots. ExitOnOutOfMemoryError kills the fork on the first
+                         OOM instead of letting a heap-thrashing JVM drag the job out for hours.
+                         argLine here REPLACES the root pom's (no merge) - keep the add-opens list. -->
+                    <reuseForks>false</reuseForks>
+                    <argLine>
+                        -Xmx6g
+                        -XX:+ExitOnOutOfMemoryError
+                        --add-opens=java.base/java.lang=ALL-UNNAMED
+                        --add-opens=java.base/java.lang.reflect=ALL-UNNAMED
+                        --add-opens=java.base/java.nio=ALL-UNNAMED
+                    </argLine>
                 </configuration>
             </plugin>
             <plugin>

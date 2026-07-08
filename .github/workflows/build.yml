@@ -162,6 +162,9 @@ jobs:
 
   integration-tests-h2:
     runs-on: ubuntu-latest
+    # A green full IT run takes ~1h30m; a heap-exhausted JVM used to thrash for 4h+ before anyone
+    # noticed. Cap the job well above the healthy time so hangs fail fast instead of burning runners.
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
         with:
@@ -217,6 +220,8 @@ jobs:
 
   integration-tests-postgresql:
     runs-on: ubuntu-latest
+    # Same rationale as integration-tests-h2: green run ~1h30m, cap runaway JVMs.
+    timeout-minutes: 150
     env:
       POSTGRES_DB: testdb
       POSTGRES_USER: testuser
