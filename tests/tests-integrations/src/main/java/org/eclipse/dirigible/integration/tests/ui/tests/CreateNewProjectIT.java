@@ -9,9 +9,11 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.junit.jupiter.api.Tag;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.junit.jupiter.api.Test;
 
+@Tag("smoke")
 public class CreateNewProjectIT extends UserInterfaceIntegrationTest {
 
     @Test

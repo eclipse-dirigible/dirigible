@@ -87,8 +87,12 @@ public final class IntentParser {
     private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
     /** Implemented field {@code function} values (lower-cased). */
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
-    /** Implemented relation {@code function} values (lower-cased). */
-    private static final Set<String> RELATION_FUNCTIONS = Set.of("documentstatus");
+    /**
+     * Implemented relation {@code function} values (lower-cased). {@code entitystatus} is the canonical
+     * status role, valid on any entity; {@code documentstatus} is the pre-rename spelling, accepted for
+     * one release while the sample and consumer intents migrate - it then becomes a validation error.
+     */
+    private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus", "documentstatus");
     private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
@@ -250,11 +254,11 @@ public final class IntentParser {
                 if (!RELATION_FUNCTIONS.contains(rf.trim()
                                                    .toLowerCase(Locale.ROOT))) {
                     issues.add("entity [" + name + "] relation [" + relation.getName() + "] has unknown function [" + rf
-                            + "] (valid: DocumentStatus)");
-                } else if (relation.isDocumentStatus()
+                            + "] (valid: EntityStatus)");
+                } else if (relation.isEntityStatus()
                         && !("manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind()))) {
                     issues.add("entity [" + name + "] relation [" + relation.getName()
-                            + "] function: DocumentStatus must be a manyToOne/oneToOne relation");
+                            + "] function: EntityStatus must be a manyToOne/oneToOne relation");
                 }
             }
         }
@@ -950,8 +954,8 @@ public final class IntentParser {
                     boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
                     if (!toOne) {
                         issues.add(subject + " declares dependsOn but only a manyToOne/oneToOne relation can depend on another");
-                    } else if (relation.isDocumentStatus()) {
-                        issues.add(subject + " is a documentStatus (a read-only pill) so it cannot declare dependsOn");
+                    } else if (relation.isEntityStatus()) {
+                        issues.add(subject + " is an EntityStatus (a read-only badge) so it cannot declare dependsOn");
                     } else {
                         validateDependsOn(entity, subject, relation.getDependsOn(), relation, byName, issues);
                     }
@@ -984,8 +988,8 @@ public final class IntentParser {
             issues.add(subject + " dependsOn relation [" + triggerName + "] is not a to-one relation of [" + entity.getName() + "]");
             return;
         }
-        if (trigger.isDocumentStatus()) {
-            issues.add(subject + " dependsOn relation [" + triggerName + "] is a documentStatus (a read-only pill) so it cannot trigger");
+        if (trigger.isEntityStatus()) {
+            issues.add(subject + " dependsOn relation [" + triggerName + "] is an EntityStatus (a read-only badge) so it cannot trigger");
         }
         if (ownRelation == null) {
             // A scalar field is auto-populated - it needs the source property and has no option list.

@@ -101,13 +101,15 @@ composition is opt-in.
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
   read-only automatically — you don't need this on them.)
-- `function: DocumentTitle` (on a field) / `function: DocumentStatus` (on a to-one relation) - **document
-  layout roles** for a document (header-items) entity. The `DocumentTitle` field shows in the form's title
-  (e.g. `SALES INVOICE 00001231` = the document name + the number) and the `DocumentStatus` relation shows
-  as a read-only coloured status pill in the title bar - neither as a form input. Typical pairing: the
-  number field is `DocumentTitle`, the workflow-managed status FK is `DocumentStatus`. (The older
-  `documentTitle: true` / `documentStatus: true` booleans still work but `function` is preferred - see the
-  **function** section below.)
+- `function: DocumentTitle` (on a field) / `function: EntityStatus` (on a to-one relation). The
+  `DocumentTitle` field shows in a document's form title (e.g. `SALES INVOICE 00001231` = the document
+  name + the number). `EntityStatus` marks the entity's **system-managed status** on ANY entity (not
+  only documents): it renders as a read-only coloured badge - the title-bar pill on document and manage
+  forms, badge pills in the list tables - never as an editable input. The value is managed by the
+  platform (an `init:` seed, a workflow `setRelationField`, a roll-up status); an entity whose status
+  must be hand-set simply does not mark the relation. Typical pairing on a document: the number field
+  is `DocumentTitle`, the workflow-managed status FK is `EntityStatus`. (`DocumentStatus` is the
+  pre-rename spelling of `EntityStatus` and is being removed - always author `EntityStatus`.)
 - `precision` / `scale` - override the DECIMAL default (16, 2): `{ name: rate, type: decimal, precision: 18, scale: 6 }`.
 - `size` (on a field OR a to-one relation) - the form-control width as a 12-column grid span
   (3 = quarter, 4 = third, 6 = half, 12 = full). The generated form maps it to `grid-column: span N`;
@@ -295,7 +297,7 @@ existing breaks.
 | `Setting` | nomenclature under Settings | `kind: setting` |
 
 **Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
-`DocumentStatus` (the read-only status pill).
+`EntityStatus` (the read-only status badge, valid on any entity).
 
 ```yaml
 entities:
@@ -305,7 +307,7 @@ entities:
       - { name: id, type: integer, primaryKey: true, generated: true }
       - { name: number, type: string, function: DocumentTitle }
     relations:
-      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: DocumentStatus, init: 1 }
+      - { name: Status, kind: manyToOne, to: TimesheetStatus, function: EntityStatus, init: 1 }
   - name: EmployeeTimesheet          # the items - no "*Item" name needed
     function: DocumentItem
     relations:

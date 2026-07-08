@@ -9,12 +9,14 @@
  */
 package org.eclipse.dirigible.integration.tests.ui.tests;
 
+import org.junit.jupiter.api.Tag;
 import org.eclipse.dirigible.tests.base.UserInterfaceIntegrationTest;
 import org.eclipse.dirigible.tests.framework.browser.HtmlAttribute;
 import org.eclipse.dirigible.tests.framework.browser.HtmlElementType;
 import org.eclipse.dirigible.tests.framework.ide.Workbench;
 import org.junit.jupiter.api.Test;
 
+@Tag("smoke")
 public class CreateNewFileIT extends UserInterfaceIntegrationTest {
 
     @Test

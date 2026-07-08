@@ -131,6 +131,17 @@ document.addEventListener('alpine:init', () => {
       return (t !== undefined && t !== null && t !== '') ? t : this.displayValue(v);
     },
 
+    // EntityStatus badge colour, keyed by status keyword - same map as the form/document pages.
+    statusVariant(text) {
+      const t = String(text || '').toLowerCase();
+      if (/draft/.test(t)) return 'outline';
+      if (/(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)/.test(t)) return 'negative';
+      if (/(pending|await|hold|review|partial)/.test(t)) return 'warning';
+      if (/(approv|accept|activ|complet|paid|done|available)/.test(t)) return 'positive';
+      if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
+      return 'default';
+    },
+
     newMaster()  { window.PineconeRouter.navigate('/${name}/create'); },
     editMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
     previewMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },

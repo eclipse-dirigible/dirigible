@@ -394,11 +394,23 @@ Treat `modules/commons/commons-config/src/main/java/org/eclipse/dirigible/common
 
 ## CI reference
 
-`.github/workflows/build.yml` is the source of truth for "does this build pass":
+`.github/workflows/build.yml` is the source of truth for "does this build pass" on **push to master**:
 
 - `code-style`: `mvn -T 1C formatter:validate`
 - `tests` (ubuntu + windows matrix): `mvn clean install -P unit-tests`
-- `integration-tests-h2` / `-postgresql`: `mvn clean install -P integration-tests` with the matching `DIRIGIBLE_DATASOURCE_DEFAULT_*` env vars (MSSQL is no longer a CI leg — removed in #6150)
+- `integration-tests-h2` / `-postgresql`: the **full** Selenide IT suite, `mvn clean install -P integration-tests` with the matching `DIRIGIBLE_DATASOURCE_DEFAULT_*` env vars (MSSQL is no longer a CI leg — removed in #6150)
 - `build-deploy`: `mvn clean install -P quick-build` then Docker buildx multi-arch image push to `dirigiblelabs/dirigible`
 
-`pull-request.yml`, `codeql.yml`, `release.yml` cover PR validation, CodeQL, and Maven Central release respectively.
+### PR gate vs full suite (smoke / nightly split)
+
+The full Selenide UI suite takes ~1.5h per DB, so it does **not** run on every PR:
+
+- **`pull-request.yml`** (every PR) runs `code-style`, unit `tests`, `docker-build`, and a single fast **`smoke-tests`** job on H2: `mvn clean install -P integration-tests -Dit.groups="!ui | smoke"`. The tag expression selects the HTTP-level ITs (untagged, so `!ui`) plus the few UI journeys explicitly marked `@Tag("smoke")` - including one full clone->generate->validate app lifecycle (`IntentEditorLoadsIT`, the intent Generate flow). Keep the smoke set small so the PR gate stays fast.
+- **`nightly.yml`** (cron `0 2 * * *` + `workflow_dispatch`) and **push to master** (`build.yml`) run the **full** suite on H2 + PostgreSQL.
+
+**Test tagging convention (JUnit 5 `@Tag`, wired to failsafe via the `${it.groups}` / `${it.excludedGroups}` properties in the root `pom.xml`):**
+- Every browser-driven IT is `@Tag("ui")` - inherited from the `UserInterfaceIntegrationTest` base (and thus by `SampleProjectRepositoryIT` and all sample-project ITs). Do not tag these individually.
+- HTTP-level ITs (`extends IntegrationTest` directly) carry no tag, so they are always in the smoke set.
+- To force a specific UI IT to run on every PR, add `@Tag("smoke")` to that class (keep the list small - smoke must stay fast).
+
+`codeql.yml`, `release.yml` cover CodeQL and Maven Central release respectively.

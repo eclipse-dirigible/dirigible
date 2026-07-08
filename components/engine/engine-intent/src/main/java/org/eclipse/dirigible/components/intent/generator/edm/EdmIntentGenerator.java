@@ -883,7 +883,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipEntityPerspectiveLabel", "Entities");
         // Document role: a status FK renders as a read-only coloured pill in the document title bar; it
         // keeps the dropdown lookup metadata so the UI can resolve the status name to display.
-        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
+        p.put("widgetType", relation.isEntityStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", relation.getSize() == null ? ""
                 : relation.getSize()
                           .toString());
@@ -932,7 +932,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // own name - resolved from the owner model when present.
         p.put("relationshipEntityPerspectiveName", info.perspectiveName());
         p.put("relationshipEntityPerspectiveLabel", "Entities");
-        p.put("widgetType", relation.isDocumentStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
+        p.put("widgetType", relation.isEntityStatus() ? "DOCUMENT_STATUS" : "DROPDOWN");
         p.put("widgetSize", relation.getSize() == null ? ""
                 : relation.getSize()
                           .toString());
