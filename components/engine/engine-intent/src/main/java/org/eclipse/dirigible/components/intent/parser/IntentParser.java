@@ -34,6 +34,7 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
+import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
@@ -183,6 +184,7 @@ public final class IntentParser {
         validateIntegrations(model, entityNames, issues);
         validateInbound(model, entityNames, issues);
         validateRollups(model, issues);
+        validateExpansions(model, issues);
         validateSettlements(model, issues);
         if (!issues.isEmpty()) {
             throw new IntentValidationException(issues);
@@ -685,6 +687,142 @@ public final class IntentParser {
                             "rollup [" + name + "] status [" + rollup.getStatus() + "] is not a to-one relation of [" + via.getTo() + "]");
                 }
             }
+        }
+    }
+
+    /**
+     * A period expansion must name a declared master ({@code from}) and child ({@code into}) entity,
+     * where the child has a to-one relation back to the master; {@code between.start}/{@code end} are
+     * {@code date} fields of the master; {@code unit} is day / week / month; {@code skipDays} (day unit
+     * only) are weekday indexes 0..6; {@code map} assigns the {@code period} token to a {@code date}
+     * field of the child; {@code defaults} name child fields; {@code spread} divides a numeric master
+     * field over a numeric child field; {@code count} names a numeric master field for the row count.
+     */
+    private static void validateExpansions(IntentModel model, List<String> issues) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (ExpansionIntent expansion : model.getExpansions()) {
+            String name = expansion.getName();
+            if (name == null || name.isBlank()) {
+                issues.add("expansion has no name");
+                continue;
+            }
+            if (!names.add(name)) {
+                issues.add("duplicate expansion [" + name + "]");
+            }
+            String subject = "expansion [" + name + "]";
+            EntityIntent master = byName.get(expansion.getFrom());
+            if (master == null) {
+                issues.add(subject + " expands unknown entity [" + expansion.getFrom() + "]");
+                continue;
+            }
+            EntityIntent child = byName.get(expansion.getInto());
+            if (child == null) {
+                issues.add(subject + " generates into unknown entity [" + expansion.getInto() + "]");
+                continue;
+            }
+            RelationIntent back = null;
+            for (RelationIntent relation : child.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && expansion.getFrom()
+                                      .equals(relation.getTo())) {
+                    back = relation;
+                    break;
+                }
+            }
+            if (back == null) {
+                issues.add(
+                        subject + " requires a to-one relation from [" + expansion.getInto() + "] back to [" + expansion.getFrom() + "]");
+            }
+            String unit = expansion.getUnit() == null || expansion.getUnit()
+                                                                  .isBlank() ? "day"
+                                                                          : expansion.getUnit()
+                                                                                     .trim()
+                                                                                     .toLowerCase(Locale.ROOT);
+            if (!"day".equals(unit) && !"week".equals(unit) && !"month".equals(unit)) {
+                issues.add(subject + " has unknown unit [" + expansion.getUnit() + "] (supported: day, week, month)");
+            }
+            if (!expansion.getSkipDays()
+                          .isEmpty()) {
+                if (!"day".equals(unit)) {
+                    issues.add(subject + " skipDays applies to unit day only");
+                }
+                for (Integer d : expansion.getSkipDays()) {
+                    if (d == null || d < 0 || d > 6) {
+                        issues.add(subject + " skipDays entries must be weekday indexes 0 (Sunday) .. 6 (Saturday)");
+                        break;
+                    }
+                }
+            }
+            if (expansion.getBetween() == null) {
+                issues.add(subject + " requires between: { start, end } naming date fields of [" + expansion.getFrom() + "]");
+            } else {
+                requireDateField(master, expansion.getBetween()
+                                                  .getStart(),
+                        subject, "between.start", issues);
+                requireDateField(master, expansion.getBetween()
+                                                  .getEnd(),
+                        subject, "between.end", issues);
+            }
+            if (expansion.getMap()
+                         .isEmpty()) {
+                issues.add(subject + " requires map: { <childDateField>: period }");
+            }
+            for (java.util.Map.Entry<String, String> entry : expansion.getMap()
+                                                                      .entrySet()) {
+                if (!"period".equals(entry.getValue())) {
+                    issues.add(subject + " map value [" + entry.getValue() + "] is not supported (only the `period` token)");
+                }
+                requireDateField(child, entry.getKey(), subject, "map field", issues);
+            }
+            for (String field : expansion.getDefaults()
+                                         .keySet()) {
+                if (fieldByName(child, field) == null) {
+                    issues.add(subject + " defaults field [" + field + "] is not a field of [" + expansion.getInto() + "]");
+                }
+            }
+            if (expansion.getSpread() != null) {
+                ExpansionIntent.Spread spread = expansion.getSpread();
+                requireNumericFieldOf(master, spread.getTotal(), subject, "spread.total", expansion.getFrom(), issues);
+                requireNumericFieldOf(child, spread.getInto(), subject, "spread.into", expansion.getInto(), issues);
+                if (spread.getRound() != null && (spread.getRound() < 0 || spread.getRound() > 6)) {
+                    issues.add(subject + " spread.round must be between 0 and 6");
+                }
+            }
+            if (expansion.getCount() != null && !expansion.getCount()
+                                                          .isBlank()) {
+                requireNumericFieldOf(master, expansion.getCount(), subject, "count", expansion.getFrom(), issues);
+            }
+        }
+    }
+
+    /** Validate a required {@code date} field reference on an expansion. */
+    private static void requireDateField(EntityIntent entity, String field, String subject, String role, List<String> issues) {
+        if (field == null || field.isBlank()) {
+            issues.add(subject + " requires " + role);
+            return;
+        }
+        FieldIntent resolved = fieldByName(entity, field);
+        if (resolved == null || !"date".equals(resolved.getType())) {
+            issues.add(subject + " " + role + " [" + field + "] is not a date field of [" + entity.getName() + "]");
+        }
+    }
+
+    /** Validate a numeric field reference on an expansion (spread total/into, count). */
+    private static void requireNumericFieldOf(EntityIntent entity, String field, String subject, String role, String entityName,
+            List<String> issues) {
+        if (field == null || field.isBlank()) {
+            issues.add(subject + " requires " + role);
+            return;
+        }
+        FieldIntent resolved = fieldByName(entity, field);
+        if (resolved == null || !NUMERIC_TYPES.contains(resolved.getType())) {
+            issues.add(subject + " " + role + " [" + field + "] is not a numeric field of [" + entityName + "]");
         }
     }
 

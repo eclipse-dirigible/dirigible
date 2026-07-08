@@ -692,6 +692,48 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "expansions":
+                    // Period expansions (intent layer): handlers on the master's create/update events
+                    // that (re)generate the child rows for a date span (days / weeks / months). The
+                    // type-dependent pieces (defaults literals, count write-back) arrive pre-rendered
+                    // from the glue; only the period step is derived here from the unit.
+                    if (model.expansions) {
+                        for (let i = 0; i < model.expansions.length; i++) {
+                            const ex = model.expansions[i];
+                            const step = ex.unit === "month" ? "d.plusMonths(1)" : (ex.unit === "week" ? "d.plusWeeks(1)" : "d.plusDays(1)");
+                            const expansionParameters = {
+                                ...parameters,
+                                className: ex.className,
+                                masterEntity: ex.masterEntity,
+                                masterPerspective: ex.masterPerspective,
+                                javaMasterPerspective: sanitizeJavaIdentifier(ex.masterPerspective),
+                                masterPk: ex.masterPk,
+                                childEntity: ex.childEntity,
+                                javaChildPerspective: sanitizeJavaIdentifier(ex.childPerspective),
+                                fkProperty: ex.fkProperty,
+                                startProperty: ex.startProperty,
+                                endProperty: ex.endProperty,
+                                mapProperty: ex.mapProperty,
+                                unit: ex.unit,
+                                periodStep: step,
+                                skipDays: ex.skipDays || "",
+                                defaultsBlock: ex.defaultsBlock || "",
+                                spreadTotalProperty: ex.spreadTotalProperty || "",
+                                spreadIntoProperty: ex.spreadIntoProperty || "",
+                                spreadRound: ex.spreadRound || "2",
+                                countAssign: ex.countAssign || "",
+                                topicSuffix: ex.topicSuffix || "",
+                                criteriaExpression: ex.criteriaExpression
+                            };
+                            const cleanExpansionParameters = cleanData(expansionParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanExpansionParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanExpansionParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "settlements":
                     // Auto-settlement (intent layer): per settlement, an onPayment listener + an
                     // onInvoice delegate. The junction + invoice live in this project; the payment may be

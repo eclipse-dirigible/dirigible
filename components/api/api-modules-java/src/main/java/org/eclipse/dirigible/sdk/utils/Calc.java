@@ -31,7 +31,16 @@ import java.math.RoundingMode;
  *
  * An {@code IDENT} names a property of the {@code entity} and is read from its public field;
  * functions are limited to {@code round(x, n)}, {@code abs(x)}, {@code min(a, b)},
- * {@code max(a, b)}, {@code ceil(x)} and {@code floor(x)}.
+ * {@code max(a, b)}, {@code ceil(x)}, {@code floor(x)} and the date functions
+ * {@code daysBetween(a, b)} (calendar days, {@code b - a}), {@code businessDaysBetween(a, b)}
+ * (Mon-Fri dates in the closed interval {@code [a, b]}, {@code 0} when {@code b < a}) and
+ * {@code monthsBetween(a, b)} (whole calendar months).
+ * <p>
+ * A <b>date-typed</b> identifier ({@code java.time} date/datetime, {@code java.util.Date},
+ * {@code java.sql} date types, or an ISO {@code yyyy-MM-dd[...]} string) reads as its <b>epoch
+ * day</b>, which is what the date functions consume - so
+ * {@code businessDaysBetween(FromDate, ToDate)} computes working days between two date fields, and
+ * {@code daysBetween(FromDate, ToDate) + 1} is the inclusive span.
  * <p>
  * Semantics contract (kept identical to the JS mirror): a {@code null}, missing or non-numeric
  * identifier reads as {@code 0}; division by zero yields {@code 0}; rounding is half-up with ties
@@ -214,12 +223,51 @@ public final class Calc {
                     return Math.ceil(a);
                 case "floor":
                     return Math.floor(a);
+                case "daysBetween":
+                    return Math.floor(b) - Math.floor(a);
+                case "businessDaysBetween":
+                    return businessDaysBetween((long) Math.floor(a), (long) Math.floor(b));
+                case "monthsBetween":
+                    return monthsBetween((long) Math.floor(a), (long) Math.floor(b));
                 default:
                     return 0d;
             }
         }
 
-        /** Read an identifier from the entity's public field; null / missing / non-numeric reads as 0. */
+        /**
+         * Mon-Fri dates in the closed interval of the two epoch days; {@code 0} when the interval is empty.
+         * Counted arithmetically (no per-day loop) so a years-long span stays O(1): epoch day 0
+         * (1970-01-01) was a Thursday, so {@code floorMod(epochDay + 3, 7)} is the weekday with Monday = 0
+         * - the JS mirror derives the same index from {@code getUTCDay}.
+         */
+        private static double businessDaysBetween(long from, long to) {
+            if (to < from) {
+                return 0d;
+            }
+            long days = to - from + 1;
+            long fullWeeks = days / 7;
+            long count = fullWeeks * 5;
+            long remainder = days % 7;
+            long startWeekday = Math.floorMod(from + 3, 7); // Monday = 0 ... Sunday = 6
+            for (long i = 0; i < remainder; i++) {
+                if ((startWeekday + i) % 7 < 5) {
+                    count++;
+                }
+            }
+            return count;
+        }
+
+        /** Whole calendar months between the two epoch days ({@code b - a} in year*12+month terms). */
+        private static double monthsBetween(long from, long to) {
+            java.time.LocalDate a = java.time.LocalDate.ofEpochDay(from);
+            java.time.LocalDate b = java.time.LocalDate.ofEpochDay(to);
+            return (b.getYear() - a.getYear()) * 12 + (b.getMonthValue() - a.getMonthValue());
+        }
+
+        /**
+         * Read an identifier from the entity's public field; null / missing / non-numeric reads as 0. A
+         * date-typed value reads as its epoch day so the date functions can consume it.
+         */
         private double readField(String name) {
             if (entity == null) {
                 return 0d;
@@ -234,6 +282,10 @@ public final class Calc {
                 if (value instanceof Number) {
                     return ((Number) value).doubleValue();
                 }
+                Double epochDay = toEpochDay(value);
+                if (epochDay != null) {
+                    return epochDay;
+                }
                 String text = value.toString()
                                    .trim();
                 if (text.isEmpty()) {
@@ -244,5 +296,46 @@ public final class Calc {
                 return 0d;
             }
         }
+
+        /**
+         * The epoch day of a date-shaped value, or {@code null} when the value is not date-shaped. An ISO
+         * {@code yyyy-MM-dd} prefix covers the string forms the HTML date/datetime inputs and the JSON
+         * serializations produce - matching the JS mirror's coercion.
+         */
+        private static Double toEpochDay(Object value) {
+            if (value instanceof java.time.LocalDate localDate) {
+                return (double) localDate.toEpochDay();
+            }
+            if (value instanceof java.time.LocalDateTime localDateTime) {
+                return (double) localDateTime.toLocalDate()
+                                             .toEpochDay();
+            }
+            if (value instanceof java.time.Instant instant) {
+                return (double) instant.atZone(java.time.ZoneOffset.UTC)
+                                       .toLocalDate()
+                                       .toEpochDay();
+            }
+            if (value instanceof java.util.Date date) {
+                // covers java.sql.Date / java.sql.Timestamp too
+                return (double) java.time.Instant.ofEpochMilli(date.getTime())
+                                                 .atZone(java.time.ZoneOffset.UTC)
+                                                 .toLocalDate()
+                                                 .toEpochDay();
+            }
+            if (value instanceof String text) {
+                java.util.regex.Matcher m = ISO_DATE_PREFIX.matcher(text.trim());
+                if (m.find()) {
+                    try {
+                        return (double) java.time.LocalDate.parse(m.group())
+                                                           .toEpochDay();
+                    } catch (java.time.format.DateTimeParseException e) {
+                        return null;
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static final java.util.regex.Pattern ISO_DATE_PREFIX = java.util.regex.Pattern.compile("^\\d{4}-\\d{2}-\\d{2}");
     }
 }

@@ -896,7 +896,59 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "call an external API when X changes" -> **integrations**
 - "let an external system create X" -> **inbound**
 - "keep a running count of children on the parent" -> **rollups**
+- "expand a from-to span into day/week/month child rows / loan installments / vacation day items" -> **expansions**
+- "compute days between two dates on the form (working days / months)" -> **calculated field with a date function**
 - "reference a Customer/Country/Currency/UoM owned by another app" -> **uses + cross-model relation**
 - "many-to-many between X and Y (with extra fields)" -> **intermediate entity** (composition + manyToOne)
+
+### expansions - generate child rows from a date span
+
+A master's from-to span expands into generated child rows, one per unit - vacation day items, loan
+installments, booking days:
+
+```yaml
+expansions:
+  - name: installments
+    from: Loan                                    # the span master
+    into: LoanInstallment                         # the generated child (needs a to-one back to Loan)
+    unit: month                                   # day (default) | week | month
+    between: { start: startDate, end: endDate }   # date fields of the master
+    map: { dueDate: period }                      # child date field <- the iterated period date
+    spread: { total: principal, into: amount, round: 2 }  # divide a master total across the rows
+    count: periods                                # optional: write the row count to a master field
+  - name: vacation-days
+    from: VacationRequest
+    into: VacationDay
+    unit: day
+    between: { start: fromDate, end: toDate }
+    skipDays: [0, 6]                              # unit day only: skip weekends (0=Sun..6=Sat)
+    map: { day: period }
+    defaults: { days: 1 }                         # literal child field defaults
+```
+
+Semantics: two generated handlers ((re)generate on the master's create AND update events) own the
+child set - a span change REPLACES every child row pointing at the master, so never mix hand-entered
+rows into an expanded child. Rows are written through the child repository (create/delete events
+fire; roll-ups and capacity guards run as for hand-entered rows). With `spread`, the last row absorbs
+the rounding remainder so the shares always sum to the total. The `count` write-back and the
+regeneration are idempotent and event-safe (no cascades). All span/map fields must be `date` typed;
+`spread`/`count` fields numeric.
+
+### date functions in calculated fields
+
+The neutral `calculatedOnCreate`/`calculatedOnUpdate` expression language supports date arguments: a
+date field used in an expression reads as its epoch day, consumed by `daysBetween(a, b)` (calendar
+days, `b - a`), `businessDaysBetween(a, b)` (Mon-Fri dates in the CLOSED interval `[a, b]`) and
+`monthsBetween(a, b)` (whole months). They evaluate server-side (SDK `Calc`) and preview LIVE in the
+generated forms as the user picks the dates:
+
+```yaml
+- { name: days, type: decimal, precision: 9, scale: 2, readOnly: true,
+    calculatedOnCreate: "businessDaysBetween(FromDate, ToDate)",
+    calculatedOnUpdate: "businessDaysBetween(FromDate, ToDate)" }
+```
+
+Note the PascalCase property names inside the expression (the generated model names, as for every
+calculated expression).
 
 When in doubt, propose the smallest combination that satisfies the request and ask before adding more.

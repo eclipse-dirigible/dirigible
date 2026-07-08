@@ -56,6 +56,8 @@ public class IntentModel {
     private List<IntegrationIntent> integrations = new ArrayList<>();
     private List<InboundIntent> inbound = new ArrayList<>();
     private List<RollupIntent> rollups = new ArrayList<>();
+    /** Period expansions: a master's date span generated into child rows (days / weeks / months). */
+    private List<ExpansionIntent> expansions = new ArrayList<>();
     private List<SettlementIntent> settlements = new ArrayList<>();
     /** Developer-declared on-demand action buttons contributed onto entity views. */
     private List<ActionIntent> actions = new ArrayList<>();
@@ -220,6 +222,14 @@ public class IntentModel {
 
     public void setRollups(List<RollupIntent> rollups) {
         this.rollups = rollups == null ? new ArrayList<>() : rollups;
+    }
+
+    public List<ExpansionIntent> getExpansions() {
+        return expansions;
+    }
+
+    public void setExpansions(List<ExpansionIntent> expansions) {
+        this.expansions = expansions == null ? new ArrayList<>() : expansions;
     }
 
     public List<String> getLanguages() {

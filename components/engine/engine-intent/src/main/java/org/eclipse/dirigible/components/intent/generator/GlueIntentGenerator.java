@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
@@ -89,13 +90,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
         List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
+        List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty()) {
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -111,6 +113,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("integrations", integrations);
         glue.put("inbound", inbound);
         glue.put("rollups", rollups);
+        glue.put("expansions", expansions);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
         glue.put("printFeeders", printFeeders);
@@ -603,6 +606,162 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         entry.put("className", className);
         entry.put("topicSuffix", topicSuffix);
         return entry;
+    }
+
+    /**
+     * Period expansions: per expansion, two handlers - on the master's create and update events - that
+     * (re)generate the child rows for the span. Everything type-dependent (the defaults literals, the
+     * count write-back) is pre-rendered here as Java lines so the template stays shape-only; the child
+     * rows go through the child repository, so their create/delete events fire and downstream
+     * roll-ups/guards run exactly as for hand-entered rows.
+     */
+    private static List<Map<String, Object>> buildExpansions(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> expansions = new ArrayList<>();
+        for (ExpansionIntent expansion : model.getExpansions()) {
+            if (expansion.getName() == null || expansion.getName()
+                                                        .isBlank()) {
+                continue;
+            }
+            EntityIntent master = byName.get(expansion.getFrom());
+            EntityIntent child = byName.get(expansion.getInto());
+            if (master == null || child == null || expansion.getBetween() == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("expansions", expansion.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing handlers for expansion [{}] (not generated)", expansion.getName());
+                continue;
+            }
+            RelationIntent back = null;
+            for (RelationIntent relation : child.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && expansion.getFrom()
+                                      .equals(relation.getTo())) {
+                    back = relation;
+                    break;
+                }
+            }
+            if (back == null) {
+                continue;
+            }
+            String mapProperty = null;
+            for (Map.Entry<String, String> entry : expansion.getMap()
+                                                            .entrySet()) {
+                if ("period".equals(entry.getValue())) {
+                    mapProperty = IntentNaming.pascalCase(entry.getKey());
+                    break;
+                }
+            }
+            if (mapProperty == null) {
+                continue;
+            }
+            String fkProperty = IntentNaming.pascalCase(back.getName());
+            Map<String, Object> base = new LinkedHashMap<>();
+            base.put("masterEntity", expansion.getFrom());
+            base.put("masterPerspective", IntentEntities.resolvePerspective(expansion.getFrom(), compositionParents));
+            base.put("masterPk", IntentEntities.keyFieldName(master));
+            base.put("childEntity", expansion.getInto());
+            base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents));
+            base.put("fkProperty", fkProperty);
+            base.put("startProperty", IntentNaming.pascalCase(expansion.getBetween()
+                                                                       .getStart()));
+            base.put("endProperty", IntentNaming.pascalCase(expansion.getBetween()
+                                                                     .getEnd()));
+            base.put("mapProperty", mapProperty);
+            String unit = expansion.getUnit() == null || expansion.getUnit()
+                                                                  .isBlank() ? "day"
+                                                                          : expansion.getUnit()
+                                                                                     .trim()
+                                                                                     .toLowerCase();
+            base.put("unit", unit);
+            base.put("skipDays", expansion.getSkipDays()
+                                          .stream()
+                                          .map(String::valueOf)
+                                          .collect(java.util.stream.Collectors.joining(",")));
+            base.put("defaultsBlock", expansionDefaultsBlock(child, expansion));
+            ExpansionIntent.Spread spread = expansion.getSpread();
+            base.put("spreadTotalProperty", spread == null ? "" : IntentNaming.pascalCase(spread.getTotal()));
+            base.put("spreadIntoProperty", spread == null ? "" : IntentNaming.pascalCase(spread.getInto()));
+            base.put("spreadRound", spread == null || spread.getRound() == null ? "2"
+                    : spread.getRound()
+                            .toString());
+            base.put("countAssign", expansionCountAssign(master, expansion));
+            base.put("criteriaExpression",
+                    "Criteria.create().eq(\"" + fkProperty + "\", master." + IntentEntities.keyFieldName(master) + ")");
+            String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
+            expansions.add(rollupEntry(base, className + "OnCreate", ""));
+            expansions.add(rollupEntry(base, className + "OnUpdate", "-updated"));
+        }
+        return expansions;
+    }
+
+    /** Pre-rendered Java assignment lines for the expansion's literal child defaults. */
+    private static String expansionDefaultsBlock(EntityIntent child, ExpansionIntent expansion) {
+        StringBuilder block = new StringBuilder();
+        for (Map.Entry<String, Object> entry : expansion.getDefaults()
+                                                        .entrySet()) {
+            FieldIntent field = fieldNamed(child, entry.getKey());
+            if (field == null) {
+                continue;
+            }
+            String property = IntentNaming.pascalCase(entry.getKey());
+            Object value = entry.getValue();
+            String literal;
+            String type = field.getType() == null ? "string" : field.getType();
+            switch (type) {
+                case "integer", "int" -> literal = "Integer.valueOf(" + integralLiteral(value) + ")";
+                case "long" -> literal = "Long.valueOf(" + integralLiteral(value) + "L)";
+                case "decimal", "double" -> literal = "new java.math.BigDecimal(\"" + value + "\")";
+                case "boolean" -> literal = String.valueOf(Boolean.parseBoolean(String.valueOf(value)));
+                default -> literal = "\"" + String.valueOf(value)
+                                                  .replace("\"", "\\\"")
+                        + "\"";
+            }
+            block.append("            child.")
+                 .append(property)
+                 .append(" = ")
+                 .append(literal)
+                 .append(";\n");
+        }
+        return block.toString();
+    }
+
+    /** An integral literal for a YAML number (Gson parses YAML integers as Long or Double). */
+    private static String integralLiteral(Object value) {
+        if (value instanceof Number number) {
+            return String.valueOf(number.longValue());
+        }
+        return String.valueOf(value);
+    }
+
+    /** The count write-back assignment (typed to the master field), or empty when not declared. */
+    private static String expansionCountAssign(EntityIntent master, ExpansionIntent expansion) {
+        if (expansion.getCount() == null || expansion.getCount()
+                                                     .isBlank()) {
+            return "";
+        }
+        FieldIntent field = fieldNamed(master, expansion.getCount());
+        if (field == null) {
+            return "";
+        }
+        String property = IntentNaming.pascalCase(expansion.getCount());
+        String type = field.getType() == null ? "decimal" : field.getType();
+        return switch (type) {
+            case "integer", "int" -> "master." + property + " = Integer.valueOf(periods.size());";
+            case "long" -> "master." + property + " = Long.valueOf(periods.size());";
+            default -> "master." + property + " = java.math.BigDecimal.valueOf(periods.size());";
+        };
+    }
+
+    /** The child/master field with the given authored name, or null. */
+    private static FieldIntent fieldNamed(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.getName() != null && field.getName()
+                                                .equals(name)) {
+                return field;
+            }
+        }
+        return null;
     }
 
     private static RelationIntent toOneRelation(EntityIntent owner, String name) {

@@ -1,0 +1,119 @@
+package gen.events;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaMasterPerspective}.${masterEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaMasterPerspective}.${masterEntity}Repository;
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
+
+/**
+ * Expands the ${masterEntity} span (${startProperty}..${endProperty}) into generated ${childEntity}
+ * rows - one per ${unit}.
+ *
+ * Generated from the intent expansions block - do not edit; it is re-generated with the application.
+ * The expansion OWNS the child set: a span change replaces every ${childEntity} pointing at the
+ * master. Rows are written through the child repository, so their create/delete events fire and any
+ * roll-ups or capacity guards run exactly as for hand-entered rows. An unchanged span is detected
+ * and skipped, which both makes re-delivery idempotent and bounds the event cascade (a roll-up's
+ * write-back to the master re-triggers this handler once; the skip terminates it).
+ */
+@Component
+public class ${className} implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${masterPerspective}-${masterEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${masterEntity}Entity master = Json.parse(message, ${masterEntity}Entity.class);
+        if (master == null || master.${masterPk} == null || master.${startProperty} == null || master.${endProperty} == null) {
+            return;
+        }
+        java.time.LocalDate start = master.${startProperty};
+        java.time.LocalDate end = master.${endProperty};
+        java.util.List<java.time.LocalDate> periods = new java.util.ArrayList<>();
+        if (!end.isBefore(start)) {
+            for (java.time.LocalDate d = start; !d.isAfter(end); d = ${periodStep}) {
+#if($skipDays != "")
+                // skipDays weekday indexes are 0 = Sunday .. 6 = Saturday (ISO getValue: Monday 1 .. Sunday 7).
+                if (java.util.Set.of(${skipDays}).contains(d.getDayOfWeek().getValue() % 7)) {
+                    continue;
+                }
+#end
+                periods.add(d);
+            }
+        }
+
+        ${childEntity}Repository children = new ${childEntity}Repository();
+        java.util.List<${childEntity}Entity> existing = children.findAll(${criteriaExpression});
+
+        // Idempotence: an unchanged expansion is skipped (same periods#if($spreadTotalProperty != "") and the spread total still adds up#end).
+        if (existing.size() == periods.size()) {
+            java.util.Set<java.time.LocalDate> current = new java.util.HashSet<>();
+            for (${childEntity}Entity row : existing) {
+                current.add(row.${mapProperty});
+            }
+            boolean same = current.equals(new java.util.HashSet<>(periods));
+#if($spreadTotalProperty != "")
+            if (same) {
+                java.math.BigDecimal sum = java.math.BigDecimal.ZERO;
+                for (${childEntity}Entity row : existing) {
+                    if (row.${spreadIntoProperty} != null) {
+                        sum = sum.add(row.${spreadIntoProperty});
+                    }
+                }
+                same = master.${spreadTotalProperty} != null && sum.compareTo(master.${spreadTotalProperty}) == 0;
+            }
+#end
+            if (same) {
+                return;
+            }
+        }
+
+        for (${childEntity}Entity row : existing) {
+            children.delete(row);
+        }
+#if($spreadTotalProperty != "")
+        java.math.BigDecimal total = master.${spreadTotalProperty} == null ? java.math.BigDecimal.ZERO : master.${spreadTotalProperty};
+        java.math.BigDecimal share = periods.isEmpty() ? java.math.BigDecimal.ZERO
+                : total.divide(java.math.BigDecimal.valueOf(periods.size()), ${spreadRound}, java.math.RoundingMode.HALF_UP);
+#end
+        for (int i = 0; i < periods.size(); i++) {
+            ${childEntity}Entity child = new ${childEntity}Entity();
+            child.${fkProperty} = master.${masterPk};
+            child.${mapProperty} = periods.get(i);
+${defaultsBlock}#if($spreadTotalProperty != "")
+            // The last row absorbs the rounding remainder so the shares always add up to the total.
+            child.${spreadIntoProperty} = i == periods.size() - 1
+                    ? total.subtract(share.multiply(java.math.BigDecimal.valueOf(periods.size() - 1)))
+                    : share;
+#end
+            children.save(child);
+        }
+#if($countAssign != "")
+
+        // Write the generated row count back to the master WITHOUT an event - a normal update would
+        // re-trigger this handler and every onUpdate reaction for a system write. The master is
+        // RELOADED first: updateWithoutEvent persists the full row, and the message copy may be stale
+        // (the same clobber trap as the trigger's ProcessId write-back).
+        ${masterEntity}Repository masters = new ${masterEntity}Repository();
+        master = masters.findById(master.${masterPk});
+        if (master != null) {
+            ${countAssign}
+            masters.updateWithoutEvent(master);
+        }
+#end
+    }
+}
