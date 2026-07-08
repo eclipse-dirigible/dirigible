@@ -411,16 +411,17 @@ class IntentParserTest {
     }
 
     @Test
-    void dependsOnOnDocumentStatusRelationIsRejected() {
-        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+    void dependsOnOnEntityStatusRelationIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing()
+                + """
 
-                      - { name: City, kind: manyToOne, to: City, documentStatus: true, dependsOn: { relation: Country, filterBy: country } }
-                """;
+                              - { name: City, kind: manyToOne, to: City, function: EntityStatus, dependsOn: { relation: Country, filterBy: country } }
+                        """;
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("documentStatus (a read-only pill) so it cannot declare dependsOn")),
-                "expected a documentStatus-dependent issue, got: " + ex.getIssues());
+                     .anyMatch(i -> i.contains("EntityStatus (a read-only badge) so it cannot declare dependsOn")),
+                "expected an EntityStatus-dependent issue, got: " + ex.getIssues());
     }
 
     private static final String WIDGET_HEAD = """
