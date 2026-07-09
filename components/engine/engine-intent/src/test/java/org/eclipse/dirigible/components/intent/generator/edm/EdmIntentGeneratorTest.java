@@ -242,6 +242,51 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void checksEmitTemplateReadyMaps() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    checks:
+                      - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Must balance" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntryItem
+                    checks:
+                      - { kind: exactlyOne, fields: [debit, credit], message: "Debit or credit" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        List<Map<String, Object>> entities = entities(model);
+        List<Map<String, Object>> entryChecks = (List<Map<String, Object>>) entityByName(entities, "JournalEntry").get("checks");
+        assertEquals(1, entryChecks.size());
+        Map<String, Object> sumCheck = entryChecks.get(0);
+        // Everything the DAO template needs, precomputed: items entity + back-FK + gate + fields.
+        assertEquals("JournalEntryItem", sumCheck.get("itemsEntity"));
+        assertEquals("JournalEntry", sumCheck.get("itemsFk"));
+        assertEquals("Status", sumCheck.get("statusProperty"));
+        assertEquals("2", sumCheck.get("status"));
+        assertEquals("Debit", sumCheck.get("overA"));
+        assertEquals("Credit", sumCheck.get("overB"));
+        List<Map<String, Object>> itemChecks = (List<Map<String, Object>>) entityByName(entities, "JournalEntryItem").get("checks");
+        assertEquals(List.of("Debit", "Credit"), itemChecks.get(0)
+                                                           .get("fields"));
+    }
+
+    @Test
     void whereEmitsStaticOptionFilterAttributes() {
         String yaml = """
                 name: shop

@@ -54,6 +54,13 @@ export function process(model, parameters) {
 
         e.referencedProjections = [];
 
+        // Declarative checks (intent `checks:`): split by scope for the templates - row-level
+        // exactlyOne goes to the REST validate(), document-level (status-gated) to the repository.
+        if (e.checks && e.checks.length) {
+            e.rowChecks = e.checks.filter(c => c.kind === 'exactlyOne');
+            e.documentChecks = e.checks.filter(c => c.kind !== 'exactlyOne');
+        }
+
         const dataOrderByProperties = e.properties.filter(p => p.dataOrderBy !== undefined);
         if (dataOrderByProperties.length > 0) {
             e.dataOrderBy = dataOrderByProperties[0].dataOrderBy;

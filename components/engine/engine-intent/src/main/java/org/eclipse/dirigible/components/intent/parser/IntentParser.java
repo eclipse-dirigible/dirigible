@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -1119,6 +1120,11 @@ public final class IntentParser {
                                                           .isEmpty()) {
                 validateImmutableIn(entity, issues);
             }
+            if (entity.getChecks() != null) {
+                for (CheckIntent check : entity.getChecks()) {
+                    validateCheck(entity, check, byName, issues);
+                }
+            }
         }
         return entityNames;
     }
@@ -1201,6 +1207,91 @@ public final class IntentParser {
                 issues.add(subject + " declares leafOnly but its target [" + relation.getTo() + "] declares no hierarchy");
             }
         }
+    }
+
+    /**
+     * A {@code checks} entry is one of three kinds. {@code exactlyOne} is row-level: at least two own
+     * fields, no status gate (it must hold on every write). {@code itemsSumEqual}/{@code itemsMin} are
+     * document-level: the entity must own a composition child (the items), the {@code over} fields must
+     * be two numeric fields OF THE ITEMS entity, and a {@code status} gate (an EntityStatus seed id) is
+     * mandatory - without it the check would forbid drafting the document item by item.
+     */
+    private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
+        String kind = check.getKind();
+        if ("exactlyOne".equals(kind)) {
+            if (check.getFields() == null || check.getFields()
+                                                  .size() < 2) {
+                issues.add(subject + " requires `fields`: at least two of the entity's own fields");
+                return;
+            }
+            if (check.getStatus() != null) {
+                issues.add(subject + " is row-level and cannot carry a `status` gate - it must hold on every write");
+            }
+            for (String field : check.getFields()) {
+                if (fieldByName(entity, field) == null) {
+                    issues.add(subject + " field [" + field + "] is not a field of [" + entity.getName() + "]");
+                }
+            }
+            return;
+        }
+        if ("itemsSumEqual".equals(kind) || "itemsMin".equals(kind)) {
+            EntityIntent items = compositionChildOf(entity, byName);
+            if (items == null) {
+                issues.add(subject + " requires the entity to own a composition child (the document's items)");
+                return;
+            }
+            if (check.getStatus() == null || check.getStatus() <= 0) {
+                issues.add(subject + " requires a `status` gate (an EntityStatus seed id) - without one the check would"
+                        + " forbid drafting the document item by item");
+            }
+            boolean hasStatus = false;
+            if (entity.getRelations() != null) {
+                for (RelationIntent relation : entity.getRelations()) {
+                    if (relation.isEntityStatus()) {
+                        hasStatus = true;
+                        break;
+                    }
+                }
+            }
+            if (!hasStatus) {
+                issues.add(subject + " requires the entity to declare a `function: EntityStatus` relation for the gate");
+            }
+            if ("itemsSumEqual".equals(kind)) {
+                if (check.getOver() == null || check.getOver()
+                                                    .size() != 2) {
+                    issues.add(subject + " requires `over`: exactly two numeric fields of the items entity");
+                } else {
+                    for (String field : check.getOver()) {
+                        FieldIntent itemsField = fieldByName(items, field);
+                        if (itemsField == null) {
+                            issues.add(subject + " over [" + field + "] is not a field of the items entity [" + items.getName() + "]");
+                        }
+                    }
+                }
+            } else if (check.getCount() == null || check.getCount() < 1) {
+                issues.add(subject + " requires `count`: the minimum number of items (>= 1)");
+            }
+            return;
+        }
+        issues.add(subject + " has unknown kind - expected exactlyOne, itemsSumEqual or itemsMin");
+    }
+
+    /** The entity's composition child (the first entity declaring a composition to-one back to it). */
+    private static EntityIntent compositionChildOf(EntityIntent entity, java.util.Map<String, EntityIntent> byName) {
+        for (EntityIntent candidate : byName.values()) {
+            if (candidate.getRelations() == null) {
+                continue;
+            }
+            for (RelationIntent relation : candidate.getRelations()) {
+                if (relation.isComposition() && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
     }
 
     /**

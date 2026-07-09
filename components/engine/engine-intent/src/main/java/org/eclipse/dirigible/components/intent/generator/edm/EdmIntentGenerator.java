@@ -383,6 +383,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // The Harmonia list renders a tree off it and pickers indent/leaf-filter by it.
                 entityMap.put("hierarchyProperty", IntentNaming.pascalCase(entity.getHierarchy()));
             }
+            List<Map<String, Object>> checkMaps = buildChecks(entity, byName);
+            if (!checkMaps.isEmpty()) {
+                // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
+                // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
+                entityMap.put("checks", checkMaps);
+            }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             if (!relations.isEmpty()) {
@@ -1104,6 +1110,70 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static String stripTrailingZero(Number value) {
         double d = value.doubleValue();
         return d == Math.rint(d) && !Double.isInfinite(d) ? String.valueOf((long) d) : String.valueOf(d);
+    }
+
+    /**
+     * The entity's {@code checks} as template-ready maps: {@code exactlyOne} carries the PascalCased
+     * own fields; the document-level kinds additionally carry the resolved items entity, the items'
+     * back-reference FK property, and the EntityStatus gate property - everything the DAO/REST
+     * templates need without re-deriving model structure.
+     */
+    private static List<Map<String, Object>> buildChecks(EntityIntent entity, Map<String, EntityIntent> byName) {
+        List<Map<String, Object>> checkMaps = new ArrayList<>();
+        if (entity.getChecks() == null) {
+            return checkMaps;
+        }
+        for (org.eclipse.dirigible.components.intent.model.CheckIntent check : entity.getChecks()) {
+            Map<String, Object> checkMap = new LinkedHashMap<>();
+            checkMap.put("kind", check.getKind());
+            checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            if ("exactlyOne".equals(check.getKind())) {
+                checkMap.put("fields", check.getFields()
+                                            .stream()
+                                            .map(IntentNaming::pascalCase)
+                                            .toList());
+            } else {
+                EntityIntent items = null;
+                String itemsFk = null;
+                for (EntityIntent candidate : byName.values()) {
+                    if (candidate.getRelations() == null) {
+                        continue;
+                    }
+                    for (RelationIntent relation : candidate.getRelations()) {
+                        if (relation.isComposition() && entity.getName()
+                                                              .equals(relation.getTo())) {
+                            items = candidate;
+                            itemsFk = IntentNaming.pascalCase(relation.getName());
+                            break;
+                        }
+                    }
+                    if (items != null) {
+                        break;
+                    }
+                }
+                if (items == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("itemsEntity", items.getName());
+                checkMap.put("itemsFk", itemsFk);
+                checkMap.put("status", String.valueOf(check.getStatus()));
+                RelationIntent status = entityStatusRelation(entity);
+                if (status == null) {
+                    continue; // the parser already reported it
+                }
+                checkMap.put("statusProperty", IntentNaming.pascalCase(status.getName()));
+                if ("itemsSumEqual".equals(check.getKind())) {
+                    checkMap.put("overA", IntentNaming.pascalCase(check.getOver()
+                                                                       .get(0)));
+                    checkMap.put("overB", IntentNaming.pascalCase(check.getOver()
+                                                                       .get(1)));
+                } else {
+                    checkMap.put("count", String.valueOf(check.getCount()));
+                }
+            }
+            checkMaps.add(checkMap);
+        }
+        return checkMaps;
     }
 
     /** The entity's {@code function: EntityStatus} relation, or null. */

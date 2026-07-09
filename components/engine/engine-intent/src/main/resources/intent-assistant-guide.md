@@ -160,6 +160,18 @@ composition is opt-in.
   FK to a node with children (e.g. a journal line references an analytical account, never a
   synthetic one). The target entity must declare `hierarchy`. Canonical pair:
     `- { name: Account, kind: manyToOne, to: Account, model: kf-accounts, required: true, leafOnly: true }`
+- `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
+  - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
+    listed own fields is non-null - enforced on every user write (400).
+  - `{ kind: itemsSumEqual, over: [debit, credit], status: 2, message: "..." }` (document-level):
+    the sums of the two item fields must be equal - the double-entry invariant. Enforced in the
+    repository whenever the document is persisted CARRYING the `status` gate seed id, i.e. at the
+    workflow transition into e.g. POSTED - so drafting item by item stays unconstrained. The gate
+    is mandatory and the entity needs a `function: EntityStatus` relation.
+  - `{ kind: itemsMin, count: 1, status: 2, message: "..." }` (document-level): minimum item count,
+    same gate.
+  A failed document check aborts the transition (the workflow task completion fails with the
+  authored message).
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and
