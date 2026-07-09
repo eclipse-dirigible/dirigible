@@ -240,6 +240,79 @@ class IntentParserTest {
     }
 
     @Test
+    void hierarchyAndLeafOnlyParse() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Account
+                    hierarchy: Parent
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, required: true, length: 10 }
+                    relations:
+                      - { name: Parent, kind: manyToOne, to: Account }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: Account, kind: manyToOne, to: Account, required: true, leafOnly: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("Parent", model.getEntities()
+                                    .get(0)
+                                    .getHierarchy());
+        assertTrue(model.getEntities()
+                        .get(1)
+                        .getRelations()
+                        .get(0)
+                        .isLeafOnly());
+    }
+
+    @Test
+    void hierarchyMustNameAnOptionalSelfRelation() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Category
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Account
+                    hierarchy: Category
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Category, kind: manyToOne, to: Category }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must target the entity itself")),
+                "expected a self-relation issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void leafOnlyRequiresAHierarchicalTarget() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares no hierarchy")),
+                "expected a no-hierarchy issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void whereStaticOptionFilterParses() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
 

@@ -71,7 +71,7 @@ public final class CrossModelSupport {
      *        model was not resolved (convention fallback) - callers then skip the check
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
-            String labelField, String fkType, java.util.Set<String> propertyNames) {
+            String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty) {
     }
 
     @SuppressWarnings("unchecked")
@@ -161,7 +161,9 @@ public final class CrossModelSupport {
                     }
                     labelField = labelField(properties, keyField);
                 }
-                return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames);
+                String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
+                return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
+                        hierarchyProperty);
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
@@ -196,7 +198,7 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null);
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null);
     }
 
     /**

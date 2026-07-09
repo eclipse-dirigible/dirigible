@@ -341,6 +341,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
+                    putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
@@ -353,6 +354,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
                 putOptionsFilter(fkProperty, relation, null);
+                putLeafOnly(fkProperty, relation,
+                        target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
@@ -373,6 +376,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                                  .map(String::valueOf)
                                                                  .collect(java.util.stream.Collectors.joining(",")));
                 }
+            }
+            if (entity.getHierarchy() != null && !entity.getHierarchy()
+                                                        .isBlank()) {
+                // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
+                // The Harmonia list renders a tree off it and pickers indent/leaf-filter by it.
+                entityMap.put("hierarchyProperty", IntentNaming.pascalCase(entity.getHierarchy()));
             }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
@@ -1065,6 +1074,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         String literal = value instanceof Number ? stripTrailingZero((Number) value) : String.valueOf(value);
         p.put("widgetOptionsFilterBy", by);
         p.put("widgetOptionsFilterValue", literal);
+    }
+
+    /**
+     * Emit the leaf-only attributes for a relation that declares {@code leafOnly: true}: the picker
+     * offers only childless nodes of the (hierarchical) target and the generated REST validation
+     * rejects an FK to a node with children. Two scalar attrs: {@code widgetLeafOnly} plus
+     * {@code widgetHierarchyProperty} - the TARGET's tree-edge FK property, which both the picker (to
+     * compute depth/leaves client-side) and the validation (to count children) key on. The parser
+     * checked a same-model target declares a hierarchy; a resolved cross-model target without one fails
+     * loudly here, while an unresolved target (the unit-test convention fallback) is skipped.
+     */
+    private static void putLeafOnly(Map<String, Object> p, RelationIntent relation, String targetHierarchyProperty, boolean resolved) {
+        if (!relation.isLeafOnly()) {
+            return;
+        }
+        if (targetHierarchyProperty == null || targetHierarchyProperty.isBlank()) {
+            if (resolved) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName()
+                        + "] declares leafOnly but its target [" + relation.getTo() + "] declares no hierarchy"));
+            }
+            return;
+        }
+        p.put("widgetLeafOnly", "true");
+        p.put("widgetHierarchyProperty", targetHierarchyProperty);
     }
 
     /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */

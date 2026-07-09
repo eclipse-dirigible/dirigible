@@ -94,6 +94,26 @@ document.addEventListener('alpine:init', () => {
       this.refreshIcons();
     },
 
+#if($hierarchyProperty)
+    // --- Hierarchy (intent `hierarchy:`): tree helpers over the loaded rows. The tree shows when no
+    // search / column filter is active (the flat table takes over for searching); rendering depth is
+    // capped at 6 by the fixed-depth view markup.
+    get treeVisible() { return !this.searchTerm && !this.hasActiveColumnFilters; },
+    childrenOf(parent) {
+      const pid = parent == null ? null : parent.${primaryKeysString};
+      if (pid == null) {
+        // Roots: no parent, or the parent is not in the loaded set (defensive for partial data).
+        return this.items.filter(it => it.${hierarchyProperty} == null
+          || !this.items.some(o => o.${primaryKeysString} === it.${hierarchyProperty}));
+      }
+      return this.items.filter(it => it.${hierarchyProperty} === pid);
+    },
+    hasChildren(node) { return this.items.some(it => it.${hierarchyProperty} === node.${primaryKeysString}); },
+    nodeLabel(node) {
+#set($labelCandidates = 0)
+      return [#foreach($property in $properties)#if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.widgetType != "DROPDOWN" && $property.widgetType != "DOCUMENT_STATUS" && $labelCandidates < 4)node.${property.name}, #set($labelCandidates = $labelCandidates + 1)#end#end].filter(v => v !== null && v !== undefined && v !== '').slice(0, 2).join(' ');
+    },
+#end
     // Right-pane selection (the table shows only the major columns; the pane shows every property).
     get selectedId() { return this.selected ? this.selected.${primaryKeysString} : null; },
     isSelected(row)  { return this.selected && row.${primaryKeysString} === this.selected.${primaryKeysString}; },

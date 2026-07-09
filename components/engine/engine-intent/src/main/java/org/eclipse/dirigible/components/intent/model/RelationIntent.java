@@ -93,6 +93,14 @@ public class RelationIntent {
      */
     private Map<String, Object> where;
 
+    /**
+     * Restricts this to-one relation to LEAF nodes of its (hierarchical) target: the picker offers only
+     * childless nodes and the generated REST validation rejects an FK to a node with children (e.g. a
+     * journal line may reference an analytical account, never a synthetic one). Valid only when the
+     * target entity declares {@code hierarchy}.
+     */
+    private boolean leafOnly;
+
     public String getName() {
         return name;
     }
@@ -218,5 +226,13 @@ public class RelationIntent {
 
     public void setWhere(Map<String, Object> where) {
         this.where = where;
+    }
+
+    public boolean isLeafOnly() {
+        return leafOnly;
+    }
+
+    public void setLeafOnly(boolean leafOnly) {
+        this.leafOnly = leafOnly;
     }
 }

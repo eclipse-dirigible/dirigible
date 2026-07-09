@@ -171,6 +171,13 @@ export function process(model, parameters) {
                     const javaUrl = `/services/java/${targetProject}/gen/${javaGen}/api/${javaPerspective}/${p.relationshipEntityName}Controller`;
                     p.widgetDropdownUrl = javaUrl;
                     p.widgetDropdownControllerUrl = javaUrl;
+                    // leafOnly (intent hierarchy): the generated controller validation counts the
+                    // referenced node's children through the TARGET's repository - client-Java compiles
+                    // registry-wide, so a cross-model import resolves like any custom-code one.
+                    if (p.widgetLeafOnly && p.widgetHierarchyProperty) {
+                        p.leafOnlyRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
+                        e.hasReferenceValidations = true;
+                    }
                     // The target's own Harmonia SPA (for the FK "Add new" iframe dialog). The web assets
                     // live under the RAW genFolderName, while the Java controllers use the sanitized one
                     // - so this must be derived from targetGenFolder directly, NOT by rewriting the
@@ -205,6 +212,10 @@ export function process(model, parameters) {
                 p.widgetOptionsFilterValueJs = /^-?\d+(\.\d+)?$/.test(raw) ? raw : "'" + raw.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
             }
         });
+        // A hierarchical entity guards its own tree edge (cycle check) in the generated validation.
+        if (e.hierarchyProperty) {
+            e.hasReferenceValidations = true;
+        }
     });
 
     parameters.perspectives = {};

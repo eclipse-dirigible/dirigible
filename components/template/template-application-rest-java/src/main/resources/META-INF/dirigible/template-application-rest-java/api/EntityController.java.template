@@ -127,6 +127,9 @@ public class ${name}Controller {
         applyOnCreate(entity);
 #end
         validate(entity);
+#if($hasReferenceValidations)
+        validateReferences(entity);
+#end
         return repository.save(entity);
     }
 
@@ -144,10 +147,16 @@ public class ${name}Controller {
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
         mergeWritable(existing, entity);
         validate(existing);
+#if($hasReferenceValidations)
+        validateReferences(existing);
+#end
         return repository.update(existing);
 #else
         entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
         validate(entity);
+#if($hasReferenceValidations)
+        validateReferences(entity);
+#end
         return repository.update(entity);
 #end
     }
@@ -369,4 +378,45 @@ public class ${name}Controller {
 #end
 #end
     }
+#if($hasReferenceValidations)
+
+    // Hierarchy reference checks (intent `hierarchy:` / `leafOnly:`). Server-side on purpose - the
+    // pickers mirror these rules client-side, but a hand-crafted request must not bypass them.
+    private void validateReferences(${name}Entity entity) {
+#foreach($property in $properties)
+#if($property.widgetLeafOnly && $property.leafOnlyRepositoryClass && $property.widgetHierarchyProperty)
+        // ${property.name} is leafOnly: the referenced ${property.relationshipEntityName} must have no children.
+        if (entity.${property.name} != null && !new ${property.leafOnlyRepositoryClass}().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                        .eq("${property.widgetHierarchyProperty}", entity.${property.name})).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "The '${property.name}' must reference a leaf ${property.relationshipEntityName} - the selected one has children");
+        }
+#end
+#end
+#if($hierarchyProperty)
+        // The tree edge must not form a cycle: walk up from the assigned parent; hitting the entity
+        // itself (or an implausible depth) rejects the write.
+        if (entity.${hierarchyProperty} != null) {
+            Object self = entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end;
+            Object cursor = entity.${hierarchyProperty};
+            int depth = 0;
+            while (cursor != null && depth++ < 100) {
+                if (cursor.equals(self)) {
+                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                            "The '${hierarchyProperty}' reference would create a cycle in the ${name} hierarchy");
+                }
+                ${name}Entity parent = repository.findOne(cursor).orElse(null);
+                if (parent == null) {
+                    break;
+                }
+                cursor = parent.${hierarchyProperty};
+            }
+            if (depth >= 100) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The ${name} hierarchy is implausibly deep - aborting");
+            }
+        }
+#end
+    }
+#end
 }

@@ -261,10 +261,18 @@ document.addEventListener('alpine:init', () => {
         // lazy-loads + server-filters). Skeleton fetches the first page.
         const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
 #end
+#if($property.widgetLeafOnly && $property.widgetHierarchyProperty)
+        // leafOnly hierarchy picker: depth-indented, childless nodes only (server re-validates).
+        this.options${property.name} = this.hierarchizeOptions(rows${property.name}, {
+          key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}',
+          parent: '${property.widgetHierarchyProperty}', leafOnly: true
+        });
+#else
         this.options${property.name} = (rows${property.name} || []).map(e => ({
           value: e.${property.widgetDropDownKey},
           text: e.${property.widgetDropDownValue}
         }));
+#end
       } catch (e) {
         console.error('[${name}FormPage] failed to load options for ${property.name}', e);
       }
@@ -278,6 +286,22 @@ document.addEventListener('alpine:init', () => {
       }
 #end
 #end
+    },
+
+
+    // Hierarchy-aware picker options (intent `hierarchy:` + `leafOnly:`): depth-first order,
+    // em-space indentation per depth, and optionally leaves only (nodes nobody parents). The
+    // server enforces leafOnly independently - this mirrors it for the UX.
+    hierarchizeOptions(rows, opts) {
+      const list = rows || [];
+      const byId = new Map(list.map(r => [r[opts.key], r]));
+      const parents = new Set(list.map(r => r[opts.parent]).filter(v => v != null));
+      const depthOf = r => { let d = 0, c = r[opts.parent]; while (c != null && byId.has(c) && d < 6) { d++; c = byId.get(c)[opts.parent]; } return d; };
+      const pathOf = r => { const seg = []; let c = r, guard = 0; while (c && guard++ < 7) { seg.unshift(String(c[opts.text] ?? c[opts.key])); c = byId.get(c[opts.parent]); } return seg.join('\u0000'); };
+      return list
+        .filter(r => !opts.leafOnly || !parents.has(r[opts.key]))
+        .sort((a, b) => pathOf(a).localeCompare(pathOf(b)))
+        .map(r => ({ value: r[opts.key], text: '\u2003'.repeat(depthOf(r)) + String(r[opts.text] ?? '') }));
     },
 
     optionText(options, value) {
