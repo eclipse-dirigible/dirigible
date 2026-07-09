@@ -49,11 +49,11 @@ export class ${name}Repository {
 
     public count(filter: ${name}Filter): number {
         const sql = `
-            SELECT COUNT(*) as REPORT_COUNT FROM (
+            SELECT COUNT(*) AS "REPORT_COUNT" FROM (
 #foreach($queryLine in $queryLines)
                 ${queryLine}
 #end
-            )
+            ) AS "REPORT_TOTAL"
         `;
 
         const parameters: NamedQueryParameter[] = [];
