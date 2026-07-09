@@ -57,15 +57,44 @@
            data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
         <div x-h-sidebar x-ref="sidebar">
           <!-- Instance brand mark (DIRIGIBLE_BRANDING_LOGO / _NAME / _SUBTITLE via the `branding` store),
-               the Harmonia counterpart of the AngularJS shell header. -->
+               the Harmonia counterpart of the AngularJS shell header. With 2+ projections declared
+               (the application-projections extension point) it becomes the Harmonia
+               product-switch-header: the selected projection filters the shell. -->
           <div x-h-sidebar-header>
-            <div class="hbox items-center gap-2 p-1">
-              <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
-              <div class="vbox gap-0">
-                <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
-                <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
+            <template x-if="projections.length > 1">
+              <div>
+                <button x-h-sidebar-menu-button data-size="lg" x-h-menu-trigger.dropdown>
+                  <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-9 rounded-control" />
+                  <div class="vbox min-w-0 text-left">
+                    <span class="truncate font-medium" x-text="projectionLabel()"></span>
+                    <span class="truncate text-xs font-normal" x-text="projectionSubtitle()"></span>
+                  </div>
+                  <i x-h-lucide role="img" data-lucide="chevrons-up-down"></i>
+                </button>
+                <ul x-h-menu aria-label="Projections" data-align="bottom-start">
+                  <div x-h-menu-label x-text="T('application-core:shell.projections.title', 'Applications')"></div>
+                  <template x-for="p in projections" :key="p.id">
+                    <li x-h-menu-item @click="selectProjection(p)">
+                      <template x-if="isSvgIcon(p.icon)"><svg x-h-icon :data-link="p.icon" class="size-4" role="presentation"></svg></template>
+                      <template x-if="isImageIcon(p.icon)"><img :src="p.icon" alt="" class="size-4" /></template>
+                      <template x-if="!isSvgIcon(p.icon) && !isImageIcon(p.icon)"><i role="img" x-h-lucide :data-lucide="p.icon || 'box'"></i></template>
+                      <span class="flex-1" x-text="p.tkey ? T(p.tkey, p.label) : p.label"></span>
+                      <!-- svg placeholder: x-show on an <i x-h-lucide> is lost when the i is replaced by the svg -->
+                      <svg x-h-lucide x-show="projectionId === p.id" role="img" data-lucide="check"></svg>
+                    </li>
+                  </template>
+                </ul>
               </div>
-            </div>
+            </template>
+            <template x-if="projections.length <= 1">
+              <div class="hbox items-center gap-2 p-1">
+                <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
+                <div class="vbox gap-0">
+                  <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
+                  <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
+                </div>
+              </div>
+            </template>
           </div>
 
           <div x-h-sidebar-content>
@@ -97,8 +126,9 @@
             <div x-show="loading" x-cloak x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.apps.loading', 'Loading applications...')"></div>
             <div x-show="!loading && groups.length === 0" x-cloak x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.apps.empty', 'No applications published yet.')"></div>
 
-            <!-- Domain apps: one group per navigation group, items host the embedded app. -->
-            <template x-for="group in groups" :key="group.id">
+            <!-- Domain apps: one group per navigation group (filtered by the active projection),
+                 items host the embedded app. -->
+            <template x-for="group in visibleGroups()" :key="group.id">
               <div x-h-sidebar-group>
                 <div x-h-sidebar-group-label x-text="group.tkey ? T(group.tkey, group.label) : group.label"></div>
                 <div x-h-sidebar-group-content>
@@ -120,11 +150,11 @@
 
             <!-- Reports: one entry per report, discovered at runtime across every published app
                  (the reports store walks the whole registry). Selecting one shows it on /reports. -->
-            <div x-h-sidebar-group x-show="$store.reports.items.length > 0" x-cloak>
+            <div x-h-sidebar-group x-show="visibleReports().length > 0" x-cloak>
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.reports', 'Reports')"></div>
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
-                  <template x-for="r in $store.reports.items" :key="r.url">
+                  <template x-for="r in visibleReports()" :key="r.url">
                     <li x-h-sidebar-menu-item>
                       <button x-h-sidebar-menu-button :data-active="isReportActive(r)" @click="openReport(r)">
                         <i role="img" x-h-lucide data-lucide="bar-chart-3"></i><span x-text="$store.reports.displayLabel(r)"></span>
@@ -139,7 +169,7 @@
           <!-- Settings pinned to the footer; it aggregates every app's SETTING entities. -->
           <div x-h-sidebar-footer>
             <ul x-h-sidebar-menu>
-              <li x-h-sidebar-menu-item x-show="settingsItems.length > 0">
+              <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
                 <button x-h-sidebar-menu-button :data-active="settingsMode" @click="openSettings()">
                   <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
                 </button>
