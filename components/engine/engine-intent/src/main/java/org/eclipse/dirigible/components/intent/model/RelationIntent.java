@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Relationship between two {@link EntityIntent}s. {@link #kind} is one of {@code oneToMany},
@@ -81,6 +82,16 @@ public class RelationIntent {
      * {@link DependsOnIntent}.
      */
     private DependsOnIntent dependsOn;
+
+    /**
+     * Optional static option filter: a single {@code <target property>: <literal>} pair that narrows
+     * this dropdown's option list to the target rows matching it (e.g. a stock line's Product picker
+     * showing only {@code Type: 1} = real products, never services). Unlike {@code dependsOn} (which
+     * reacts to a sibling selection) the condition is constant. Emitted as the
+     * {@code widgetOptionsFilterBy} / {@code widgetOptionsFilterValue} attributes on the FK property;
+     * label-resolution lookups deliberately keep the full set so historical rows still resolve.
+     */
+    private Map<String, Object> where;
 
     public String getName() {
         return name;
@@ -199,5 +210,13 @@ public class RelationIntent {
 
     public void setDependsOn(DependsOnIntent dependsOn) {
         this.dependsOn = dependsOn;
+    }
+
+    public Map<String, Object> getWhere() {
+        return where;
+    }
+
+    public void setWhere(Map<String, Object> where) {
+        this.where = where;
     }
 }

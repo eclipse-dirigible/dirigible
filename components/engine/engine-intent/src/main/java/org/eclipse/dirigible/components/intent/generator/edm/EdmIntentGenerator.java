@@ -340,6 +340,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     Map<String, Object> fkProperty = crossModelRelationProperty(name, relation, info);
                     putDependsOn(fkProperty, entity, relation.getDependsOn(), info.keyField(), info.propertyNames(), byName, usesByAlias,
                             context);
+                    putOptionsFilter(fkProperty, relation, info.propertyNames());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
@@ -351,6 +352,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 Map<String, Object> fkProperty = relationProperty(name, relation, target, composition, targetPerspective);
                 putDependsOn(fkProperty, entity, relation.getDependsOn(), target == null ? "Id" : keyFieldName(target), null, byName,
                         usesByAlias, context);
+                putOptionsFilter(fkProperty, relation, null);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
@@ -1022,6 +1024,40 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             requireTargetProperty(filterBy, ownTargetPropertyNames, "filterBy", String.valueOf(p.get("relationshipEntityName")));
             p.put("widgetDependsOnFilterBy", filterBy);
         }
+    }
+
+    /**
+     * Emit the static option-filter attributes for a relation that declares {@code where}: a single
+     * constant {@code <target property> = <literal>} condition narrowing the dropdown's option list
+     * (e.g. a stock line's Product picker showing only real products, never services). Two scalar
+     * attributes ({@code widgetOptionsFilterBy} / {@code widgetOptionsFilterValue}), so they flow into
+     * the {@code .edm} XML and the {@code .model} like any other widget attribute; the Harmonia chooser
+     * dropdowns consume them via the controller's {@code /search}, while label-resolution lookups keep
+     * the full set so historical rows still resolve. The parser validated the shape and same-model
+     * property; a cross-model property is validated here against the resolved owner model (skipped when
+     * unresolved - the unit-test convention fallback).
+     */
+    private static void putOptionsFilter(Map<String, Object> p, RelationIntent relation, Set<String> targetPropertyNames) {
+        if (relation.getWhere() == null || relation.getWhere()
+                                                   .size() != 1) {
+            return;
+        }
+        Map.Entry<String, Object> condition = relation.getWhere()
+                                                      .entrySet()
+                                                      .iterator()
+                                                      .next();
+        String by = IntentNaming.pascalCase(condition.getKey());
+        requireTargetProperty(by, targetPropertyNames, "where", relation.getTo());
+        Object value = condition.getValue();
+        String literal = value instanceof Number ? stripTrailingZero((Number) value) : String.valueOf(value);
+        p.put("widgetOptionsFilterBy", by);
+        p.put("widgetOptionsFilterValue", literal);
+    }
+
+    /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */
+    private static String stripTrailingZero(Number value) {
+        double d = value.doubleValue();
+        return d == Math.rint(d) && !Double.isInfinite(d) ? String.valueOf((long) d) : String.valueOf(d);
     }
 
     /** The to-one relation of the entity with the given name, or null. */
