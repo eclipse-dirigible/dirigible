@@ -621,6 +621,13 @@ class IntentEngineIT extends IntegrationTest {
                 "the setter should assign the field and persist without re-firing an update event");
         assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("entity.Status = \"REJECTED\""),
                 "the reject setter should assign the rejected status");
+        // The transition IS observable: the setter publishes the dedicated -transitioned topic (the
+        // status-reached channel for posting glue / integrations), which reactions never listen on -
+        // so onUpdate reactions still do not re-fire, but a consumer can bind the transition. The
+        // topic prefix is the PROJECT name (matching the DAO's create/-updated topics), not the
+        // intent model name - here the IT's workspace project.
+        assertTrue(activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", Json.stringify(entity))"),
+                "the setter should publish the entity on the -transitioned topic after the silent persist");
     }
 
     @Test

@@ -1,5 +1,7 @@
 package gen.events;
 
+import org.eclipse.dirigible.sdk.messaging.Producer;
+import org.eclipse.dirigible.sdk.utils.Json;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -12,7 +14,10 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * it is re-generated with the application. Runs
  * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it loads the ${entity} by its
  * process-variable id and persists the change WITHOUT publishing an "-updated" event, because this is
- * a workflow-driven system write, not a user edit, and must not re-fire onUpdate reactions.
+ * a workflow-driven system write, not a user edit, and must not re-fire onUpdate reactions. It DOES
+ * publish the dedicated "-transitioned" topic: the channel for status-reached consumers (posting
+ * glue, integrations) that reactions never listen on - so a transition is observable without
+ * re-firing onUpdate.
  */
 public class ${className} implements JavaDelegate {
 
@@ -32,6 +37,7 @@ public class ${className} implements JavaDelegate {
             entity.${field} = "${value}";
 #end
             repository.updateWithoutEvent(entity);
+            Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned", Json.stringify(entity));
         }
     }
 }
