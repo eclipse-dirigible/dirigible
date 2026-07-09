@@ -187,6 +187,29 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void immutableInEmitsStatusGuardAttributes() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    immutableIn: [2, 3]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
+        assertEquals("Status", entry.get("immutableStatusProperty"));
+        assertEquals("2,3", entry.get("immutableStatusValues"));
+    }
+
+    @Test
     void whereEmitsStaticOptionFilterAttributes() {
         String yaml = """
                 name: shop

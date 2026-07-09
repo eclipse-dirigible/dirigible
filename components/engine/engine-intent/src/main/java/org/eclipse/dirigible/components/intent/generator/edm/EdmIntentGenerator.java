@@ -361,6 +361,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // instead of the default fields-then-relations layout. Unlisted properties keep their
             // relative position, appended after the listed ones.
             properties = applyOrder(properties, entity.getOrder());
+            if (entity.getImmutableIn() != null && !entity.getImmutableIn()
+                                                          .isEmpty()) {
+                // User-write immutability: the generated REST controller rejects update/delete while
+                // the EntityStatus FK holds one of these seed ids (system writes stay possible).
+                RelationIntent status = entityStatusRelation(entity);
+                if (status != null) {
+                    entityMap.put("immutableStatusProperty", IntentNaming.pascalCase(status.getName()));
+                    entityMap.put("immutableStatusValues", entity.getImmutableIn()
+                                                                 .stream()
+                                                                 .map(String::valueOf)
+                                                                 .collect(java.util.stream.Collectors.joining(",")));
+                }
+            }
             entityMap.put("properties", properties);
             entityList.add(entityMap);
             if (!relations.isEmpty()) {
@@ -1058,6 +1071,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     private static String stripTrailingZero(Number value) {
         double d = value.doubleValue();
         return d == Math.rint(d) && !Double.isInfinite(d) ? String.valueOf((long) d) : String.valueOf(d);
+    }
+
+    /** The entity's {@code function: EntityStatus} relation, or null. */
+    private static RelationIntent entityStatusRelation(EntityIntent entity) {
+        if (entity.getRelations() == null) {
+            return null;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                return relation;
+            }
+        }
+        return null;
     }
 
     /** The to-one relation of the entity with the given name, or null. */

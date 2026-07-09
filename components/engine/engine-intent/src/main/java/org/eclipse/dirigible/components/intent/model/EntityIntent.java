@@ -103,6 +103,15 @@ public class EntityIntent {
     private SlotsIntent slots;
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
+    /**
+     * Optional immutability declaration: the EntityStatus seed ids in which the record is READ-ONLY for
+     * user writes (e.g. {@code immutableIn: [2]} = a POSTED journal entry can no longer be edited or
+     * deleted through the REST surface). Workflow/system writes through the repository (storno
+     * generation, roll-ups) are deliberately unaffected - this guards the USER surface. Requires the
+     * entity to declare a {@code function: EntityStatus} relation.
+     */
+    private List<Integer> immutableIn;
+
 
     public String getName() {
         return name;
@@ -261,6 +270,14 @@ public class EntityIntent {
 
     public void setFields(List<FieldIntent> fields) {
         this.fields = fields == null ? new ArrayList<>() : fields;
+    }
+
+    public List<Integer> getImmutableIn() {
+        return immutableIn;
+    }
+
+    public void setImmutableIn(List<Integer> immutableIn) {
+        this.immutableIn = immutableIn;
     }
 
     public List<RelationIntent> getRelations() {
