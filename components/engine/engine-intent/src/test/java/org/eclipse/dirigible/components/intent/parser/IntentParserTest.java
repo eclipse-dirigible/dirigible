@@ -203,6 +203,43 @@ class IntentParserTest {
     }
 
     @Test
+    void immutableInParsesAndRequiresAnEntityStatus() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    immutableIn: [2, 3]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals(java.util.List.of(2, 3), model.getEntities()
+                                                   .get(1)
+                                                   .getImmutableIn());
+
+        String noStatus = """
+                name: ledger
+                entities:
+                  - name: JournalEntry
+                    immutableIn: [2]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(noStatus));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("requires a `function: EntityStatus` relation")),
+                "expected a missing-status issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void whereStaticOptionFilterParses() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
 

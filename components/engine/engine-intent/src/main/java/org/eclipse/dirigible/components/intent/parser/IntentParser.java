@@ -1108,8 +1108,40 @@ public final class IntentParser {
                     validateWhere(entity, relation, byName, issues);
                 }
             }
+            if (entity.getImmutableIn() != null && !entity.getImmutableIn()
+                                                          .isEmpty()) {
+                validateImmutableIn(entity, issues);
+            }
         }
         return entityNames;
+    }
+
+    /**
+     * {@code immutableIn: [<status seed ids>]} makes the record read-only for USER writes while its
+     * EntityStatus holds one of the listed seed ids (workflow/system writes through the repository stay
+     * possible - corrections are reversals, not edits). It therefore requires the entity to declare a
+     * {@code function: EntityStatus} relation, and the ids must be positive integers.
+     */
+    private static void validateImmutableIn(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] immutableIn";
+        boolean hasStatus = false;
+        if (entity.getRelations() != null) {
+            for (RelationIntent relation : entity.getRelations()) {
+                if (relation.isEntityStatus()) {
+                    hasStatus = true;
+                    break;
+                }
+            }
+        }
+        if (!hasStatus) {
+            issues.add(subject + " requires a `function: EntityStatus` relation - immutability keys on the status");
+        }
+        for (Integer value : entity.getImmutableIn()) {
+            if (value == null || value <= 0) {
+                issues.add(subject + " values must be positive status seed ids");
+                break;
+            }
+        }
     }
 
     /**
