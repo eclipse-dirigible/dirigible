@@ -137,6 +137,14 @@ composition is opt-in.
   - auto-populate - price copied from the chosen product:
     `- { name: price, type: decimal, dependsOn: { relation: Product, valueFrom: price } }`
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
+- `where` (on a user-picked to-one relation) - **a static option filter**: a single
+  `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching
+  target rows. Unlike `dependsOn` (which reacts to a sibling selection) the condition is constant.
+  The property is the target's authored field or to-one relation name; an FK condition uses the seed
+  id. Label-resolution lookups (list/table columns) deliberately keep the full set so historical rows
+  still resolve. Not allowed on a composition parent (preset, never picked) or an `EntityStatus`.
+  Canonical shape - a stock line's Product picker excluding services:
+    `- { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }`
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and

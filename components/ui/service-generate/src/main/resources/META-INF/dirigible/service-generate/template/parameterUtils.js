@@ -196,6 +196,14 @@ export function process(model, parameters) {
                     p.widgetDependsOnControllerUrl = trigger.widgetDropdownControllerUrl;
                 }
             }
+            // Static option filter (intent relation `where:`): pre-render the condition value as a
+            // ready JS literal so the templates emit it verbatim into the generated /search call -
+            // numeric stays a number (FK ids / numeric columns type-match the EQ condition), anything
+            // else becomes a quoted string.
+            if (p.widgetOptionsFilterBy && p.widgetOptionsFilterValue !== undefined) {
+                const raw = String(p.widgetOptionsFilterValue);
+                p.widgetOptionsFilterValueJs = /^-?\d+(\.\d+)?$/.test(raw) ? raw : "'" + raw.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+            }
         });
     });
 

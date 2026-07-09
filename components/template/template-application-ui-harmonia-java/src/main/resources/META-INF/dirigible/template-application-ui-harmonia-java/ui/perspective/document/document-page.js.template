@@ -172,6 +172,9 @@ document.addEventListener('alpine:init', () => {
     // Depends-On-filtered options for the OPEN item dialog only. Kept apart from itemOptions,
     // which the items table uses to resolve labels for ALL rows and must stay the full set.
     draftOptions: {},
+    // Statically-filtered chooser sets (intent `where:` on a column) - loaded once per column;
+    // itemOptions keeps the FULL set for the items table's label resolution.
+    filteredOptions: {},
     _draftInitializing: false,
     deleteOpen: false,
     deleteTarget: null,
@@ -343,7 +346,14 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && $property.aggregate != "true")
       try {
+#if($property.widgetOptionsFilterBy)
+        // Static option filter (intent `where:`): the chooser lists only matching rows.
+        const rows${property.name} = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
+          conditions: [{ propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }]
+        }, { baseUrl: '' });
+#else
         const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+#end
         this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -380,7 +390,8 @@ document.addEventListener('alpine:init', () => {
 #if($property.widgetType == "DROPDOWN")
         if (from == null || from === '') return;
         const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
-          conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }]
+          conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
+            { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
         this.options${property.name} = (rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
         if (adjust) {
@@ -545,6 +556,13 @@ document.addEventListener('alpine:init', () => {
         try {
           const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
           this.itemOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+          if (col.filter) {
+            // Static option filter (intent `where:`): the dialog chooser sees only matching rows.
+            const filtered = await App.services.api.post(col.lookup.url + '/search', {
+              conditions: [{ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value }]
+            }, { baseUrl: '' });
+            this.filteredOptions[col.name] = (filtered || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
+          }
         } catch (e) {
           console.error('[${name}DocumentPage] failed to load item options for ' + col.name, e);
         }
@@ -553,8 +571,9 @@ document.addEventListener('alpine:init', () => {
 
     optionsFor(name) { return this.itemOptions[name] || []; },
 
-    // The item dialog's option list: the Depends-On-filtered set when one is active, else the full set.
-    dialogOptionsFor(name) { return this.draftOptions[name] || this.itemOptions[name] || []; },
+    // The item dialog's option list: the Depends-On-filtered set when one is active, else the static
+    // `where:`-filtered set when the column declares one, else the full set.
+    dialogOptionsFor(name) { return this.draftOptions[name] || this.filteredOptions[name] || this.itemOptions[name] || []; },
 
     // Depends-On in the item dialog, metadata-driven off editColumns (col.dependsOn = { property,
     // valueFrom, filterBy?, url }): when the trigger column changes, load its selected record, read
@@ -571,9 +590,9 @@ document.addEventListener('alpine:init', () => {
           const from = rec == null ? null : rec[col.dependsOn.valueFrom];
           if (col.widget === 'DROPDOWN' && col.lookup) {
             if (from == null || from === '') continue;
-            const rows = await App.services.api.post(col.lookup.url + '/search', {
-              conditions: [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }]
-            }, { baseUrl: '' });
+            const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
+            if (col.filter) conditions.push({ propertyName: col.filter.by, operator: 'EQ', value: col.filter.value });
+            const rows = await App.services.api.post(col.lookup.url + '/search', { conditions }, { baseUrl: '' });
             this.draftOptions[col.name] = (rows || []).map(e => ({ value: e[col.lookup.key], text: e[col.lookup.text] }));
             if (adjust) {
               this.draft[col.name] = this.draftOptions[col.name].length === 1 ? String(this.draftOptions[col.name][0].value) : '';
@@ -595,6 +614,7 @@ document.addEventListener('alpine:init', () => {
         delete this.itemOptions[col.name];
         // Drop a Depends-On-filtered set so the just-created record is selectable even off-filter.
         delete this.draftOptions[col.name];
+        delete this.filteredOptions[col.name];
         await this.loadItemOptions();
         if (id != null) this.draft[col.name] = String(id);
       });
@@ -603,6 +623,7 @@ document.addEventListener('alpine:init', () => {
     refreshItemOptions(col) {
       delete this.itemOptions[col.name];
       delete this.draftOptions[col.name];
+      delete this.filteredOptions[col.name];
       this.loadItemOptions();
       // Re-apply the Depends-On filter for a populated trigger so Refresh keeps the cascade.
       if (col.dependsOn && this.draft[col.dependsOn.property] != null && this.draft[col.dependsOn.property] !== '') {

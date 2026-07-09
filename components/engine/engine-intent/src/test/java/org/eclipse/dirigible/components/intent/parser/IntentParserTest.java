@@ -203,6 +203,48 @@ class IntentParserTest {
     }
 
     @Test
+    void whereStaticOptionFilterParses() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: HomeCity, kind: manyToOne, to: City, where: { Country: 1 } }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        var where = model.getEntities()
+                         .get(2)
+                         .getRelations()
+                         .get(1)
+                         .getWhere();
+        assertEquals(1, where.size());
+        assertEquals(1L, where.get("Country"));
+    }
+
+    @Test
+    void whereWithUnknownTargetPropertyIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: HomeCity, kind: manyToOne, to: City, where: { region: 1 } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("where [region] is not a field or to-one relation")),
+                "expected an unknown-property issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void whereWithMultipleConditionsIsRejected() {
+        String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
+
+                      - { name: HomeCity, kind: manyToOne, to: City, where: { Country: 1, name: Sofia } }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("where must be a single")),
+                "expected a single-pair issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void dependsOnUnknownTriggerRelationIsRejected() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
 

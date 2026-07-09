@@ -1104,9 +1104,58 @@ public final class IntentParser {
                         validateDependsOn(entity, subject, relation.getDependsOn(), relation, byName, issues);
                     }
                 }
+                if (relation.getWhere() != null) {
+                    validateWhere(entity, relation, byName, issues);
+                }
             }
         }
         return entityNames;
+    }
+
+    /**
+     * A {@code where} declaration (a static dropdown option filter) is a single
+     * {@code <target property>: <scalar literal>} pair on a user-picked to-one relation. The property
+     * must exist on the relation's target (same-model targets checked here; cross-model at generation
+     * time, like the relation target itself). A composition parent FK is preset by the layout - never
+     * picked - so a filter there is authoring noise and rejected.
+     */
+    private static void validateWhere(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares where but only a manyToOne/oneToOne relation has a dropdown to filter");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout, never picked) so it cannot declare where");
+            return;
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is an EntityStatus (a read-only badge) so it cannot declare where");
+            return;
+        }
+        if (relation.getWhere()
+                    .size() != 1) {
+            issues.add(subject + " where must be a single `<target property>: <literal>` pair (multiple conditions are not supported yet)");
+            return;
+        }
+        java.util.Map.Entry<String, Object> condition = relation.getWhere()
+                                                                .entrySet()
+                                                                .iterator()
+                                                                .next();
+        Object value = condition.getValue();
+        if (value == null || value instanceof java.util.Collection || value instanceof java.util.Map) {
+            issues.add(subject + " where [" + condition.getKey() + "] value must be a scalar literal");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && fieldByName(target, condition.getKey()) == null
+                    && toOneRelationByName(target, condition.getKey()) == null) {
+                issues.add(subject + " where [" + condition.getKey() + "] is not a field or to-one relation of [" + relation.getTo() + "]");
+            }
+        }
     }
 
     /**

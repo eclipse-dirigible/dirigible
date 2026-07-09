@@ -251,9 +251,16 @@ document.addEventListener('alpine:init', () => {
 #foreach($property in $properties)
 #if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
       try {
+#if($property.widgetOptionsFilterBy)
+        // Static option filter (intent `where:`): the chooser lists only matching rows.
+        const rows${property.name} = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
+          conditions: [{ propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }]
+        }, { baseUrl: '' });
+#else
         // TODO (Phase 2): paginate/search large option sets (the Angular module
         // lazy-loads + server-filters). Skeleton fetches the first page.
         const rows${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+#end
         this.options${property.name} = (rows${property.name} || []).map(e => ({
           value: e.${property.widgetDropDownKey},
           text: e.${property.widgetDropDownValue}
@@ -340,7 +347,8 @@ document.addEventListener('alpine:init', () => {
 #if($property.widgetType == "DROPDOWN")
         if (from == null || from === '') return;
         const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
-          conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }]
+          conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
+            { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
         this.options${property.name} = (rows || []).map(e => ({
           value: e.${property.widgetDropDownKey},

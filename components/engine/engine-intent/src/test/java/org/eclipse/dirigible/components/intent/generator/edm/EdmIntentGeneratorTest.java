@@ -187,6 +187,50 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void whereEmitsStaticOptionFilterAttributes() {
+        String yaml = """
+                name: shop
+                uses:
+                  - { model: uoms }
+                entities:
+                  - name: ProductType
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Type, kind: manyToOne, to: ProductType }
+                  - name: StockLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product, where: { Type: 1 } }
+                      - { name: UoM, kind: manyToOne, to: UoM, model: uoms, where: { code: KG } }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "shop");
+        List<Map<String, Object>> entities = entities(model);
+
+        Map<String, Object> stockLine = entityByName(entities, "StockLine");
+        // Same-model: the chooser narrows to Type = 1; a YAML integer renders without a trailing .0.
+        Map<String, Object> product = propertyByName(stockLine, "Product");
+        assertEquals("Type", product.get("widgetOptionsFilterBy"));
+        assertEquals("1", product.get("widgetOptionsFilterValue"));
+        // Cross-model (convention fallback in tests): the authored key is PascalCased, value verbatim.
+        Map<String, Object> uom = propertyByName(stockLine, "UoM");
+        assertEquals("Code", uom.get("widgetOptionsFilterBy"));
+        assertEquals("KG", uom.get("widgetOptionsFilterValue"));
+        // An unfiltered relation carries neither attribute.
+        Map<String, Object> type = propertyByName(entityByName(entities, "Product"), "Type");
+        assertNull(type.get("widgetOptionsFilterBy"));
+    }
+
+    @Test
     void multilingualEntityAndLanguagesFlowIntoTheModel() {
         String yaml = """
                 name: uoms
