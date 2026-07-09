@@ -55,7 +55,7 @@ public class ${name}Repository {
     @SuppressWarnings("unchecked")
     public long count(Map<String, Object> filter) {
         List<Map<String, Object>> parameters = baseParameters(filter);
-        String sql = "SELECT COUNT(*) AS REPORT_COUNT FROM (" + filteredQuery(filter, parameters) + ") AS \"REPORT_TOTAL\"";
+        String sql = "SELECT COUNT(*) AS \"REPORT_COUNT\" FROM (" + filteredQuery(filter, parameters) + ") AS \"REPORT_TOTAL\"";
         try {
             String result = Database.queryNamed(sql, Json.stringify(parameters));
             List<Map<String, Object>> rows = (List<Map<String, Object>>) Json.parse(result, List.class);

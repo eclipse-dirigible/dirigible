@@ -1212,6 +1212,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(repository.contains("FILTER_COLUMNS"), "the report repository should carry the filterable-column allowlist");
         assertTrue(repository.contains("SELECT * FROM (\").append(QUERY).append(\") AS \\\"REPORT_DATA\\\" WHERE"),
                 "conditions should wrap the report query");
+        assertTrue(repository.contains("SELECT COUNT(*) AS \\\"REPORT_COUNT\\\" FROM ("),
+                "the count alias must be quoted - PostgreSQL folds an unquoted alias to lower case and the case-sensitive read misses it");
         assertTrue(repository.contains("\"GTE\", \">=\""), "range operators should be whitelisted");
         String controller = contentOf("gen/ordersbycustomer/api/reports/OrdersByCustomerController.java");
         assertTrue(controller.contains("exportCsv(@Body Map<String, Object> filter)"), "export should honor the active filters");
