@@ -21,6 +21,24 @@ public class ReportIntent {
 
     private String name;
     private String source;
+    /**
+     * Optional report kind. {@code balance} is the accounting balance shape: opening / period / closing
+     * debit and credit totals per dimension over the runtime {@code fromDate}/{@code toDate} window -
+     * {@link #date} drives the window, {@link #debit}/{@link #credit} are the summed amount fields, and
+     * the report declares the two date parameters on the generated {@code .report}. Absent (the
+     * default) -> a plain aggregation report from {@link #measures}.
+     */
+    private String kind;
+    /**
+     * {@code kind: balance}: the {@code date}-typed field driving the period window - a field of the
+     * source or a one-hop {@code relation.field} path to it (e.g. {@code journalEntry.entryDate} on a
+     * journal-entry item).
+     */
+    private String date;
+    /** {@code kind: balance}: the numeric source field holding the debit amount. */
+    private String debit;
+    /** {@code kind: balance}: the numeric source field holding the credit amount. */
+    private String credit;
     private List<String> dimensions = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
     private String filter;
@@ -57,6 +75,43 @@ public class ReportIntent {
 
     public void setSource(String source) {
         this.source = source;
+    }
+
+    /** Whether this is a balance report ({@code kind: balance}). */
+    public boolean isBalance() {
+        return kind != null && "balance".equalsIgnoreCase(kind.trim());
+    }
+
+    public String getKind() {
+        return kind;
+    }
+
+    public void setKind(String kind) {
+        this.kind = kind;
+    }
+
+    public String getDate() {
+        return date;
+    }
+
+    public void setDate(String date) {
+        this.date = date;
+    }
+
+    public String getDebit() {
+        return debit;
+    }
+
+    public void setDebit(String debit) {
+        this.debit = debit;
+    }
+
+    public String getCredit() {
+        return credit;
+    }
+
+    public void setCredit(String credit) {
+        this.credit = credit;
     }
 
     public List<String> getDimensions() {
