@@ -82,12 +82,13 @@ public final class IntentParser {
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
-    private static final Set<String> ENTITY_FUNCTIONS = Set.of("document", "documentitem", "master", "detail", "list", "setting");
+    private static final Set<String> ENTITY_FUNCTIONS =
+            Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar");
     /**
      * Entity {@code function} values whose template is reserved but not yet shipped (gated with a
      * message).
      */
-    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
+    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("board", "gantt", "timeline");
     /** Implemented field {@code function} values (lower-cased). */
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
     /** Implemented relation {@code function} values (lower-cased). */
@@ -229,7 +230,7 @@ public final class IntentParser {
                             + "] is reserved for an upcoming template and is not yet available in this version");
                 } else if (!ENTITY_FUNCTIONS.contains(key)) {
                     issues.add("entity [" + name + "] has unknown function [" + fn
-                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting)");
+                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting, Calendar)");
                 } else if (entity.isDocumentItem() && !compositionParent.containsKey(name)) {
                     issues.add("entity [" + name
                             + "] function: DocumentItem must be a composition child (a manyToOne/oneToOne relation with composition: true)");
@@ -304,10 +305,21 @@ public final class IntentParser {
     private static void validateViews(IntentModel model, List<String> issues) {
         for (EntityIntent entity : model.getEntities()) {
             String view = entity.getView();
+            String name = entity.getName();
+            boolean functionCalendar = entity.getFunction() != null && "calendar".equalsIgnoreCase(entity.getFunction()
+                                                                                                         .trim());
             if (view == null || view.isBlank()) {
+                if (!functionCalendar) {
+                    continue;
+                }
+                // function: Calendar is the role alias for view: calendar - same rendering, same
+                // required calendar block, validated below with the effective view.
+                view = "calendar";
+            } else if (functionCalendar && !"calendar".equalsIgnoreCase(view.trim())) {
+                issues.add("entity [" + name + "] declares function: Calendar together with view: " + view
+                        + " - the role implies view: calendar; drop one of the two");
                 continue;
             }
-            String name = entity.getName();
             String v = view.trim();
             if (!"calendar".equalsIgnoreCase(v) && !"range".equalsIgnoreCase(v) && !"slots".equalsIgnoreCase(v)) {
                 issues.add("entity [" + name + "] has unknown view [" + view + "] (supported: calendar, range, slots)");
@@ -1120,7 +1132,16 @@ public final class IntentParser {
             }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
-                validateImmutableIn(entity, issues);
+                issues.add("entity [" + entity.getName()
+                        + "] uses immutableIn - renamed; author immutableWhen: \"<Status> == <seed id>\" (terms joined with ||)");
+            }
+            if (Boolean.TRUE.equals(entity.getImmutable()) && entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                                                          .isBlank()) {
+                issues.add("entity [" + entity.getName()
+                        + "] declares both immutable: true and immutableWhen - always-immutable subsumes any status scope; keep one");
+            } else if (entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                   .isBlank()) {
+                validateImmutableWhen(entity, issues);
             }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
@@ -1131,30 +1152,44 @@ public final class IntentParser {
         return entityNames;
     }
 
+    /** The compiled shape of one {@code immutableWhen} term: {@code <Status> == <seed id>}. */
+    private static final java.util.regex.Pattern IMMUTABLE_WHEN_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+
     /**
-     * {@code immutableIn: [<status seed ids>]} makes the record read-only for USER writes while its
-     * EntityStatus holds one of the listed seed ids (workflow/system writes through the repository stay
-     * possible - corrections are reversals, not edits). It therefore requires the entity to declare a
-     * {@code function: EntityStatus} relation, and the ids must be positive integers.
+     * {@code immutableWhen: "<Status> == <seed id> [|| ...]"} makes the record read-only for USER
+     * writes while its EntityStatus satisfies the expression (workflow/system writes through the
+     * repository stay possible - corrections are reversals, not edits). It therefore requires the
+     * entity to declare a {@code function: EntityStatus} relation, every term must reference THAT
+     * relation by its authored name, and the seed ids must be positive integers.
      */
-    private static void validateImmutableIn(EntityIntent entity, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] immutableIn";
-        boolean hasStatus = false;
+    private static void validateImmutableWhen(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] immutableWhen";
+        RelationIntent status = null;
         if (entity.getRelations() != null) {
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.isEntityStatus()) {
-                    hasStatus = true;
+                    status = relation;
                     break;
                 }
             }
         }
-        if (!hasStatus) {
+        if (status == null) {
             issues.add(subject + " requires a `function: EntityStatus` relation - immutability keys on the status");
+            return;
         }
-        for (Integer value : entity.getImmutableIn()) {
-            if (value == null || value <= 0) {
-                issues.add(subject + " values must be positive status seed ids");
-                break;
+        for (String term : entity.getImmutableWhen()
+                                 .split("\\|\\|")) {
+            java.util.regex.Matcher matcher = IMMUTABLE_WHEN_TERM.matcher(term);
+            if (!matcher.matches()) {
+                issues.add(subject + " term [" + term.trim() + "] must be `<Status relation> == <seed id>` (terms joined with ||)");
+                continue;
+            }
+            if (!matcher.group(1)
+                        .equals(status.getName())) {
+                issues.add(subject + " term [" + term.trim() + "] must reference the EntityStatus relation [" + status.getName() + "]");
+            }
+            if (Integer.parseInt(matcher.group(2)) <= 0) {
+                issues.add(subject + " seed ids must be positive");
             }
         }
     }
@@ -1974,6 +2009,23 @@ public final class IntentParser {
             String name = g.getName();
             if (!names.add(name)) {
                 issues.add("duplicate generates action [" + name + "]");
+            }
+            if (g.getSourceStatus() != null) {
+                // The completion hook flips the SOURCE's status after the target is created - it
+                // needs the EntityStatus relation to write to.
+                EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
+                boolean hasStatus = false;
+                if (from != null) {
+                    for (RelationIntent relation : from.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            hasStatus = true;
+                        }
+                    }
+                }
+                if (from != null && !hasStatus) {
+                    issues.add("generates [" + name + "] sourceStatus requires the from entity [" + g.getFrom()
+                            + "] to declare a function: EntityStatus relation");
+                }
             }
             EntityIntent source = null;
             if (g.getFrom() == null || g.getFrom()

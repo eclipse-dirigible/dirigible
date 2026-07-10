@@ -54,6 +54,16 @@ public class ${className}Generate {
             new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
         }
 #end
+#if($sourceStatusValue != "")
+        // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation
+        // status now that the target exists (e.g. a proforma flips to INVOICED). A workflow-style
+        // system write - no "-updated" re-fire (no onUpdate reactions), but the dedicated
+        // "-transitioned" topic IS published so posting glue / integrations observe the transition.
+        source.${sourceStatusProperty} = ${sourceStatusValue};
+        new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository().updateWithoutEvent(source);
+        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
+                "${projectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
+#end
         return Json.stringify(saved);
     }
 }

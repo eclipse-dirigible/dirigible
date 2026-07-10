@@ -30,10 +30,11 @@ public class EntityIntent {
 
     /**
      * Explicit presentation role that selects the entity's UI template - {@code Document},
-     * {@code DocumentItem}, {@code Master}, {@code Detail}, {@code List}, {@code Setting} (and reserved
-     * future templates such as {@code Calendar}). Authoritative when set; otherwise the role is
-     * inferred from structure and the legacy flags ({@code kind: setting}, an {@code *Item}-named
-     * child).
+     * {@code DocumentItem}, {@code Master}, {@code Detail}, {@code List}, {@code Setting}, or
+     * {@code Calendar} (the role alias for {@code view: calendar} - the entity renders on the Harmonia
+     * calendar, configured by the {@code calendar:} block; reserved values such as
+     * {@code Board}/{@code Gantt} stay gated). Authoritative when set; otherwise the role is inferred
+     * from structure and the legacy flags ({@code kind: setting}, an {@code *Item}-named child).
      */
     private String function;
     /**
@@ -104,13 +105,27 @@ public class EntityIntent {
     private List<FieldIntent> fields = new ArrayList<>();
     private List<RelationIntent> relations = new ArrayList<>();
     /**
-     * Optional immutability declaration: the EntityStatus seed ids in which the record is READ-ONLY for
-     * user writes (e.g. {@code immutableIn: [2]} = a POSTED journal entry can no longer be edited or
-     * deleted through the REST surface). Workflow/system writes through the repository (storno
-     * generation, roll-ups) are deliberately unaffected - this guards the USER surface. Requires the
-     * entity to declare a {@code function: EntityStatus} relation.
+     * RETIRED spelling, bound only so the parser can reject it with a migration message: status-scoped
+     * immutability is authored as {@code immutableWhen} since the rename.
      */
     private List<Integer> immutableIn;
+    /**
+     * Optional status-scoped immutability: a boolean expression over the entity's
+     * {@code function: EntityStatus} relation - terms {@code <Status> == <seed id>} joined with
+     * {@code ||} - while true the record is READ-ONLY for user writes (e.g.
+     * {@code immutableWhen: "Status == 2"} = a POSTED journal entry can no longer be edited or deleted
+     * through the REST surface). Workflow/system writes through the repository (storno generation,
+     * roll-ups) are deliberately unaffected - this guards the USER surface. Requires the entity to
+     * declare a {@code function: EntityStatus} relation.
+     */
+    private String immutableWhen;
+    /**
+     * Optional append-only marker: {@code immutable: true} makes every record READ-ONLY for user writes
+     * from the moment it is created (audit trails, ledger lines, event logs) - REST update and delete
+     * always return 409. System writes through the repository stay possible. Mutually exclusive with
+     * {@code immutableWhen} - always-immutable subsumes any status scope.
+     */
+    private Boolean immutable;
     /**
      * Optional hierarchy declaration: names this entity's to-one SELF-relation that forms the tree edge
      * (e.g. {@code hierarchy: Parent} on a chart-of-accounts Account). The generated list renders as a
@@ -144,10 +159,12 @@ public class EntityIntent {
     }
 
     /**
-     * Whether this entity uses the calendar renderer ({@code view: calendar} or {@code view: range}).
+     * Whether this entity uses the calendar renderer - {@code view: calendar}, {@code view: range}, or
+     * the presentation role {@code function: Calendar} (the role alias for {@code view: calendar}; the
+     * {@code calendar:} block configures it either way).
      */
     public boolean isCalendar() {
-        return viewIs("calendar") || viewIs("range");
+        return viewIs("calendar") || viewIs("range") || functionIs("Calendar");
     }
 
     /**
@@ -292,6 +309,22 @@ public class EntityIntent {
 
     public void setImmutableIn(List<Integer> immutableIn) {
         this.immutableIn = immutableIn;
+    }
+
+    public String getImmutableWhen() {
+        return immutableWhen;
+    }
+
+    public void setImmutableWhen(String immutableWhen) {
+        this.immutableWhen = immutableWhen;
+    }
+
+    public Boolean getImmutable() {
+        return immutable;
+    }
+
+    public void setImmutable(Boolean immutable) {
+        this.immutable = immutable;
     }
 
     public String getHierarchy() {

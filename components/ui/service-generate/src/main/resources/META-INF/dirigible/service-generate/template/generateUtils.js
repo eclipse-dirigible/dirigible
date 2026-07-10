@@ -800,7 +800,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 toItemEntity: g.toItemEntity,
                                 srcFkProperty: g.srcFkProperty,
                                 toFkProperty: g.toFkProperty,
-                                itemFieldAssignments: g.itemFieldAssignments
+                                itemFieldAssignments: g.itemFieldAssignments,
+                                // Completion hook: flip the source's status after the target exists.
+                                fromPerspective: g.fromPerspective,
+                                sourceStatusProperty: g.sourceStatusProperty,
+                                sourceStatusValue: g.sourceStatusValue
                             };
                             const cleanGenerateParameters = cleanData(generateParameters);
                             generatedFiles.push({

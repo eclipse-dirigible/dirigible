@@ -462,6 +462,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
             e.put("fieldAssignments", assignments(g.getMap(), g.getDefaults(), "source"));
+            // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
+            // is created (empty = no hook). Pre-resolved to the PascalCase FK property.
+            String sourceStatusProperty = "";
+            if (g.getSourceStatus() != null) {
+                for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
+                    if (relation.isEntityStatus()) {
+                        sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
+                    }
+                }
+            }
+            e.put("sourceStatusProperty", sourceStatusProperty);
+            e.put("sourceStatusValue",
+                    g.getSourceStatus() == null || sourceStatusProperty.isEmpty() ? "" : String.valueOf(g.getSourceStatus()));
 
             GeneratesItemsIntent items = g.getItems();
             boolean hasItems = items != null && items.getFrom() != null && !items.getFrom()

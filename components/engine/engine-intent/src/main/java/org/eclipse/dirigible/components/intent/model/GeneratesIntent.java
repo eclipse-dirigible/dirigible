@@ -72,6 +72,13 @@ public class GeneratesIntent {
 
     /** Optional ordering hint among the contributed actions of a view. */
     private Integer order;
+    /**
+     * Optional completion hook: the EntityStatus seed id the SOURCE record is set to after the target
+     * is created (e.g. a proforma flips to INVOICED once the invoice exists). A workflow-style system
+     * write - no {@code -updated} re-fire, but the source's {@code -transitioned} topic IS published.
+     * Requires the {@code from} entity to declare a {@code function: EntityStatus} relation.
+     */
+    private Integer sourceStatus;
 
     /** Target property -> source property (a field or to-one relation name of {@link #from}). */
     private Map<String, String> map = new LinkedHashMap<>();
@@ -154,6 +161,14 @@ public class GeneratesIntent {
 
     public void setOrder(Integer order) {
         this.order = order;
+    }
+
+    public Integer getSourceStatus() {
+        return sourceStatus;
+    }
+
+    public void setSourceStatus(Integer sourceStatus) {
+        this.sourceStatus = sourceStatus;
     }
 
     public Map<String, String> getMap() {

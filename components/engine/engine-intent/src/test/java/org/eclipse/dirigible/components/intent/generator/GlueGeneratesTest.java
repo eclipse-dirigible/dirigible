@@ -104,6 +104,46 @@ class GlueGeneratesTest {
 
         List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
         assertTrue(itemFields.contains(Map.of("targetProp", "Amount", "expr", "srcItem.Amount")));
+
+        // No completion hook declared - the template's #if renders nothing.
+        assertEquals("", g.get("sourceStatusProperty"));
+        assertEquals("", g.get("sourceStatusValue"));
+    }
+
+    @Test
+    void completionHookResolvesTheSourceStatusRelation() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: ProformaStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    sourceStatus: 3
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        // Pre-resolved to the EntityStatus FK property + the seed id the source flips to.
+        assertEquals("Status", g.get("sourceStatusProperty"));
+        assertEquals("3", g.get("sourceStatusValue"));
+        assertEquals("Proforma", g.get("fromPerspective"));
     }
 
     @SuppressWarnings("unchecked")

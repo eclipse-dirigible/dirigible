@@ -21,7 +21,7 @@ is covered end to end (generated tokens + runtime behavior) by `IntentEmissionCo
 | [field/relation attributes](#field--relation-attributes) | uniqueness, layout, read-only, dropdown filtering, cascades |
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
-| [`immutableIn`](#immutablein--status-keyed-immutability) | 409 on user writes in a given status |
+| [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |
@@ -263,10 +263,13 @@ generates:
     map: { Customer: Customer }
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
+    sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
 ```
 
 Adds a button on the source view; the clone saves through the target's repository so numbering,
-status init and calculated fields fire.
+status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
+seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
+the source's `-transitioned` topic is published.
 
 ## postings - source-document to ledger
 
@@ -453,9 +456,9 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
 
 ## Planned - recognised but not yet implemented
 
-- **`function: Calendar`** - reserved as an entity presentation role; rejected with a clear "not
-  yet available" message (the `view: calendar|range|slots` pages above are the current calendar
-  surface). Likewise other reserved `function` values for upcoming templates.
+- **Reserved `function:` roles** - `Board`, `Gantt`, `Timeline`; rejected with a clear "not yet
+  available" message. (`function: Calendar` is now first-class - the role alias for
+  `view: calendar`.)
 - **`manyToMany`** - parsed but never materialized; the supported shape is the explicit
   intermediate entity.
 - **Declarative glue actions beyond the current set** (see CLAUDE.md "Planned: declarative glue"):
@@ -467,6 +470,8 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
   be cross-model).
 - **`generates` completion hook** - flipping the SOURCE record's status after creating the target
   (`onDone`-style) is not yet expressible.
+- **Embedded calendar panel for a DEPENDENT composition child** inside its master page - calendar
+  views require a PRIMARY entity today.
 - **Pipeline hardening follow-ups** (tracked on the emission-coverage IT): seed-row key
   validation at generate time, surfaced + retried CSVIM import failures, `checks:` violations
   mapped to 4xx, generator-version stamping of generated output.

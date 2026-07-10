@@ -373,17 +373,26 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // instead of the default fields-then-relations layout. Unlisted properties keep their
             // relative position, appended after the listed ones.
             properties = applyOrder(properties, entity.getOrder());
-            if (entity.getImmutableIn() != null && !entity.getImmutableIn()
-                                                          .isEmpty()) {
-                // User-write immutability: the generated REST controller rejects update/delete while
-                // the EntityStatus FK holds one of these seed ids (system writes stay possible).
+            if (Boolean.TRUE.equals(entity.getImmutable())) {
+                // Append-only (intent `immutable: true`): every record is read-only for user writes from
+                // the moment it is created - e.g. the snapshot stored when a document is sent.
+                entityMap.put("immutableAlways", "true");
+            } else if (entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                   .isBlank()) {
+                // Status-scoped (intent `immutableWhen: "<Status> == <id> [|| ...]"`): compiled here into
+                // the status property + the seed-id list the controller template consumes - user writes
+                // are rejected while the EntityStatus FK holds one of these ids (system writes stay
+                // possible).
                 RelationIntent status = entityStatusRelation(entity);
                 if (status != null) {
+                    java.util.List<String> ids = new java.util.ArrayList<>();
+                    java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("==\\s*(\\d+)")
+                                                                             .matcher(entity.getImmutableWhen());
+                    while (matcher.find()) {
+                        ids.add(matcher.group(1));
+                    }
                     entityMap.put("immutableStatusProperty", IntentNaming.pascalCase(status.getName()));
-                    entityMap.put("immutableStatusValues", entity.getImmutableIn()
-                                                                 .stream()
-                                                                 .map(String::valueOf)
-                                                                 .collect(java.util.stream.Collectors.joining(",")));
+                    entityMap.put("immutableStatusValues", String.join(",", ids));
                 }
             }
             if (entity.getHierarchy() != null && !entity.getHierarchy()
