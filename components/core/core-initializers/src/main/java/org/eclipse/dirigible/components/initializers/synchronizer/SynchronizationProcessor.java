@@ -566,8 +566,31 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                             }
                             addArtefacts(parsed);
                             break;
-                        case BROKEN: // has been broken
-                            // do not try to parse it again as it is still not modified
+                        case BROKEN: // has been broken - retry every pass (self-healing)
+                            // The original failure may have been transient: a race with a concurrent
+                            // publish, or a cross-artefact condition that a later pass resolved (a
+                            // duplicate-FQN Java source whose twin was since deleted). Skipping until
+                            // the content changes leaves the definition permanently dead - one
+                            // unparsed .java source is invisible to the client-Java batch compile and
+                            // fails the WHOLE batch until someone edits the file's bytes. A genuinely
+                            // broken definition re-fails cheaply; state and message are rewritten only
+                            // when the error changes, so there is no per-pass churn.
+                            try {
+                                parsed = synchronizer.parse(definition.getLocation(), definition.getContent());
+                                parsed.forEach(a -> {
+                                    a.setPhase(ArtefactPhase.CREATE);
+                                    synchronizer.setStatus((a), ArtefactLifecycle.NEW, "");
+                                });
+                                addArtefacts(parsed);
+                                registerParsedState(definition);
+                                logger.info("Previously broken definition [{}] parsed successfully on retry", definition.getLocation());
+                            } catch (ParseException e) {
+                                if (!Objects.equals(definition.getMessage(), e.getMessage())) {
+                                    registerBrokenState(definition, e.getMessage());
+                                } else {
+                                    logger.debug("Definition [{}] is still broken: {}", definition.getLocation(), e.getMessage(), e);
+                                }
+                            }
                             break;
                         case DELETED: // has been deleted before, but appeared again
                             try {
