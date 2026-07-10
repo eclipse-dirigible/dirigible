@@ -1014,8 +1014,14 @@ class IntentEngineIT extends IntegrationTest {
                 "a timestamp strategy should mint a yyyyMMddHHmmss value into the flagged field when blank");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.Number);"),
                 "the business key must be the minted number field");
-        assertTrue(trigger.contains("repository.updateWithoutEvent(entity)"),
-                "the minted number and ProcessId must be persisted via the silent update (no spurious -updated event)");
+        // Targeted single-column writes, never a full-row update: a stale snapshot merge would revert
+        // concurrent writes (the ProcessId write-back race). No event either - a system write.
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"ProcessId\", processId)"),
+                "ProcessId must be persisted via a targeted single-column update, not a full-row merge");
+        assertTrue(trigger.contains("repository.updateProperty(entity.Id, \"Number\", minted)"),
+                "the minted number must be persisted via its own targeted single-column update");
+        assertFalse(trigger.contains("updateWithoutEvent"),
+                "the trigger must not merge its stale full-row snapshot back (the ProcessId write-back race)");
     }
 
     @Test

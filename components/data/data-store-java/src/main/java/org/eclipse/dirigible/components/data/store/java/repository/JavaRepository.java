@@ -77,6 +77,23 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Update a single property of one row, touching nothing else — the workflow/system write-back
+     * primitive (the process trigger persisting {@code ProcessId}, a minted document number). Unlike
+     * {@link #update(Object)}, which writes every column from the caller's snapshot and can silently
+     * revert a concurrent write (a document's recalculated totals, a workflow status), this statement
+     * carries only the named column. No validations, no events, no translation overlay — reserve it for
+     * system columns; user data goes through the generated repository's normal write path.
+     *
+     * @param id the primary-key value
+     * @param property the entity property to set (a plain identifier)
+     * @param value the new value
+     * @return the number of updated rows ({@code 0} when the id does not exist)
+     */
+    public int updateProperty(Object id, String property, Object value) {
+        return store().updateProperty(entityClass, id, property, value);
+    }
+
+    /**
      * Look up an entity by primary key.
      *
      * @param id the primary-key value
