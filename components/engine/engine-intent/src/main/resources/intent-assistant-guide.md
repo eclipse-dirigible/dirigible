@@ -609,6 +609,35 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].kind: balance - the accounting balance report
+
+**Use when:** the user needs a trial balance, general ledger summary, or any opening / period /
+closing view over a signed ledger (debit/credit line items) — per account, per counterparty, or any
+dimension set.
+
+```yaml
+reports:
+  - name: TrialBalance
+    kind: balance
+    source: JournalEntryItem              # the ledger line items
+    date: journalEntry.entryDate          # the date driving the window (field or one-hop relation.field)
+    debit: debit                          # the numeric debit amount field of the source
+    credit: credit                        # the numeric credit amount field of the source
+    dimensions: [account.code, account.name]
+    filter: "journalEntry.status == 2"    # only POSTED entries count (compose with the status FK)
+```
+
+Instead of `measures`, a balance report computes six totals per dimension row — **Opening
+Debit/Credit** (strictly before `fromDate`), **Debit/Credit** (the period, inclusive), **Closing
+Debit/Credit** (up to and including `toDate`) — so opening + period = closing on every row. The
+window is a pair of runtime date parameters the generated report page renders as From/To pickers
+(declared as `.report` `parameters`; when left empty the report shows the all-time balance), and the
+page adds a totals footer when the whole result fits on one page. **Rules:** `date` must resolve to
+a `date`-typed field (a `timestamp` is rejected — the window bounds are dates); `debit`/`credit`
+must be numeric fields of the source; at least one dimension; `measures` must be empty. Restrict to
+posted entries with a `filter` on the source's (or its master's) status FK — the report itself does
+not filter.
+
 #### reports[].chart - render as a chart
 
 Add `chart:` to render the report page as a chart instead of a table (the page keeps a Table/Chart

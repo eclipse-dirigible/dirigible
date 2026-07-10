@@ -43,6 +43,31 @@
         <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" x-h-lucide data-lucide="printer"></i><span>Print</span></button>
       </div>
 
+      <!-- Declared report parameters (the .report `parameters` block - e.g. the balance report's
+           fromDate/toDate window): first-class inputs sent by name with every query. An empty value
+           uses the parameter's server-side default. Renders nothing for parameter-less reports. -->
+      <div x-show="!preview && reportParams.length" class="hbox items-end gap-2 mx-4 flex-wrap">
+        <template x-for="p in reportParams" :key="p.name">
+          <div class="vbox gap-0">
+            <label class="text-xs text-muted-foreground" x-text="paramLabel(p.name)"></label>
+            <template x-if="p.kind === 'date'">
+              <div x-h-date-picker>
+                <input type="text" @keydown.enter="applyFilters()" />
+                <button x-h-date-picker-trigger aria-label="Pick date"></button>
+                <div x-h-date-picker-popup x-model="params[p.name]"></div>
+              </div>
+            </template>
+            <template x-if="p.kind === 'number'">
+              <div x-h-input-number><input type="number" step="any" x-model.number="params[p.name]" @keydown.enter="applyFilters()" /></div>
+            </template>
+            <template x-if="p.kind === 'text'">
+              <input x-h-input type="text" x-model="params[p.name]" @keydown.enter="applyFilters()" />
+            </template>
+          </div>
+        </template>
+        <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span>Apply</span></button>
+      </div>
+
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
            boolean -> select, text -> contains. Applied server-side (the query is wrapped with the
            conditions), so pagination, count and export all reflect them. -->
@@ -129,6 +154,17 @@
                 </tr>
               </template>
             </tbody>
+#if($kind == 'balance')
+            <!-- Balance totals: the summed SUM columns, shown only when the whole result fits on
+                 one page (the debit/credit equality check the accountant reads off the footer). -->
+            <tfoot x-show="showTotals">
+              <tr x-h-table-row>
+                <template x-for="(col, ci) in columns" :key="ci">
+                  <td x-h-table-cell class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? 'Total' : totalText(col)"></td>
+                </template>
+              </tr>
+            </tfoot>
+#end
           </table>
         </div>
 

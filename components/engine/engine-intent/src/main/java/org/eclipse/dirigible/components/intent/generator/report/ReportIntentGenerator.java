@@ -128,15 +128,21 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
     }
 
+    /** Test hook: the assembled {@code .report} document for one report. */
+    static Map<String, Object> buildForTest(IntentGenerationContext context, ReportIntent report) {
+        return build(context, report);
+    }
+
     private static Map<String, Object> build(IntentGenerationContext context, ReportIntent report) {
         IntentModel model = context.getModel();
         EntityIntent source = entityByName(model, report.getSource());
         String baseAlias = report.getSource() == null ? report.getName() : report.getSource();
         String baseTable = report.getSource() == null ? "" : IntentNaming.tableName(context, report.getSource());
 
-        boolean aggregated = report.getMeasures()
-                                   .stream()
-                                   .anyMatch(m -> m != null && !m.isBlank());
+        boolean balance = report.isBalance();
+        boolean aggregated = balance || report.getMeasures()
+                                              .stream()
+                                              .anyMatch(m -> m != null && !m.isBlank());
 
         Map<String, Join> joins = new LinkedHashMap<>();
         List<Map<String, Object>> columns = new ArrayList<>();
@@ -188,14 +194,18 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 groupParts.add(ref.qualified());
             }
         }
-        for (String measure : report.getMeasures()) {
-            if (measure == null || measure.isBlank()) {
-                continue;
-            }
-            int before = columns.size();
-            addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns, selectParts);
-            if (columns.size() > before) {
-                measureColumns.put(expressionKey(measure), columns.get(before));
+        if (balance) {
+            addBalanceMeasures(context, model, source, baseAlias, report, joins, columns, selectParts);
+        } else {
+            for (String measure : report.getMeasures()) {
+                if (measure == null || measure.isBlank()) {
+                    continue;
+                }
+                int before = columns.size();
+                addMeasure(context, model, source, baseAlias, measure.trim(), joins, columns, selectParts);
+                if (columns.size() > before) {
+                    measureColumns.put(expressionKey(measure), columns.get(before));
+                }
             }
         }
 
@@ -228,8 +238,16 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         if (report.getWidget() != null) {
             document.put("widget", widget(report, dimensionColumns, measureColumns));
         }
+        if (balance) {
+            // The report kind rides on the .report so the generated page knows to render the
+            // balance affordances (window pickers, totals row).
+            document.put("kind", "balance");
+        }
         document.put("columns", columns);
         document.put("query", query);
+        if (balance) {
+            document.put("parameters", balanceParameters());
+        }
         document.put("conditions", conditions(context, model, source, baseAlias, report.getFilter()));
         document.put("security", security(context, report.getName()));
         return document;
@@ -262,6 +280,64 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
             }
         }
         LOGGER.warn("Measure [{}] did not match the aggregate(field) convention - skipping", measure);
+    }
+
+    /**
+     * The six balance totals - opening / period / closing debit and credit sums around the runtime
+     * {@code :fromDate}/{@code :toDate} window. Opening is strictly before {@code fromDate}, the period
+     * is inclusive of both bounds, closing is everything up to and including {@code toDate} - so
+     * opening + period = closing for every row. The date and the two amounts resolve like any dimension
+     * ({@code relation.field} joins), the window bounds are the named parameters the generated
+     * repository binds from the request (or the all-time defaults).
+     */
+    private static void addBalanceMeasures(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns, List<String> selectParts) {
+        ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()
+                                                                          .trim());
+        registerJoin(joins, date);
+        ColumnRef debit = resolve(context, model, source, baseAlias, report.getDebit()
+                                                                           .trim());
+        registerJoin(joins, debit);
+        ColumnRef credit = resolve(context, model, source, baseAlias, report.getCredit()
+                                                                            .trim());
+        registerJoin(joins, credit);
+        String opening = date.qualified() + " < :fromDate";
+        String period = date.qualified() + " >= :fromDate AND " + date.qualified() + " <= :toDate";
+        String closing = date.qualified() + " <= :toDate";
+        addBalanceColumn(columns, selectParts, debit, opening, "Opening Debit");
+        addBalanceColumn(columns, selectParts, credit, opening, "Opening Credit");
+        addBalanceColumn(columns, selectParts, debit, period, "Debit");
+        addBalanceColumn(columns, selectParts, credit, period, "Credit");
+        addBalanceColumn(columns, selectParts, debit, closing, "Closing Debit");
+        addBalanceColumn(columns, selectParts, credit, closing, "Closing Credit");
+    }
+
+    private static void addBalanceColumn(List<Map<String, Object>> columns, List<String> selectParts, ColumnRef amount, String window,
+            String alias) {
+        columns.add(column(amount.tableAlias, alias, amount.physicalColumn, "DECIMAL", "SUM", false));
+        // COALESCE the amount: a one-sided ledger line (the exactlyOne debit/credit shape) holds
+        // NULL on the other side, and SUM over all-NULL yields NULL instead of the 0 a balance shows.
+        selectParts.add("SUM(CASE WHEN " + window + " THEN COALESCE(" + amount.qualified() + ", 0) ELSE 0 END) as \"" + alias + "\"");
+    }
+
+    /**
+     * The balance window as declared {@code .report} parameters, in the report editor's {@code {name,
+     * type, initial}} shape the generated repository already binds. The defaults make an
+     * unparameterized call return the all-time balance (empty opening, everything in the period).
+     */
+    private static List<Map<String, Object>> balanceParameters() {
+        List<Map<String, Object>> parameters = new ArrayList<>();
+        parameters.add(reportParameter("fromDate", "1900-01-01"));
+        parameters.add(reportParameter("toDate", "9999-12-31"));
+        return parameters;
+    }
+
+    private static Map<String, Object> reportParameter(String name, String initial) {
+        Map<String, Object> parameter = new LinkedHashMap<>();
+        parameter.put("name", name);
+        parameter.put("type", "DATE");
+        parameter.put("initial", initial);
+        return parameter;
     }
 
     /**
@@ -534,6 +610,9 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         Matcher.quoteReplacement(baseAlias + "." + quote(column(source.getName(), field.getName()))));
             }
         }
+        // Authors used to the intent's guard syntax write `Status == 2`; SQL equality is a single
+        // `=` (H2 tolerates `==`, PostgreSQL rejects it), so normalize. `<=`/`>=`/`!=` are untouched.
+        where = where.replace("==", "=");
         return where.trim();
     }
 
