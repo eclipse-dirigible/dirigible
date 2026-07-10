@@ -40,7 +40,12 @@ public class GreenMailConfig {
      * it only ever waits this long on failure - a healthy server returns as soon as the socket is
      * listening.
      */
-    private static final long SERVER_STARTUP_TIMEOUT_MS = 30_000L;
+    // 30s flakes on loaded CI runners: a test that boots a FRESH application context (e.g. a
+    // restart-semantics IT) pays a cold GreenMail start on a new random port and has been observed
+    // missing the 30s window on a runner 90 minutes into an integration leg - failing the context
+    // load before any test logic runs. 120s costs nothing when startup is healthy (the bind is
+    // awaited, not slept).
+    private static final long SERVER_STARTUP_TIMEOUT_MS = 120_000L;
 
     @Bean
     GreenMail provideGreenMailServer() {
