@@ -577,6 +577,8 @@ generates:
       map:
         Description: Description
         Amount: Amount
+    sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
+                                   # after the target is created (e.g. proforma -> INVOICED)
 ```
 
 **Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
@@ -586,7 +588,10 @@ to-one relation** of the source entity - one-hop `relation.field` paths are not 
 copies a source value; `defaults` sets a constant (`now` = today's date, or a literal). Do **not** map
 the target's identity, document number, status or the item->master foreign key: they are left for the
 target to mint - the clone is saved through the **target's** generated repository, so its create-time
-logic (numbering, status init, calculated fields) fires naturally.
+logic (numbering, status init, calculated fields) fires naturally. `sourceStatus` (optional) flips the
+SOURCE record to the given EntityStatus seed id once the target exists - a workflow-style system write
+(no `-updated` re-fire; the source's `-transitioned` topic IS published, so postings/integrations can
+observe it); it requires the `from` entity to declare a `function: EntityStatus` relation.
 
 Two halves are generated: a client button (a `<name>-generate-action.extension` + `.js` contribution
 to the app's `<project>-custom-action` point, carrying an `endpoint`) and a server-side Java
