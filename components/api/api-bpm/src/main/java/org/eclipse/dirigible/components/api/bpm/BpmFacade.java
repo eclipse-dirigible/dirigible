@@ -192,6 +192,28 @@ public class BpmFacade implements InitializingBean {
     }
 
     /**
+     * Run an action after the current Flowable command's transaction COMMITS - i.e. after the whole
+     * synchronous BPMN execution chain the caller is part of (the current service task and every
+     * service task that follows it up to the next wait state) has completed. The canonical use is
+     * publishing an event about a workflow transition: an asynchronous consumer that re-loads the
+     * entity on receive is then guaranteed to observe every write the chain performed, instead of
+     * racing the steps that run milliseconds after the publisher. Outside a Flowable command (no
+     * transaction context) the action runs immediately.
+     *
+     * @param action the action to run on commit
+     */
+    public static void executeAfterCommit(Runnable action) {
+        org.flowable.common.engine.impl.cfg.TransactionContext transactionContext =
+                org.flowable.common.engine.impl.context.Context.getTransactionContext();
+        if (transactionContext != null) {
+            transactionContext.addTransactionListener(org.flowable.common.engine.impl.cfg.TransactionState.COMMITTED,
+                    commandContext -> action.run());
+        } else {
+            action.run();
+        }
+    }
+
+    /**
      * Get all the tasks.
      *
      * @return the list of tasks

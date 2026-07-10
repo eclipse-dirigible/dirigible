@@ -78,4 +78,18 @@ public final class Process {
     public static void correlateMessageEvent(String processInstanceId, String messageName, Map<String, Object> variables) {
         BpmFacade.correlateMessageEvent(processInstanceId, messageName, variables);
     }
+
+    /**
+     * Run an action after the current BPMN execution chain COMMITS - i.e. after the current service
+     * task and every service task that follows it up to the next wait state have completed. Use it from
+     * a delegate to publish an event about a workflow transition: an asynchronous consumer that
+     * re-loads the entity on receive is then guaranteed to observe every write the chain performed (a
+     * number stamped by a later step), instead of racing it. Outside a BPMN execution the action runs
+     * immediately.
+     *
+     * @param action the action to run on commit
+     */
+    public static void executeAfterCommit(Runnable action) {
+        BpmFacade.executeAfterCommit(action);
+    }
 }
