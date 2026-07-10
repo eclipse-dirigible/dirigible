@@ -210,6 +210,38 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void hierarchyEmitsTreeAndLeafOnlyAttributes() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Account
+                    hierarchy: Parent
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, required: true, length: 10 }
+                    relations:
+                      - { name: Parent, kind: manyToOne, to: Account }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: Account, kind: manyToOne, to: Account, required: true, leafOnly: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        List<Map<String, Object>> entities = entities(model);
+        // The tree edge on the entity itself: the self-relation's FK property, PascalCased.
+        assertEquals("Parent", entityByName(entities, "Account").get("hierarchyProperty"));
+        // The referencing FK carries the restriction plus the TARGET's tree-edge property, so the
+        // picker can compute depth/leaves and the validation can count children.
+        Map<String, Object> account = propertyByName(entityByName(entities, "JournalEntryItem"), "Account");
+        assertEquals("true", account.get("widgetLeafOnly"));
+        assertEquals("Parent", account.get("widgetHierarchyProperty"));
+        // The self-FK itself carries neither.
+        assertNull(propertyByName(entityByName(entities, "Account"), "Parent").get("widgetLeafOnly"));
+    }
+
+    @Test
     void whereEmitsStaticOptionFilterAttributes() {
         String yaml = """
                 name: shop

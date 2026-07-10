@@ -62,7 +62,90 @@
     <!-- Master: the records table -->
     <div x-h-split-panel data-size="60%" data-min="320">
       <div class="vbox size-full">
-        <div x-h-table-container.scroll class="flex-1" data-border="true">
+#if($hierarchyProperty)
+        <!-- Hierarchy (intent `hierarchy:`): the records render as a Harmonia tree off
+             ${hierarchyProperty} when no search/filter is active; searching falls back to the flat
+             table so matches outside collapsed branches stay findable. Markup recursion is a fixed
+             6 levels deep (Alpine has no recursive template) - deeper nodes are not rendered. -->
+        <div x-show="treeVisible" x-h-table-container.scroll class="flex-1" data-border="true">
+          <ul x-h-tree class="p-2">
+              <template x-for="n1 in childrenOf(null)" :key="n1.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n1) ? 'information' : null" @click="selectRow(n1)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n1) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n1)"></span>
+                  </button>
+                  <template x-if="hasChildren(n1)">
+                    <ul x-h-tree.sub data-border="true">
+                      <template x-for="n2 in childrenOf(n1)" :key="n2.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n2) ? 'information' : null" @click="selectRow(n2)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n2) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n2)"></span>
+                  </button>
+                  <template x-if="hasChildren(n2)">
+                    <ul x-h-tree.sub data-border="true">
+                      <template x-for="n3 in childrenOf(n2)" :key="n3.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n3) ? 'information' : null" @click="selectRow(n3)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n3) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n3)"></span>
+                  </button>
+                  <template x-if="hasChildren(n3)">
+                    <ul x-h-tree.sub data-border="true">
+                      <template x-for="n4 in childrenOf(n3)" :key="n4.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n4) ? 'information' : null" @click="selectRow(n4)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n4) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n4)"></span>
+                  </button>
+                  <template x-if="hasChildren(n4)">
+                    <ul x-h-tree.sub data-border="true">
+                      <template x-for="n5 in childrenOf(n4)" :key="n5.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n5) ? 'information' : null" @click="selectRow(n5)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n5) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n5)"></span>
+                  </button>
+                  <template x-if="hasChildren(n5)">
+                    <ul x-h-tree.sub data-border="true">
+                      <template x-for="n6 in childrenOf(n5)" :key="n6.${primaryKeysString}">
+                <li x-h-tree-item.expanded="true">
+                  <button x-h-tree-button :data-indicator="isSelected(n6) ? 'information' : null" @click="selectRow(n6)">
+                    <i role="img" x-h-lucide :data-lucide="hasChildren(n6) ? 'folder' : 'file-text'"></i>
+                    <span x-text="nodeLabel(n6)"></span>
+                  </button>
+                  <template x-if="hasChildren(n6)">
+                    <ul x-h-tree.sub data-border="true">
+                      <!-- depth limit: 6 levels (see the page comment) -->
+                    </ul>
+                  </template>
+                </li>
+              </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
+                    </ul>
+                  </template>
+                </li>
+              </template>
+          </ul>
+        </div>
+#end
+        <div#if($hierarchyProperty) x-show="!treeVisible"#end x-h-table-container.scroll class="flex-1" data-border="true">
           <table x-h-table data-borders="rows">
             <thead x-h-table-header>
               <tr x-h-table-row>
@@ -148,7 +231,7 @@
           </table>
         </div>
 
-        <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
+        <div#if($hierarchyProperty) x-show="!treeVisible"#end class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
           <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>

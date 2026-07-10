@@ -1107,6 +1107,13 @@ public final class IntentParser {
                 if (relation.getWhere() != null) {
                     validateWhere(entity, relation, byName, issues);
                 }
+                if (relation.isLeafOnly()) {
+                    validateLeafOnly(entity, relation, byName, issues);
+                }
+            }
+            if (entity.getHierarchy() != null && !entity.getHierarchy()
+                                                        .isBlank()) {
+                validateHierarchy(entity, issues);
             }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
@@ -1140,6 +1147,58 @@ public final class IntentParser {
             if (value == null || value <= 0) {
                 issues.add(subject + " values must be positive status seed ids");
                 break;
+            }
+        }
+    }
+
+    /**
+     * A {@code hierarchy} declaration names the entity's own to-one SELF-relation that forms the tree
+     * edge. It must resolve to a declared to-one relation targeting the entity itself, and it cannot be
+     * a composition (a composition parent is the master-detail owner, a different concept) or required
+     * (a required parent leaves no way to author a root node).
+     */
+    private static void validateHierarchy(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] hierarchy [" + entity.getHierarchy() + "]";
+        RelationIntent edge = toOneRelationByName(entity, entity.getHierarchy());
+        if (edge == null) {
+            issues.add(subject + " does not name a to-one relation of the entity");
+            return;
+        }
+        if (!entity.getName()
+                   .equals(edge.getTo())
+                || edge.isCrossModel()) {
+            issues.add(subject + " must target the entity itself (a self-relation) - it targets [" + edge.getTo() + "]");
+        }
+        if (edge.isComposition()) {
+            issues.add(subject + " cannot be a composition (the tree edge is a plain optional self-association)");
+        }
+        if (edge.isRequired()) {
+            issues.add(subject + " must be optional - a required parent leaves no way to author a root node");
+        }
+    }
+
+    /**
+     * {@code leafOnly: true} restricts a to-one relation to leaf nodes of its target's hierarchy, so
+     * the target must declare one. A same-model target is checked here; a cross-model target is
+     * validated at generation against the resolved owner model (like the relation target itself).
+     */
+    private static void validateLeafOnly(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares leafOnly but only a manyToOne/oneToOne relation has a picker to restrict");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout, never picked) so it cannot declare leafOnly");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && (target.getHierarchy() == null || target.getHierarchy()
+                                                                          .isBlank())) {
+                issues.add(subject + " declares leafOnly but its target [" + relation.getTo() + "] declares no hierarchy");
             }
         }
     }

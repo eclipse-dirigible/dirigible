@@ -111,6 +111,13 @@ public class EntityIntent {
      * entity to declare a {@code function: EntityStatus} relation.
      */
     private List<Integer> immutableIn;
+    /**
+     * Optional hierarchy declaration: names this entity's to-one SELF-relation that forms the tree edge
+     * (e.g. {@code hierarchy: Parent} on a chart-of-accounts Account). The generated list renders as a
+     * tree, relations targeting this entity get a hierarchy-aware picker, and {@code leafOnly}
+     * references become valid. Explicit by design - a self-FK alone does not imply a hierarchy.
+     */
+    private String hierarchy;
 
 
     public String getName() {
@@ -278,6 +285,14 @@ public class EntityIntent {
 
     public void setImmutableIn(List<Integer> immutableIn) {
         this.immutableIn = immutableIn;
+    }
+
+    public String getHierarchy() {
+        return hierarchy;
+    }
+
+    public void setHierarchy(String hierarchy) {
+        this.hierarchy = hierarchy;
     }
 
     public List<RelationIntent> getRelations() {
