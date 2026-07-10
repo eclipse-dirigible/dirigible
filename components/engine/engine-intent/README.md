@@ -256,10 +256,13 @@ generates:
     map: { Customer: Customer }
     defaults: { InvoiceDate: now }
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
+    sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
 ```
 
 Adds a button on the source view; the clone saves through the target's repository so numbering,
-status init and calculated fields fire.
+status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
+seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
+the source's `-transitioned` topic is published.
 
 ## postings - source-document to ledger
 
@@ -458,8 +461,6 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
   generates, postings.
 - **Cross-model schedule SOURCE** - a schedule's `entity` must be local (the generate target may
   be cross-model).
-- **`generates` completion hook** - flipping the SOURCE record's status after creating the target
-  (`onDone`-style) is not yet expressible.
 - **Embedded calendar panel for a DEPENDENT composition child** inside its master page - calendar
   views require a PRIMARY entity today.
 - **Pipeline hardening follow-ups** (tracked on the emission-coverage IT): seed-row key

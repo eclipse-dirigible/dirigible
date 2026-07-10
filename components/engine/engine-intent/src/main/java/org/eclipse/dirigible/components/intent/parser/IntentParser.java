@@ -1975,6 +1975,23 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate generates action [" + name + "]");
             }
+            if (g.getSourceStatus() != null) {
+                // The completion hook flips the SOURCE's status after the target is created - it
+                // needs the EntityStatus relation to write to.
+                EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
+                boolean hasStatus = false;
+                if (from != null) {
+                    for (RelationIntent relation : from.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            hasStatus = true;
+                        }
+                    }
+                }
+                if (from != null && !hasStatus) {
+                    issues.add("generates [" + name + "] sourceStatus requires the from entity [" + g.getFrom()
+                            + "] to declare a function: EntityStatus relation");
+                }
+            }
             EntityIntent source = null;
             if (g.getFrom() == null || g.getFrom()
                                         .isBlank()) {
