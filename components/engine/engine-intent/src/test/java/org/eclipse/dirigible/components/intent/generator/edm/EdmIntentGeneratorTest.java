@@ -187,7 +187,24 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
-    void immutableInEmitsStatusGuardAttributes() {
+    void immutableAlwaysEmitsTheAppendOnlyAttribute() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: InvoiceSnapshot
+                    immutable: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: payload, type: text }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> entry = entityByName(entities(model), "InvoiceSnapshot");
+        assertEquals("true", entry.get("immutableAlways"));
+        assertNull(entry.get("immutableStatusProperty"));
+    }
+
+    @Test
+    void immutableWhenEmitsStatusGuardAttributes() {
         String yaml = """
                 name: ledger
                 entities:
@@ -197,7 +214,7 @@ class EdmIntentGeneratorTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
                   - name: JournalEntry
-                    immutableIn: [2, 3]
+                    immutableWhen: "Status == 2 || Status == 3"
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:

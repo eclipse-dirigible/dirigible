@@ -203,7 +203,7 @@ class IntentParserTest {
     }
 
     @Test
-    void immutableInParsesAndRequiresAnEntityStatus() {
+    void immutableWhenParsesAndValidates() {
         String yaml = """
                 name: ledger
                 entities:
@@ -213,22 +213,22 @@ class IntentParserTest {
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: name, type: string }
                   - name: JournalEntry
-                    immutableIn: [2, 3]
+                    immutableWhen: "Status == 2 || Status == 3"
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:
                       - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                 """;
         IntentModel model = IntentParser.parse(yaml);
-        assertEquals(java.util.List.of(2, 3), model.getEntities()
-                                                   .get(1)
-                                                   .getImmutableIn());
+        assertEquals("Status == 2 || Status == 3", model.getEntities()
+                                                        .get(1)
+                                                        .getImmutableWhen());
 
         String noStatus = """
                 name: ledger
                 entities:
                   - name: JournalEntry
-                    immutableIn: [2]
+                    immutableWhen: "Status == 2"
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                 """;
@@ -237,6 +237,83 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("requires a `function: EntityStatus` relation")),
                 "expected a missing-status issue, got: " + ex.getIssues());
+
+        String wrongRelation = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    immutableWhen: "State == 2"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                """;
+        ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(wrongRelation));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must reference the EntityStatus relation [Status]")),
+                "expected a wrong-relation issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void immutableInIsRejectedWithAMigrationMessage() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: JournalEntry
+                    immutableIn: [2]
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("renamed") && i.contains("immutableWhen")),
+                "expected the immutableIn migration message, got: " + ex.getIssues());
+    }
+
+    @Test
+    void immutableTrueIsAppendOnlyAndExcludesImmutableWhen() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: InvoiceSnapshot
+                    immutable: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: payload, type: text }
+                """;
+        assertEquals(Boolean.TRUE, IntentParser.parse(yaml)
+                                               .getEntities()
+                                               .get(0)
+                                               .getImmutable());
+
+        String both = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    immutable: true
+                    immutableWhen: "Status == 2"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(both));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("always-immutable subsumes")),
+                "expected the mutual-exclusion issue, got: " + ex.getIssues());
     }
 
     @Test

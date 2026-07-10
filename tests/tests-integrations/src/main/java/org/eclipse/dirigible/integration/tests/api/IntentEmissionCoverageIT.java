@@ -88,9 +88,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Parent, kind: manyToOne, to: Account }
 
+              # Append-only (immutable: true): e.g. the snapshot stored when a document is sent -
+              # user writes and deletes are rejected from the moment a record is created.
+              - name: Snapshot
+                immutable: true
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: payload, type: string, length: 500 }
+
               # The document master: immutable once POSTED (status 2), post gated by document checks.
               - name: Entry
-                immutableIn: [2]
+                immutableWhen: "Status == 2"
                 checks:
                   - { kind: itemsMin, count: 1, status: 2, message: "Entry needs at least one line" }
                   - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Debits must equal credits" }
@@ -180,7 +188,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private void assertEmission() {
         String entryController = contentOf("gen/emission/api/entry/EntryController.java");
         assertTrue(entryController.contains("requireMutable"),
-                "immutableIn must emit the requireMutable gate in the entity's REST controller");
+                "immutableWhen must emit the requireMutable gate in the entity's REST controller");
+        String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
+        assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
+                "immutable: true must emit the unconditional append-only gate in the REST controller");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
@@ -290,7 +301,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
 
-        // ...and immutableIn now enforces: user writes and deletes on the POSTED record are 409.
+        // ...and immutableWhen now enforces: user writes and deletes on the POSTED record are 409.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Id\":" + entryId
                                                          + ",\"Date\":\"2026-01-15\",\"Account\":2,\"Status\":2,\"Note\":\"tamper\"}")
@@ -300,6 +311,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(409));
         restAssuredExecutor.execute(() -> given().when()
                                                  .delete(API + "/entry/EntryController/" + entryId)
+                                                 .then()
+                                                 .statusCode(409));
+
+        // immutable: true (append-only): a snapshot can be created, then never edited or deleted.
+        AtomicInteger snapshot = new AtomicInteger();
+        restAssuredExecutor.execute(() -> snapshot.set(given().contentType("application/json")
+                                                              .body("{\"Payload\":\"sent-invoice snapshot\"}")
+                                                              .when()
+                                                              .post(API + "/snapshot/SnapshotController")
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + snapshot.get() + ",\"Payload\":\"tamper\"}")
+                                                 .when()
+                                                 .put(API + "/snapshot/SnapshotController/" + snapshot.get())
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
                                                  .statusCode(409));
     }
