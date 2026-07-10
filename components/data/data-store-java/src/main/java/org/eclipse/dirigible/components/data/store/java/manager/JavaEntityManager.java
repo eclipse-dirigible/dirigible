@@ -13,9 +13,11 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.sql.DataSource;
 
@@ -70,6 +72,14 @@ public class JavaEntityManager implements DisposableBean {
 
     /** Current registered entities, keyed by {@code <project>::<fqn>}. */
     private final Map<String, RegisteredEntity> registered = new LinkedHashMap<>();
+
+    /**
+     * Metadata views for callers whose entity {@link Class} belongs to an OLDER client-classloader
+     * generation than the currently registered one — e.g. a Flowable-cached delegate instance that
+     * resolved its classes before its module was republished. Weakly keyed by the caller's class so a
+     * retired generation's entries are garbage-collected together with its classloader.
+     */
+    private final Map<Class<?>, RegisteredEntity> staleGenerationViews = Collections.synchronizedMap(new WeakHashMap<>());
 
     private final ReentrantLock rebuildLock = new ReentrantLock();
 
@@ -143,14 +153,30 @@ public class JavaEntityManager implements DisposableBean {
         return Optional.ofNullable(registered.get(key));
     }
 
+    /** Test seam: seed a registration without touching the Hibernate {@link SessionFactory}. */
+    void registerWithoutRebuild(String key, Class<?> entityClass) {
+        registered.put(key, JavaEntityToHbmMapper.map(key, entityClass)
+                                                 .registered());
+    }
+
     /**
      * Look up by entity {@link Class} — finds the registered entry whose
      * {@link RegisteredEntity#entityClass()} matches by identity, falling back to FQN equality so a
      * class loaded in a previous generation of the {@code ClientClassLoader} still resolves to its
      * current registration.
      *
+     * <p>
+     * The FQN fallback must NOT return the current registration as-is: its reflective surface
+     * ({@code Field}s, constructor) belongs to the CURRENT generation's class and cannot be applied to
+     * the caller's instances — {@code EntityBeanMapper} would throw {@code IllegalArgumentException}
+     * mixing a bean of one generation with fields of another (the shape a Flowable-cached delegate hits
+     * after its module is republished, stalling the workflow job on every retry). Instead the same
+     * entity is re-reflected against the CALLER's class: persistence is Hibernate dynamic-map
+     * (name-keyed), so the entity/table names line up and only the reflective surface differs per
+     * generation.
+     *
      * @param entityClass the entity class to resolve
-     * @return the registered entry, or empty if none matches
+     * @return the registered entry (or a caller-generation view of it), or empty if none matches
      */
     public Optional<RegisteredEntity> findForClass(Class<?> entityClass) {
         for (RegisteredEntity r : registered.values()) {
@@ -162,7 +188,16 @@ public class JavaEntityManager implements DisposableBean {
             if (r.entityClass()
                  .getName()
                  .equals(entityClass.getName())) {
-                return Optional.of(r);
+                String key = r.key();
+                return Optional.of(staleGenerationViews.computeIfAbsent(entityClass, clazz -> {
+                    LOGGER.info(
+                            "Entity [{}] resolved for a previous-generation class (caller classloader [{}], registered [{}])"
+                                    + " - serving a caller-generation metadata view",
+                            clazz.getName(), clazz.getClassLoader(), r.entityClass()
+                                                                      .getClassLoader());
+                    return JavaEntityToHbmMapper.map(key, clazz)
+                                                .registered();
+                }));
             }
         }
         return Optional.empty();
