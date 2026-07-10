@@ -324,6 +324,7 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
     @Override
     protected void cleanupImpl(JavaFile artefact) {
         try {
+            LOGGER.info("Removing Java artefact [{}] ([{}]) - its source is gone", artefact.getLocation(), artefact.getClassFqn());
             javaFileService.delete(artefact);
             // Clear any compilation problems for the removed source - the next rebuild won't see it,
             // so its entries would otherwise linger.

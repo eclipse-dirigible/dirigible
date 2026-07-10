@@ -105,6 +105,36 @@ class JavaEngineIT extends IntegrationTest {
         assertEndpointStatus(404);
     }
 
+    @Test
+    void broken_definition_self_heals_without_a_byte_change() {
+        // A duplicate FQN breaks the SECOND source's parse (definition state BROKEN) - one
+        // deterministic instance of the "transient parse failure" class. The regression this guards:
+        // a BROKEN definition used to be skipped until its CONTENT changed, so removing the cause
+        // (the first duplicate) never healed the second source, and - because one unparsed .java is
+        // invisible to the registry-wide javac batch - the whole client codebase stayed broken until
+        // someone edited the file's bytes.
+        writeAndSync(handlerSource("original"));
+        assertEndpointReturns(200, "hello from original");
+
+        String duplicatePath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/other/Hello.java";
+        repository.createResource(duplicatePath, handlerSource("duplicate").getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+        synchronizationProcessor.forceProcessSynchronizers();
+        // The duplicate is rejected; the original keeps serving.
+        assertEndpointReturns(200, "hello from original");
+
+        // Remove the ORIGINAL - the duplicate's bytes stay untouched. The heal needs two passes
+        // (one whose cleanup drops the stale FQN claim, one whose retry re-parses), and a concurrent
+        // scheduled run can consume a force after its parse phase already ran - so force a few.
+        repository.removeResource(REGISTRY_PATH);
+        for (int i = 0; i < 3; i++) {
+            synchronizationProcessor.forceProcessSynchronizers();
+        }
+        assertEndpointReturns(200, "hello from duplicate");
+
+        repository.removeResource(duplicatePath);
+        synchronizationProcessor.forceProcessSynchronizers();
+    }
+
     @AfterEach
     void removeArtefactFromRegistry() {
         // Best-effort cleanup so the next test starts from a clean registry. The
