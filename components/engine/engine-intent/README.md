@@ -468,8 +468,8 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
   generates, postings.
 - **Cross-model schedule SOURCE** - a schedule's `entity` must be local (the generate target may
   be cross-model).
-- **`generates` completion hook** - flipping the SOURCE record's status after creating the target
-  (`onDone`-style) is not yet expressible.
+- ~~`generates` completion hook~~ - LANDED (#6237): `sourceStatus` flips the source's
+  EntityStatus after the target is created.
 - **Embedded calendar panel for a DEPENDENT composition child** inside its master page - calendar
   views require a PRIMARY entity today.
 - **Pipeline hardening follow-ups** (tracked on the emission-coverage IT): seed-row key
