@@ -21,7 +21,7 @@ is covered end to end (generated tokens + runtime behavior) by `IntentEmissionCo
 | [field/relation attributes](#field--relation-attributes) | uniqueness, layout, read-only, dropdown filtering, cascades |
 | [`function`](#function--presentation-role) | explicit presentation role (Document, Setting, ...) |
 | [`checks`](#checks--declarative-validations) | cross-field / cross-line validations |
-| [`immutableIn`](#immutablein--status-keyed-immutability) | 409 on user writes in a given status |
+| [`immutableWhen` / `immutable`](#immutablewhen--immutable---user-write-immutability) | 409 on user writes in a status / append-only snapshots |
 | [`hierarchy` / `leafOnly`](#hierarchy--leafonly--tree-entities) | tree entities, leaf-only references |
 | [`multilingual` / `languages`](#multilingual--translated-master-data) | `_LANG` tables + read-time translation overlay |
 | [calculated fields](#calculated-fields--actions) | server+UI-evaluated expressions, date functions, Java call-outs |

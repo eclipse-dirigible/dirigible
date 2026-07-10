@@ -145,7 +145,7 @@ assert the OUTERMOST observable layer, never only the parsed model: the pipeline
 silently (Velocity skips undefined variables; an unknown seed-row key is dropped and a NOT NULL
 FK then makes CSVIM skip every row; a stale registry template generates feature-less code) -
 with every step returning success. `IntentEmissionCoverageIT` is the enforcement: one
-self-contained fixture intent exercising the enforcement-bearing keywords (`immutableIn`,
+self-contained fixture intent exercising the enforcement-bearing keywords (`immutableWhen`/`immutable`,
 `checks`, `hierarchy`/`leafOnly`, `multilingual`, relation-carrying seed rows, `aggregate`),
 asserting first the generated TOKENS (requireMutable, the authored check messages, `_LANG` +
 Translator, the seed CSV's FK column) and then the PUBLISHED app's behavior over REST (409 on

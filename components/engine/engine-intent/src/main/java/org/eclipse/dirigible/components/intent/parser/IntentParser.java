@@ -1132,7 +1132,16 @@ public final class IntentParser {
             }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
-                validateImmutableIn(entity, issues);
+                issues.add("entity [" + entity.getName()
+                        + "] uses immutableIn - renamed; author immutableWhen: \"<Status> == <seed id>\" (terms joined with ||)");
+            }
+            if (Boolean.TRUE.equals(entity.getImmutable()) && entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                                                          .isBlank()) {
+                issues.add("entity [" + entity.getName()
+                        + "] declares both immutable: true and immutableWhen - always-immutable subsumes any status scope; keep one");
+            } else if (entity.getImmutableWhen() != null && !entity.getImmutableWhen()
+                                                                   .isBlank()) {
+                validateImmutableWhen(entity, issues);
             }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
@@ -1143,30 +1152,44 @@ public final class IntentParser {
         return entityNames;
     }
 
+    /** The compiled shape of one {@code immutableWhen} term: {@code <Status> == <seed id>}. */
+    private static final java.util.regex.Pattern IMMUTABLE_WHEN_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+
     /**
-     * {@code immutableIn: [<status seed ids>]} makes the record read-only for USER writes while its
-     * EntityStatus holds one of the listed seed ids (workflow/system writes through the repository stay
-     * possible - corrections are reversals, not edits). It therefore requires the entity to declare a
-     * {@code function: EntityStatus} relation, and the ids must be positive integers.
+     * {@code immutableWhen: "<Status> == <seed id> [|| ...]"} makes the record read-only for USER
+     * writes while its EntityStatus satisfies the expression (workflow/system writes through the
+     * repository stay possible - corrections are reversals, not edits). It therefore requires the
+     * entity to declare a {@code function: EntityStatus} relation, every term must reference THAT
+     * relation by its authored name, and the seed ids must be positive integers.
      */
-    private static void validateImmutableIn(EntityIntent entity, List<String> issues) {
-        String subject = "entity [" + entity.getName() + "] immutableIn";
-        boolean hasStatus = false;
+    private static void validateImmutableWhen(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] immutableWhen";
+        RelationIntent status = null;
         if (entity.getRelations() != null) {
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.isEntityStatus()) {
-                    hasStatus = true;
+                    status = relation;
                     break;
                 }
             }
         }
-        if (!hasStatus) {
+        if (status == null) {
             issues.add(subject + " requires a `function: EntityStatus` relation - immutability keys on the status");
+            return;
         }
-        for (Integer value : entity.getImmutableIn()) {
-            if (value == null || value <= 0) {
-                issues.add(subject + " values must be positive status seed ids");
-                break;
+        for (String term : entity.getImmutableWhen()
+                                 .split("\\|\\|")) {
+            java.util.regex.Matcher matcher = IMMUTABLE_WHEN_TERM.matcher(term);
+            if (!matcher.matches()) {
+                issues.add(subject + " term [" + term.trim() + "] must be `<Status relation> == <seed id>` (terms joined with ||)");
+                continue;
+            }
+            if (!matcher.group(1)
+                        .equals(status.getName())) {
+                issues.add(subject + " term [" + term.trim() + "] must reference the EntityStatus relation [" + status.getName() + "]");
+            }
+            if (Integer.parseInt(matcher.group(2)) <= 0) {
+                issues.add(subject + " seed ids must be positive");
             }
         }
     }
