@@ -118,6 +118,13 @@ public class EntityIntent {
      * references become valid. Explicit by design - a self-FK alone does not imply a hierarchy.
      */
     private String hierarchy;
+    /**
+     * Optional declarative validations - the cross-field / cross-line rules plain field attributes
+     * cannot express: {@code exactlyOne} (row-level one-of), {@code itemsSumEqual} (the document's
+     * items balance - the double-entry invariant) and {@code itemsMin} (minimum line count), the latter
+     * two gated on an EntityStatus seed id so drafting stays unconstrained. See {@link CheckIntent}.
+     */
+    private List<CheckIntent> checks;
 
 
     public String getName() {
@@ -293,6 +300,14 @@ public class EntityIntent {
 
     public void setHierarchy(String hierarchy) {
         this.hierarchy = hierarchy;
+    }
+
+    public List<CheckIntent> getChecks() {
+        return checks;
+    }
+
+    public void setChecks(List<CheckIntent> checks) {
+        this.checks = checks;
     }
 
     public List<RelationIntent> getRelations() {

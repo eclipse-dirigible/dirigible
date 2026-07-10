@@ -360,6 +360,22 @@ public class ${name}Controller {
 
 #end
     private static void validate(${name}Entity entity) {
+#if($rowChecks && $rowChecks.size() > 0)
+#foreach($check in $rowChecks)
+        // Row-level check (intent `checks: exactlyOne`).
+        {
+            int assigned = 0;
+#foreach($field in $check.fields)
+            if (entity.${field} != null) {
+                assigned++;
+            }
+#end
+            if (assigned != 1) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${check.message}");
+            }
+        }
+#end
+#end
 #foreach($property in $properties)
 #if($property.isRequiredProperty)
         if (entity.${property.name} == null) {

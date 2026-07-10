@@ -240,6 +240,49 @@ class IntentParserTest {
     }
 
     @Test
+    void checksParseAndValidate() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: EntryStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: JournalEntry
+                    checks:
+                      - { kind: itemsSumEqual, over: [debit, credit], status: 2, message: "Must balance" }
+                      - { kind: itemsMin, count: 1, status: 2, message: "Needs a line" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  - name: JournalEntryItem
+                    checks:
+                      - { kind: exactlyOne, fields: [debit, credit], message: "Debit or credit" }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: credit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals(2, model.getEntities()
+                             .get(1)
+                             .getChecks()
+                             .size());
+
+        // A document check without a status gate would forbid drafting - rejected.
+        String noGate = yaml.replace(", status: 2, message: \"Must balance\"", ", message: \"Must balance\"");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(noGate));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("requires a `status` gate")),
+                "expected a gate issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void hierarchyAndLeafOnlyParse() {
         String yaml = """
                 name: ledger
