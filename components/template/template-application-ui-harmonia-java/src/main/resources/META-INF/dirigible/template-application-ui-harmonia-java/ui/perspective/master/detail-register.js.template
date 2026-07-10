@@ -31,6 +31,11 @@ App.registerDetail('${masterEntity}', {
   masterEntityId: '${masterEntityId}',
   primaryKey: '${primaryKeysString}',
   returnTo: '/${masterEntity}',
+#if($detailCalendar)
+  // Rendered as an embedded x-h-calendar panel on the master page (intent view: calendar on a
+  // composition child); the shared detailPanel maps the rows to events by these properties.
+  calendar: { start: '${calendarStartProperty}'#if($calendarEndProperty), end: '${calendarEndProperty}'#end#if($calendarTitleProperty), title: '${calendarTitleProperty}'#end#if($calendarColorProperty), color: '${calendarColorProperty}'#end, view: '${calendarInitialView}', range: #if($calendarRange)true#{else}false#end },
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)

@@ -186,6 +186,13 @@ included. For logic beyond an expression, a hand-written `CalculatedField` compo
   slots: { start: startTime }
 ```
 
+`view: calendar` on a **composition child** renders an **embedded calendar panel inside its master's
+page** (and the master's edit form) instead of the detail table: the same master-filtered rows become
+events, event-click edits the child, an empty-day click creates one with the master FK and the
+clicked date preset. The child keeps everything a detail has (registry, filtered controller, form
+pages) - the calendar is just how its panel renders. `range` works the same way; `slots` stays
+primary-only.
+
 ## uses - cross-model references
 
 Entities owned by another intent model are referenced read-only (a PROJECTION + FK + dropdown - no
@@ -460,8 +467,6 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
   be cross-model).
 - **`generates` completion hook** - flipping the SOURCE record's status after creating the target
   (`onDone`-style) is not yet expressible.
-- **Embedded calendar panel for a DEPENDENT composition child** inside its master page - calendar
-  views require a PRIMARY entity today.
 - **Pipeline hardening follow-ups** (tracked on the emission-coverage IT): seed-row key
   validation at generate time, surfaced + retried CSVIM import failures, `checks:` violations
   mapped to 4xx, generator-version stamping of generated output.

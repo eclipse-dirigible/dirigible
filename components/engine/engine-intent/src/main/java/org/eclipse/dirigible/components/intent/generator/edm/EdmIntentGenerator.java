@@ -190,7 +190,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // (and the Jackson-serialized controller row) the calendar page reads.
             if (entity.isCalendar()) {
                 CalendarIntent cal = entity.getCalendar();
-                entityMap.put("layoutType", "MANAGE_CALENDAR");
+                if (dependent) {
+                    // A composition child stays a DETAIL of its master (MANAGE_DETAILS layout, the
+                    // detail registry, the master-filtered controller) - the calendar is HOW the
+                    // master page renders this child's panel: an embedded x-h-calendar instead of
+                    // the detail table. The flag + the calendar* properties ride the .model into
+                    // detail-register.js; no standalone calendar page is generated.
+                    entityMap.put("detailCalendar", "true");
+                } else {
+                    entityMap.put("layoutType", "MANAGE_CALENDAR");
+                }
                 if (cal != null) {
                     if (notBlank(cal.getStart())) {
                         entityMap.put("calendarStartProperty", IntentNaming.pascalCase(cal.getStart()));
