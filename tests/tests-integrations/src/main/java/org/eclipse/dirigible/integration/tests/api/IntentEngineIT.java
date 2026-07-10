@@ -637,8 +637,13 @@ class IntentEngineIT extends IntegrationTest {
         // so onUpdate reactions still do not re-fire, but a consumer can bind the transition. The
         // topic prefix is the PROJECT name (matching the DAO's create/-updated topics), not the
         // intent model name - here the IT's workspace project.
-        assertTrue(activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", Json.stringify(entity))"),
-                "the setter should publish the entity on the -transitioned topic after the silent persist");
+        // The publish is deferred to the END of the synchronous BPMN chain (after-commit): a service
+        // task following the setter (a number-generation delegate) runs in the same Flowable command,
+        // and the async consumer re-loads the source on receive - it must observe those writes.
+        assertTrue(
+                activate.contains("Process.executeAfterCommit(")
+                        && activate.contains("Producer.sendToTopic(\"" + PROJECT + "-Member-Member-transitioned\", transitioned)"),
+                "the setter should publish the -transitioned topic after the BPMN chain commits");
     }
 
     @Test

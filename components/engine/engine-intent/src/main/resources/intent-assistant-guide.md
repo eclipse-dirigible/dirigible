@@ -189,7 +189,11 @@ composition is opt-in.
         - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
   ```
   Semantics: binds the source's `-transitioned` topic and RE-LOADS the source by id (the payload is
-  as-of the transition - a number stamped by a later step is not in it); `map` values are a source
+  as-of the transition; the topic is published only after the source's whole synchronous BPMN chain
+  commits, so writes by steps that follow the status set - a number-generation delegate - are
+  visible to the re-load). Still prefer ordering such steps BEFORE the status set (issue ->
+  generateNumber -> markIssued): "the transition is final" then also means "the document is
+  complete"; `map` values are a source
   property (copy), a literal, or a `{sourceProperty}` template; item values are `rule(<column>)`
   references or arithmetic over the SOURCE's fields; a row `when` is `<SourceField> ==|!= <number>`.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status

@@ -1,5 +1,6 @@
 package gen.events;
 
+import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
 import org.flowable.engine.delegate.DelegateExecution;
@@ -37,7 +38,14 @@ public class ${className} implements JavaDelegate {
             entity.${field} = "${value}";
 #end
             repository.updateWithoutEvent(entity);
-            Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned", Json.stringify(entity));
+            // Publish the transition AFTER the current BPMN chain commits: service tasks that follow
+            // this setter in the same synchronous chain (e.g. a number-generation delegate) run in the
+            // same Flowable command, and the asynchronous consumer (posting glue, integrations)
+            // re-loads the source on receive - deferring guarantees it observes those writes instead
+            // of racing them (an auto-posted entry used to catch the create-time UUID placeholder).
+            String transitioned = Json.stringify(entity);
+            Process.executeAfterCommit(
+                    () -> Producer.sendToTopic("${projectName}-${perspective}-${entity}-transitioned", transitioned));
         }
     }
 }
