@@ -140,6 +140,21 @@ Each graph is `setEnabled(false)` (read-only, no selection/editing), HTML labels
 
 **Stale-jar trap (still the most likely reason "nothing changed").** `editor-intent` is static web resources **bundled into the `build/application` fat jar**. `mvn install -pl components/ui/editor-intent` updates the `.m2` artifact but NOT an already-built `dirigible-application-*-executable.jar`. After editing, `mvn -P quick-build install -pl components/ui/editor-intent` **and** `mvn -P quick-build package -pl build/application`, then restart. Verify the running jar is current: `curl -s -u admin:admin http://localhost:8080/services/web/editor-intent/js/editor.js | grep -c mxGraph` (expect a non-zero count; `mermaid` should be gone). `IntentEditorLoadsIT` does not have this problem (failsafe repackages independently), which is why a green IT never proves the user's jar is current.
 
+**The emission + runtime testing contract (every DSL keyword).** A DSL feature's test must
+assert the OUTERMOST observable layer, never only the parsed model: the pipeline degrades
+silently (Velocity skips undefined variables; an unknown seed-row key is dropped and a NOT NULL
+FK then makes CSVIM skip every row; a stale registry template generates feature-less code) -
+with every step returning success. `IntentEmissionCoverageIT` is the enforcement: one
+self-contained fixture intent exercising the enforcement-bearing keywords (`immutableIn`,
+`checks`, `hierarchy`/`leafOnly`, `multilingual`, relation-carrying seed rows, `aggregate`),
+asserting first the generated TOKENS (requireMutable, the authored check messages, `_LANG` +
+Translator, the seed CSV's FK column) and then the PUBLISHED app's behavior over REST (409 on
+writes/deletes of an immutable-status record, 4xx on check violations, the Accept-Language
+overlay, the imported seed ROW COUNT). **When adding a DSL keyword whose promise lives in
+generated code, extend this fixture + both assertion layers in the same PR** - a test that stops
+at the `.model` attributes proves parsing, not the promise (that is exactly how a template-side
+regression ships green).
+
 `IntentEditorLoadsIT` **clones [`dirigiblelabs/sample-intent-model`](https://github.com/dirigiblelabs/sample-intent-model)** (the library intent sample - same clone-a-real-repo pattern as the `SampleProjectRepositoryIT` subclasses; it replaced the old local `IntentEditorIT` fixture so the published sample stays the single source of truth), opens its `app.intent`, then asserts the mxGraph diagram renders (`.intent-diagram svg` is visible) **and** that the parsed `Book` entity's label appears inside `.intent-diagram` - so it fails on an empty or broken diagram, unlike the old "any `<svg>` exists" check that a Mermaid error bomb satisfied. It does not separately exercise a theme switch because the fixed-colour palette renders identically in both themes. Editing the sample's entities/process means the sample repo must change too (the IT clones its HEAD). `IntentEngineIT` stays self-contained (inline YAML) for fast, network-free coverage.
 
 ### General build/serve gotcha (applies to all UI modules)
