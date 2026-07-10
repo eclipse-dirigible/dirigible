@@ -354,6 +354,7 @@ existing breaks.
 | `Detail` | a plain composition detail | was a composition child |
 | `List` | plain searchable list | had no composition children |
 | `Setting` | nomenclature under Settings | `kind: setting` |
+| `Calendar` | records as events on the Harmonia calendar | `view: calendar` (the role alias; the `calendar:` block is required either way) |
 
 **Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
 `EntityStatus` (the read-only status badge, valid on any entity).

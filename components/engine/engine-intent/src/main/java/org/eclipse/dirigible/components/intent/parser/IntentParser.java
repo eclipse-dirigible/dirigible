@@ -82,12 +82,13 @@ public final class IntentParser {
     private static final Set<String> NUMERIC_TYPES = Set.of("integer", "int", "long", "decimal", "double");
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
-    private static final Set<String> ENTITY_FUNCTIONS = Set.of("document", "documentitem", "master", "detail", "list", "setting");
+    private static final Set<String> ENTITY_FUNCTIONS =
+            Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar");
     /**
      * Entity {@code function} values whose template is reserved but not yet shipped (gated with a
      * message).
      */
-    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("calendar", "board", "gantt", "timeline");
+    private static final Set<String> ENTITY_FUNCTIONS_RESERVED = Set.of("board", "gantt", "timeline");
     /** Implemented field {@code function} values (lower-cased). */
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
     /** Implemented relation {@code function} values (lower-cased). */
@@ -229,7 +230,7 @@ public final class IntentParser {
                             + "] is reserved for an upcoming template and is not yet available in this version");
                 } else if (!ENTITY_FUNCTIONS.contains(key)) {
                     issues.add("entity [" + name + "] has unknown function [" + fn
-                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting)");
+                            + "] (valid: Document, DocumentItem, Master, Detail, List, Setting, Calendar)");
                 } else if (entity.isDocumentItem() && !compositionParent.containsKey(name)) {
                     issues.add("entity [" + name
                             + "] function: DocumentItem must be a composition child (a manyToOne/oneToOne relation with composition: true)");
@@ -304,10 +305,21 @@ public final class IntentParser {
     private static void validateViews(IntentModel model, List<String> issues) {
         for (EntityIntent entity : model.getEntities()) {
             String view = entity.getView();
+            String name = entity.getName();
+            boolean functionCalendar = entity.getFunction() != null && "calendar".equalsIgnoreCase(entity.getFunction()
+                                                                                                         .trim());
             if (view == null || view.isBlank()) {
+                if (!functionCalendar) {
+                    continue;
+                }
+                // function: Calendar is the role alias for view: calendar - same rendering, same
+                // required calendar block, validated below with the effective view.
+                view = "calendar";
+            } else if (functionCalendar && !"calendar".equalsIgnoreCase(view.trim())) {
+                issues.add("entity [" + name + "] declares function: Calendar together with view: " + view
+                        + " - the role implies view: calendar; drop one of the two");
                 continue;
             }
-            String name = entity.getName();
             String v = view.trim();
             if (!"calendar".equalsIgnoreCase(v) && !"range".equalsIgnoreCase(v) && !"slots".equalsIgnoreCase(v)) {
                 issues.add("entity [" + name + "] has unknown view [" + view + "] (supported: calendar, range, slots)");

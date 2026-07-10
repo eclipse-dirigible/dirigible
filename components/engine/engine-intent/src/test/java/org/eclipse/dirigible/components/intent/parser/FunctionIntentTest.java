@@ -153,8 +153,10 @@ class FunctionIntentTest {
     }
 
     @Test
-    void gatesReservedCalendarFunction() {
-        String yaml = base("    function: Calendar\n");
+    void gatesReservedBoardFunction() {
+        // Calendar graduated to a first-class role (the view: calendar alias - see
+        // FunctionCalendarTest); the remaining reserved roles keep the clear gate.
+        String yaml = base("    function: Board\n");
         assertIssue(yaml, "reserved for an upcoming template");
     }
 

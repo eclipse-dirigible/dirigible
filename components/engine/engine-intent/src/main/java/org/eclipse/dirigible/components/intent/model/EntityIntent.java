@@ -30,10 +30,11 @@ public class EntityIntent {
 
     /**
      * Explicit presentation role that selects the entity's UI template - {@code Document},
-     * {@code DocumentItem}, {@code Master}, {@code Detail}, {@code List}, {@code Setting} (and reserved
-     * future templates such as {@code Calendar}). Authoritative when set; otherwise the role is
-     * inferred from structure and the legacy flags ({@code kind: setting}, an {@code *Item}-named
-     * child).
+     * {@code DocumentItem}, {@code Master}, {@code Detail}, {@code List}, {@code Setting}, or
+     * {@code Calendar} (the role alias for {@code view: calendar} - the entity renders on the Harmonia
+     * calendar, configured by the {@code calendar:} block; reserved values such as
+     * {@code Board}/{@code Gantt} stay gated). Authoritative when set; otherwise the role is inferred
+     * from structure and the legacy flags ({@code kind: setting}, an {@code *Item}-named child).
      */
     private String function;
     /**
@@ -144,10 +145,12 @@ public class EntityIntent {
     }
 
     /**
-     * Whether this entity uses the calendar renderer ({@code view: calendar} or {@code view: range}).
+     * Whether this entity uses the calendar renderer - {@code view: calendar}, {@code view: range}, or
+     * the presentation role {@code function: Calendar} (the role alias for {@code view: calendar}; the
+     * {@code calendar:} block configures it either way).
      */
     public boolean isCalendar() {
-        return viewIs("calendar") || viewIs("range");
+        return viewIs("calendar") || viewIs("range") || functionIs("Calendar");
     }
 
     /**
