@@ -25,6 +25,8 @@ const PERSPECTIVE_COLLECTIONS = [
     "uiManageMasterModels",
     "uiListMasterModels",
     "uiDocumentModels",
+    "uiCalendarModels",
+    "uiSlotsModels",
     "uiSettingModels"
 ];
 
