@@ -172,6 +172,29 @@ composition is opt-in.
     same gate.
   A failed document check aborts the transition (the workflow task completion fails with the
   authored message).
+- `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
+  reaches a status, create ONE local document with computed multi-line content (the accounting
+  "source document -> balanced journal entry" shape, generalized):
+  ```yaml
+  postings:
+    - name: salesInvoicePosting
+      event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+      creates: JournalEntry            # a LOCAL document entity owning a composition items child
+      backReference: SalesInvoice      # creates' to-one back to the source = the at-most-once guard
+      map: { entryDate: date, customer: Customer, reason: "Sales invoice {number}" }
+      rule: { entity: PostingRule, match: { documentType: "Sales Invoice" } }
+      items:
+        - { Account: rule(receivableAccount), debit: "Net + Vat" }
+        - { Account: rule(revenueAccount),    credit: "Net" }
+        - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
+  ```
+  Semantics: binds the source's `-transitioned` topic and RE-LOADS the source by id (the payload is
+  as-of the transition - a number stamped by a later step is not in it); `map` values are a source
+  property (copy), a literal, or a `{sourceProperty}` template; item values are `rule(<column>)`
+  references or arithmetic over the SOURCE's fields; a row `when` is `<SourceField> ==|!= <number>`.
+  A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
+  documents with no back-referencing target), never throws. All writes go through the generated
+  repositories, so numbering/status-init/`checks:` fire on the created document.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and

@@ -63,6 +63,8 @@ public class IntentModel {
     private List<ActionIntent> actions = new ArrayList<>();
     /** Create-from (document generation) actions - clone a source record into a new target record. */
     private List<GeneratesIntent> generates = new ArrayList<>();
+    /** Declarative postings: source-document status → generated local document + items. */
+    private List<PostingIntent> postings = new ArrayList<>();
 
     public List<ActionIntent> getActions() {
         return actions;
@@ -74,6 +76,14 @@ public class IntentModel {
 
     public List<GeneratesIntent> getGenerates() {
         return generates;
+    }
+
+    public List<PostingIntent> getPostings() {
+        return postings;
+    }
+
+    public void setPostings(List<PostingIntent> postings) {
+        this.postings = postings == null ? new ArrayList<>() : postings;
     }
 
     public void setGenerates(List<GeneratesIntent> generates) {

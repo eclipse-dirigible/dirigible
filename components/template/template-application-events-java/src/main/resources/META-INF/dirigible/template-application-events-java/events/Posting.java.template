@@ -1,0 +1,97 @@
+package gen.events;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Calc;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Posting ${name}: when a ${sourceEntity} transitions into status ${guardValue}, create one
+ * ${targetEntity} with its ${itemsEntity} rows computed from the source's totals per the resolved
+ * rule row. Generated from the intent postings block - do not edit; it is re-generated with the
+ * application.
+ *
+ * Contract (the accounting posting semantics, generalized):
+ * - binds the -transitioned topic (workflow status writes publish it; -updated reactions never see
+ *   it, so no loops) and RE-LOADS the source by id - the payload is as-of the transition and lacks
+ *   later-step data such as a stamped document number;
+ * - at-most-once via the ${backRefProperty} back-reference (an event redelivery must not double-post);
+ * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
+ *   unposted worklist - final-status documents with no back-referencing ${targetEntity}) - it never
+ *   throws or half-posts;
+ * - all writes go through the generated repositories (numbering, status init, validations, checks).
+ */
+@Component
+public class ${className}Posting implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}-transitioned";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity payload =
+                Json.parse(message, gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity.class);
+        if (payload == null || payload.${sourceKeyField} == null) {
+            return;
+        }
+        // Re-load: the transition payload lacks later-step data (e.g. the number stamped after Issue).
+        gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
+                new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
+        if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
+            return;
+        }
+        // At-most-once: the back-reference is the guard.
+        if (!new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository().findAll(
+                Criteria.create().eq("${backRefProperty}", source.${sourceKeyField})).isEmpty()) {
+            return;
+        }
+#if($hasRule)
+        java.util.List<gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity> ruleRows =
+                new gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Repository().findAll(
+                        Criteria.create().eq("${ruleMatchProperty}", ${ruleMatchValueJava}));
+        if (ruleRows.isEmpty()) {
+            return; // no determination rule -> the document stays on the unposted worklist
+        }
+        gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity ruleRow = ruleRows.get(0);
+#foreach($column in $usedRuleColumns)
+        if (ruleRow.${column} == null) {
+            return; // incomplete determination -> unposted worklist
+        }
+#end
+#end
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
+#foreach($a in $headerAssignments)
+        target.${a.targetProp} = ${a.expr};
+#end
+        target.${backRefProperty} = source.${sourceKeyField};
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository().save(target);
+#foreach($row in $itemRows)
+#if($row.guard != "")
+        if (${row.guard}) {
+#end
+        {
+            gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item =
+                    new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity();
+#foreach($a in $row.assigns)
+            item.${a.targetProp} = ${a.expr};
+#end
+            item.${itemsFk} = saved.${targetPk};
+            new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository().save(item);
+        }
+#if($row.guard != "")
+        }
+#end
+#end
+    }
+}

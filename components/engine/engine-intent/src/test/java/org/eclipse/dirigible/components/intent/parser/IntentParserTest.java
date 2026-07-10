@@ -356,6 +356,43 @@ class IntentParserTest {
     }
 
     @Test
+    void postingRequiresGuardAndItemsAndKnownReferences() {
+        String yaml = """
+                name: ledger
+                uses:
+                  - { model: kf-mod-sales-invoices }
+                entities:
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, model: kf-mod-sales-invoices }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                postings:
+                  - name: broken
+                    event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "whenever" }
+                    creates: JournalEntry
+                    backReference: SalesInvoice
+                    items:
+                      - { nonsuch: "Net" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("event requires `when:")),
+                "expected a when-guard issue, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("item [nonsuch]")),
+                "expected an unknown-item-field issue, got: " + ex.getIssues());
+    }
+
+    @Test
     void whereStaticOptionFilterParses() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """
 

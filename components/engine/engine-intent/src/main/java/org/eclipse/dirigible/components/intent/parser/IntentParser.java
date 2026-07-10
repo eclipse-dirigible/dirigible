@@ -22,6 +22,7 @@ import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
+import org.eclipse.dirigible.components.intent.model.PostingIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.FormIntent;
@@ -176,6 +177,7 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
         validateGenerates(model, entityNames, usesAliases, issues);
+        validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
         validateSeeds(model, entityNames, issues);
@@ -1278,6 +1280,26 @@ public final class IntentParser {
         issues.add(subject + " has unknown kind - expected exactlyOne, itemsSumEqual or itemsMin");
     }
 
+    /** Whether the name matches (case-insensitively) a field or to-one relation of the entity. */
+    private static boolean hasPropertyIgnoreCase(EntityIntent entity, String name) {
+        if (entity.getFields() != null) {
+            for (FieldIntent field : entity.getFields()) {
+                if (name.equalsIgnoreCase(field.getName())) {
+                    return true;
+                }
+            }
+        }
+        if (entity.getRelations() != null) {
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && name.equalsIgnoreCase(relation.getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** The entity's composition child (the first entity declaring a composition to-one back to it). */
     private static EntityIntent compositionChildOf(EntityIntent entity, java.util.Map<String, EntityIntent> byName) {
         for (EntityIntent candidate : byName.values()) {
@@ -1797,6 +1819,144 @@ public final class IntentParser {
      * the same rules against the source child entity. Target property names are resolved (and, when the
      * target model is available, validated) at generation time by the {@code GlueIntentGenerator}.
      */
+    /**
+     * A {@code postings} entry: the trigger names a source entity ({@code model:} alias for a
+     * cross-model source, which must be in {@code uses:}) with a {@code when} status guard
+     * ({@code <Property> == <seed id>}); {@code creates} is a LOCAL document entity owning a
+     * composition items child; {@code backReference} its to-one relation to the source (the
+     * at-most-once guard); {@code rule.entity} a local entity with a single {@code match} selector;
+     * item rows assign fields/relations of the items entity from {@code rule(<column>)} references or
+     * source expressions, with an optional {@code when} row guard.
+     */
+    private static void validatePostings(IntentModel model, Set<String> usesAliases, List<String> issues) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        for (PostingIntent posting : model.getPostings()) {
+            if (posting.getName() == null || posting.getName()
+                                                    .isBlank()) {
+                issues.add("posting has no name");
+                continue;
+            }
+            String subject = "posting [" + posting.getName() + "]";
+            // event
+            if (posting.getEvent() == null || posting.getEvent()
+                                                     .get("onTransition") == null) {
+                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`");
+            } else {
+                Object alias = posting.getEvent()
+                                      .get("model");
+                if (alias != null && !usesAliases.contains(String.valueOf(alias))) {
+                    issues.add(subject + " event model [" + alias + "] is not declared in uses:");
+                }
+                if (alias == null && !byName.containsKey(String.valueOf(posting.getEvent()
+                                                                               .get("onTransition")))) {
+                    issues.add(subject + " event source [" + posting.getEvent()
+                                                                    .get("onTransition")
+                            + "] is not a declared entity (declare `model:` for a cross-model source)");
+                }
+                Object when = posting.getEvent()
+                                     .get("when");
+                if (when == null || !String.valueOf(when)
+                                           .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+                    issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
+                }
+            }
+            // creates + items child + backReference
+            EntityIntent creates = posting.getCreates() == null ? null : byName.get(posting.getCreates());
+            if (creates == null) {
+                issues.add(subject + " `creates` must name a local entity");
+                continue;
+            }
+            EntityIntent itemsEntity = compositionChildOf(creates, byName);
+            if (itemsEntity == null) {
+                issues.add(subject + " `creates` entity [" + creates.getName() + "] must own a composition items child");
+                continue;
+            }
+            if (posting.getBackReference() == null || toOneRelationByName(creates, posting.getBackReference()) == null) {
+                issues.add(subject + " `backReference` must name a to-one relation of [" + creates.getName()
+                        + "] pointing at the source document");
+            }
+            if (posting.getMap() != null) {
+                for (String key : posting.getMap()
+                                         .keySet()) {
+                    if (!hasPropertyIgnoreCase(creates, key)) {
+                        issues.add(subject + " map [" + key + "] is not a field or to-one relation of [" + creates.getName() + "]");
+                    }
+                }
+            }
+            // rule
+            EntityIntent ruleEntity = null;
+            if (posting.getRule() != null) {
+                ruleEntity = byName.get(String.valueOf(posting.getRule()
+                                                              .get("entity")));
+                Object match = posting.getRule()
+                                      .get("match");
+                if (ruleEntity == null) {
+                    issues.add(subject + " rule.entity must name a local entity");
+                } else if (!(match instanceof java.util.Map) || ((java.util.Map<?, ?>) match).size() != 1) {
+                    issues.add(subject + " rule.match must be a single `column: literal` selector");
+                }
+            }
+            // items
+            if (posting.getItems() == null || posting.getItems()
+                                                     .isEmpty()) {
+                issues.add(subject + " requires at least one items row");
+                continue;
+            }
+            for (java.util.Map<String, String> row : posting.getItems()) {
+                for (java.util.Map.Entry<String, String> cell : row.entrySet()) {
+                    String key = cell.getKey();
+                    String value = cell.getValue() == null ? "" : cell.getValue();
+                    if ("when".equals(key)) {
+                        if (!value.matches("\\s*\\w+\\s*[!=]=\\s*\\d+(\\.\\d+)?\\s*")) {
+                            issues.add(subject + " item when [" + value + "] must be `<SourceField> ==|!= <number>`");
+                        }
+                        continue;
+                    }
+                    if (!hasPropertyIgnoreCase(itemsEntity, key)) {
+                        issues.add(subject + " item [" + key + "] is not a field or to-one relation of [" + itemsEntity.getName() + "]");
+                    }
+                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("\\s*rule\\((\\w+)\\)\\s*")
+                                                                             .matcher(value);
+                    if (ruleRef.matches()) {
+                        if (ruleEntity == null) {
+                            issues.add(subject + " item [" + key + "] references rule(...) but the posting declares no rule");
+                        } else {
+                            String column = ruleRef.group(1);
+                            // Authored lower-camel matches a PascalCase relation (rule(receivableAccount)
+                            // -> ReceivableAccount) - compare case-insensitively.
+                            boolean known = false;
+                            if (ruleEntity.getFields() != null) {
+                                for (FieldIntent f : ruleEntity.getFields()) {
+                                    if (column.equalsIgnoreCase(f.getName())) {
+                                        known = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!known && ruleEntity.getRelations() != null) {
+                                for (RelationIntent r : ruleEntity.getRelations()) {
+                                    if (column.equalsIgnoreCase(r.getName())) {
+                                        known = true;
+                                        break;
+                                    }
+                                }
+                            }
+                            if (!known) {
+                                issues.add(subject + " rule(" + column + ") is not a field or to-one relation of [" + ruleEntity.getName()
+                                        + "]");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private static void validateGenerates(IntentModel model, Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         Map<String, EntityIntent> byName = new HashMap<>();
         for (EntityIntent entity : model.getEntities()) {
