@@ -151,6 +151,15 @@ class IntentEngineIT extends IntegrationTest {
                 dimensions: [order.orderDate, quantity]
                 filter: "quantity > 1"
                 widget: { kind: count, label: Big Order Items, icon: alert-triangle }
+              # kind: balance - the accounting shape: opening/period/closing debit+credit totals per
+              # dimension between the runtime fromDate/toDate parameters (declared on the .report).
+              - name: OrderBalance
+                kind: balance
+                source: Order
+                date: orderDate
+                debit: total
+                credit: creditSnapshot
+                dimensions: [customer]
 
             # Custom dashboard widgets - developer-supplied content: a REST KPI (the url returns
             # {value, description?}) and an embedded page tile.
@@ -243,7 +252,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
                                                  .body("forms", hasSize(1))
-                                                 .body("reports", hasSize(3))
+                                                 .body("reports", hasSize(4))
                                                  .body("permissions", hasSize(2))
                                                  .body("seeds[0].rows", hasSize(2)));
     }
@@ -365,9 +374,11 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("project", equalTo(PROJECT))
-                                                 .body("written", hasItems("orders.edm", "orders.model", "OrderApproval.bpmn",
-                                                         "ApproveOrder.form", "OrdersByCustomer.report", "orders.roles", "orders.glue",
-                                                         "countries.csvim", "countries.csv", "doc/Templates/Order/Print/en/standard.print"))
+                                                 .body("written",
+                                                         hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
+                                                                 "OrdersByCustomer.report", "OrderBalance.report", "orders.roles",
+                                                                 "orders.glue", "countries.csvim", "countries.csv",
+                                                                 "doc/Templates/Order/Print/en/standard.print"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
                                                  // recipe in .settings, naming the template + parameters.
@@ -1798,6 +1809,24 @@ class IntentEngineIT extends IntegrationTest {
                 "a relation.field dimension (order.orderDate) should INNER JOIN the related entity on its FK");
         assertTrue(joined.contains("WHERE OrderItem.\\\"ORDER_ITEM_QUANTITY\\\" > 1"),
                 "the intent filter should become a WHERE with the field rewritten to its quoted, qualified column");
+
+        // kind: balance - the six windowed totals around the runtime :fromDate/:toDate parameters,
+        // declared on the .report in the editor's {name, type, initial} shape with all-time defaults.
+        String balance = contentOf("OrderBalance.report");
+        assertTrue(balance.contains("\"kind\": \"balance\""), "the balance report should carry its kind");
+        assertTrue(balance.contains(
+                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" < :fromDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Opening Debit\\\""),
+                "the opening debit should sum the debit amount strictly before :fromDate");
+        assertTrue(balance.contains(
+                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" >= :fromDate AND Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_CREDIT_SNAPSHOT\\\", 0) ELSE 0 END) as \\\"Credit\\\""),
+                "the period credit should sum the credit amount inside the inclusive window");
+        assertTrue(balance.contains(
+                "SUM(CASE WHEN Order.\\\"ORDER_ORDER_DATE\\\" <= :toDate THEN COALESCE(Order.\\\"ORDER_TOTAL\\\", 0) ELSE 0 END) as \\\"Closing Debit\\\""),
+                "the closing debit should sum everything up to and including :toDate");
+        assertTrue(balance.contains("\"name\": \"fromDate\"") && balance.contains("\"name\": \"toDate\""),
+                "the balance report should declare the two window parameters");
+        assertTrue(balance.contains("\"initial\": \"1900-01-01\"") && balance.contains("\"initial\": \"9999-12-31\""),
+                "the window parameters should default to the all-time balance");
     }
 
     private void assertRoles() {

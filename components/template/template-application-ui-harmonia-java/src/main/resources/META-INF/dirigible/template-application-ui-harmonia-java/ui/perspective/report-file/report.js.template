@@ -44,6 +44,17 @@ document.addEventListener('alpine:init', () => {
       { key: '${column.alias}', kind: #if($column.typeTypescript == "Date")'date'#elseif($column.typeTypescript == "number")'number'#elseif($column.typeTypescript == "boolean")'boolean'#{else}'text'#end, align: '${column.align}', agg: '${column.aggregate}'#if($column.pattern), pattern: '${column.pattern}'#end },
 #end
     ],
+    // The report's declared runtime parameters (the .report `parameters` block - e.g. the balance
+    // window's fromDate/toDate): first-class inputs sent by name in every query body. An empty
+    // value falls back to the parameter's server-side default.
+    reportParams: [
+#if($parameters)
+#foreach($parameter in $parameters)
+      { name: '${parameter.name}', kind: #if($parameter.typeTypescript == "Date")'date'#elseif($parameter.typeTypescript == "number")'number'#{else}'text'#end },
+#end
+#end
+    ],
+    params: {},         // parameter name -> value ('' = use the server-side default)
     showFilters: false,
     filters: {},        // column key -> { from, to, min, max, contains, equals } (per kind)
     state: 'loading',   // loading | error | empty | default
@@ -73,8 +84,28 @@ document.addEventListener('alpine:init', () => {
       for (const col of this.reportColumns) {
         this.filters[col.key] = { from: '', to: '', min: null, max: null, contains: '', equals: '' };
       }
+      for (const p of this.reportParams) {
+        this.params[p.name] = '';
+      }
       try { document.title = this.displayName; } catch (e) { /* no document */ }
       this.load();
+    },
+
+    // The non-empty declared-parameter values, keyed by name - merged into every query body.
+    paramValues() {
+      const out = {};
+      for (const p of this.reportParams) {
+        const v = this.params[p.name];
+        if (v !== '' && v != null) out[p.name] = v;
+      }
+      return out;
+    },
+
+    // "fromDate" -> "From Date" for the parameter strip labels.
+    paramLabel(name) {
+      return String(name || '')
+        .replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/\s+/g, ' ').trim()
+        .replace(/^./, c => c.toUpperCase());
     },
 
     // The active per-column conditions in the controller's shape: [{ column, operator, value }].
@@ -116,11 +147,13 @@ document.addEventListener('alpine:init', () => {
       this.error = null;
       try {
         const conditions = this.conditions();
+        const params = this.paramValues();
+        const filtered = conditions.length > 0 || Object.keys(params).length > 0;
         // Fetch the total first so preview mode (the dashboard tile) can window to the LAST rows -
         // the most recent records in the report's natural order - rather than the first ones.
         try {
-          const c = conditions.length
-            ? await reportHttp.post(this.apiBase + '/count', { conditions })
+          const c = filtered
+            ? await reportHttp.post(this.apiBase + '/count', { conditions, ...params })
             : await reportHttp.get(this.apiBase + '/count');
           this.count = (c && c.count != null) ? c.count : 0;
         } catch (e) { this.count = 0; }
@@ -128,8 +161,8 @@ document.addEventListener('alpine:init', () => {
           ? Math.max(0, this.count - this.limit)
           : (this.page - 1) * this.limit;
         let rows;
-        if (conditions.length) {
-          rows = await reportHttp.post(this.apiBase + '/search', { ${dollar}limit: this.limit, ${dollar}offset: offset, conditions });
+        if (filtered) {
+          rows = await reportHttp.post(this.apiBase + '/search', { ${dollar}limit: this.limit, ${dollar}offset: offset, conditions, ...params });
         } else {
           rows = await reportHttp.get(this.apiBase + '?${dollar}limit=' + this.limit + '&${dollar}offset=' + offset);
         }
@@ -223,6 +256,18 @@ document.addEventListener('alpine:init', () => {
       return window.HarmoniaFormat.number(v, pattern, '');
     },
 
+    // Column totals over the fetched rows (balance reports render them as a table footer) - shown
+    // only when the whole (filtered) result fits on one page, so the footer never presents a
+    // page-local sum as the report total.
+    get showTotals() { return this.rows.length > 0 && this.count <= this.limit; },
+    totalText(key) {
+      const meta = this.columnMeta(key);
+      if (!meta || meta.agg !== 'SUM') return '';
+      let sum = 0;
+      for (const row of this.rows) sum += Number(row[key]) || 0;
+      return this.displayNumber(sum, meta.pattern || '0');
+    },
+
     get totalPages() { return Math.max(1, Math.ceil(this.count / this.limit)); },
     next() { if (this.page < this.totalPages) { this.page++; this.load(); } },
     prev() { if (this.page > 1) { this.page--; this.load(); } },
@@ -230,8 +275,9 @@ document.addEventListener('alpine:init', () => {
     // Export the FULL result set (POST /export returns all rows) as CSV.
     async exportCsv() {
       try {
-        // The export honors the active per-column filters - it downloads what the table shows.
-        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions() });
+        // The export honors the active per-column filters and parameters - it downloads what the
+        // table shows.
+        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
         const rows = Array.isArray(data) ? data : [];
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);
@@ -252,7 +298,7 @@ document.addEventListener('alpine:init', () => {
     // just the on-screen page) rendered into a minimal print document in a new window.
     async printReport() {
       try {
-        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions() });
+        const data = await reportHttp.post(this.apiBase + '/export', { conditions: this.conditions(), ...this.paramValues() });
         const rows = Array.isArray(data) ? data : [];
         if (!rows.length) return;
         const cols = Object.keys(rows[0]);

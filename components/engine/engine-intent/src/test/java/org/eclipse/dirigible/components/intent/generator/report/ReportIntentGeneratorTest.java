@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.TestContexts;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
@@ -189,5 +190,138 @@ class ReportIntentGeneratorTest {
                                   .get("value"));
         assertNull(pins.get(0)
                        .get("token"));
+    }
+
+    private static final String LEDGER_INTENT = """
+            name: ledger
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: code, type: string }
+                  - { name: name, type: string }
+              - name: JournalEntry
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: entryDate, type: date }
+                relations:
+                  - { name: items, kind: oneToMany, to: JournalEntryItem }
+              - name: JournalEntryItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: debit, type: decimal }
+                  - { name: credit, type: decimal }
+                relations:
+                  - { name: journalEntry, kind: manyToOne, to: JournalEntry, composition: true }
+                  - { name: account, kind: manyToOne, to: Account, required: true }
+            reports:
+              - name: TrialBalance
+                kind: balance
+                source: JournalEntryItem
+                date: journalEntry.entryDate
+                debit: debit
+                credit: credit
+                dimensions: [account.code, account.name]
+                filter: "credit == 0"
+            """;
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void balanceReportEmitsTheWindowedTotalsQueryAndTheDateParameters() {
+        IntentModel model = IntentParser.parse(LEDGER_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+
+        assertEquals("balance", document.get("kind"));
+
+        String query = (String) document.get("query");
+        // The window: opening strictly before :fromDate, period inclusive, closing up to :toDate.
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" < :fromDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"Opening Debit\""),
+                query);
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" >= :fromDate AND JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\", 0) ELSE 0 END) as \"Credit\""),
+                query);
+        assertTrue(query.contains(
+                "SUM(CASE WHEN JournalEntry.\"JOURNAL_ENTRY_ENTRY_DATE\" <= :toDate THEN COALESCE(JournalEntryItem.\"JOURNAL_ENTRY_ITEM_DEBIT\", 0) ELSE 0 END) as \"Closing Debit\""),
+                query);
+        // The date rides in over the composition join; the dimensions join the account.
+        assertTrue(query.contains("INNER JOIN \"LEDGER_JOURNAL_ENTRY\" as JournalEntry"), query);
+        assertTrue(query.contains("INNER JOIN \"LEDGER_ACCOUNT\" as Account"), query);
+        assertTrue(query.contains("GROUP BY Account.\"ACCOUNT_CODE\", Account.\"ACCOUNT_NAME\""), query);
+        // The intent-guard-style `==` is normalized to SQL's single `=` (PostgreSQL rejects `==`).
+        assertTrue(query.contains("WHERE JournalEntryItem.\"JOURNAL_ENTRY_ITEM_CREDIT\" = 0"), query);
+
+        List<Map<String, Object>> parameters = (List<Map<String, Object>>) document.get("parameters");
+        assertEquals(2, parameters.size());
+        assertEquals("fromDate", parameters.get(0)
+                                           .get("name"));
+        assertEquals("DATE", parameters.get(0)
+                                       .get("type"));
+        assertEquals("1900-01-01", parameters.get(0)
+                                             .get("initial"));
+        assertEquals("toDate", parameters.get(1)
+                                         .get("name"));
+        assertEquals("9999-12-31", parameters.get(1)
+                                             .get("initial"));
+
+        // Two dimensions + the six totals, all SUM DECIMAL with the money pattern.
+        List<Map<String, Object>> columns = (List<Map<String, Object>>) document.get("columns");
+        assertEquals(8, columns.size());
+        List<String> totals = List.of("Opening Debit", "Opening Credit", "Debit", "Credit", "Closing Debit", "Closing Credit");
+        for (int i = 0; i < totals.size(); i++) {
+            Map<String, Object> column = columns.get(2 + i);
+            assertEquals(totals.get(i), column.get("alias"));
+            assertEquals("SUM", column.get("aggregate"));
+            assertEquals("DECIMAL", column.get("type"));
+            assertEquals("### ### ### ##0.00", column.get("pattern"));
+        }
+    }
+
+    @Test
+    void balanceReportRequiresItsInputsAndForbidsMeasures() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                      - { name: postedAt, type: timestamp }
+                reports:
+                  - name: TrialBalance
+                    kind: balance
+                    source: JournalEntryItem
+                    date: postedAt
+                    debit: debit
+                    measures: ["sum(debit)"]
+                """));
+        String message = error.getMessage();
+        assertTrue(message.contains("must not declare measures"), message);
+        assertTrue(message.contains("needs at least one dimension"), message);
+        assertTrue(message.contains("date [postedAt] must be a date field (found [timestamp])"), message);
+        assertTrue(message.contains("needs credit"), message);
+    }
+
+    @Test
+    void balanceInputsWithoutTheKindAndAnUnknownKindAreRejected() {
+        IntentValidationException error = assertThrows(IntentValidationException.class, () -> IntentParser.parse("""
+                name: ledger
+                entities:
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                reports:
+                  - name: Totals
+                    source: JournalEntryItem
+                    debit: debit
+                  - name: Weird
+                    kind: pivot
+                    source: JournalEntryItem
+                """));
+        String message = error.getMessage();
+        assertTrue(message.contains("declares date/debit/credit but is not kind: balance"), message);
+        assertTrue(message.contains("unknown kind [pivot]"), message);
     }
 }

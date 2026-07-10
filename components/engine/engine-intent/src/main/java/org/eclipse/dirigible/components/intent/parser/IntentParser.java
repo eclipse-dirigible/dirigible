@@ -2170,6 +2170,108 @@ public final class IntentParser {
                 issues.add("report [" + report.getName() + "] has unknown chart [" + report.getChart() + "] - expected one of "
                         + REPORT_CHART_KINDS);
             }
+            validateBalanceReport(model, report, issues);
+        }
+    }
+
+    /**
+     * {@code kind: balance} - the accounting balance report. Requires {@code date} (the window field),
+     * {@code debit} and {@code credit} (the summed amounts) and at least one dimension; forbids ad-hoc
+     * {@code measures} because the six opening / period / closing totals ARE the measures.
+     */
+    private static void validateBalanceReport(IntentModel model, ReportIntent report, List<String> issues) {
+        boolean balanceInputs = report.getDate() != null || report.getDebit() != null || report.getCredit() != null;
+        if (report.getKind() == null || report.getKind()
+                                              .isBlank()) {
+            if (balanceInputs) {
+                issues.add("report [" + report.getName() + "] declares date/debit/credit but is not kind: balance");
+            }
+            return;
+        }
+        if (!report.isBalance()) {
+            issues.add("report [" + report.getName() + "] has unknown kind [" + report.getKind() + "] - expected balance");
+            return;
+        }
+        String prefix = "balance report [" + report.getName() + "]";
+        if (!report.getMeasures()
+                   .isEmpty()) {
+            issues.add(prefix + " must not declare measures - it computes the opening/period/closing debit and credit totals");
+        }
+        if (report.getDimensions()
+                  .stream()
+                  .noneMatch(d -> d != null && !d.isBlank())) {
+            issues.add(prefix + " needs at least one dimension to balance by");
+        }
+        EntityIntent source = null;
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null && entity.getName()
+                                                  .equals(report.getSource())) {
+                source = entity;
+            }
+        }
+        if (source == null) {
+            return; // the missing/unknown source is already reported
+        }
+        validateBalanceDate(model, source, report, issues, prefix);
+        requireNumericBalanceField(source, report.getDebit(), "debit", issues, prefix);
+        requireNumericBalanceField(source, report.getCredit(), "credit", issues, prefix);
+    }
+
+    /**
+     * The balance {@code date} must resolve to a {@code date}-typed field - directly on the source or
+     * through a one-hop to-one {@code relation.field} path (a cross-model target is checked at
+     * generation, like every cross-model reference). A {@code timestamp} is rejected deliberately: the
+     * window parameters are dates, and comparing a timestamp against the {@code toDate} midnight would
+     * silently exclude that day's intra-day entries.
+     */
+    private static void validateBalanceDate(IntentModel model, EntityIntent source, ReportIntent report, List<String> issues,
+            String prefix) {
+        String reference = report.getDate();
+        if (reference == null || reference.isBlank()) {
+            issues.add(prefix + " needs date: the date field driving the period window");
+            return;
+        }
+        reference = reference.trim();
+        FieldIntent field;
+        int dot = reference.indexOf('.');
+        if (dot > 0) {
+            RelationIntent relation = toOneRelation(source, reference.substring(0, dot));
+            if (relation == null) {
+                issues.add(prefix + " date [" + reference + "] does not start with a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (relation.isCrossModel()) {
+                return;
+            }
+            EntityIntent target = null;
+            for (EntityIntent entity : model.getEntities()) {
+                if (entity.getName() != null && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    target = entity;
+                }
+            }
+            field = target == null ? null : fieldByName(target, reference.substring(dot + 1));
+        } else {
+            field = fieldByName(source, reference);
+        }
+        if (field == null) {
+            issues.add(prefix + " date [" + reference + "] does not resolve to a field");
+        } else if (!"date".equalsIgnoreCase(field.getType() == null ? "" : field.getType())) {
+            issues.add(prefix + " date [" + reference + "] must be a date field (found [" + field.getType() + "])");
+        }
+    }
+
+    /** The balance {@code debit}/{@code credit} must be a numeric field of the source entity itself. */
+    private static void requireNumericBalanceField(EntityIntent source, String value, String role, List<String> issues, String prefix) {
+        if (value == null || value.isBlank()) {
+            issues.add(prefix + " needs " + role + ": the numeric field holding the " + role + " amount");
+            return;
+        }
+        FieldIntent field = fieldByName(source, value.trim());
+        if (field == null) {
+            issues.add(prefix + " " + role + " [" + value + "] is not a field of [" + source.getName() + "]");
+        } else if (!NUMERIC_TYPES.contains(field.getType())) {
+            issues.add(prefix + " " + role + " [" + value + "] must be numeric (found [" + field.getType() + "])");
         }
     }
 
