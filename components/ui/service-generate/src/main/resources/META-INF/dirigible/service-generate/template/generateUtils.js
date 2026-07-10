@@ -811,6 +811,52 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "postings":
+                    // Declarative postings (intent layer): a MessageHandler on the source's
+                    // -transitioned topic creating a local document + computed items. Everything is
+                    // pre-rendered by the glue generator; here only the Java package segments are
+                    // sanitized (cross-model source gen folder = the model alias; same-model = this
+                    // project). The topic keeps the RAW perspective (matches the setter publisher).
+                    if (model.postings) {
+                        for (let i = 0; i < model.postings.length; i++) {
+                            const po = model.postings[i];
+                            const postingParameters = {
+                                ...parameters,
+                                name: po.name,
+                                className: po.className,
+                                sourceTopicProject: po.crossModel ? po.sourceProject : parameters.projectName,
+                                sourceJavaGenFolder: po.crossModel ? sanitizeJavaIdentifier(po.sourceGenFolder) : parameters.javaGenFolderName,
+                                sourcePerspective: po.sourcePerspective,
+                                sourceJavaPerspective: sanitizeJavaIdentifier(po.sourcePerspective),
+                                sourceEntity: po.sourceEntity,
+                                sourceKeyField: po.sourceKeyField,
+                                guardProperty: po.guardProperty,
+                                guardValue: po.guardValue,
+                                targetEntity: po.targetEntity,
+                                targetJavaPerspective: sanitizeJavaIdentifier(po.targetPerspective),
+                                targetPk: po.targetPk,
+                                itemsEntity: po.itemsEntity,
+                                itemsJavaPerspective: sanitizeJavaIdentifier(po.itemsPerspective),
+                                itemsFk: po.itemsFk,
+                                backRefProperty: po.backRefProperty,
+                                hasRule: po.hasRule,
+                                ruleEntity: po.ruleEntity,
+                                ruleJavaPerspective: po.rulePerspective ? sanitizeJavaIdentifier(po.rulePerspective) : "",
+                                ruleMatchProperty: po.ruleMatchProperty,
+                                ruleMatchValueJava: po.ruleMatchValueJava,
+                                usedRuleColumns: po.usedRuleColumns,
+                                headerAssignments: po.headerAssignments,
+                                itemRows: po.itemRows
+                            };
+                            const cleanPostingParameters = cleanData(postingParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanPostingParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanPostingParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "printFeeders":
                     // Print data feeders (intent layer): one @Controller per document master that loads
                     // the record + its related graph through the generated repositories and returns the

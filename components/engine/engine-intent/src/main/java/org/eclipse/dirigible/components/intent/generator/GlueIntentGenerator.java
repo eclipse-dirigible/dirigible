@@ -93,11 +93,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty()) {
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -116,6 +117,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansions", expansions);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
+        glue.put("postings", postings);
         glue.put("printFeeders", printFeeders);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
@@ -495,6 +497,256 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildGeneratesForTest(IntentModel model) {
         return buildGenerates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /**
+     * Postings: one entry per {@code postings} declaration, with EVERYTHING pre-rendered for the
+     * shape-only template - the source topic + re-load coordinates, the status guard, the at-most-once
+     * back-reference, the rule lookup, and per-row Java assignment expressions (a
+     * {@code rule(<column>)} reference reads the resolved rule row; anything else runs through the SDK
+     * {@code Calc} evaluator against the re-loaded source; string headers support
+     * {@code {sourceProperty}} interpolation).
+     */
+    private static List<Map<String, Object>> buildPostings(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.PostingIntent posting : model.getPostings()) {
+            if (posting.getName() == null || posting.getName()
+                                                    .isBlank()
+                    || posting.getEvent() == null || posting.getCreates() == null) {
+                continue; // parser already reported it
+            }
+            if (!settings.shouldGenerate("postings", posting.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)", posting.getName());
+                continue;
+            }
+            EntityIntent creates = byName.get(posting.getCreates());
+            EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, byName);
+            if (creates == null || itemsEntity == null) {
+                continue; // parser already reported it
+            }
+            String sourceEntity = String.valueOf(posting.getEvent()
+                                                        .get("onTransition"));
+            Object alias = posting.getEvent()
+                                  .get("model");
+            String sourceProject;
+            String sourcePerspective;
+            String sourceKeyField = "Id";
+            String sourceGenFolder;
+            if (alias != null) {
+                UsesIntent uses = findUses(model, String.valueOf(alias));
+                if (uses == null) {
+                    continue; // parser already reported it
+                }
+                sourceProject = uses.getProject() == null || uses.getProject()
+                                                                 .isBlank() ? uses.getModel() : uses.getProject();
+                sourceGenFolder = uses.getModel();
+                CrossModelSupport.TargetInfo info = CrossModelSupport.resolve(context, uses, sourceEntity);
+                sourcePerspective = info.perspectiveName();
+                sourceKeyField = info.keyField();
+            } else {
+                sourceProject = ""; // resolved to the own project name at template time
+                sourceGenFolder = "";
+                sourcePerspective = IntentEntities.resolvePerspective(sourceEntity, compositionParents);
+                EntityIntent local = byName.get(sourceEntity);
+                if (local != null) {
+                    sourceKeyField = IntentEntities.keyFieldName(local);
+                }
+            }
+            // The status guard: "<Property> == <seed id>", evaluated against the RE-LOADED source.
+            java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
+                                                                  .matcher(String.valueOf(posting.getEvent()
+                                                                                                 .get("when")));
+            if (!when.matches()) {
+                continue; // parser already reported it
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", posting.getName());
+            e.put("className", IntentNaming.pascalIdentifier(posting.getName()));
+            e.put("crossModel", alias != null);
+            e.put("sourceProject", sourceProject);
+            e.put("sourceGenFolder", sourceGenFolder);
+            e.put("sourcePerspective", sourcePerspective);
+            e.put("sourceEntity", sourceEntity);
+            e.put("sourceKeyField", sourceKeyField);
+            e.put("guardProperty", IntentNaming.pascalCase(when.group(1)));
+            e.put("guardValue", when.group(2));
+            e.put("targetEntity", creates.getName());
+            e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents));
+            e.put("targetPk", IntentEntities.keyFieldName(creates));
+            e.put("itemsEntity", itemsEntity.getName());
+            e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents));
+            e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
+            e.put("backRefProperty", IntentNaming.pascalCase(posting.getBackReference()));
+            // Rule lookup: a single match selector, columns referenced from the items.
+            boolean hasRule = posting.getRule() != null && posting.getRule()
+                                                                  .get("entity") != null;
+            e.put("hasRule", hasRule);
+            java.util.Set<String> usedRuleColumns = new java.util.LinkedHashSet<>();
+            if (hasRule) {
+                String ruleEntityName = String.valueOf(posting.getRule()
+                                                              .get("entity"));
+                e.put("ruleEntity", ruleEntityName);
+                // A setting rule entity (the normal case) lives under the global Settings perspective.
+                EntityIntent ruleEntityIntent = byName.get(ruleEntityName);
+                e.put("rulePerspective", ruleEntityIntent != null && ruleEntityIntent.isSetting() ? "Settings"
+                        : IntentEntities.resolvePerspective(ruleEntityName, compositionParents));
+                Map<?, ?> match = (Map<?, ?>) posting.getRule()
+                                                     .get("match");
+                Map.Entry<?, ?> selector = match.entrySet()
+                                                .iterator()
+                                                .next();
+                e.put("ruleMatchProperty", IntentNaming.pascalCase(String.valueOf(selector.getKey())));
+                e.put("ruleMatchValueJava", javaLiteral(selector.getValue()));
+            }
+            // Header assignments: copy / literal / {placeholder} template - pre-rendered Java.
+            List<Map<String, Object>> headerAssignments = new ArrayList<>();
+            if (posting.getMap() != null) {
+                for (Map.Entry<String, String> entry : posting.getMap()
+                                                              .entrySet()) {
+                    headerAssignments.add(postingAssignment(entry.getKey(), entry.getValue()));
+                }
+            }
+            e.put("headerAssignments", headerAssignments);
+            // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source.
+            List<Map<String, Object>> itemRows = new ArrayList<>();
+            for (Map<String, String> row : posting.getItems() == null ? List.<Map<String, String>>of() : posting.getItems()) {
+                Map<String, Object> rendered = new LinkedHashMap<>();
+                List<Map<String, Object>> assigns = new ArrayList<>();
+                String rowGuard = "";
+                for (Map.Entry<String, String> cell : row.entrySet()) {
+                    String value = cell.getValue() == null ? ""
+                            : cell.getValue()
+                                  .trim();
+                    if ("when".equals(cell.getKey())) {
+                        java.util.regex.Matcher guard = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*([!=]=)\\s*(\\d+(?:\\.\\d+)?)\\s*")
+                                                                               .matcher(value);
+                        if (guard.matches()) {
+                            // Calc reads the (possibly null) source field as BigDecimal - null-safe.
+                            rowGuard = "Calc.eval(\"" + IntentNaming.pascalCase(guard.group(1))
+                                    + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + guard.group(3) + "\")) "
+                                    + ("==".equals(guard.group(2)) ? "==" : "!=") + " 0";
+                        }
+                        continue;
+                    }
+                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
+                                                                             .matcher(value);
+                    Map<String, Object> assign = new LinkedHashMap<>();
+                    assign.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
+                    if (ruleRef.matches()) {
+                        String column = IntentNaming.pascalCase(ruleRef.group(1));
+                        usedRuleColumns.add(column);
+                        assign.put("expr", "ruleRow." + column);
+                    } else {
+                        FieldIntent target = fieldOf(itemsEntity, cell.getKey());
+                        int scale = target != null && target.getScale() != null ? target.getScale() : 2;
+                        assign.put("expr", "Calc.eval(\"" + value.replace("\"", "\\\"") + "\", source, " + scale + ")");
+                    }
+                    assigns.add(assign);
+                }
+                rendered.put("guard", rowGuard);
+                rendered.put("assigns", assigns);
+                itemRows.add(rendered);
+            }
+            e.put("itemRows", itemRows);
+            e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
+            out.add(e);
+        }
+        return out;
+    }
+
+    /**
+     * Test hook: build the postings glue without a repository (convention fallbacks, deterministic).
+     */
+    static List<Map<String, Object>> buildPostingsForTest(IntentModel model) {
+        return buildPostings(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
+    }
+
+    /** The entity's composition child (first entity declaring a composition to-one back to it). */
+    private static EntityIntent compositionChild(EntityIntent entity, Map<String, EntityIntent> byName) {
+        for (EntityIntent candidate : byName.values()) {
+            if (candidate.getRelations() == null) {
+                continue;
+            }
+            for (RelationIntent relation : candidate.getRelations()) {
+                if (relation.isComposition() && entity.getName()
+                                                      .equals(relation.getTo())) {
+                    return candidate;
+                }
+            }
+        }
+        return null;
+    }
+
+    /** The entity's field by authored name (case-insensitive), or null. */
+    private static FieldIntent fieldOf(EntityIntent entity, String name) {
+        if (entity.getFields() == null || name == null) {
+            return null;
+        }
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equalsIgnoreCase(field.getName())) {
+                return field;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * A posting header assignment: a bare source property name copies it; a value containing
+     * {@code {prop}} placeholders becomes a Java string concatenation; anything else is a literal.
+     */
+    private static Map<String, Object> postingAssignment(String targetProperty, String value) {
+        Map<String, Object> a = new LinkedHashMap<>();
+        a.put("targetProp", IntentNaming.pascalCase(targetProperty));
+        String v = value == null ? "" : value.trim();
+        if (v.matches("\\w+") && !v.matches("\\d+")) {
+            a.put("expr", "source." + IntentNaming.pascalCase(v));
+        } else if (v.contains("{")) {
+            StringBuilder expr = new StringBuilder();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                               .matcher(v);
+            int last = 0;
+            while (m.find()) {
+                if (m.start() > last) {
+                    if (expr.length() > 0) {
+                        expr.append(" + ");
+                    }
+                    expr.append('"')
+                        .append(v.substring(last, m.start())
+                                 .replace("\"", "\\\""))
+                        .append('"');
+                }
+                if (expr.length() > 0) {
+                    expr.append(" + ");
+                }
+                expr.append("source.")
+                    .append(IntentNaming.pascalCase(m.group(1)));
+                last = m.end();
+            }
+            if (last < v.length()) {
+                if (expr.length() > 0) {
+                    expr.append(" + ");
+                }
+                expr.append('"')
+                    .append(v.substring(last)
+                             .replace("\"", "\\\""))
+                    .append('"');
+            }
+            a.put("expr", expr.toString());
+        } else {
+            a.put("expr", javaLiteral(v));
+        }
+        return a;
+    }
+
+    /** A YAML scalar as a Java literal: numbers bare, everything else a quoted string. */
+    private static String javaLiteral(Object value) {
+        String v = String.valueOf(value);
+        if (v.matches("-?\\d+")) {
+            return v;
+        }
+        return '"' + v.replace("\"", "\\\"") + '"';
     }
 
     /**
