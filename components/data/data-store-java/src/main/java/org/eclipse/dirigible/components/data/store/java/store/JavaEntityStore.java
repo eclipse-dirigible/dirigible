@@ -17,6 +17,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.data.store.java.manager.JavaEntityManager;
@@ -109,6 +110,46 @@ public class JavaEntityStore {
         }
         return entity;
     }
+
+    /**
+     * Update a single property of one entity row, touching nothing else — the primitive for
+     * workflow/system write-backs (e.g. the process trigger persisting {@code ProcessId}). A full-row
+     * {@link #update(Object)} writes every column from the caller's possibly stale snapshot and
+     * silently reverts concurrent writes (a document's recalculated totals, a workflow status); this
+     * targeted mutation cannot, because only the named column is in the statement. No audit stamping,
+     * no events — a system column write, not a user edit.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary-key value
+     * @param property the entity property to set (a plain identifier)
+     * @param value the new value
+     * @return the number of updated rows ({@code 0} when the id does not exist)
+     */
+    public <T> int updateProperty(Class<T> type, Object id, String property, Object value) {
+        if (property == null || !PLAIN_PROPERTY.matcher(property)
+                                               .matches()) {
+            throw new IllegalArgumentException("Invalid property name: [" + property + "]");
+        }
+        RegisteredEntity meta = resolve(type);
+        String idProperty = meta.idField()
+                                .getName();
+        try (Session session = entityManager.getSessionFactory()
+                                            .openSession()) {
+            Transaction tx = session.beginTransaction();
+            int updated = session
+                                 .createMutationQuery(
+                                         "update " + meta.entityName() + " set " + property + " = :value where " + idProperty + " = :id")
+                                 .setParameter("value", value)
+                                 .setParameter("id", id)
+                                 .executeUpdate();
+            tx.commit();
+            return updated;
+        }
+    }
+
+    /** Property names must be plain identifiers so nothing can be injected into the mutation HQL. */
+    private static final Pattern PLAIN_PROPERTY = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*");
 
     /**
      * Find by id. Throws {@link IllegalArgumentException} when not found — use {@link #findOne} for the

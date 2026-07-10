@@ -57,8 +57,10 @@ public class ${process}Trigger implements MessageHandler {
         }
 #end
 #if(${generateBusinessKey} == "true")
+        String minted = null;
         if (entity.${businessKeyProperty} == null || entity.${businessKeyProperty}.isBlank()) {
-            entity.${businessKeyProperty} = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            minted = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
+            entity.${businessKeyProperty} = minted;
         }
 #end
         String businessKey = String.valueOf(entity.${businessKeyProperty});
@@ -67,7 +69,6 @@ public class ${process}Trigger implements MessageHandler {
         // decision resolvers load it by this id - so the process never carries the entity's data and can
         // never present it stale.
         String processId = Process.start("${process}", businessKey, "{\"${keyProperty}\": " + entity.${keyProperty} + "}");
-        entity.ProcessId = processId;
         // Clear-D context: publish only a LOCATOR for the entity - its REST controller URL + id - so the
         // task form fetches the LIVE entity dynamically when it is opened, rather than relying on the
         // start-time snapshot in `message` (which is stale once the entity is edited after the process
@@ -81,8 +82,16 @@ public class ${process}Trigger implements MessageHandler {
         Process.setVariable(processId, "__${rl.fkProperty}EntityUrl", "${rl.url}");
         Process.setVariable(processId, "__${rl.fkProperty}EntityLabel", "${rl.labelField}");
 #end
-        // Persist the back-reference WITHOUT publishing "-updated": this is a system write, not a user
-        // edit, so it must not re-fire onUpdate reactions (e.g. the notification that emails the member).
-        repository.updateWithoutEvent(entity);
+        // Persist ONLY the columns this trigger owns - targeted single-column writes, never a full-row
+        // update: the entity snapshot loaded above is stale the moment line items or workflow steps
+        // write the same row (a document's recalculated totals, a start-step status), and merging the
+        // snapshot back would silently revert those concurrent writes. No event is published either -
+        // a system write, not a user edit, so onUpdate reactions must not re-fire.
+        repository.updateProperty(entity.${keyProperty}, "ProcessId", processId);
+#if(${generateBusinessKey} == "true")
+        if (minted != null) {
+            repository.updateProperty(entity.${keyProperty}, "${businessKeyProperty}", minted);
+        }
+#end
     }
 }
