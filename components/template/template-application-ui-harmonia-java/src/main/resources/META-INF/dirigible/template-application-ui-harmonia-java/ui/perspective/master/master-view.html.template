@@ -168,6 +168,15 @@
               <div x-show="state === 'loading'"><div x-h-spinner></div></div>
               <div x-show="state === 'error'" x-h-text.muted x-text="error"></div>
               <div x-show="state === 'empty'" x-h-text.muted x-text="T('$projectName:${tprefix}.messages.noData', 'No records yet.')"></div>
+              <!-- A calendar detail (intent view: calendar on the composition child) renders the same
+                   master-filtered rows as events on an embedded calendar: event-click edits the child,
+                   empty-day click creates one with the master FK + the clicked date preset. -->
+              <template x-if="def.calendar">
+                <div x-show="state === 'default'" style="min-height: 420px">
+                  <div x-h-calendar="calCfg" style="height: 420px" @event-click="onEventClick" @date-click="onDateClick"></div>
+                </div>
+              </template>
+              <template x-if="!def.calendar">
               <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
                 <table x-h-table data-borders="rows">
                   <thead x-h-table-header>
@@ -201,6 +210,7 @@
                   </tbody>
                 </table>
               </div>
+              </template>
             </div>
           </div>
         </template>

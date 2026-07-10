@@ -21,6 +21,12 @@
  * `def` shape (from App.registerDetail): { entity, apiPath, masterEntityId, label,
  *   columns: [{ name }], returnTo }. apiPath is relative to App.config.restBase (the api client
  *   prepends it), so detail calls pass no baseUrl override.
+ *
+ * A def carrying `calendar: { start, end?, title?, color?, view, range }` (a composition child
+ * declared `view: calendar` in the intent) renders as an embedded x-h-calendar instead of the
+ * table: the same master-filtered rows become events; event-click edits the child, date-click
+ * creates one with the master FK AND the clicked date preset. An empty month is meaningful, so a
+ * calendar panel shows the calendar even with zero rows.
  */
 function detailPanel(def, masterId) {
   return {
@@ -33,6 +39,8 @@ function detailPanel(def, masterId) {
     deleteOpen: false,
     deleteTarget: null,
     deleteBusy: false,
+    // Reactive config for the embedded x-h-calendar (calendar defs only); rebuilt on every load.
+    calCfg: { view: (def.calendar && def.calendar.view) || 'month', events: [] },
 
     lookups: {},   // relationship column name -> { fkValue: referencedRow }
 
@@ -98,7 +106,12 @@ function detailPanel(def, masterId) {
         // would silently cap a detail with more rows and hide the ones past the first page.
         const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
         this.rows = await App.services.api.getAll(this.def.apiPath + q);
-        this.state = this.rows.length === 0 ? 'empty' : 'default';
+        if (this.def.calendar) {
+          this.calCfg = { view: this.def.calendar.view || 'month', events: this.buildEvents() };
+          this.state = 'default';
+        } else {
+          this.state = this.rows.length === 0 ? 'empty' : 'default';
+        }
       } catch (e) {
         this.error = App.services.apiErrors.messageFor(e, 'Could not load ' + this.def.label + '.');
         this.state = 'error';
@@ -120,6 +133,84 @@ function detailPanel(def, masterId) {
     previewRow(row) {
       const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
       window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/preview' + q);
+    },
+
+    // --- embedded calendar (calendar defs only) -------------------------------------------------
+    // Row -> event mapping, the same conventions as the standalone calendar page: Jackson java.time
+    // arrays / epoch seconds / ISO strings normalize via toISO; rows with no start are skipped.
+    buildEvents() {
+      const cal = this.def.calendar;
+      return (this.rows || []).map(row => {
+        const start = this.toISO(row[cal.start]);
+        if (!start) return null;
+        const ev = {
+          id: String(row[this.def.primaryKey]),
+          title: this.eventTitle(row),
+          start: start,
+          allDay: cal.range ? true : this.isDateOnly(row[cal.start]),
+        };
+        if (cal.end) {
+          const end = this.toISO(row[cal.end]);
+          if (end) ev.end = end;
+        }
+        if (cal.color) ev.color = this.colorFor(row[cal.color]);
+        return ev;
+      }).filter(Boolean);
+    },
+    eventTitle(row) {
+      const cal = this.def.calendar;
+      if (cal.title) {
+        const t = row[cal.title];
+        if (t !== undefined && t !== null && String(t) !== '') return String(t);
+      }
+      return this.def.label + ' #' + row[this.def.primaryKey];
+    },
+    toISO(v) {
+      if (v === undefined || v === null || v === '') return '';
+      if (Array.isArray(v)) {
+        const p = n => String(n).padStart(2, '0');
+        const date = v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        if (v.length <= 3) return date;
+        return date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
+      }
+      if (typeof v === 'number') {
+        // Jackson serializes Instant/Timestamp as epoch SECONDS; JS Date wants millis.
+        const ms = v < 1e12 ? v * 1000 : v;
+        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
+      }
+      return String(v);
+    },
+    isDateOnly(v) {
+      return Array.isArray(v) ? v.length <= 3 : (typeof v === 'string' && v.length <= 10);
+    },
+    // Deterministic categorical colour from the Harmonia calendar palette.
+    colorFor(v) {
+      const palette = ['blue', 'green', 'purple', 'orange', 'teal', 'pink', 'indigo', 'yellow', 'red', 'gray'];
+      const key = (v === undefined || v === null) ? '' : String(v);
+      let h = 0;
+      for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+      return palette[h % palette.length];
+    },
+    // Event click -> edit the child; empty-day click -> create one with the master FK AND the
+    // clicked date preset (the shared form presets any create query param whose name matches).
+    onEventClick(e) {
+      const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
+      if (!id) return;
+      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
+      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit' + q);
+    },
+    onDateClick(e) {
+      const cal = this.def.calendar;
+      let q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
+            + '&returnTo=' + encodeURIComponent(this.def.returnTo);
+      const d = e && e.detail ? e.detail.date : null;
+      if (d instanceof Date && !isNaN(d.getTime())) {
+        const p = n => String(n).padStart(2, '0');
+        let val = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+        if (e.detail.time) val += 'T' + e.detail.time;
+        q += '&' + encodeURIComponent(cal.start) + '=' + encodeURIComponent(val);
+      }
+      window.PineconeRouter.navigate('/' + this.def.entity + '/create' + q);
     },
 
     askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },

@@ -476,6 +476,50 @@ class EdmIntentGeneratorTest {
     }
 
     @SuppressWarnings("unchecked")
+    @Test
+    void dependentCalendarChildKeepsTheDetailLayoutAndCarriesTheCalendarMeta() {
+        String yaml = """
+                name: work
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: month, type: date }
+                    relations:
+                      - { name: days, kind: oneToMany, to: DayAllocation }
+                  - name: DayAllocation
+                    view: calendar
+                    calendar: { start: day, title: note }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Timesheet, kind: manyToOne, to: Timesheet, composition: true, required: true }
+                  - name: Meeting
+                    view: calendar
+                    calendar: { start: at }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: at, type: timestamp }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "work");
+        List<Map<String, Object>> entities = entities(model);
+
+        // A COMPOSITION CHILD with view: calendar stays a detail of its master (registry, filtered
+        // controller, form pages) - the calendar is HOW the master renders its panel.
+        Map<String, Object> child = entityByName(entities, "DayAllocation");
+        assertEquals("MANAGE_DETAILS", child.get("layoutType"));
+        assertEquals("true", child.get("detailCalendar"));
+        assertEquals("Day", child.get("calendarStartProperty"));
+        assertEquals("Note", child.get("calendarTitleProperty"));
+
+        // A PRIMARY calendar entity keeps the standalone calendar page as before.
+        Map<String, Object> primary = entityByName(entities, "Meeting");
+        assertEquals("MANAGE_CALENDAR", primary.get("layoutType"));
+        assertEquals(null, primary.get("detailCalendar"));
+    }
+
     private static List<Map<String, Object>> entities(Map<String, Object> modelJson) {
         return (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
     }
