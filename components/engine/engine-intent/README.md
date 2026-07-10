@@ -446,9 +446,9 @@ UI-test manifest, and its perspective in the generated Harmonia SPA + the shared
 
 ## Planned - recognised but not yet implemented
 
-- **`function: Calendar`** - reserved as an entity presentation role; rejected with a clear "not
-  yet available" message (the `view: calendar|range|slots` pages above are the current calendar
-  surface). Likewise other reserved `function` values for upcoming templates.
+- **Reserved `function:` roles** - `Board`, `Gantt`, `Timeline`; rejected with a clear "not yet
+  available" message. (`function: Calendar` is now first-class - the role alias for
+  `view: calendar`.)
 - **`manyToMany`** - parsed but never materialized; the supported shape is the explicit
   intermediate entity.
 - **Declarative glue actions beyond the current set** (see CLAUDE.md "Planned: declarative glue"):
