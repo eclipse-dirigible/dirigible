@@ -44,9 +44,24 @@
 #elseif($property.widgetType == "CHECKBOX")
         <span x-h-checkbox><input type="checkbox" x-model="form.${property.name}" /></span>
 #elseif($property.widgetType == "DATE")
-        <input x-h-input type="date" x-model="form.${property.name}" />
+        <!-- Harmonia date picker: model is YYYY-MM-DD (same as the native date input it replaces),
+             so form.${property.name} round-trips unchanged through toDateInput/toPayload. -->
+        <div x-h-date-picker>
+          <input type="text" />
+          <button x-h-date-picker-trigger aria-label="Choose date"></button>
+          <div x-h-date-picker-popup x-model="form.${property.name}"></div>
+        </div>
 #elseif($property.widgetType == "DATETIME-LOCAL")
-        <input x-h-input type="datetime-local" x-model="form.${property.name}" />
+        <div x-h-datetime-picker>
+          <input type="text" />
+          <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
+          <div x-h-datetime-picker-popup x-model="form.${property.name}"></div>
+        </div>
+#elseif($property.widgetType == "TIME")
+        <div x-h-time-picker>
+          <input type="text" x-h-time-picker-input x-model="form.${property.name}" />
+          <div x-h-time-picker-popup></div>
+        </div>
 #else
         <input x-h-input type="text" x-model="form.${property.name}" />
 #end
