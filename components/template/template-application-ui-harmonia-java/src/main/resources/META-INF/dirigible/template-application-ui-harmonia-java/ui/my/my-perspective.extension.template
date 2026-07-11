@@ -1,0 +1,5 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/perspectives/my/${name}/perspective.js",
+    "extensionPoint": "application-personal-perspectives",
+    "description": "${projectName} - Personal perspective - ${name}"
+}

@@ -1,0 +1,5 @@
+{
+    "module": "my/configs/my-group.js",
+    "extensionPoint": "application-personal-perspectives",
+    "description": "My Shell - the 'my' navigation group"
+}

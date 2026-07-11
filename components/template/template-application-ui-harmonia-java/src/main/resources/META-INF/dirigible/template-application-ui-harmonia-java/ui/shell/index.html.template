@@ -93,6 +93,28 @@
                 </ul>
               </div>
             </div>
+#set($hasMy = false)
+#foreach($entity in $models)#if($entity.personalProperty)#set($hasMy = true)#end#end
+#if($hasMy)
+            <!-- My: the logged-in user's own records (personal surface - scoped controllers). -->
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.my', 'My')"></div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+#foreach($entity in $models)
+#if($entity.personalProperty)
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isActive('/my/${entity.name}')" @click="navigate('/my/${entity.name}')">
+                      <i role="img" x-h-lucide data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}user#end"></i>
+                      <span x-text="'My ' + T('$projectName:${tprefix}.t.${entity.dataName}_plural', navLabel('#if($entity.menuLabel && $entity.menuLabel != '')${entity.menuLabel}#{else}${entity.name}#end'))"></span>
+                    </button>
+                  </li>
+#end
+#end
+                </ul>
+              </div>
+            </div>
+#end
 #set($hasEntities = false)
 #foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT" || $entity.layoutType == "MANAGE_CALENDAR" || $entity.layoutType == "MANAGE_SLOTS") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
 #if($hasEntities)
@@ -390,6 +412,17 @@
     <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-report.html"></template>
 #end
 #end
+    <!-- PERSONAL (my) surface: the user's own records - a list per root, a form per personal
+         entity (children are reached from their parent's panels). -->
+#foreach($entity in $models)
+#if($entity.personalProperty)
+    <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-list.html"></template>
+#end
+#if($entity.personalProperty || $entity.personalParent)
+    <template x-route="/my/${entity.name}/create" x-template.target.app="./views/my/${entity.name}-form.html"></template>
+    <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-form.html"></template>
+#end
+#end
     <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
 
     <!-- Route segment -> nav label, from the model — read by appShell for the breadcrumb so the
@@ -473,6 +506,12 @@
 #end
 #if($entity.type == "REPORT")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ReportPage.js" defer></script>
+#end
+#if($entity.personalProperty)
+    <script src="./js/components/pages/my/${entity.name}MyListPage.js" defer></script>
+#end
+#if($entity.personalProperty || $entity.personalParent)
+    <script src="./js/components/pages/my/${entity.name}MyFormPage.js" defer></script>
 #end
 #end
 

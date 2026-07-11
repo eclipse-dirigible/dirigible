@@ -284,6 +284,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimTrigger.contains("__personalUser"),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
 
+        // personal UI (phase B): the my pages exist, the form never mentions the sensitive field,
+        // and the SPA routes + sidebar carry the personal surface.
+        String myList = contentOf("gen/emission/js/components/pages/my/ClaimMyListPage.js");
+        assertTrue(myList.contains("ClaimMyController"), "the my list page must talk to the scoped controller only");
+        String myForm = contentOf("gen/emission/views/my/Claim-form.html");
+        assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
+        assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
+        String myLineForm = contentOf("gen/emission/js/components/pages/my/ClaimLineMyFormPage.js");
+        assertTrue(myLineForm.contains("ClaimLineMyController"), "a personal child gets its own my form page");
+        String spaIndex = contentOf("gen/emission/index.html");
+        assertTrue(spaIndex.contains("/my/Claim"), "the SPA must route the personal pages");
+        String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
+        assertTrue(myPerspective.contains("application-personal-perspectives"),
+                "the personal perspective must register on the My Shell's extension point");
+
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
@@ -488,6 +503,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+
+        // My Shell (phase C): the shell page is served and aggregates the published personal
+        // perspective through the application-personal-perspectives extension point.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/web/my/index.html")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-personal-perspectives")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(org.hamcrest.Matchers.containsString("emission-test-my-Claim")),
+                30);
     }
 
     private void publishProject() {

@@ -219,11 +219,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * When the trigger entity has a {@code personal: true} owner relation, the listener also seeds
-     * the {@code __personalUser} process variable - the identity value (login username) of the
-     * record's owner - so user tasks with {@code assignee: personal} land in exactly that person's
-     * Inbox. Emits the FK property plus the identity target coordinates (same shapes as
-     * relationLinks; the template engine assembles the import).
+     * When the trigger entity has a {@code personal: true} owner relation, the listener also seeds the
+     * {@code __personalUser} process variable - the identity value (login username) of the record's
+     * owner - so user tasks with {@code assignee: personal} land in exactly that person's Inbox. Emits
+     * the FK property plus the identity target coordinates (same shapes as relationLinks; the template
+     * engine assembles the import).
      */
     private static void putPersonalAssignee(Map<String, Object> trigger, EntityIntent owner, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {

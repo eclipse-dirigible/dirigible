@@ -266,6 +266,9 @@ export function generateFiles(model, parameters, templateSources) {
     // (intent `personal: true`) or the scope inherited from the direct composition parent
     // (derived by parameterUtils). Each gets an additional scoped REST controller / UI.
     const personalModels = model.entities.filter(e => e.personalProperty || e.personalParent);
+    // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
+    // reach their forms through the parent's panels, never through navigation.
+    const personalRootModels = model.entities.filter(e => e.personalProperty);
 
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
@@ -339,6 +342,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "personalModels":
                     generatedFiles.push(...generateCollection(location, content, template, personalModels, parameters));
+                    break;
+                case "personalRootModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalRootModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));

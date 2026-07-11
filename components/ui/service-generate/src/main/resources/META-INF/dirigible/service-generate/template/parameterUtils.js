@@ -241,6 +241,29 @@ export function process(model, parameters) {
             e.sensitiveProperties = (e.properties || []).filter(p => p.sensitiveProperty === 'true' || p.sensitiveProperty === true)
                                                         .map(p => p.name);
         });
+        // Personal child panels: for each personal entity, the children that inherit its scope -
+        // rendered on the my-form as an embedded calendar (detailCalendar children) or a table.
+        model.entities.forEach(e => {
+            if (!(e.personalProperty || e.personalParent)) return;
+            e.myChildren = model.entities.filter(c => c.personalParent && c.personalParent.entity === e.name)
+                                         .map(c => ({
+                                             name: c.name,
+                                             label: c.menuLabel || c.name,
+                                             fkProperty: c.personalParent.fkProperty,
+                                             apiPath: '/' + sanitizeJavaIdentifier(c.perspectiveName) + '/' + c.name + 'MyController',
+                                             calendar: c.detailCalendar === 'true' || c.detailCalendar === true ? {
+                                                 start: c.calendarStartProperty || null,
+                                                 end: c.calendarEndProperty || null,
+                                                 title: c.calendarTitleProperty || null,
+                                                 view: c.calendarInitialView || 'month'
+                                             } : null,
+                                             columns: (c.properties || []).filter(cp => !cp.sensitiveProperty && !cp.dataAutoIncrement
+                                                     && cp.name !== c.personalParent.fkProperty && cp.name !== 'ProcessId'
+                                                     && (!cp.auditType || cp.auditType === 'NONE') && cp.widgetIsMajor !== 'false')
+                                                                          .map(cp => ({ name: cp.name, label: cp.widgetLabel || cp.name,
+                                                                              number: !!cp.isNumberType, date: !!cp.isDateType }))
+                                         }));
+        });
         // Label parts (intent `label:`): resolve each relation token's FK property to the target
         // repository the DAO's computeName loads through; drop parts whose FK is not resolvable.
         model.entities.forEach(e => {
