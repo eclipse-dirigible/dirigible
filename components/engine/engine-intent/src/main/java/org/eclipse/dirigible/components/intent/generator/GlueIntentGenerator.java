@@ -164,6 +164,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // Per to-one relation: enough to build the target controller URL so the task form can resolve
             // each FK to a display name (the form falls back to the raw id when a URL is missing).
             trigger.put("relationLinks", buildRelationLinks(byName.get(entity), model, byName, compositionParents, context));
+            putPersonalAssignee(trigger, byName.get(entity), model, byName, compositionParents, context);
             triggers.add(trigger);
         }
         return triggers;
@@ -215,6 +216,46 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             links.add(link);
         }
         return links;
+    }
+
+    /**
+     * When the trigger entity has a {@code personal: true} owner relation, the listener also seeds
+     * the {@code __personalUser} process variable - the identity value (login username) of the
+     * record's owner - so user tasks with {@code assignee: personal} land in exactly that person's
+     * Inbox. Emits the FK property plus the identity target coordinates (same shapes as
+     * relationLinks; the template engine assembles the import).
+     */
+    private static void putPersonalAssignee(Map<String, Object> trigger, EntityIntent owner, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context) {
+        if (owner == null || owner.getRelations() == null) {
+            return;
+        }
+        for (RelationIntent relation : owner.getRelations()) {
+            if (!relation.isPersonal()) {
+                continue;
+            }
+            trigger.put("personalFkProperty", IntentNaming.pascalCase(relation.getName()));
+            trigger.put("personalTargetEntity", relation.getTo());
+            boolean crossModel = relation.getModel() != null && !relation.getModel()
+                                                                         .isBlank();
+            trigger.put("personalCrossModel", crossModel);
+            if (crossModel) {
+                UsesIntent uses = findUses(model, relation.getModel());
+                CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, relation.getTo());
+                trigger.put("personalTargetModel", relation.getModel());
+                trigger.put("personalIdentityProperty",
+                        target != null && target.identityProperty() != null ? target.identityProperty() : "Email");
+                trigger.put("personalTargetPerspective", target != null ? target.perspectiveName() : relation.getTo());
+            } else {
+                EntityIntent target = byName.get(relation.getTo());
+                trigger.put("personalTargetModel", "");
+                trigger.put("personalIdentityProperty",
+                        target != null && target.getIdentity() != null ? IntentNaming.pascalCase(target.getIdentity()) : "Email");
+                trigger.put("personalTargetPerspective", target != null && target.isSetting() ? "Settings"
+                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+            }
+            return;
+        }
     }
 
     /** The to-one target's label property: its {@code name} field (PascalCased), else {@code Name}. */

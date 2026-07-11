@@ -512,7 +512,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append("\" name=\"")
           .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
           .append("\"");
-        if (assignee != null && !assignee.isBlank()) {
+        if ("personal".equals(assignee)) {
+            // The record's owner, resolved at start time by the trigger listener (identity mapping)
+            // into the __personalUser variable - a per-user assignment, not a claimable group.
+            sb.append(" flowable:assignee=\"${__personalUser}\"");
+        } else if (assignee != null && !assignee.isBlank()) {
             String candidateGroups = resolveCandidateGroup(assignee, rolesByLowerName);
             if (candidateGroupsExtra != null && !candidateGroupsExtra.isBlank()) {
                 candidateGroups = candidateGroups + "," + candidateGroupsExtra;

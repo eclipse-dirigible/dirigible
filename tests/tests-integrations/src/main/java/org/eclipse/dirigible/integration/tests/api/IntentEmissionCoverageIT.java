@@ -152,6 +152,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
+            processes:
+              # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
+              # runs as admin, mapped by the Person seed below).
+              - name: ClaimConfirm
+                trigger: { onCreate: Claim }
+                steps:
+                  - { name: confirm, kind: userTask, args: { assignee: personal } }
+                  - { name: end, kind: end }
+
             seeds:
               - name: people
                 entity: Person
@@ -265,6 +274,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");
+
+        // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
+        // trigger listener seeds that variable from the identity mapping.
+        String bpmn = contentOf("ClaimConfirm.bpmn");
+        assertTrue(bpmn.contains("flowable:assignee=\"${__personalUser}\""),
+                "assignee: personal must emit a per-user flowable:assignee, not a candidate group");
+        String claimTrigger = contentOf("gen/events/ClaimConfirmTrigger.java");
+        assertTrue(claimTrigger.contains("__personalUser"),
+                "the trigger listener must seed the __personalUser variable from the identity mapping");
 
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
@@ -437,6 +455,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("Person", equalTo(1))
                                                  .body("Rate", equalTo(50.0F))
                                                  .body("Name", equalTo("edited (Admin)")));
+
+        // The personal-assignee task landed in the owner's (admin's) Inbox - assigned, not just
+        // claimable (the trigger + BPMN chain resolved the identity mapping at start time).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/inbox/tasks?type=assigned")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(org.hamcrest.Matchers.containsString("Confirm")),
+                30);
 
         // The composition child guards through its parent: the foreign claim's lines are a 404,
         // creating a line under a foreign claim is a 404, under my own claim it works.

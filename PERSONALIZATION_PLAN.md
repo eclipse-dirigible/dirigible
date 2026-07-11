@@ -1,7 +1,6 @@
 # Personalized surfaces — design decisions & implementation plan
 
-Status: **AGREED 2026-07-11** (design settled with the consuming application suite; implemented in
-phases below). This is the design doc + status tracker, in the spirit of
+Status: **AGREED 2026-07-11**; also agreed: the entity `label:` display-name feature (shipped alongside phase A - see the engine-intent README). This is the design doc + status tracker, in the spirit of
 [`HARMONIA_RUNTIME_PLAN.md`](./HARMONIA_RUNTIME_PLAN.md).
 
 ## The problem
@@ -63,12 +62,12 @@ Semantics:
 
 | Phase | Scope | Status |
 |---|---|---|
-| **A** | DSL (`identity`/`personal`/`sensitive`) + backend contract: parser validations, EDM/model emission, cross-model identity resolution, generated **personal REST controller** (`.../my/<Entity>`: scoped reads, forced FK, ancestor-ownership for children, sensitive stripping) | in progress |
+| **A** | DSL (`identity`/`personal`/`sensitive`) + backend contract: parser validations, EDM/model emission, cross-model identity resolution, generated **personal REST controller** (scoped reads, forced FK, ancestor-ownership for children, sensitive stripping) | **done** |
 | **B** | Personal UI: "My …" pages (locked owner value, sensitive-free forms, scope-inherited details incl. embedded calendars), contributed to a new **`application-personal-perspectives`** extension point | planned |
 | **C** | **My Shell** — `/services/web/my/`: the personal counterpart of the shared application shell (`resources-application`), aggregating every module's personal perspectives under one umbrella; includes Inbox (tasks are personal by nature), Dashboard scoped to personal pages; reuses the shared shell runtime | planned |
-| **D** | Per-user task assignment for personal processes: `flowable:assignee` resolved through the personal relation + identity mapping (candidate groups stay the default elsewhere) | planned |
+| **D** | Per-user task assignment: `assignee: personal` on a user task → `flowable:assignee="${__personalUser}"`, resolved by the trigger listener through the personal relation + identity mapping and carried IN the start payload (assignee expressions evaluate at task creation, inside Process.start) | **done** |
 | **E** | Collection-driven generation: `schedules`/`generates` emit **child rows from a source collection** (e.g. one timesheet line per assigned employee + one allocation per working day) | planned |
-| **F** | Document item dialog honors `readOnly` (independent hygiene fix, agreed earlier) | planned |
+| **F** | Document item dialog honors `readOnly`: read-only columns render as values, not controls (saves already ignored them - the input was fake editability) | **done** |
 
 ## Flagship application (the consuming suite's timesheets flow)
 

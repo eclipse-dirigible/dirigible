@@ -387,6 +387,18 @@ export function generateFiles(model, parameters, templateSources) {
                                 generateBusinessKey: model.triggers[t].generateBusinessKey,
                                 topicSuffix: model.triggers[t].topicSuffix,
                                 guardExpression: model.triggers[t].guardExpression,
+                                // personal task assignment: the identity repository the listener
+                                // resolves the owner through (cross-model imports compile
+                                // registry-wide, like any custom-code one).
+                                personalFkProperty: model.triggers[t].personalFkProperty,
+                                personalIdentityProperty: model.triggers[t].personalIdentityProperty,
+                                personalIdentityRepositoryClass: model.triggers[t].personalFkProperty
+                                    ? 'gen.' + (model.triggers[t].personalCrossModel
+                                        ? sanitizeJavaIdentifier(model.triggers[t].personalTargetModel)
+                                        : parameters.javaGenFolderName)
+                                        + '.data.' + sanitizeJavaIdentifier(model.triggers[t].personalTargetPerspective)
+                                        + '.' + model.triggers[t].personalTargetEntity + 'Repository'
+                                    : undefined,
                                 // Per to-one relation: assemble the target controller URL here (the
                                 // template engine knows the path layout; the intent glue carried only
                                 // logical names). A cross-model link uses the target project + sanitized

@@ -1709,6 +1709,30 @@ public final class IntentParser {
      * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
      * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
      */
+    /** The entity a process trigger starts on (onCreate/onUpdate/onDelete target), or null. */
+    private static String triggerEntityName(ProcessIntent process) {
+        if (process.getTrigger() == null) {
+            return null;
+        }
+        for (String kind : EVENT_KINDS) {
+            Object target = process.getTrigger()
+                                   .get(kind);
+            if (target != null) {
+                return target.toString();
+            }
+        }
+        return null;
+    }
+
+    private static EntityIntent entityByNameInsensitive(IntentModel model, String name) {
+        for (EntityIntent entity : model.getEntities()) {
+            if (name.equalsIgnoreCase(entity.getName())) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
     private static void validateTaskFormActions(ProcessIntent process, IntentModel model, List<String> issues) {
         Map<String, FormIntent> formsByName = new HashMap<>();
         for (FormIntent form : model.getForms()) {
@@ -1721,6 +1745,21 @@ public final class IntentParser {
             StepIntent step = steps.get(i);
             if (!"userTask".equals(step.getKind()) || step.getArgs() == null) {
                 continue;
+            }
+            Object assignee = step.getArgs()
+                                  .get("assignee");
+            if ("personal".equals(assignee)) {
+                // The per-user assignment resolves through the trigger entity's personal owner - the
+                // trigger listener seeds __personalUser from the identity mapping at start time.
+                String triggerEntity = triggerEntityName(process);
+                EntityIntent target = triggerEntity == null ? null : entityByNameInsensitive(model, triggerEntity);
+                boolean hasPersonal = target != null && target.getRelations() != null && target.getRelations()
+                                                                                               .stream()
+                                                                                               .anyMatch(RelationIntent::isPersonal);
+                if (!hasPersonal) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] declares assignee: personal but the trigger entity has no personal relation to resolve the owner from");
+                }
             }
             Object formArg = step.getArgs()
                                  .get("form");
