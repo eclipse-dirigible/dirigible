@@ -44,7 +44,7 @@ document.addEventListener('alpine:init', () => {
       await this.loadOptions();
       if (this.id) {
         try {
-          const record = await App.api.get(this.apiPath + '/' + this.id);
+          const record = await App.services.api.get(this.apiPath + '/' + this.id);
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined && record[key] !== null) this.form[key] = record[key];
           }
@@ -113,9 +113,9 @@ document.addEventListener('alpine:init', () => {
       this.error = null;
       try {
         if (this.mode === 'edit') {
-          await App.api.put(this.apiPath + '/' + this.id, this.toPayload());
+          await App.services.api.put(this.apiPath + '/' + this.id, this.toPayload());
         } else {
-          await App.api.post(this.apiPath, this.toPayload());
+          await App.services.api.post(this.apiPath, this.toPayload());
         }
         this.goBack();
       } catch (e) {
@@ -128,7 +128,7 @@ document.addEventListener('alpine:init', () => {
     async confirmDelete() {
       this.deleteBusy = true;
       try {
-        await App.api.del(this.apiPath + '/' + this.id);
+        await App.services.api.delete(this.apiPath + '/' + this.id);
         this.deleteOpen = false;
         this.goBack();
       } catch (e) {
@@ -167,7 +167,7 @@ document.addEventListener('alpine:init', () => {
     async loadChildren() {
       for (const child of this.children) {
         try {
-          child.rows = await App.api.get(child.apiPath + '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)) || [];
+          child.rows = await App.services.api.get(child.apiPath + '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)) || [];
           if (child.calendar) child.calCfg = { view: child.calendar.view, events: this.buildEvents(child) };
           child.state = 'default';
         } catch (e) {
