@@ -47,7 +47,7 @@ Treat it as the contract: anything you propose must parse and validate against i
 - **`init: <seed id>` on a to-one relation = the FK's database-level default** (the relation analogue of
   a field's `defaultValue`). A new row gets this FK on insert when the column is left unset - e.g. a new
   invoice starts as DRAFT / Bank transfer / E-mail:
-  `- { name: Status, kind: manyToOne, to: SalesInvoiceStatus, documentStatus: true, init: 1 }`.
+  `- { name: Status, kind: manyToOne, to: SalesInvoiceStatus, function: EntityStatus, init: 1 }`.
   **Prefer `init` over a process step for an initial status.** A `serviceTask` that sets the status on
   process start races the trigger's `ProcessId` write-back (a full-row update with the pre-step value)
   and gets clobbered; a DB default is race-free. Use `setRelationField` only for *transitions* (after a
@@ -407,7 +407,8 @@ entities:
 
 **Rules:** a `DocumentItem` must be a composition child; a `Document` must resolve a line-items child
 (a `DocumentItem`/`*Item` child, or a single composition child). Prefer `function` over the legacy
-`*Item` naming and the `documentTitle`/`documentStatus`/`kind: setting` flags (all still accepted).
+`*Item` naming and the `documentTitle`/`kind: setting` flags (still accepted); `documentStatus` was
+renamed and is now REJECTED with a migration message - use `function: EntityStatus` on the status relation.
 Reserved values for upcoming templates (e.g. `Calendar`) are recognised but rejected with a clear
 "not yet available" message until the template ships.
 

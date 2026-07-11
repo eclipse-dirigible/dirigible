@@ -210,6 +210,15 @@ document.addEventListener('alpine:init', () => {
           if (this.form.${property.name} != null) this.form.${property.name} = String(this.form.${property.name});
 #end
 #end
+#foreach($property in $properties)
+#if($property.widgetOptionsFilterBy && $property.widgetType == "DROPDOWN")
+          // Static option filter (intent `where:`): a value stored before/outside the filter is absent
+          // from the filtered chooser list, so its label would not resolve on edit. Splice in that one
+          // row by id - the filter still governs what may be newly picked (mirrors the items dialog,
+          // which keeps the full set for label resolution alongside the filtered chooser set).
+          await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
+#end
+#end
           this.state = 'ready';
         } catch (e) {
           this.applyLoadError(e, { fallbackMessage: 'Could not load the ${name} record.' });
@@ -302,6 +311,22 @@ document.addEventListener('alpine:init', () => {
         .filter(r => !opts.leafOnly || !parents.has(r[opts.key]))
         .sort((a, b) => pathOf(a).localeCompare(pathOf(b)))
         .map(r => ({ value: r[opts.key], text: '\u2003'.repeat(depthOf(r)) + String(r[opts.text] ?? '') }));
+    },
+
+    // Static option filter (intent `where:`) label resolution: fetch a single out-of-filter row by id
+    // and prepend it to the chooser list so a value stored outside the filter still shows its label on
+    // edit. The filter still governs what the user can newly pick.
+    async ensureFilteredCurrent(prop, url, key, text) {
+      const current = this.form[prop];
+      if (current == null || current === '') return;
+      const opts = this['options' + prop];
+      if (!Array.isArray(opts) || opts.some(o => String(o.value) === String(current))) return;
+      try {
+        const row = await App.services.api.get(url + '/' + encodeURIComponent(current), { baseUrl: '' });
+        if (row && row[key] != null) opts.unshift({ value: row[key], text: row[text] });
+      } catch (e) {
+        console.error('[${name}FormPage] failed to resolve the filtered current option for ' + prop, e);
+      }
     },
 
     optionText(options, value) {

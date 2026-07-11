@@ -45,11 +45,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * row), and a stale registry template generates feature-less code - all with every pipeline step
  * returning success. A feature's test must therefore assert the OUTERMOST observable layer (the
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
- * Covered here: {@code immutableIn} (409 on write/delete), {@code checks} (exactlyOne / itemsMin /
- * itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (read-time overlay),
- * seed rows carrying a RELATION column, aggregate totals, and the personal (my) surface
- * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
- * fields).
+ * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
+ * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
+ * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, and the personal
+ * (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner,
+ * stripped fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -355,7 +355,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .post(API + "/entry/EntryController")
                                                  .then()
-                                                 .statusCode(greaterThanOrEqualTo(400)));
+                                                 .statusCode(400));
 
         // A valid DRAFT entry on the leaf account.
         AtomicInteger created = new AtomicInteger();
@@ -375,7 +375,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + entryId)
                                                  .then()
-                                                 .statusCode(greaterThanOrEqualTo(400)));
+                                                 .statusCode(400));
 
         // checks: exactlyOne - a line with BOTH sides must be rejected at the row level.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -383,7 +383,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .post(API + "/entry/EntryLineController")
                                                  .then()
-                                                 .statusCode(greaterThanOrEqualTo(400)));
+                                                 .statusCode(400));
 
         // One debit line only -> sums unequal -> the itemsSumEqual gate must reject POSTED.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -397,7 +397,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .when()
                                                  .put(API + "/entry/EntryController/" + entryId)
                                                  .then()
-                                                 .statusCode(greaterThanOrEqualTo(400)));
+                                                 .statusCode(400));
 
         // Balance the entry -> POSTED is accepted...
         restAssuredExecutor.execute(() -> given().contentType("application/json")

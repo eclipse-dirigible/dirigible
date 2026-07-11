@@ -1265,6 +1265,135 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void postings_generates_the_idempotent_resumable_handler() {
+        // A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with
+        // two LedgerLine rows (debit + credit) determined by a PostingRule.
+        String postingYaml = """
+                name: postingtest
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: OrderStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: DebitAccount, kind: manyToOne, to: Account }
+                      - { name: CreditAccount, kind: manyToOne, to: Account }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                  - name: Ledger
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: memo, type: string, length: 400 }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order }
+                  - name: LedgerLine
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal, precision: 18, scale: 2 }
+                      - { name: credit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
+                      - { name: Account, kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: orderLedger
+                    event: { onTransition: Order, when: "Status == 2" }
+                    creates: Ledger
+                    backReference: Order
+                    map: { memo: "Order {number}" }
+                    rule: { entity: PostingRule, match: { documentType: "Order" } }
+                    items:
+                      - { Account: rule(debitAccount), debit: "Amount" }
+                      - { Account: rule(creditAccount), credit: "Amount" }
+                """;
+        writeIntent(postingYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The glue carries the posting handler entry with the pre-rendered pieces.
+        String glue = contentOf("postingtest.glue");
+        assertTrue(glue.contains("\"postings\""), "the .glue should carry the postings collection");
+        assertTrue(glue.contains("OrderLedger"), "the posting className should be carried in the glue");
+
+        // Events template: the generated handler is idempotent + resumable (the cloud-native posting
+        // semantics - no cross-step transaction): it skips a complete post and rebuilds a half-post.
+        generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
+        String posting = contentOf("gen/events/OrderLedgerPosting.java");
+        assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
+        assertTrue(posting.contains("-transitioned"), "it listens on the source's -transitioned channel");
+        assertTrue(posting.contains("int expectedItems = 0"), "it computes the expected item count for the completeness check");
+        assertTrue(posting.contains("existingTargets"), "it looks up an existing post by the back-reference (idempotency)");
+        assertTrue(posting.contains("currentItems.size() >= expectedItems"), "a complete post is a no-op (idempotent)");
+        assertTrue(posting.contains("itemsRepository.delete(stale)"), "a half-post rebuilds its items (resumable)");
+    }
+
+    @Test
+    void generates_completion_hook_flips_the_source_via_targeted_update() {
+        // A create-from with a sourceStatus completion hook: after the Invoice is created, the Proforma
+        // flips to status 3 - via a TARGETED single-column write (updateProperty), never a full-row
+        // merge of the stale pre-generation snapshot (which would clobber concurrent writes to the source).
+        String genYaml = """
+                name: proforma
+                entities:
+                  - name: ProformaStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: ProformaStatus, function: EntityStatus, init: 1 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                generates:
+                  - name: invoice-from-proforma
+                    from: Proforma
+                    to: Invoice
+                    forEntity: Proforma
+                    sourceStatus: 3
+                """;
+        writeIntent(genYaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
+        String generate = contentOf("gen/events/InvoiceFromProformaGenerate.java");
+        // The completion hook flips the source status via the targeted single-column primitive...
+        assertTrue(generate.contains("updateProperty(req.id, \"Status\", 3)"),
+                "the source status must be flipped with the targeted updateProperty write");
+        // ...and reloads before publishing so the -transitioned payload is the committed row...
+        assertTrue(generate.contains("findById(req.id)"), "it should reload the source for the -transitioned payload");
+        assertTrue(generate.contains("-transitioned"), "it should publish the source's -transitioned channel");
+        // ...NOT the full-row merge that would revert a concurrent write to the source row (the actual
+        // call pattern; an explanatory code comment naming it is expected and must not trip this).
+        assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
+                "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+    }
+
+    @Test
     void multilingual_entity_generates_the_translation_stack() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
