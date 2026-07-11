@@ -17,7 +17,9 @@ const perspectiveData = {
 #if($perspectiveOrder)
 	order: ${perspectiveOrder},
 #end
-	icon: '${perspectiveIcon}'
+	// Lucide / Harmonia built-in icon NAME (rendered by the shell via x-h-lucide), not a unicons SVG
+	// URL - the Harmonia shells resolve a bare name through Lucide; a '<name>.svg' path would 404.
+	icon: '${iconName}'
 };
 if (typeof exports !== 'undefined') {
 	exports.getPerspective = () => perspectiveData;
