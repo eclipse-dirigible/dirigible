@@ -1,0 +1,5 @@
+{
+    "module": "application/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Application Shell"
+}
