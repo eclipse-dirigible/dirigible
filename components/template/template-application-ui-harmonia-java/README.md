@@ -91,6 +91,17 @@ Velocity model vars (per-entity collections, same as the Angular module):
 `${primaryKeysString}`, `$hasProcess`. The aggregate `index.html` is generated with
 no `collection`, so `$models` = `model.entities`.
 
+**Perspective icons are Lucide NAMES, not unicons URLs.** The generated `perspective.js`
+(both the shared-shell `perspective/perspective.js.template` and the My-shell
+`my/my-perspective.js.template`) emits `icon: '${iconName}'` — the bare Lucide / Harmonia
+built-in icon name (the model's `iconName`), which the application shell and My shell render
+via `x-h-lucide`. It does **NOT** emit `${perspectiveIcon}` (the `/services/web/resources/unicons/<name>.svg`
+URL): that path is only meaningful to the legacy **AngularJS** perspective and 404s in the Harmonia
+shells (whose `isSvgIcon`/`isImageIcon` would send a `.svg` path down the `<svg data-link>` branch to
+a missing file). The `.model` still carries `perspectiveIcon` for the AngularJS stack — untouched.
+So the intent `icon:` must be a valid Lucide name (bundled `org.webjars.npm:lucide` `dist/esm/icons/<name>.js`,
+currently 1.8.0); an unknown name renders blank.
+
 ## Parity checklist (TODO)
 
 | View type | Angular collection | Status |
