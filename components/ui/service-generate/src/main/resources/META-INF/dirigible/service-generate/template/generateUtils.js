@@ -262,6 +262,14 @@ export function generateFiles(model, parameters, templateSources) {
     // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
     const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
 
+    // Personal (my) surface: entities owned by the logged-in user - a direct personal FK
+    // (intent `personal: true`) or the scope inherited from the direct composition parent
+    // (derived by parameterUtils). Each gets an additional scoped REST controller / UI.
+    const personalModels = model.entities.filter(e => e.personalProperty || e.personalParent);
+    // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
+    // reach their forms through the parent's panels, never through navigation.
+    const personalRootModels = model.entities.filter(e => e.personalProperty);
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -332,6 +340,12 @@ export function generateFiles(model, parameters, templateSources) {
                 case "uiSlotsModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiSlotsModels, parameters));
                     break;
+                case "personalModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalModels, parameters));
+                    break;
+                case "personalRootModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalRootModels, parameters));
+                    break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
                     break;
@@ -379,6 +393,18 @@ export function generateFiles(model, parameters, templateSources) {
                                 generateBusinessKey: model.triggers[t].generateBusinessKey,
                                 topicSuffix: model.triggers[t].topicSuffix,
                                 guardExpression: model.triggers[t].guardExpression,
+                                // personal task assignment: the identity repository the listener
+                                // resolves the owner through (cross-model imports compile
+                                // registry-wide, like any custom-code one).
+                                personalFkProperty: model.triggers[t].personalFkProperty,
+                                personalIdentityProperty: model.triggers[t].personalIdentityProperty,
+                                personalIdentityRepositoryClass: model.triggers[t].personalFkProperty
+                                    ? 'gen.' + (model.triggers[t].personalCrossModel
+                                        ? sanitizeJavaIdentifier(model.triggers[t].personalTargetModel)
+                                        : parameters.javaGenFolderName)
+                                        + '.data.' + sanitizeJavaIdentifier(model.triggers[t].personalTargetPerspective)
+                                        + '.' + model.triggers[t].personalTargetEntity + 'Repository'
+                                    : undefined,
                                 // Per to-one relation: assemble the target controller URL here (the
                                 // template engine knows the path layout; the intent glue carried only
                                 // logical names). A cross-model link uses the target project + sanitized
@@ -587,7 +613,27 @@ export function generateFiles(model, parameters, templateSources) {
                                 genToGenFolder: isGenerate
                                     ? (sc.genCrossModel ? sanitizeJavaIdentifier(sc.genToModel) : parameters.javaGenFolderName)
                                     : "",
-                                genToJavaPerspective: isGenerate ? sanitizeJavaIdentifier(sc.genToPerspective) : ""
+                                genToJavaPerspective: isGenerate ? sanitizeJavaIdentifier(sc.genToPerspective) : "",
+                                // Collection-driven children: fully-qualified classes resolved here
+                                // (the template engine knows the path layout; the glue carried only
+                                // logical names). The child target lives in the generation target's
+                                // model; the forEach collection is always LOCAL.
+                                genChildren: (sc.genChildren || []).map(function resolveChild(c) {
+                                    const childGenFolder = c.toCrossModel ? sanitizeJavaIdentifier(c.toModel) : parameters.javaGenFolderName;
+                                    const childPkg = 'gen.' + childGenFolder + '.data.' + sanitizeJavaIdentifier(c.toPerspective) + '.';
+                                    return {
+                                        ...c,
+                                        toEntityClass: childPkg + c.toEntity + 'Entity',
+                                        toRepositoryClass: childPkg + c.toEntity + 'Repository',
+                                        forEachEntityClass: c.forEachEntity
+                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Entity'
+                                            : undefined,
+                                        forEachRepositoryClass: c.forEachEntity
+                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Repository'
+                                            : undefined,
+                                        children: (c.children || []).map(resolveChild)
+                                    };
+                                })
                             };
                             const cleanScheduleParameters = cleanData(scheduleParameters);
                             generatedFiles.push({

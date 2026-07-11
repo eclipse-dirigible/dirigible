@@ -362,7 +362,7 @@
           <template x-for="col in editColumns" :key="col.name">
             <div x-h-field>
               <label x-h-label x-text="T(col.tkey, col.label)"></label>
-              <template x-if="col.widget === 'DROPDOWN'">
+              <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
                   <div x-h-select data-filter="contains" :data-disabled="col.readonly">
                     <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
@@ -381,28 +381,34 @@
                   </div>
                 </div>
               </template>
-              <template x-if="col.widget === 'NUMBER'">
+              <template x-if="!col.readonly && col.widget === 'NUMBER'">
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" :readonly="col.readonly" @input="recalcDraft()" /></div>
               </template>
-              <template x-if="col.widget === 'CHECKBOX'">
+              <template x-if="!col.readonly && col.widget === 'CHECKBOX'">
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>
               </template>
-              <template x-if="col.widget === 'DATE'">
+              <template x-if="!col.readonly && col.widget === 'DATE'">
                 <div x-h-date-picker.table>
                   <input type="text" :disabled="col.readonly" />
                   <button x-h-date-picker-trigger aria-label="Choose date"></button>
                   <div x-h-date-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
-              <template x-if="col.widget === 'DATETIME-LOCAL'">
+              <template x-if="!col.readonly && col.widget === 'DATETIME-LOCAL'">
                 <div x-h-datetime-picker.table>
                   <input type="text" :disabled="col.readonly" />
                   <button x-h-datetime-picker-trigger aria-label="Choose date and time"></button>
                   <div x-h-datetime-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
-              <template x-if="!['DROPDOWN','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
-                <input x-h-input type="text" x-model="draft[col.name]" :readonly="col.readonly" />
+              <template x-if="!col.readonly && !['DROPDOWN','NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget)">
+                <input x-h-input type="text" x-model="draft[col.name]" />
+              </template>
+              <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
+                   save path already ignores it - rendering an input only faked editability. Live
+                   recalculated previews still update (the text binds the same draft slot). -->
+              <template x-if="col.readonly">
+                <div class="text-sm py-2 text-secondary-foreground" x-text="draft[col.name] == null || draft[col.name] === '' ? '&#8212;' : draft[col.name]"></div>
               </template>
             </div>
           </template>

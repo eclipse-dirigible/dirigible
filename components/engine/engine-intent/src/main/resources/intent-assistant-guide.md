@@ -257,6 +257,25 @@ not listed keeps its default position and is appended after the listed ones. Sys
 (`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
 
+**Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
+generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
+then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a
+date pattern for temporal values; deeper paths are rejected - compose by referencing the related
+entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
+a token must never reference a `sensitive` field. Prefer a label for every document-ish entity a
+user will pick in a dropdown (a raw id is what renders otherwise).
+
+**Personal surfaces (`identity` / `personal` / `sensitive`):** an entity representing the person
+declares `identity: <string field>` (conventionally the unique e-mail matched against the login
+username). A record-owning to-one relation to it may declare `personal: true` (at most one per
+entity, target must declare `identity`; never on a composition parent - children inherit the
+scope through their parent). The entity then gets an ADDITIONAL generated `<Entity>MyController`
+scoped to the logged-in user: reads filtered to the mapped identity record, the owner FK forced
+server-side on writes, foreign records 404. A field marked `sensitive: true` (not the PK, the
+identity field, or the owner FK) is stripped from personal responses and ignored on personal
+writes - use it for billing rates and amounts the person must not see. The regular controller is
+unaffected.
+
 **Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java

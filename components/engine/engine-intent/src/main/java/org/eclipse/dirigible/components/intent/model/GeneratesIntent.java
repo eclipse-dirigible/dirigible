@@ -91,6 +91,13 @@ public class GeneratesIntent {
      */
     private GeneratesItemsIntent items;
 
+    /**
+     * Scheduled generation only: child blocks generated under the created target - one child per
+     * element of a source collection (a matching LOCAL entity's rows, or the working days of the
+     * month). See {@code GenerateChildIntent}.
+     */
+    private java.util.List<GenerateChildIntent> children;
+
     public String getName() {
         return name;
     }
@@ -193,5 +200,13 @@ public class GeneratesIntent {
 
     public void setItems(GeneratesItemsIntent items) {
         this.items = items;
+    }
+
+    public java.util.List<GenerateChildIntent> getChildren() {
+        return children;
+    }
+
+    public void setChildren(java.util.List<GenerateChildIntent> children) {
+        this.children = children;
     }
 }

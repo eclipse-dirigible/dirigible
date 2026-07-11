@@ -24,6 +24,16 @@ export function getTemplate(parameters) {
         engine: "velocity",
         collection: "apiModels"
     }, {
+        // The personal (my) surface: an ADDITIONAL controller scoped to the logged-in user's
+        // identity record, generated only for entities with a personal owner relation (or the
+        // scope inherited from their composition parent) - see the intent identity/personal/
+        // sensitive attributes.
+        location: "/template-application-rest-java/api/EntityMyController.java.template",
+        action: "generate",
+        rename: "gen/{{javaGenFolderName}}/api/{{javaPerspectiveName}}/{{name}}MyController.java",
+        engine: "velocity",
+        collection: "personalModels"
+    }, {
         location: "/template-application-rest-java/project.json.mjs",
         action: "generate",
         rename: "project.json",

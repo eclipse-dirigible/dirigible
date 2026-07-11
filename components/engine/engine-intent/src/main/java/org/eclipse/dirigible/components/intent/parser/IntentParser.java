@@ -30,7 +30,9 @@ import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
+import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -631,6 +633,71 @@ public final class IntentParser {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
+        if (g.getChildren() != null) {
+            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, issues);
+        }
+    }
+
+    /**
+     * Child blocks of a scheduled generation: each creates one child row of the just-generated parent
+     * per element of a source collection. Two collection kinds - {@code forEach: &#123;
+     * entity, match &#125;} (rows of a LOCAL entity whose field equals a source-row field) and
+     * {@code forEach: &#123; days: workingDays &#125;} (the working days of the month, the date written
+     * to {@code dayField}). {@code parent} names the child's to-one back to the generated parent
+     * (resolved in the target's model at generation). Depth is capped at two levels.
+     */
+    private static void validateGenerateChildren(String name, List<GenerateChildIntent> children, int depth, EntityIntent source,
+            Set<String> entityNames, List<String> issues) {
+        if (depth > 2) {
+            issues.add("schedule [" + name + "] generate children nest deeper than two levels - flatten the shape");
+            return;
+        }
+        for (GenerateChildIntent child : children) {
+            String subject = "schedule [" + name + "] generate child [" + (child.getTo() == null ? "?" : child.getTo()) + "]";
+            if (child.getTo() == null || child.getTo()
+                                              .isBlank()) {
+                issues.add("schedule [" + name + "] generate has a child with no to entity");
+                continue;
+            }
+            if (child.getParent() == null || child.getParent()
+                                                  .isBlank()) {
+                issues.add(subject + " has no parent relation (the child's to-one back to the generated record)");
+            }
+            Object forEachEntity = child.getForEach()
+                                        .get("entity");
+            Object forEachDays = child.getForEach()
+                                      .get("days");
+            if ((forEachEntity == null) == (forEachDays == null)) {
+                issues.add(subject + " forEach must declare exactly one of entity (a local collection) or days: workingDays");
+                continue;
+            }
+            if (forEachDays != null) {
+                if (!"workingDays".equals(String.valueOf(forEachDays))) {
+                    issues.add(subject + " forEach days [" + forEachDays + "] is not supported - only workingDays");
+                }
+                if (child.getDayField() == null || child.getDayField()
+                                                        .isBlank()) {
+                    issues.add(subject + " uses forEach days but declares no dayField to receive each date");
+                }
+                if (!child.getMap()
+                          .isEmpty()) {
+                    issues.add(subject + " a days child cannot map from a collection row - use defaults for literals");
+                }
+            } else {
+                String collection = String.valueOf(forEachEntity);
+                if (!entityNames.contains(collection)) {
+                    issues.add(subject + " forEach entity [" + collection + "] is not a local entity of this model");
+                }
+                Object match = child.getForEach()
+                                    .get("match");
+                if (!(match instanceof Map) || ((Map<?, ?>) match).isEmpty()) {
+                    issues.add(subject + " forEach entity requires a match: { <collection field>: <source field> } condition");
+                }
+            }
+            if (child.getChildren() != null) {
+                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, issues);
+            }
+        }
     }
 
     /**
@@ -1052,6 +1119,16 @@ public final class IntentParser {
                         validateDependsOn(entity, subject, field.getDependsOn(), null, byName, issues);
                     }
                 }
+                if (field.isSensitive()) {
+                    if (field.isPrimaryKey()) {
+                        issues.add("entity [" + name + "] field [" + field.getName()
+                                + "] is the primary key so it cannot be sensitive (the personal surface needs it)");
+                    }
+                    if (field.getName()
+                             .equals(entity.getIdentity())) {
+                        issues.add("entity [" + name + "] field [" + field.getName() + "] is the identity field so it cannot be sensitive");
+                    }
+                }
             }
             if (idCount > 1) {
                 issues.add("entity [" + name + "] declares " + idCount + " primary-key fields - exactly one is allowed");
@@ -1061,6 +1138,7 @@ public final class IntentParser {
             if (entity.getName() == null) {
                 continue;
             }
+            int personalCount = 0;
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.getName() == null || relation.getName()
                                                           .isBlank()) {
@@ -1125,10 +1203,26 @@ public final class IntentParser {
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
+                if (relation.isPersonal()) {
+                    personalCount++;
+                    validatePersonal(entity, relation, byName, issues);
+                }
+            }
+            if (personalCount > 1) {
+                issues.add("entity [" + entity.getName() + "] declares " + personalCount
+                        + " personal relations - exactly one owner is allowed");
             }
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 validateHierarchy(entity, issues);
+            }
+            if (entity.getIdentity() != null && !entity.getIdentity()
+                                                       .isBlank()) {
+                validateIdentity(entity, issues);
+            }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                validateLabel(entity, byName, issues);
             }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
@@ -1217,6 +1311,127 @@ public final class IntentParser {
         }
         if (edge.isRequired()) {
             issues.add(subject + " must be optional - a required parent leaves no way to author a root node");
+        }
+    }
+
+    /**
+     * {@code identity: <field>} names the field of this entity matched against the logged-in username
+     * (the personal-surface mapping). It must be an own string field - the natural shape is a unique
+     * e-mail/username column.
+     */
+    private static void validateIdentity(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] identity [" + entity.getIdentity() + "]";
+        FieldIntent field = null;
+        if (entity.getFields() != null) {
+            for (FieldIntent f : entity.getFields()) {
+                if (entity.getIdentity()
+                          .equals(f.getName())) {
+                    field = f;
+                    break;
+                }
+            }
+        }
+        if (field == null) {
+            issues.add(subject + " does not name a field of the entity");
+            return;
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " must be a string field (it is matched against the login username), got [" + field.getType() + "]");
+        }
+    }
+
+    /**
+     * {@code personal: true} marks the to-one relation whose target record IS the logged-in user - the
+     * owner the personal surface scopes by. The target must declare {@code identity}; a same-model
+     * target is checked here, a cross-model one at generation against the resolved owner model (like
+     * the relation target itself).
+     */
+    private static void validatePersonal(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares personal but only a manyToOne/oneToOne relation can own the record");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent - a child inherits the personal scope through it; mark the parent's relation");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && (target.getIdentity() == null || target.getIdentity()
+                                                                         .isBlank())) {
+                issues.add(subject + " declares personal but its target [" + relation.getTo() + "] declares no identity");
+            }
+        }
+    }
+
+    /**
+     * {@code label: "..."} - a display-label expression generating the stored read-only {@code Name}
+     * property. Tokens are own fields or one-hop to-one relation properties; a same-model target
+     * property is checked here (the target's own generated {@code Name} counts), a cross-model one at
+     * generation. A label is redundant next to an authored {@code name} field, and it must never embed
+     * a sensitive field (the Name is visible on the personal surface).
+     */
+    private static void validateLabel(EntityIntent entity, java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] label";
+        if (entity.getFields() != null && entity.getFields()
+                                                .stream()
+                                                .anyMatch(f -> "name".equalsIgnoreCase(f.getName()))) {
+            issues.add(subject + " is redundant - the entity already declares a name field");
+            return;
+        }
+        java.util.List<LabelExpression.Part> parts;
+        try {
+            parts = LabelExpression.parse(entity.getLabel());
+        } catch (IllegalArgumentException e) {
+            issues.add(subject + " is malformed: " + e.getMessage());
+            return;
+        }
+        for (LabelExpression.Part part : parts) {
+            if (part.isLiteral()) {
+                continue;
+            }
+            if (part.relation() == null) {
+                FieldIntent field = fieldByName(entity, part.property());
+                if (field == null) {
+                    issues.add(subject + " token [" + part.property() + "] does not name a field of the entity");
+                } else if (field.isSensitive()) {
+                    issues.add(subject + " token [" + part.property()
+                            + "] is a sensitive field - the generated Name is visible on the personal surface");
+                }
+                continue;
+            }
+            RelationIntent relation = toOneRelationByName(entity, part.relation());
+            if (relation == null) {
+                issues.add(
+                        subject + " token [" + part.relation() + "." + part.property() + "] does not name a to-one relation of the entity");
+                continue;
+            }
+            if (relation.isCrossModel()) {
+                continue; // resolved against the owner model at generation
+            }
+            EntityIntent target = byName.get(relation.getTo());
+            if (target == null) {
+                continue;
+            }
+            boolean targetHasIt = fieldByName(target, part.property()) != null
+                    || ("name".equalsIgnoreCase(part.property()) && target.getLabel() != null && !target.getLabel()
+                                                                                                        .isBlank());
+            if (!targetHasIt) {
+                issues.add(subject + " token [" + part.relation() + "." + part.property() + "] does not name a field of ["
+                        + relation.getTo() + "]");
+            } else {
+                FieldIntent targetField = fieldByName(target, part.property());
+                if (targetField != null && targetField.isSensitive()) {
+                    issues.add(subject + " token [" + part.relation() + "." + part.property() + "] is a sensitive field of ["
+                            + relation.getTo() + "] - it must not leak into a label");
+                }
+            }
         }
     }
 
@@ -1560,6 +1775,30 @@ public final class IntentParser {
      * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
      * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
      */
+    /** The entity a process trigger starts on (onCreate/onUpdate/onDelete target), or null. */
+    private static String triggerEntityName(ProcessIntent process) {
+        if (process.getTrigger() == null) {
+            return null;
+        }
+        for (String kind : EVENT_KINDS) {
+            Object target = process.getTrigger()
+                                   .get(kind);
+            if (target != null) {
+                return target.toString();
+            }
+        }
+        return null;
+    }
+
+    private static EntityIntent entityByNameInsensitive(IntentModel model, String name) {
+        for (EntityIntent entity : model.getEntities()) {
+            if (name.equalsIgnoreCase(entity.getName())) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
     private static void validateTaskFormActions(ProcessIntent process, IntentModel model, List<String> issues) {
         Map<String, FormIntent> formsByName = new HashMap<>();
         for (FormIntent form : model.getForms()) {
@@ -1572,6 +1811,21 @@ public final class IntentParser {
             StepIntent step = steps.get(i);
             if (!"userTask".equals(step.getKind()) || step.getArgs() == null) {
                 continue;
+            }
+            Object assignee = step.getArgs()
+                                  .get("assignee");
+            if ("personal".equals(assignee)) {
+                // The per-user assignment resolves through the trigger entity's personal owner - the
+                // trigger listener seeds __personalUser from the identity mapping at start time.
+                String triggerEntity = triggerEntityName(process);
+                EntityIntent target = triggerEntity == null ? null : entityByNameInsensitive(model, triggerEntity);
+                boolean hasPersonal = target != null && target.getRelations() != null && target.getRelations()
+                                                                                               .stream()
+                                                                                               .anyMatch(RelationIntent::isPersonal);
+                if (!hasPersonal) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName()
+                            + "] declares assignee: personal but the trigger entity has no personal relation to resolve the owner from");
+                }
             }
             Object formArg = step.getArgs()
                                  .get("form");

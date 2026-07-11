@@ -147,6 +147,43 @@ possible - corrections are flow-generated reversals, never edits.
 The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
 node with children.
 
+## label - the stored display name
+
+```yaml
+- name: SalesInvoice
+  label: "{number} - {date|yyyy MMMM} - {Customer.name}"
+```
+
+Generates a stored, read-only `Name` property recomputed by the repository on **every write path**
+(save / update / workflow writes), so lookups, dropdowns and lists show a meaningful display name
+everywhere - dropdown label resolution prefers `Name` automatically, including cross-model. Tokens
+are own fields or ONE-hop to-one relation properties, `|format` applies a date pattern to temporal
+values. Compose across hops by referencing the related entity's own generated label
+(`{ProjectTimesheet.Name}` - e.g. "2026 July - My Project - Ivan Georgiev"). Rejected when the
+entity already declares a `name` field or a token references a sensitive field.
+
+## identity / personal / sensitive - the personal (my) surface
+
+```yaml
+- name: Employee
+  identity: email              # this entity maps the logged-in user (matched by this field)
+# elsewhere - the owner relation of a personal record:
+- name: VacationRequest
+  fields:
+    - { name: dailyRate, type: decimal, sensitive: true }  # never on the personal surface
+  relations:
+    - { name: Employee, kind: manyToOne, to: Employee, model: kf-employees, personal: true }
+```
+
+A `personal` owner relation makes the entity get an ADDITIONAL generated REST controller
+(`<Entity>MyController`) scoped to the logged-in user: reads are filtered to the user's mapped
+identity record, writes force the owner FK server-side, foreign records are a 404, and
+`sensitive` fields are stripped from responses and ignored on writes. Composition children
+inherit the scope through their DIRECT parent (ancestor-ownership guard). The regular (power)
+controller is unaffected. One `personal` relation per entity; the target must declare
+`identity` (a string field, conventionally the unique e-mail/username). No identity row mapped
+to the user = an empty personal surface, never an error.
+
 ## multilingual - translated master data
 
 ```yaml
@@ -192,6 +229,34 @@ events, event-click edits the child, an empty-day click creates one with the mas
 clicked date preset. The child keeps everything a detail has (registry, filtered controller, form
 pages) - the calendar is just how its panel renders. `range` works the same way; `slots` stays
 primary-only.
+
+## generate children - collection-driven scheduled generation
+
+```yaml
+schedules:
+  - name: monthly-project-timesheets
+    cron: "0 0 2 1 * *"
+    entity: Project
+    generate:
+      to: ProjectTimesheet
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach: { entity: EmployeeProjectAssignment, match: { Project: id } }
+          map: { Employee: Employee }
+          children:
+            - to: EmployeeDayAllocation
+              parent: EmployeeTimesheet
+              forEach: { days: workingDays }
+              dayField: day
+              defaults: { hours: 8 }
+```
+
+A scheduled generation may create CHILD rows under each generated record: one per matching row of
+a LOCAL collection entity (`forEach: {entity, match}`) or one per working day (Mon-Fri) of the
+month the job runs in (`forEach: {days: workingDays}` + `dayField`). `parent:` names the child's
+to-one back to the generated record; children nest one more level (depth two). Numeric literal
+defaults render as decimals.
 
 ## uses - cross-model references
 

@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
+import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -317,6 +318,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putDependsOn(property, entity, field.getDependsOn(), null, null, byName, usesByAlias, context);
                 properties.add(property);
             }
+            // A label expression (intent `label:`) synthesizes a stored, read-only Name property -
+            // recomputed by the generated repository on every write, so lookups and dropdowns show
+            // a meaningful display name everywhere (the platform's label resolution prefers "Name").
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                properties.add(labelNameProperty(name));
+            }
             // An entity a process starts on create carries a ProcessId back-reference (the runtime
             // listener/handler writes the started process-instance id here). See TriggerSupport.
             if (triggerTargets.contains(name)) {
@@ -351,6 +359,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
+                    putPersonal(fkProperty, relation, info.identityProperty(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
@@ -365,6 +374,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putOptionsFilter(fkProperty, relation, null);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
+                putPersonal(fkProperty, relation,
+                        target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()), true);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
@@ -400,6 +411,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
                 // The Harmonia list renders a tree off it and pickers indent/leaf-filter by it.
                 entityMap.put("hierarchyProperty", IntentNaming.pascalCase(entity.getHierarchy()));
+            }
+            if (entity.getIdentity() != null && !entity.getIdentity()
+                                                       .isBlank()) {
+                // The current-user mapping: the field of THIS entity matched against the logged-in
+                // username. Consumers referencing this entity (incl. cross-model, via TargetInfo)
+                // read it to scope their personal surfaces.
+                entityMap.put("identityProperty", IntentNaming.pascalCase(entity.getIdentity()));
+            }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                // Template-ready label parts (a List - .model twin only): literals interleaved with
+                // field / one-hop relation tokens, property names PascalCased to the generated model.
+                // A relation token's `relation` is the FK PROPERTY name; the DAO template loads the
+                // target through the repository parameterUtils derives for that FK.
+                entityMap.put("labelExpression", entity.getLabel());
+                entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, byName);
             if (!checkMaps.isEmpty()) {
@@ -784,6 +811,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType())) {
             p.put("isReadOnlyProperty", "true");
         }
+        if (field.isSensitive()) {
+            // Hidden from the personal (my) surface: absent from its pages and stripped from the
+            // personal REST controller's responses. The power surface ignores this attribute.
+            p.put("sensitiveProperty", "true");
+        }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         } else if (field.isRequired()) {
@@ -1124,6 +1156,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetHierarchyProperty", targetHierarchyProperty);
     }
 
+    /**
+     * Emit the personal-owner attributes for a relation that declares {@code personal: true}: the
+     * generated personal (my) REST controller scopes reads by this FK and forces it on writes, and the
+     * personal UI renders it as a locked value. Two scalar attrs: {@code relationshipPersonal} plus
+     * {@code relationshipIdentityProperty} - the TARGET's identity field (PascalCase), which the
+     * generated current-user resolution matches against the logged-in username. The parser checked a
+     * same-model target declares an identity; a resolved cross-model target without one fails loudly
+     * here, while an unresolved target (the unit-test convention fallback) is skipped.
+     */
+    private static void putPersonal(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty, boolean resolved) {
+        if (!relation.isPersonal()) {
+            return;
+        }
+        if (targetIdentityProperty == null || targetIdentityProperty.isBlank()) {
+            if (resolved) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName()
+                        + "] declares personal but its target [" + relation.getTo() + "] declares no identity"));
+            }
+            return;
+        }
+        p.put("relationshipPersonal", "true");
+        p.put("relationshipIdentityProperty", targetIdentityProperty);
+    }
+
     /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */
     private static String stripTrailingZero(Number value) {
         double d = value.doubleValue();
@@ -1384,8 +1440,65 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * The dropdown label: the target's {@code name} field (case-insensitive), else its first
      * string-typed field, else its PK.
      */
+    /**
+     * The synthesized {@code Name} property for an entity with a {@code label:} expression: a stored
+     * VARCHAR the generated repository recomputes on every write. Read-only and shown on lists so the
+     * display name is first-class everywhere.
+     */
+    private static Map<String, Object> labelNameProperty(String entityName) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "Name");
+        p.put("description", "");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_NAME");
+        p.put("dataType", "VARCHAR");
+        p.put("dataLength", "512");
+        p.put("dataNullable", "true");
+        p.put("isReadOnlyProperty", "true");
+        p.put("widgetType", "TEXTBOX");
+        p.put("widgetLength", "512");
+        p.put("widgetIsMajor", "true");
+        p.put("auditType", "NONE");
+        return p;
+    }
+
+    /**
+     * The template-ready parts of a {@code label:} expression. Property names are PascalCased to the
+     * generated model; a relation part's {@code relation} is the FK property name and {@code property}
+     * the target's property - {@code name} resolves to the target's own display label (its authored
+     * name field or its synthesized {@code Name}).
+     */
+    private static List<Map<String, Object>> buildLabelParts(EntityIntent entity, Map<String, EntityIntent> byName) {
+        List<Map<String, Object>> parts = new ArrayList<>();
+        for (LabelExpression.Part part : LabelExpression.parse(entity.getLabel())) {
+            Map<String, Object> map = new LinkedHashMap<>();
+            if (part.isLiteral()) {
+                map.put("kind", "literal");
+                map.put("text", part.literal());
+            } else if (part.relation() == null) {
+                map.put("kind", "field");
+                map.put("property", IntentNaming.pascalCase(part.property()));
+            } else {
+                map.put("kind", "relation");
+                map.put("relation", IntentNaming.pascalCase(part.relation()));
+                map.put("property", IntentNaming.pascalCase(part.property()));
+            }
+            if (part.format() != null && !part.format()
+                                              .isBlank()) {
+                map.put("format", part.format());
+            }
+            parts.add(map);
+        }
+        return parts;
+    }
+
     private static String labelFieldName(EntityIntent target) {
         if (target == null) {
+            return "Name";
+        }
+        if (target.getLabel() != null && !target.getLabel()
+                                                .isBlank()) {
+            // The target's stored label (intent `label:`) IS its display name.
             return "Name";
         }
         for (FieldIntent field : target.getFields()) {

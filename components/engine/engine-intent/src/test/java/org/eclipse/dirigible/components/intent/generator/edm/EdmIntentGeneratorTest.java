@@ -548,4 +548,84 @@ class EdmIntentGeneratorTest {
             throw new AssertionError("failed to read " + resource, e);
         }
     }
+
+    @Test
+    void identityPersonalAndSensitiveFlowIntoTheModel() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 400 }
+                      - { name: dailyRate, type: decimal, sensitive: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr");
+        List<Map<String, Object>> entities = entities(model);
+        // The mapping entity advertises which property identifies the current user - consumers
+        // (incl. cross-model, via TargetInfo) read it off the model.
+        assertEquals("Email", entityByName(entities, "Employee").get("identityProperty"));
+        // The owner FK carries the personal marker plus the target's identity property, which the
+        // generated personal controller matches against the logged-in username.
+        Map<String, Object> owner = propertyByName(entityByName(entities, "VacationRequest"), "Employee");
+        assertEquals("true", owner.get("relationshipPersonal"));
+        assertEquals("Email", owner.get("relationshipIdentityProperty"));
+        // The confidential field is flagged for the personal-surface scrub; a plain one is not.
+        assertEquals("true", propertyByName(entityByName(entities, "VacationRequest"), "DailyRate").get("sensitiveProperty"));
+        assertNull(propertyByName(entityByName(entities, "VacationRequest"), "Note").get("sensitiveProperty"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void labelSynthesizesTheStoredNameAndTheTemplateParts() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                  - name: SalesInvoice
+                    label: "{number} - {date|yyyy MMMM} - {Customer.name}"
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, length: 40 }
+                      - { name: date, type: date, required: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: SalesInvoice }
+                """;
+        // (relation target kept same-model for the unit scope)
+        yaml = yaml.replace("to: SalesInvoice", "to: Customer");
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> invoice = entityByName(entities, "SalesInvoice");
+        // The synthesized stored Name: read-only, on the list, 512 chars.
+        Map<String, Object> nameProperty = propertyByName(invoice, "Name");
+        assertEquals("SALES_INVOICE_NAME", nameProperty.get("dataName"));
+        assertEquals("true", nameProperty.get("isReadOnlyProperty"));
+        // The template-ready parts: field, formatted field, one-hop relation, literals between.
+        List<Map<String, Object>> parts = (List<Map<String, Object>>) invoice.get("labelParts");
+        assertEquals("field", parts.get(0)
+                                   .get("kind"));
+        assertEquals("Number", parts.get(0)
+                                    .get("property"));
+        assertEquals("yyyy MMMM", parts.get(2)
+                                       .get("format"));
+        Map<String, Object> relationPart = parts.get(4);
+        assertEquals("relation", relationPart.get("kind"));
+        assertEquals("Customer", relationPart.get("relation"));
+        assertEquals("Name", relationPart.get("property"));
+        // A dropdown pointing at a label-bearing entity resolves to its generated Name.
+        assertEquals("Name", propertyByName(invoice, "Customer").get("widgetDropDownValue")
+                                                                .toString()
+                                                                .replace("Name", "Name"));
+    }
 }

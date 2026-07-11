@@ -19,6 +19,7 @@ import * as calendarTemplate from "template-application-ui-harmonia-java/templat
 import * as slotsTemplate from "template-application-ui-harmonia-java/template/ui/slots";
 import * as reportTemplate from "template-application-ui-harmonia-java/template/ui/report";
 import * as navigation from "template-application-ui-harmonia-java/template/ui/navigation";
+import * as myTemplate from "template-application-ui-harmonia-java/template/ui/my";
 
 // The Harmonia form runtime (.form artifacts incl. BPM task forms) is its own module:
 // template-form-builder-harmonia (the intent recipe's `form` template).
@@ -39,5 +40,6 @@ export function getSources(parameters) {
         ...slotsTemplate.getSources(parameters),
         ...reportTemplate.getSources(parameters),
         ...navigation.getSources(parameters),
+        ...myTemplate.getSources(parameters),
     ];
 };

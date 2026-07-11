@@ -68,6 +68,13 @@ public class FieldIntent {
      * generator; set this on any other field (e.g. a workflow-managed {@code status}) to do the same.
      */
     private boolean readOnly;
+
+    /**
+     * Hidden from the personal (my) surface entirely: absent from its pages and stripped from the
+     * personal REST controller's responses; write attempts are ignored. The power surface is
+     * unaffected. Not valid on the primary key, the identity field, or the personal FK.
+     */
+    private boolean sensitive;
     /**
      * Document role: marks this field as the document's <b>number/title</b> (widget {@code
      * DOCUMENT_NUMBER}). In the document (header-items) layout the value is shown in the form's title
@@ -292,5 +299,13 @@ public class FieldIntent {
 
     public void setDependsOn(DependsOnIntent dependsOn) {
         this.dependsOn = dependsOn;
+    }
+
+    public boolean isSensitive() {
+        return sensitive;
+    }
+
+    public void setSensitive(boolean sensitive) {
+        this.sensitive = sensitive;
     }
 }

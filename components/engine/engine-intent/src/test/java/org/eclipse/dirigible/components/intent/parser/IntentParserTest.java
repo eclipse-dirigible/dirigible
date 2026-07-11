@@ -980,4 +980,178 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("generate map source [nonexistentField] is not a field or to-one relation of [Employee]")),
                 "expected a bad-map-source issue, got: " + ex.getIssues());
     }
+
+    /** A complete personalized model built line by line - no text-block margin surprises. */
+    private static String personalYaml(String employeeExtra, String requestFields, String requestRelations) {
+        return "name: hr\n" //
+                + "entities:\n" //
+                + "  - name: Employee\n" //
+                + employeeExtra //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string, required: true, length: 200 }\n" //
+                + "      - { name: email, type: string, required: true, unique: true, length: 320 }\n" //
+                + "  - name: VacationRequest\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + requestFields //
+                + requestRelations;
+    }
+
+    private static final String OWNER_RELATION =
+            "    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }\n";
+
+    @Test
+    void identityAndPersonalParseWithoutIssues() {
+        IntentParser.parse(
+                personalYaml("    identity: email\n", "      - { name: dailyRate, type: decimal, sensitive: true }\n", OWNER_RELATION));
+    }
+
+    @Test
+    void identityMustNameAnOwnStringField() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: mail\n", "", OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not name a field")),
+                "expected an unknown-field issue, got: " + ex.getIssues());
+
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: id\n", "", OWNER_RELATION)));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("must be a string field")),
+                "expected a non-string issue, got: " + ex2.getIssues());
+    }
+
+    @Test
+    void personalRequiresAnIdentityOnItsTarget() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("", "", OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares no identity")),
+                "expected a no-identity issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void sensitiveIsRejectedOnThePrimaryKeyAndTheIdentityField() {
+        String pk = personalYaml("    identity: email\n", "", OWNER_RELATION).replace("primaryKey: true, generated: true }",
+                "primaryKey: true, generated: true, sensitive: true }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(pk));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("primary key so it cannot be sensitive")),
+                "expected a pk-sensitive issue, got: " + ex.getIssues());
+
+        String idf = personalYaml("    identity: email\n", "", OWNER_RELATION).replace("unique: true, length: 320 }",
+                "unique: true, length: 320, sensitive: true }");
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(idf));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("identity field so it cannot be sensitive")),
+                "expected an identity-sensitive issue, got: " + ex2.getIssues());
+    }
+
+    @Test
+    void onlyOnePersonalRelationIsAllowed() {
+        String relations = "    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee, personal: true }\n"
+                + "      - { name: Substitute, kind: manyToOne, to: Employee, personal: true }\n";
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: email\n", "", relations)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("exactly one owner is allowed")),
+                "expected a single-owner issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void labelParsesAndComposesButRejectsBadTokens() {
+        // A valid label with a literal, a field, a formatted field, and a one-hop relation token.
+        IntentParser.parse(personalYaml("    identity: email\n", "      - { name: fromDate, type: date }\n",
+                "    label: \"{fromDate|yyyy MMMM} - {Employee.name}\"\n" + OWNER_RELATION));
+
+        // An unknown own-field token is rejected.
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: email\n", "", "    label: \"{missing}\"\n" + OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not name a field")),
+                "expected an unknown-token issue, got: " + ex.getIssues());
+
+        // A label next to an authored name field is redundant.
+        IntentValidationException ex2 =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("    identity: email\n",
+                        "      - { name: name, type: string, length: 100 }\n", "    label: \"{name}\"\n" + OWNER_RELATION)));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("redundant")),
+                "expected a redundant-label issue, got: " + ex2.getIssues());
+
+        // A sensitive field must never leak into the label.
+        IntentValidationException ex3 =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("    identity: email\n",
+                        "      - { name: rate, type: decimal, sensitive: true }\n", "    label: \"{rate}\"\n" + OWNER_RELATION)));
+        assertTrue(ex3.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("sensitive")),
+                "expected a sensitive-token issue, got: " + ex3.getIssues());
+
+        // Two hops are rejected with the compose hint.
+        IntentValidationException ex4 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                personalYaml("    identity: email\n", "", "    label: \"{Employee.manager.name}\"\n" + OWNER_RELATION)));
+        assertTrue(ex4.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("deeper than one relation hop")),
+                "expected a depth issue, got: " + ex4.getIssues());
+    }
+
+    @Test
+    void scheduleGenerateChildrenValidate() {
+        String head = "name: hr\n" //
+                + "entities:\n" //
+                + "  - name: Person\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string, required: true, length: 200 }\n" //
+                + "  - name: Claim\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "  - name: ClaimLine\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: day, type: date }\n" //
+                + "schedules:\n" //
+                + "  - name: monthly\n" //
+                + "    cron: \"0 0 4 1 * *\"\n" //
+                + "    entity: Person\n" //
+                + "    generate:\n" //
+                + "      to: Claim\n" //
+                + "      map: { Person: id }\n" //
+                + "      children:\n";
+        // A well-formed days child validates cleanly.
+        IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { days: workingDays }\n" //
+                + "          dayField: day\n");
+        // days without a dayField is rejected.
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { days: workingDays }\n"));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("no dayField")),
+                "expected a dayField issue, got: " + ex.getIssues());
+        // an entity forEach without match is rejected.
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { entity: Person }\n"));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("requires a match")),
+                "expected a match issue, got: " + ex2.getIssues());
+    }
 }

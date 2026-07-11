@@ -1,0 +1,4 @@
+{
+    "name": "application-personal-perspectives",
+    "description": "Extension Point for the Personal Perspective Providers (the logged-in user's own pages, aggregated by the My Shell)"
+}
