@@ -13,6 +13,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -46,7 +47,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
  * Covered here: {@code immutableIn} (409 on write/delete), {@code checks} (exactlyOne / itemsMin /
  * itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual} (read-time overlay),
- * seed rows carrying a RELATION column, and aggregate totals.
+ * seed rows carrying a RELATION column, aggregate totals, and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -123,7 +126,42 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
 
+              # identity/personal/sensitive: Person maps the logged-in user (the IT runs as
+              # admin - the seed below maps it); Claim is the personal entity with a sensitive
+              # field; ClaimLine inherits the personal scope through its composition parent.
+              - name: Person
+                identity: email
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: name,  type: string, required: true, length: 200 }
+                  - { name: email, type: string, required: true, unique: true, length: 320 }
+
+              - name: Claim
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                  - { name: rate, type: decimal, sensitive: true }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+
+              - name: ClaimLine
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Claim, kind: manyToOne, to: Claim, composition: true }
+
             seeds:
+              - name: people
+                entity: Person
+                rows:
+                  - { id: 1, name: Admin, email: admin }
+                  - { id: 2, name: Other, email: other@example.com }
+              - name: claims
+                entity: Claim
+                rows:
+                  - { id: 1, note: mine,    rate: 50, Person: 1 }
+                  - { id: 2, note: foreign, rate: 70, Person: 2 }
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
@@ -216,6 +254,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(accountsCsv.contains("ACCOUNT_PARENT"), "a seed row's relation key must emit the FK column into the seed CSV");
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
+
+        // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
+        // identity entity's repository, and scrubs the sensitive field from responses.
+        String claimMy = contentOf("gen/emission/api/claim/ClaimMyController.java");
+        assertTrue(claimMy.contains("eq(\"Email\", username)"), "personal must emit the identity match against the logged-in username");
+        assertTrue(claimMy.contains("entity.Rate = null"), "sensitive must emit the response scrub in the personal controller");
+        assertTrue(claimMy.contains("entity.Person = me"), "personal must force the owner FK server-side on create");
+        String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
+        assertTrue(lineMy.contains("requireMyParent"),
+                "a composition child must inherit the personal scope as an ancestor-ownership guard");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -334,6 +382,75 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
                                                  .statusCode(409));
+
+        // personal: the my-surface lists ONLY the current user's rows, with the sensitive field
+        // stripped; a foreign record is a 404 (indistinguishable from missing).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimMyController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].Note", equalTo("mine"))
+                                                 .body("[0].Rate", nullValue()),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimMyController/2")
+                                                 .then()
+                                                 .statusCode(404));
+        // The power surface is unaffected: all rows, sensitive values included.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(2))
+                                                 .body("[0].Rate", equalTo(50.0F)));
+
+        // Writes force the owner and ignore the sensitive field, whatever the client sends.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999}")
+                                                 .when()
+                                                 .post(API + "/claim/ClaimMyController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Person", equalTo(1))
+                                                 .body("Rate", nullValue()));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
+                                                 .when()
+                                                 .put(API + "/claim/ClaimMyController/1")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimController/1")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Note", equalTo("edited"))
+                                                 .body("Person", equalTo(1))
+                                                 .body("Rate", equalTo(50.0F)));
+
+        // The composition child guards through its parent: the foreign claim's lines are a 404,
+        // creating a line under a foreign claim is a 404, under my own claim it works.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimLineMyController?Claim=2")
+                                                 .then()
+                                                 .statusCode(404));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Claim\":2,\"Amount\":10}")
+                                                 .when()
+                                                 .post(API + "/claim/ClaimLineMyController")
+                                                 .then()
+                                                 .statusCode(404));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Claim\":1,\"Amount\":10}")
+                                                 .when()
+                                                 .post(API + "/claim/ClaimLineMyController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/claim/ClaimLineMyController?Claim=1")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1)));
     }
 
     private void publishProject() {

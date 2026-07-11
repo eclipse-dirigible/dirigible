@@ -548,4 +548,38 @@ class EdmIntentGeneratorTest {
             throw new AssertionError("failed to read " + resource, e);
         }
     }
+
+    @Test
+    void identityPersonalAndSensitiveFlowIntoTheModel() {
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: VacationRequest
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 400 }
+                      - { name: dailyRate, type: decimal, sensitive: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "hr");
+        List<Map<String, Object>> entities = entities(model);
+        // The mapping entity advertises which property identifies the current user - consumers
+        // (incl. cross-model, via TargetInfo) read it off the model.
+        assertEquals("Email", entityByName(entities, "Employee").get("identityProperty"));
+        // The owner FK carries the personal marker plus the target's identity property, which the
+        // generated personal controller matches against the logged-in username.
+        Map<String, Object> owner = propertyByName(entityByName(entities, "VacationRequest"), "Employee");
+        assertEquals("true", owner.get("relationshipPersonal"));
+        assertEquals("Email", owner.get("relationshipIdentityProperty"));
+        // The confidential field is flagged for the personal-surface scrub; a plain one is not.
+        assertEquals("true", propertyByName(entityByName(entities, "VacationRequest"), "DailyRate").get("sensitiveProperty"));
+        assertNull(propertyByName(entityByName(entities, "VacationRequest"), "Note").get("sensitiveProperty"));
+    }
 }

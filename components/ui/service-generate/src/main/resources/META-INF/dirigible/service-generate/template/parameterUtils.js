@@ -185,6 +185,16 @@ export function process(model, parameters) {
                         p.leafOnlyRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
                         e.hasReferenceValidations = true;
                     }
+                    // personal (intent identity mapping): the generated personal (my) controller
+                    // resolves the current user through the TARGET's repository - a cross-model
+                    // import resolves like any custom-code one (client-Java compiles registry-wide).
+                    if (p.relationshipPersonal && p.relationshipIdentityProperty) {
+                        e.personalProperty = p.name;
+                        e.personalFkJavaClass = p.dataTypeJavaClass;
+                        e.personalIdentityProperty = p.relationshipIdentityProperty;
+                        e.personalIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
+                        e.personalIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
+                    }
                     // The target's own Harmonia SPA (for the FK "Add new" iframe dialog). The web assets
                     // live under the RAW genFolderName, while the Java controllers use the sanitized one
                     // - so this must be derived from targetGenFolder directly, NOT by rewriting the
@@ -197,6 +207,38 @@ export function process(model, parameters) {
             }
         });
     });
+    // Personal-surface derivation (intent identity/personal/sensitive), after every entity's own
+    // FK pass: a composition CHILD inherits the personal scope from its DIRECT composition parent
+    // (one hop - the flagship shapes are day-allocation -> line, vacation-day -> request); deeper
+    // chains are not generated (the child then simply has no personal surface). Each personalized
+    // entity also collects its sensitive property names for the response scrub.
+    if (parameters.javaRuntime) {
+        model.entities.forEach(e => {
+            if (e.personalProperty) return;
+            const parentFk = (e.properties || []).find(p => p.relationshipType === 'COMPOSITION');
+            if (!parentFk) return;
+            const parent = model.entities.find(x => x.name === parentFk.relationshipEntityName);
+            if (!parent || !parent.personalProperty) return;
+            const parentPerspective = sanitizeJavaIdentifier(parentFk.relationshipEntityPerspectiveName);
+            e.personalParent = {
+                fkProperty: parentFk.name,
+                fkJavaClass: parentFk.dataTypeJavaClass,
+                entity: parent.name,
+                entityClass: `gen.${parameters.javaGenFolderName}.data.${parentPerspective}.${parent.name}Entity`,
+                repositoryClass: `gen.${parameters.javaGenFolderName}.data.${parentPerspective}.${parent.name}Repository`,
+                personalProperty: parent.personalProperty,
+                personalFkJavaClass: parent.personalFkJavaClass
+            };
+            e.personalIdentityProperty = parent.personalIdentityProperty;
+            e.personalIdentityEntityClass = parent.personalIdentityEntityClass;
+            e.personalIdentityRepositoryClass = parent.personalIdentityRepositoryClass;
+        });
+        model.entities.forEach(e => {
+            if (!e.personalProperty && !e.personalParent) return;
+            e.sensitiveProperties = (e.properties || []).filter(p => p.sensitiveProperty === 'true' || p.sensitiveProperty === true)
+                                                        .map(p => p.name);
+        });
+    }
 
     // A dependsOn dependent widget needs its TRIGGER property's controller URL at runtime (the
     // generated form loads the trigger's selected record to read widgetDependsOnValueFrom). Resolved

@@ -101,6 +101,14 @@ public class RelationIntent {
      */
     private boolean leafOnly;
 
+    /**
+     * Marks this to-one relation as the OWNER of the record for the personal surface: on the generated
+     * personal (my) REST controller, reads are filtered to the logged-in user's mapped identity record
+     * and writes force this FK server-side. Valid only when the target entity declares
+     * {@code identity}. Composition children inherit the scope through their parent chain.
+     */
+    private boolean personal;
+
     public String getName() {
         return name;
     }
@@ -234,5 +242,13 @@ public class RelationIntent {
 
     public void setLeafOnly(boolean leafOnly) {
         this.leafOnly = leafOnly;
+    }
+
+    public boolean isPersonal() {
+        return personal;
+    }
+
+    public void setPersonal(boolean personal) {
+        this.personal = personal;
     }
 }

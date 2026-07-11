@@ -133,6 +133,14 @@ public class EntityIntent {
      * references become valid. Explicit by design - a self-FK alone does not imply a hierarchy.
      */
     private String hierarchy;
+
+    /**
+     * Names the field of THIS entity matched against the logged-in username to resolve the current
+     * user's record (e.g. {@code identity: email}) - the mapping that personal surfaces are scoped by.
+     * Declared once, on the entity that represents the person; consumers referencing it cross-model
+     * inherit the mapping through the resolved model.
+     */
+    private String identity;
     /**
      * Optional declarative validations - the cross-field / cross-line rules plain field attributes
      * cannot express: {@code exactlyOne} (row-level one-of), {@code itemsSumEqual} (the document's
@@ -378,5 +386,13 @@ public class EntityIntent {
 
     public void setDuplicable(Boolean duplicable) {
         this.duplicable = duplicable;
+    }
+
+    public String getIdentity() {
+        return identity;
+    }
+
+    public void setIdentity(String identity) {
+        this.identity = identity;
     }
 }

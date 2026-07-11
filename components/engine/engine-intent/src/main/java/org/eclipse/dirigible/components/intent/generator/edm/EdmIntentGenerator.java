@@ -351,6 +351,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                             context);
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
+                    putPersonal(fkProperty, relation, info.identityProperty(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
@@ -365,6 +366,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putOptionsFilter(fkProperty, relation, null);
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
+                putPersonal(fkProperty, relation,
+                        target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()), true);
                 properties.add(fkProperty);
                 relations.add(relationLink(name, relation, target, compositionParents, settingEntities));
             }
@@ -400,6 +403,13 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 // The tree edge: the FK property of the entity's self-relation named by `hierarchy`.
                 // The Harmonia list renders a tree off it and pickers indent/leaf-filter by it.
                 entityMap.put("hierarchyProperty", IntentNaming.pascalCase(entity.getHierarchy()));
+            }
+            if (entity.getIdentity() != null && !entity.getIdentity()
+                                                       .isBlank()) {
+                // The current-user mapping: the field of THIS entity matched against the logged-in
+                // username. Consumers referencing this entity (incl. cross-model, via TargetInfo)
+                // read it to scope their personal surfaces.
+                entityMap.put("identityProperty", IntentNaming.pascalCase(entity.getIdentity()));
             }
             List<Map<String, Object>> checkMaps = buildChecks(entity, byName);
             if (!checkMaps.isEmpty()) {
@@ -784,6 +794,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType())) {
             p.put("isReadOnlyProperty", "true");
         }
+        if (field.isSensitive()) {
+            // Hidden from the personal (my) surface: absent from its pages and stripped from the
+            // personal REST controller's responses. The power surface ignores this attribute.
+            p.put("sensitiveProperty", "true");
+        }
         if (field.isPrimaryKey()) {
             p.put("dataPrimaryKey", "true");
         } else if (field.isRequired()) {
@@ -1122,6 +1137,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         p.put("widgetLeafOnly", "true");
         p.put("widgetHierarchyProperty", targetHierarchyProperty);
+    }
+
+    /**
+     * Emit the personal-owner attributes for a relation that declares {@code personal: true}: the
+     * generated personal (my) REST controller scopes reads by this FK and forces it on writes, and the
+     * personal UI renders it as a locked value. Two scalar attrs: {@code relationshipPersonal} plus
+     * {@code relationshipIdentityProperty} - the TARGET's identity field (PascalCase), which the
+     * generated current-user resolution matches against the logged-in username. The parser checked a
+     * same-model target declares an identity; a resolved cross-model target without one fails loudly
+     * here, while an unresolved target (the unit-test convention fallback) is skipped.
+     */
+    private static void putPersonal(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty, boolean resolved) {
+        if (!relation.isPersonal()) {
+            return;
+        }
+        if (targetIdentityProperty == null || targetIdentityProperty.isBlank()) {
+            if (resolved) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName()
+                        + "] declares personal but its target [" + relation.getTo() + "] declares no identity"));
+            }
+            return;
+        }
+        p.put("relationshipPersonal", "true");
+        p.put("relationshipIdentityProperty", targetIdentityProperty);
     }
 
     /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */

@@ -147,6 +147,28 @@ possible - corrections are flow-generated reversals, never edits.
 The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
 node with children.
 
+## identity / personal / sensitive - the personal (my) surface
+
+```yaml
+- name: Employee
+  identity: email              # this entity maps the logged-in user (matched by this field)
+# elsewhere - the owner relation of a personal record:
+- name: VacationRequest
+  fields:
+    - { name: dailyRate, type: decimal, sensitive: true }  # never on the personal surface
+  relations:
+    - { name: Employee, kind: manyToOne, to: Employee, model: kf-employees, personal: true }
+```
+
+A `personal` owner relation makes the entity get an ADDITIONAL generated REST controller
+(`<Entity>MyController`) scoped to the logged-in user: reads are filtered to the user's mapped
+identity record, writes force the owner FK server-side, foreign records are a 404, and
+`sensitive` fields are stripped from responses and ignored on writes. Composition children
+inherit the scope through their DIRECT parent (ancestor-ownership guard). The regular (power)
+controller is unaffected. One `personal` relation per entity; the target must declare
+`identity` (a string field, conventionally the unique e-mail/username). No identity row mapped
+to the user = an empty personal surface, never an error.
+
 ## multilingual - translated master data
 
 ```yaml

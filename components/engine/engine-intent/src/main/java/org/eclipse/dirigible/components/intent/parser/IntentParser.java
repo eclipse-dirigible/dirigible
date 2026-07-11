@@ -1052,6 +1052,16 @@ public final class IntentParser {
                         validateDependsOn(entity, subject, field.getDependsOn(), null, byName, issues);
                     }
                 }
+                if (field.isSensitive()) {
+                    if (field.isPrimaryKey()) {
+                        issues.add("entity [" + name + "] field [" + field.getName()
+                                + "] is the primary key so it cannot be sensitive (the personal surface needs it)");
+                    }
+                    if (field.getName()
+                             .equals(entity.getIdentity())) {
+                        issues.add("entity [" + name + "] field [" + field.getName() + "] is the identity field so it cannot be sensitive");
+                    }
+                }
             }
             if (idCount > 1) {
                 issues.add("entity [" + name + "] declares " + idCount + " primary-key fields - exactly one is allowed");
@@ -1061,6 +1071,7 @@ public final class IntentParser {
             if (entity.getName() == null) {
                 continue;
             }
+            int personalCount = 0;
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.getName() == null || relation.getName()
                                                           .isBlank()) {
@@ -1125,10 +1136,22 @@ public final class IntentParser {
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
+                if (relation.isPersonal()) {
+                    personalCount++;
+                    validatePersonal(entity, relation, byName, issues);
+                }
+            }
+            if (personalCount > 1) {
+                issues.add("entity [" + entity.getName() + "] declares " + personalCount
+                        + " personal relations - exactly one owner is allowed");
             }
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
                 validateHierarchy(entity, issues);
+            }
+            if (entity.getIdentity() != null && !entity.getIdentity()
+                                                       .isBlank()) {
+                validateIdentity(entity, issues);
             }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
@@ -1217,6 +1240,62 @@ public final class IntentParser {
         }
         if (edge.isRequired()) {
             issues.add(subject + " must be optional - a required parent leaves no way to author a root node");
+        }
+    }
+
+    /**
+     * {@code identity: <field>} names the field of this entity matched against the logged-in username
+     * (the personal-surface mapping). It must be an own string field - the natural shape is a unique
+     * e-mail/username column.
+     */
+    private static void validateIdentity(EntityIntent entity, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] identity [" + entity.getIdentity() + "]";
+        FieldIntent field = null;
+        if (entity.getFields() != null) {
+            for (FieldIntent f : entity.getFields()) {
+                if (entity.getIdentity()
+                          .equals(f.getName())) {
+                    field = f;
+                    break;
+                }
+            }
+        }
+        if (field == null) {
+            issues.add(subject + " does not name a field of the entity");
+            return;
+        }
+        String type = field.getType() == null ? "string"
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " must be a string field (it is matched against the login username), got [" + field.getType() + "]");
+        }
+    }
+
+    /**
+     * {@code personal: true} marks the to-one relation whose target record IS the logged-in user - the
+     * owner the personal surface scopes by. The target must declare {@code identity}; a same-model
+     * target is checked here, a cross-model one at generation against the resolved owner model (like
+     * the relation target itself).
+     */
+    private static void validatePersonal(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares personal but only a manyToOne/oneToOne relation can own the record");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent - a child inherits the personal scope through it; mark the parent's relation");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && (target.getIdentity() == null || target.getIdentity()
+                                                                         .isBlank())) {
+                issues.add(subject + " declares personal but its target [" + relation.getTo() + "] declares no identity");
+            }
         }
     }
 

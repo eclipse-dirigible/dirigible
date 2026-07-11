@@ -262,6 +262,11 @@ export function generateFiles(model, parameters, templateSources) {
     // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
     const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
 
+    // Personal (my) surface: entities owned by the logged-in user - a direct personal FK
+    // (intent `personal: true`) or the scope inherited from the direct composition parent
+    // (derived by parameterUtils). Each gets an additional scoped REST controller / UI.
+    const personalModels = model.entities.filter(e => e.personalProperty || e.personalParent);
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -331,6 +336,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "uiSlotsModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiSlotsModels, parameters));
+                    break;
+                case "personalModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));

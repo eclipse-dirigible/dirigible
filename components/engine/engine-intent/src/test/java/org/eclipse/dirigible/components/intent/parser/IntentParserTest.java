@@ -980,4 +980,88 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("generate map source [nonexistentField] is not a field or to-one relation of [Employee]")),
                 "expected a bad-map-source issue, got: " + ex.getIssues());
     }
+
+    /** A complete personalized model built line by line - no text-block margin surprises. */
+    private static String personalYaml(String employeeExtra, String requestFields, String requestRelations) {
+        return "name: hr\n" //
+                + "entities:\n" //
+                + "  - name: Employee\n" //
+                + employeeExtra //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string, required: true, length: 200 }\n" //
+                + "      - { name: email, type: string, required: true, unique: true, length: 320 }\n" //
+                + "  - name: VacationRequest\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + requestFields //
+                + requestRelations;
+    }
+
+    private static final String OWNER_RELATION =
+            "    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }\n";
+
+    @Test
+    void identityAndPersonalParseWithoutIssues() {
+        IntentParser.parse(
+                personalYaml("    identity: email\n", "      - { name: dailyRate, type: decimal, sensitive: true }\n", OWNER_RELATION));
+    }
+
+    @Test
+    void identityMustNameAnOwnStringField() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: mail\n", "", OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not name a field")),
+                "expected an unknown-field issue, got: " + ex.getIssues());
+
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: id\n", "", OWNER_RELATION)));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("must be a string field")),
+                "expected a non-string issue, got: " + ex2.getIssues());
+    }
+
+    @Test
+    void personalRequiresAnIdentityOnItsTarget() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("", "", OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares no identity")),
+                "expected a no-identity issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void sensitiveIsRejectedOnThePrimaryKeyAndTheIdentityField() {
+        String pk = personalYaml("    identity: email\n", "", OWNER_RELATION).replace("primaryKey: true, generated: true }",
+                "primaryKey: true, generated: true, sensitive: true }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(pk));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("primary key so it cannot be sensitive")),
+                "expected a pk-sensitive issue, got: " + ex.getIssues());
+
+        String idf = personalYaml("    identity: email\n", "", OWNER_RELATION).replace("unique: true, length: 320 }",
+                "unique: true, length: 320, sensitive: true }");
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(idf));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("identity field so it cannot be sensitive")),
+                "expected an identity-sensitive issue, got: " + ex2.getIssues());
+    }
+
+    @Test
+    void onlyOnePersonalRelationIsAllowed() {
+        String relations = "    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee, personal: true }\n"
+                + "      - { name: Substitute, kind: manyToOne, to: Employee, personal: true }\n";
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: email\n", "", relations)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("exactly one owner is allowed")),
+                "expected a single-owner issue, got: " + ex.getIssues());
+    }
 }
