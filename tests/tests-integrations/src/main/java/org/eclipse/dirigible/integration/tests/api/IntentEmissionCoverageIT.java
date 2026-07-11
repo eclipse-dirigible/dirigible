@@ -137,6 +137,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: email, type: string, required: true, unique: true, length: 320 }
 
               - name: Claim
+                label: "{note} ({Person.name})"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
@@ -264,6 +265,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");
+
+        // label: the repository recomputes the stored display Name on every write path.
+        String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
+        assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
+        assertTrue(claimRepository.contains("related.Name"),
+                "a one-hop label token must load the related record and read its display property");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -413,7 +420,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Person", equalTo(1))
-                                                 .body("Rate", nullValue()));
+                                                 .body("Rate", nullValue())
+                                                 // label: the stored display name computed on write - "{note} ({Person.name})".
+                                                 .body("Name", equalTo("spoofed (Admin)")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
                                                  .when()
@@ -426,7 +435,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("Note", equalTo("edited"))
                                                  .body("Person", equalTo(1))
-                                                 .body("Rate", equalTo(50.0F)));
+                                                 .body("Rate", equalTo(50.0F))
+                                                 .body("Name", equalTo("edited (Admin)")));
 
         // The composition child guards through its parent: the foreign claim's lines are a 404,
         // creating a line under a foreign claim is a 404, under my own claim it works.

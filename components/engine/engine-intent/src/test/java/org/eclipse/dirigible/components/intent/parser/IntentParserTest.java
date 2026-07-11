@@ -1064,4 +1064,45 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("exactly one owner is allowed")),
                 "expected a single-owner issue, got: " + ex.getIssues());
     }
+
+    @Test
+    void labelParsesAndComposesButRejectsBadTokens() {
+        // A valid label with a literal, a field, a formatted field, and a one-hop relation token.
+        IntentParser.parse(personalYaml("    identity: email\n", "      - { name: fromDate, type: date }\n",
+                "    label: \"{fromDate|yyyy MMMM} - {Employee.name}\"\n" + OWNER_RELATION));
+
+        // An unknown own-field token is rejected.
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(personalYaml("    identity: email\n", "", "    label: \"{missing}\"\n" + OWNER_RELATION)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("does not name a field")),
+                "expected an unknown-token issue, got: " + ex.getIssues());
+
+        // A label next to an authored name field is redundant.
+        IntentValidationException ex2 =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("    identity: email\n",
+                        "      - { name: name, type: string, length: 100 }\n", "    label: \"{name}\"\n" + OWNER_RELATION)));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("redundant")),
+                "expected a redundant-label issue, got: " + ex2.getIssues());
+
+        // A sensitive field must never leak into the label.
+        IntentValidationException ex3 =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(personalYaml("    identity: email\n",
+                        "      - { name: rate, type: decimal, sensitive: true }\n", "    label: \"{rate}\"\n" + OWNER_RELATION)));
+        assertTrue(ex3.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("sensitive")),
+                "expected a sensitive-token issue, got: " + ex3.getIssues());
+
+        // Two hops are rejected with the compose hint.
+        IntentValidationException ex4 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                personalYaml("    identity: email\n", "", "    label: \"{Employee.manager.name}\"\n" + OWNER_RELATION)));
+        assertTrue(ex4.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("deeper than one relation hop")),
+                "expected a depth issue, got: " + ex4.getIssues());
+    }
 }

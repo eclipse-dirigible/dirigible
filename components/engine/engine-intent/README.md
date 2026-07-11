@@ -147,6 +147,21 @@ possible - corrections are flow-generated reversals, never edits.
 The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
 node with children.
 
+## label - the stored display name
+
+```yaml
+- name: SalesInvoice
+  label: "{number} - {date|yyyy MMMM} - {Customer.name}"
+```
+
+Generates a stored, read-only `Name` property recomputed by the repository on **every write path**
+(save / update / workflow writes), so lookups, dropdowns and lists show a meaningful display name
+everywhere - dropdown label resolution prefers `Name` automatically, including cross-model. Tokens
+are own fields or ONE-hop to-one relation properties, `|format` applies a date pattern to temporal
+values. Compose across hops by referencing the related entity's own generated label
+(`{ProjectTimesheet.Name}` - e.g. "2026 July - My Project - Ivan Georgiev"). Rejected when the
+entity already declares a `name` field or a token references a sensitive field.
+
 ## identity / personal / sensitive - the personal (my) surface
 
 ```yaml

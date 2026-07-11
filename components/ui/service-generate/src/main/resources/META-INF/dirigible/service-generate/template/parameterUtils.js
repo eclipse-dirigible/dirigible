@@ -188,6 +188,9 @@ export function process(model, parameters) {
                     // personal (intent identity mapping): the generated personal (my) controller
                     // resolves the current user through the TARGET's repository - a cross-model
                     // import resolves like any custom-code one (client-Java compiles registry-wide).
+                    // The target repository, importable from generated Java (registry-wide compile) -
+                    // used by the label computation and the personal-surface identity resolution.
+                    p.targetRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
                     if (p.relationshipPersonal && p.relationshipIdentityProperty) {
                         e.personalProperty = p.name;
                         e.personalFkJavaClass = p.dataTypeJavaClass;
@@ -237,6 +240,19 @@ export function process(model, parameters) {
             if (!e.personalProperty && !e.personalParent) return;
             e.sensitiveProperties = (e.properties || []).filter(p => p.sensitiveProperty === 'true' || p.sensitiveProperty === true)
                                                         .map(p => p.name);
+        });
+        // Label parts (intent `label:`): resolve each relation token's FK property to the target
+        // repository the DAO's computeName loads through; drop parts whose FK is not resolvable.
+        model.entities.forEach(e => {
+            if (!e.labelParts) return;
+            e.labelParts = e.labelParts.filter(part => {
+                if (part.kind !== 'relation') return true;
+                const fk = (e.properties || []).find(p => p.name === part.relation);
+                if (!fk || !fk.targetRepositoryClass) return false;
+                part.repositoryClass = fk.targetRepositoryClass;
+                return true;
+            });
+            e.hasLabel = true;
         });
     }
 

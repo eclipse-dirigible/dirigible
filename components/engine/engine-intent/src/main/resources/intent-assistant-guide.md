@@ -257,6 +257,14 @@ not listed keeps its default position and is appended after the listed ones. Sys
 (`ProcessId`, audit columns) need not be listed. Every listed name must be a real field or relation of
 the entity.
 
+**Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
+generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
+then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a
+date pattern for temporal values; deeper paths are rejected - compose by referencing the related
+entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
+a token must never reference a `sensitive` field. Prefer a label for every document-ish entity a
+user will pick in a dropdown (a raw id is what renders otherwise).
+
 **Personal surfaces (`identity` / `personal` / `sensitive`):** an entity representing the person
 declares `identity: <string field>` (conventionally the unique e-mail matched against the login
 username). A record-owning to-one relation to it may declare `personal: true` (at most one per

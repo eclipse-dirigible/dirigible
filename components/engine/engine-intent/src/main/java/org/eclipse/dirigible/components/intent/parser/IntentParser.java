@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
@@ -1153,6 +1154,10 @@ public final class IntentParser {
                                                        .isBlank()) {
                 validateIdentity(entity, issues);
             }
+            if (entity.getLabel() != null && !entity.getLabel()
+                                                    .isBlank()) {
+                validateLabel(entity, byName, issues);
+            }
             if (entity.getImmutableIn() != null && !entity.getImmutableIn()
                                                           .isEmpty()) {
                 issues.add("entity [" + entity.getName()
@@ -1295,6 +1300,71 @@ public final class IntentParser {
             if (target != null && (target.getIdentity() == null || target.getIdentity()
                                                                          .isBlank())) {
                 issues.add(subject + " declares personal but its target [" + relation.getTo() + "] declares no identity");
+            }
+        }
+    }
+
+    /**
+     * {@code label: "..."} - a display-label expression generating the stored read-only {@code Name}
+     * property. Tokens are own fields or one-hop to-one relation properties; a same-model target
+     * property is checked here (the target's own generated {@code Name} counts), a cross-model one at
+     * generation. A label is redundant next to an authored {@code name} field, and it must never embed
+     * a sensitive field (the Name is visible on the personal surface).
+     */
+    private static void validateLabel(EntityIntent entity, java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] label";
+        if (entity.getFields() != null && entity.getFields()
+                                                .stream()
+                                                .anyMatch(f -> "name".equalsIgnoreCase(f.getName()))) {
+            issues.add(subject + " is redundant - the entity already declares a name field");
+            return;
+        }
+        java.util.List<LabelExpression.Part> parts;
+        try {
+            parts = LabelExpression.parse(entity.getLabel());
+        } catch (IllegalArgumentException e) {
+            issues.add(subject + " is malformed: " + e.getMessage());
+            return;
+        }
+        for (LabelExpression.Part part : parts) {
+            if (part.isLiteral()) {
+                continue;
+            }
+            if (part.relation() == null) {
+                FieldIntent field = fieldByName(entity, part.property());
+                if (field == null) {
+                    issues.add(subject + " token [" + part.property() + "] does not name a field of the entity");
+                } else if (field.isSensitive()) {
+                    issues.add(subject + " token [" + part.property()
+                            + "] is a sensitive field - the generated Name is visible on the personal surface");
+                }
+                continue;
+            }
+            RelationIntent relation = toOneRelationByName(entity, part.relation());
+            if (relation == null) {
+                issues.add(
+                        subject + " token [" + part.relation() + "." + part.property() + "] does not name a to-one relation of the entity");
+                continue;
+            }
+            if (relation.isCrossModel()) {
+                continue; // resolved against the owner model at generation
+            }
+            EntityIntent target = byName.get(relation.getTo());
+            if (target == null) {
+                continue;
+            }
+            boolean targetHasIt = fieldByName(target, part.property()) != null
+                    || ("name".equalsIgnoreCase(part.property()) && target.getLabel() != null && !target.getLabel()
+                                                                                                        .isBlank());
+            if (!targetHasIt) {
+                issues.add(subject + " token [" + part.relation() + "." + part.property() + "] does not name a field of ["
+                        + relation.getTo() + "]");
+            } else {
+                FieldIntent targetField = fieldByName(target, part.property());
+                if (targetField != null && targetField.isSensitive()) {
+                    issues.add(subject + " token [" + part.relation() + "." + part.property() + "] is a sensitive field of ["
+                            + relation.getTo() + "] - it must not leak into a label");
+                }
             }
         }
     }

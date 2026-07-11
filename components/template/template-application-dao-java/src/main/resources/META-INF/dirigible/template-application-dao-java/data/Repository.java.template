@@ -108,6 +108,11 @@ import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
 #end
+#if($hasLabel)
+import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAccessor;
+import java.util.Locale;
+#end
 #if($importsCode && $importsCode != "")
 // custom imports
 ${importsCode}
@@ -123,6 +128,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity save(${name}Entity entity) {
 #rollupGuardCheck()
+#if($hasLabel)
+        computeName(entity);
+#end
 #if($haveCalculatedPropertyOnCreate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnCreate)
@@ -151,6 +159,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity update(${name}Entity entity) {
 #rollupGuardCheck()
+#if($hasLabel)
+        computeName(entity);
+#end
 #if($haveCalculatedPropertyOnUpdate)
 #foreach ($property in $properties)
 #if($property.isCalculatedProperty && $property.calculatedActionOnUpdate)
@@ -183,6 +194,11 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
      * re-fire onUpdate reactions (notifications, roll-ups, integrations) for a change the user never made.
      */
     public ${name}Entity updateWithoutEvent(${name}Entity entity) {
+#if($hasLabel)
+        // Workflow writes change label inputs too (e.g. the stamped document number) - keep the
+        // stored display name current on the system path as well.
+        computeName(entity);
+#end
 #if($documentChecks && $documentChecks.size() > 0)
         // The workflow transition (e.g. the setter flipping the status to POSTED) comes through here -
         // the gate check makes an unbalanced document fail the transition, not silently post.
@@ -323,6 +339,47 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         }
         recalculate(entity);
         return super.update(entity);
+    }
+#end
+
+#if($hasLabel)
+    /**
+     * Recompute the stored display name (intent label expression: ${labelExpression}). One-hop
+     * relation tokens load the referenced record; a missing reference renders empty. Runs on every
+     * write path, so the name follows its inputs (staleness is bounded by the referenced record's
+     * own next write - labels compose by referencing the related entity's generated Name).
+     */
+    private void computeName(${name}Entity entity) {
+        StringBuilder label = new StringBuilder();
+#foreach($part in $labelParts)
+#if($part.kind == "literal")
+        label.append("${part.text}");
+#elseif($part.kind == "field")
+        label.append(formatLabelValue(entity.${part.property}, #if($part.format)"${part.format}"#{else}null#end));
+#else
+        {
+            var related = entity.${part.relation} == null ? null
+                    : new ${part.repositoryClass}().findOne(entity.${part.relation})
+                                                   .orElse(null);
+            label.append(formatLabelValue(related == null ? null : related.${part.property},
+                    #if($part.format)"${part.format}"#{else}null#end));
+        }
+#end
+#end
+        String value = label.toString()
+                            .trim();
+        entity.Name = value.length() > 512 ? value.substring(0, 512) : value;
+    }
+
+    private static String formatLabelValue(Object value, String pattern) {
+        if (value == null) {
+            return "";
+        }
+        if (pattern != null && value instanceof TemporalAccessor temporal) {
+            return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
+                                    .format(temporal);
+        }
+        return String.valueOf(value);
     }
 #end
 }

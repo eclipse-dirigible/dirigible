@@ -141,6 +141,15 @@ public class EntityIntent {
      * inherit the mapping through the resolved model.
      */
     private String identity;
+
+    /**
+     * A display-label expression - literals plus {@code &#123;field&#125;} /
+     * {@code &#123;Relation.field&#125;} tokens (one hop; {@code |format} applies a date pattern to
+     * temporal values). Generates a stored, read-only {@code Name} property recomputed by the
+     * repository on every write, so lookups and dropdowns show it everywhere. Compose across hops by
+     * referencing the related entity's own generated label: {@code &#123;Parent.Name&#125;}.
+     */
+    private String label;
     /**
      * Optional declarative validations - the cross-field / cross-line rules plain field attributes
      * cannot express: {@code exactlyOne} (row-level one-of), {@code itemsSumEqual} (the document's
@@ -394,5 +403,13 @@ public class EntityIntent {
 
     public void setIdentity(String identity) {
         this.identity = identity;
+    }
+
+    public String getLabel() {
+        return label;
+    }
+
+    public void setLabel(String label) {
+        this.label = label;
     }
 }
