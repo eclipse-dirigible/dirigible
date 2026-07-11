@@ -9,17 +9,36 @@
  * scoped ${name}MyController (sensitive fields never arrive). New / row-click navigate to the
  * routed my-form.
  */
+## The EntityStatus relation (widget DOCUMENT_STATUS) shows as a coloured badge, not a number column.
+#set($statusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_STATUS")
+#set($statusProp = $property.name)
+#set($statusUrl = $property.widgetDropdownControllerUrl)
+#set($statusKey = $property.widgetDropDownKey)
+#set($statusVal = $property.widgetDropDownValue)
+#end
+#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}MyListPage', () => ({
     ...basePage(),
     state: 'loading',
     items: [],
     error: null,
+#if($statusProp != "")
+    statusOptions: [],
+#end
 
     // Controller path for the PERSONAL surface, relative to App.config.restBase.
     apiPath: '/${javaPerspectiveName}/${name}MyController',
 
     async init() {
+#if($statusProp != "")
+      try {
+        const rows = await App.services.api.getAll('${statusUrl}', { baseUrl: '' });
+        this.statusOptions = (rows || []).map((r) => ({ value: r.${statusKey}, text: r.${statusVal} }));
+      } catch (e) { this.statusOptions = []; }
+#end
       await this.load();
     },
 
@@ -41,11 +60,28 @@ document.addEventListener('alpine:init', () => {
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
       return String(v);
     },
+#if($statusProp != "")
+
+    // EntityStatus badge: resolve the FK to its label + semantic colour (same mapping as the forms).
+    statusText(row) {
+      const opt = this.statusOptions.find((o) => String(o.value) === String(row.${statusProp}));
+      return opt ? opt.text : '';
+    },
+    statusVariant(text) {
+      const t = String(text || '').toLowerCase();
+      if (/draft/.test(t)) return 'outline';
+      if (/(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)/.test(t)) return 'negative';
+      if (/(pending|await|hold|review|partial)/.test(t)) return 'warning';
+      if (/(approv|accept|activ|complet|paid|done|available)/.test(t)) return 'positive';
+      if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
+      return 'default';
+    },
+#end
 
     columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

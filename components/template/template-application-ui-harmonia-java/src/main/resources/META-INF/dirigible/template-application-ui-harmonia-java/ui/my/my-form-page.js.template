@@ -16,6 +16,11 @@
 #else
 #set($skipParentFk = "__none__")
 #end
+## The EntityStatus relation (widget DOCUMENT_STATUS) is surfaced as a read-only badge, not a control.
+#set($statusProp = "")
+#foreach($property in $properties)
+#if($property.widgetType == "DOCUMENT_STATUS")#set($statusProp = $property.name)#end
+#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}MyFormPage', () => ({
     ...basePage(),
@@ -54,7 +59,7 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && !$property.sensitiveProperty)
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty)
           if (this.form.${property.name} != null && this.form.${property.name} !== '') this.form.${property.name} = String(this.form.${property.name});
 #end
 #end
@@ -85,7 +90,7 @@ document.addEventListener('alpine:init', () => {
     async loadOptions() {
       const loaded = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN" && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
+#if(($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS") && !$property.sensitiveProperty && $property.name != $skipOwnerFk && $property.name != $skipParentFk)
       try {
         const rows = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         loaded['${property.name}'] = (rows || []).map(r => ({ value: r.${property.widgetDropDownKey}, text: r.${property.widgetDropDownValue} }));
@@ -94,6 +99,25 @@ document.addEventListener('alpine:init', () => {
 #end
       this.options = loaded;
     },
+#if($statusProp != "")
+
+    // EntityStatus badge (read-only): resolve the status FK to its label + a semantic colour, the
+    // same mapping the main form-view/document-view use.
+    statusText() {
+      const v = this.form.${statusProp};
+      const opt = (this.options['${statusProp}'] || []).find((o) => String(o.value) === String(v));
+      return opt ? opt.text : '';
+    },
+    statusVariant(text) {
+      const t = String(text || '').toLowerCase();
+      if (/draft/.test(t)) return 'outline';
+      if (/(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)/.test(t)) return 'negative';
+      if (/(pending|await|hold|review|partial)/.test(t)) return 'warning';
+      if (/(approv|accept|activ|complet|paid|done|available)/.test(t)) return 'positive';
+      if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
+      return 'default';
+    },
+#end
 
     toPayload() {
       const payload = { ...this.form };
