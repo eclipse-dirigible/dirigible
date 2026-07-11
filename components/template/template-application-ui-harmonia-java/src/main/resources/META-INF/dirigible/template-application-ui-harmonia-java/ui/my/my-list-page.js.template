@@ -26,7 +26,7 @@ document.addEventListener('alpine:init', () => {
     async load() {
       this.state = 'loading';
       try {
-        this.items = await App.api.get(this.apiPath) || [];
+        this.items = await App.services.api.get(this.apiPath) || [];
         this.state = this.items.length ? 'default' : 'empty';
       } catch (e) {
         this.error = (e && e.message) || 'Could not load your ${menuLabel}.';
