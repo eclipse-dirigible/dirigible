@@ -27,8 +27,8 @@ import java.util.Map;
  *     unit: month                                   # day (default) | week | month
  *     between: { start: startDate, end: endDate }   # date fields of the master
  *     skipDays: [0, 6]                              # unit day only: weekdays skipped (0=Sun..6=Sat)
- *     map: { dueDate: period }                      # child date field <- the iterated period date
- *     defaults: { note: generated }                 # child field <- literal
+ *     map: { dueDate: period }                      # child date field &lt;- the iterated period date
+ *     defaults: { note: generated }                 # child field &lt;- literal
  *     spread: { total: principal, into: amount, round: 2 }   # divide a master total across the rows
  *     count: periods                                # write the generated row count to a master field
  * </pre>
