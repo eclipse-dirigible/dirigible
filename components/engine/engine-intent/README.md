@@ -230,6 +230,34 @@ clicked date preset. The child keeps everything a detail has (registry, filtered
 pages) - the calendar is just how its panel renders. `range` works the same way; `slots` stays
 primary-only.
 
+## generate children - collection-driven scheduled generation
+
+```yaml
+schedules:
+  - name: monthly-project-timesheets
+    cron: "0 0 2 1 * *"
+    entity: Project
+    generate:
+      to: ProjectTimesheet
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach: { entity: EmployeeProjectAssignment, match: { Project: id } }
+          map: { Employee: Employee }
+          children:
+            - to: EmployeeDayAllocation
+              parent: EmployeeTimesheet
+              forEach: { days: workingDays }
+              dayField: day
+              defaults: { hours: 8 }
+```
+
+A scheduled generation may create CHILD rows under each generated record: one per matching row of
+a LOCAL collection entity (`forEach: {entity, match}`) or one per working day (Mon-Fri) of the
+month the job runs in (`forEach: {days: workingDays}` + `dayField`). `parent:` names the child's
+to-one back to the generated record; children nest one more level (depth two). Numeric literal
+defaults render as decimals.
+
 ## uses - cross-model references
 
 Entities owned by another intent model are referenced read-only (a PROJECTION + FK + dropdown - no

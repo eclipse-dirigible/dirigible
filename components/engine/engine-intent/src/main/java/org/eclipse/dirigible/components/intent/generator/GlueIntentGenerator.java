@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
@@ -178,6 +179,63 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * carry the target project + model alias; same-model ones leave those blank so the template uses
      * the owner's.
      */
+    /**
+     * The template-ready child blocks of a scheduled generation, up to two levels. A child target
+     * resolves in the SAME model as the generation target (the {@code uses} alias, or locally); the
+     * {@code forEach} collection entity is always LOCAL. The row variable is {@code r<depth>}; field
+     * assignments are pre-rendered against it, defaults against literals.
+     */
+    private static List<Map<String, Object>> buildGenerateChildren(List<GenerateChildIntent> children, UsesIntent uses,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, int depth) {
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (GenerateChildIntent child : children) {
+            Map<String, Object> entry = new LinkedHashMap<>();
+            boolean crossModel = uses != null;
+            CrossModelSupport.TargetInfo target = crossModel ? CrossModelSupport.resolve(context, uses, child.getTo()) : null;
+            entry.put("toEntity", child.getTo());
+            entry.put("toCrossModel", crossModel);
+            entry.put("toModel", crossModel ? uses.getModel() : "");
+            entry.put("toPerspective",
+                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(child.getTo(), compositionParents));
+            entry.put("toPk", target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(child.getTo())));
+            entry.put("parentFkProperty", IntentNaming.pascalCase(child.getParent()));
+            Object days = child.getForEach()
+                               .get("days");
+            String rowVar = "r" + depth;
+            if (days != null) {
+                entry.put("kind", "days");
+                entry.put("dayField", IntentNaming.pascalCase(child.getDayField()));
+                entry.put("fieldAssignments", childAssignments(java.util.Map.of(), child.getDefaults(), rowVar));
+            } else {
+                entry.put("kind", "entity");
+                String collection = String.valueOf(child.getForEach()
+                                                        .get("entity"));
+                entry.put("forEachEntity", collection);
+                entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents));
+                @SuppressWarnings("unchecked")
+                Map<String, Object> match = (Map<String, Object>) child.getForEach()
+                                                                       .get("match");
+                Map.Entry<String, Object> condition = match.entrySet()
+                                                           .iterator()
+                                                           .next();
+                entry.put("matchProperty", IntentNaming.pascalCase(condition.getKey()));
+                entry.put("matchSourceExpression", "entity." + IntentNaming.pascalCase(String.valueOf(condition.getValue())));
+                entry.put("fieldAssignments", childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar));
+            }
+            entry.put("rowVar", rowVar);
+            if (child.getChildren() != null && !child.getChildren()
+                                                     .isEmpty()) {
+                entry.put("children", buildGenerateChildren(child.getChildren(), uses, byName, compositionParents, context, depth + 1));
+            }
+            result.add(entry);
+        }
+        return result;
+    }
+
+    private static Map<String, String> toStringMap(Map<String, String> map) {
+        return map == null ? java.util.Map.of() : map;
+    }
+
     private static List<Map<String, Object>> buildRelationLinks(EntityIntent owner, IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentGenerationContext context) {
         List<Map<String, Object>> links = new ArrayList<>();
@@ -832,6 +890,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return list;
     }
 
+    /**
+     * Like {@code assignments} but a NUMERIC literal default renders as a {@code BigDecimal} - the
+     * child shapes (hours, amounts) are decimal columns, and a bare int literal does not convert to the
+     * generated {@code BigDecimal} field.
+     */
+    private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+        Map<String, String> typedDefaults = new LinkedHashMap<>();
+        if (defaults != null) {
+            typedDefaults.putAll(defaults);
+        }
+        List<Map<String, Object>> list = assignments(map, java.util.Map.of(), sourceVar);
+        for (Map.Entry<String, String> entry : typedDefaults.entrySet()) {
+            if (entry.getValue() == null || entry.getValue()
+                                                 .isBlank()) {
+                continue;
+            }
+            String expression = literalExpression(entry.getValue());
+            if (expression.matches("-?\\d+(\\.\\d+)?")) {
+                expression = "new java.math.BigDecimal(\"" + expression + "\")";
+            }
+            list.add(assignment(entry.getKey(), expression));
+        }
+        return list;
+    }
+
     private static Map<String, Object> assignment(String targetProperty, String expression) {
         Map<String, Object> a = new LinkedHashMap<>();
         a.put("targetProp", IntentNaming.pascalCase(targetProperty));
@@ -1187,6 +1270,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("genToPerspective", toPerspective);
                 entry.put("genToPk", toPk);
                 entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity"));
+                if (g.getChildren() != null && !g.getChildren()
+                                                 .isEmpty()) {
+                    // Collection-driven children: one row per element of a source collection, saved
+                    // under the just-generated parent. Everything is pre-rendered here (the
+                    // expansions convention) - the job template stays shape-only.
+                    entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, byName, compositionParents, context, 1));
+                }
             } else {
                 // The per-row action reuses the notification machinery against the queried row entity.
                 NotificationSupport.Plan plan =

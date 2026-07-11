@@ -149,8 +149,26 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: decimal }
+                  - { name: day,    type: date }
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
+
+            # collection-driven generation: the monthly job creates one Claim per Person and,
+            # under each, one ClaimLine per working day of the month (amount defaulted).
+            schedules:
+              - name: monthly-claims
+                cron: "0 0 4 1 * *"
+                entity: Person
+                generate:
+                  to: Claim
+                  map: { Person: id }
+                  defaults: { note: monthly }
+                  children:
+                    - to: ClaimLine
+                      parent: Claim
+                      forEach: { days: workingDays }
+                      dayField: day
+                      defaults: { amount: 8 }
 
             processes:
               # assignee: personal - the confirm task lands in exactly the owner's Inbox (the IT
@@ -298,6 +316,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
         assertTrue(myPerspective.contains("application-personal-perspectives"),
                 "the personal perspective must register on the My Shell's extension point");
+
+        // collection-driven generation: the job creates the parent AND its per-working-day children.
+        String job = contentOf("gen/events/MonthlyClaimsJob.java");
+        assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
+        assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
+        assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
 
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");

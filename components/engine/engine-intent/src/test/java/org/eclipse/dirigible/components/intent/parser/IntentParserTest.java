@@ -1105,4 +1105,53 @@ class IntentParserTest {
                       .anyMatch(i -> i.contains("deeper than one relation hop")),
                 "expected a depth issue, got: " + ex4.getIssues());
     }
+
+    @Test
+    void scheduleGenerateChildrenValidate() {
+        String head = "name: hr\n" //
+                + "entities:\n" //
+                + "  - name: Person\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string, required: true, length: 200 }\n" //
+                + "  - name: Claim\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "  - name: ClaimLine\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: day, type: date }\n" //
+                + "schedules:\n" //
+                + "  - name: monthly\n" //
+                + "    cron: \"0 0 4 1 * *\"\n" //
+                + "    entity: Person\n" //
+                + "    generate:\n" //
+                + "      to: Claim\n" //
+                + "      map: { Person: id }\n" //
+                + "      children:\n";
+        // A well-formed days child validates cleanly.
+        IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { days: workingDays }\n" //
+                + "          dayField: day\n");
+        // days without a dayField is rejected.
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { days: workingDays }\n"));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("no dayField")),
+                "expected a dayField issue, got: " + ex.getIssues());
+        // an entity forEach without match is rejected.
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(head //
+                + "        - to: ClaimLine\n" //
+                + "          parent: Claim\n" //
+                + "          forEach: { entity: Person }\n"));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("requires a match")),
+                "expected a match issue, got: " + ex2.getIssues());
+    }
 }

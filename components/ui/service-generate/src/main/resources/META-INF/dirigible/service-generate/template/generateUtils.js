@@ -613,7 +613,27 @@ export function generateFiles(model, parameters, templateSources) {
                                 genToGenFolder: isGenerate
                                     ? (sc.genCrossModel ? sanitizeJavaIdentifier(sc.genToModel) : parameters.javaGenFolderName)
                                     : "",
-                                genToJavaPerspective: isGenerate ? sanitizeJavaIdentifier(sc.genToPerspective) : ""
+                                genToJavaPerspective: isGenerate ? sanitizeJavaIdentifier(sc.genToPerspective) : "",
+                                // Collection-driven children: fully-qualified classes resolved here
+                                // (the template engine knows the path layout; the glue carried only
+                                // logical names). The child target lives in the generation target's
+                                // model; the forEach collection is always LOCAL.
+                                genChildren: (sc.genChildren || []).map(function resolveChild(c) {
+                                    const childGenFolder = c.toCrossModel ? sanitizeJavaIdentifier(c.toModel) : parameters.javaGenFolderName;
+                                    const childPkg = 'gen.' + childGenFolder + '.data.' + sanitizeJavaIdentifier(c.toPerspective) + '.';
+                                    return {
+                                        ...c,
+                                        toEntityClass: childPkg + c.toEntity + 'Entity',
+                                        toRepositoryClass: childPkg + c.toEntity + 'Repository',
+                                        forEachEntityClass: c.forEachEntity
+                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Entity'
+                                            : undefined,
+                                        forEachRepositoryClass: c.forEachEntity
+                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Repository'
+                                            : undefined,
+                                        children: (c.children || []).map(resolveChild)
+                                    };
+                                })
                             };
                             const cleanScheduleParameters = cleanData(scheduleParameters);
                             generatedFiles.push({

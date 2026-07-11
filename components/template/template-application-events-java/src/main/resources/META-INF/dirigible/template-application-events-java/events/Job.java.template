@@ -48,7 +48,67 @@ public class ${className}Job implements JobHandler {
 #foreach($a in $genFieldAssignments)
             target.${a.targetProp} = ${a.expr};
 #end
-            new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
+            var savedTarget = new gen.${genToGenFolder}.data.${genToJavaPerspective}.${genToEntity}Repository().save(target);
+#foreach($c in $genChildren)
+#if($c.kind == "days")
+            // ${c.toEntity}: one row per working day (Mon-Fri) of the current month.
+            for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                    monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                    day.isBefore(monthEnd); day = day.plusDays(1)) {
+                if (day.getDayOfWeek().getValue() >= 6) {
+                    continue;
+                }
+                ${c.toEntityClass} ${c.rowVar} = new ${c.toEntityClass}();
+                ${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+                ${c.rowVar}.${c.dayField} = day;
+#foreach($a in $c.fieldAssignments)
+                ${c.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                new ${c.toRepositoryClass}().save(${c.rowVar});
+            }
+#else
+            // ${c.toEntity}: one row per matching ${c.forEachEntity} of the source row.
+            for (${c.forEachEntityClass} ${c.rowVar} : new ${c.forEachRepositoryClass}().findAll(
+                    org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${c.matchProperty}", ${c.matchSourceExpression}))) {
+                ${c.toEntityClass} child${c.rowVar} = new ${c.toEntityClass}();
+                child${c.rowVar}.${c.parentFkProperty} = savedTarget.${genToPk};
+#foreach($a in $c.fieldAssignments)
+                child${c.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                var saved${c.rowVar} = new ${c.toRepositoryClass}().save(child${c.rowVar});
+#foreach($g in $c.children)
+#if($g.kind == "days")
+                // ${g.toEntity}: one row per working day (Mon-Fri) of the current month.
+                for (java.time.LocalDate day = java.time.LocalDate.now().withDayOfMonth(1),
+                        monthEnd = java.time.LocalDate.now().withDayOfMonth(1).plusMonths(1);
+                        day.isBefore(monthEnd); day = day.plusDays(1)) {
+                    if (day.getDayOfWeek().getValue() >= 6) {
+                        continue;
+                    }
+                    ${g.toEntityClass} ${g.rowVar} = new ${g.toEntityClass}();
+                    ${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+                    ${g.rowVar}.${g.dayField} = day;
+#foreach($a in $g.fieldAssignments)
+                    ${g.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                    new ${g.toRepositoryClass}().save(${g.rowVar});
+                }
+#else
+                // ${g.toEntity}: one row per matching ${g.forEachEntity} of the source row.
+                for (${g.forEachEntityClass} ${g.rowVar} : new ${g.forEachRepositoryClass}().findAll(
+                        org.eclipse.dirigible.components.data.store.java.repository.Criteria.create().eq("${g.matchProperty}", ${g.matchSourceExpression}))) {
+                    ${g.toEntityClass} child${g.rowVar} = new ${g.toEntityClass}();
+                    child${g.rowVar}.${g.parentFkProperty} = saved${c.rowVar}.${c.toPk};
+#foreach($a in $g.fieldAssignments)
+                    child${g.rowVar}.${a.targetProp} = ${a.expr};
+#end
+                    new ${g.toRepositoryClass}().save(child${g.rowVar});
+                }
+#end
+#end
+            }
+#end
+#end
 #else
 #foreach($load in $relationLoads)
             ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});

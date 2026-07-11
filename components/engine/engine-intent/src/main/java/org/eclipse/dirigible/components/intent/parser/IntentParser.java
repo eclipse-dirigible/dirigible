@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
 import org.eclipse.dirigible.components.intent.model.GeneratesItemsIntent;
 import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
+import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -631,6 +632,71 @@ public final class IntentParser {
         if (g.getItems() != null) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
+        }
+        if (g.getChildren() != null) {
+            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, issues);
+        }
+    }
+
+    /**
+     * Child blocks of a scheduled generation: each creates one child row of the just-generated parent
+     * per element of a source collection. Two collection kinds - {@code forEach: &#123;
+     * entity, match &#125;} (rows of a LOCAL entity whose field equals a source-row field) and
+     * {@code forEach: &#123; days: workingDays &#125;} (the working days of the month, the date written
+     * to {@code dayField}). {@code parent} names the child's to-one back to the generated parent
+     * (resolved in the target's model at generation). Depth is capped at two levels.
+     */
+    private static void validateGenerateChildren(String name, List<GenerateChildIntent> children, int depth, EntityIntent source,
+            Set<String> entityNames, List<String> issues) {
+        if (depth > 2) {
+            issues.add("schedule [" + name + "] generate children nest deeper than two levels - flatten the shape");
+            return;
+        }
+        for (GenerateChildIntent child : children) {
+            String subject = "schedule [" + name + "] generate child [" + (child.getTo() == null ? "?" : child.getTo()) + "]";
+            if (child.getTo() == null || child.getTo()
+                                              .isBlank()) {
+                issues.add("schedule [" + name + "] generate has a child with no to entity");
+                continue;
+            }
+            if (child.getParent() == null || child.getParent()
+                                                  .isBlank()) {
+                issues.add(subject + " has no parent relation (the child's to-one back to the generated record)");
+            }
+            Object forEachEntity = child.getForEach()
+                                        .get("entity");
+            Object forEachDays = child.getForEach()
+                                      .get("days");
+            if ((forEachEntity == null) == (forEachDays == null)) {
+                issues.add(subject + " forEach must declare exactly one of entity (a local collection) or days: workingDays");
+                continue;
+            }
+            if (forEachDays != null) {
+                if (!"workingDays".equals(String.valueOf(forEachDays))) {
+                    issues.add(subject + " forEach days [" + forEachDays + "] is not supported - only workingDays");
+                }
+                if (child.getDayField() == null || child.getDayField()
+                                                        .isBlank()) {
+                    issues.add(subject + " uses forEach days but declares no dayField to receive each date");
+                }
+                if (!child.getMap()
+                          .isEmpty()) {
+                    issues.add(subject + " a days child cannot map from a collection row - use defaults for literals");
+                }
+            } else {
+                String collection = String.valueOf(forEachEntity);
+                if (!entityNames.contains(collection)) {
+                    issues.add(subject + " forEach entity [" + collection + "] is not a local entity of this model");
+                }
+                Object match = child.getForEach()
+                                    .get("match");
+                if (!(match instanceof Map) || ((Map<?, ?>) match).isEmpty()) {
+                    issues.add(subject + " forEach entity requires a match: { <collection field>: <source field> } condition");
+                }
+            }
+            if (child.getChildren() != null) {
+                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, issues);
+            }
         }
     }
 
