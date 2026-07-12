@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Minimal shell styles on top of Harmonia. Layout is Harmonia's (vbox/hbox/size-full/x-h-*); this
+ * only hides x-cloak content until Alpine initialises and ensures the hosted iframe fills its panel.
+ */
+[x-cloak] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}

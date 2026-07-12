@@ -252,6 +252,7 @@
         <module>resources/resources-dashboard</module>
         <module>resources/resources-application</module>
         <module>resources/resources-my</module>
+        <module>resources/resources-partner</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
@@ -1379,6 +1380,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-my</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-partner</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
