@@ -276,6 +276,19 @@ identity field, or the owner FK) is stripped from personal responses and ignored
 writes - use it for billing rates and amounts the person must not see. The regular controller is
 unaffected.
 
+**Partner surfaces (`partner: true`):** the exact mirror of `personal:` for EXTERNAL parties
+(customers, suppliers) on the Partner shell (`/services/web/partner/`). A record-owning to-one
+relation to a partner entity that declares `identity` (Customer / Supplier carry `identity: email`)
+may declare `partner: true` (at most one per entity; never on a composition parent - children
+inherit the scope). The entity gets an ADDITIONAL generated `<Entity>PartnerController` scoped to
+the logged-in external partner (reads filtered to the mapped identity record, the owner FK forced
+server-side on writes) and its perspective registers on the disjoint
+`application-partner-perspectives` extension point. Access is gated by the IdP roles
+(`Customer`/`Supplier`/`Partner`) - the same login pool as staff, restricted roles; the row-level
+scope is what `partner:` adds (a role alone cannot tell one customer's rows from another's). An
+entity can carry BOTH `personal:` (staff owner) and `partner:` (external owner) at once. `sensitive:`
+fields are stripped from the partner surface too.
+
 **Multilingual entities (`multilingual: true`):** the entity's translatable (string-typed) properties
 may carry per-language values in a sibling `<TABLE>_LANG` table (generated automatically by the schema
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java

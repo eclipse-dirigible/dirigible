@@ -109,6 +109,16 @@ public class RelationIntent {
      */
     private boolean personal;
 
+    /**
+     * Marks this to-one relation as the OWNER of the record for the PARTNER surface: the generated
+     * partner REST controller scopes reads to the logged-in external partner's mapped identity record
+     * and forces this FK server-side on writes, and the partner perspective registers on the Partner
+     * shell's extension point (disjoint from the personal shell). The exact mirror of {@link #personal}
+     * keyed to an external partner entity (Customer / Supplier, which carry {@code identity: email}).
+     * Valid only when the target declares {@code identity}. Composition children inherit the scope.
+     */
+    private boolean partner;
+
     public String getName() {
         return name;
     }
@@ -250,5 +260,13 @@ public class RelationIntent {
 
     public void setPersonal(boolean personal) {
         this.personal = personal;
+    }
+
+    public boolean isPartner() {
+        return partner;
+    }
+
+    public void setPartner(boolean partner) {
+        this.partner = partner;
     }
 }
