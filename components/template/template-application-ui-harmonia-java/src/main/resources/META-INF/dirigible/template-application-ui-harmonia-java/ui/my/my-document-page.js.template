@@ -172,11 +172,11 @@ document.addEventListener('alpine:init', () => {
       if (!d || this.id == null) return;
       this.itemsError = null;
       try {
-        const rows = await App.services.api.getAll(this.itemsApiPath);
-        // The personal items controller returns only the user's own items across documents; keep
-        // just this document's (filter by the master FK the detail-register recorded).
-        const fk = d.masterEntityId;
-        this.items = (rows || []).filter((r) => String(r[fk]) === String(this.id));
+        // The personal items controller requires the master id as a query param (?<masterEntityId>=<id>);
+        // it returns only that document's items and enforces ownership (requireMyParent).
+        const q = '?' + encodeURIComponent(d.masterEntityId) + '=' + encodeURIComponent(this.id);
+        const rows = await App.services.api.getAll(this.itemsApiPath + q);
+        this.items = rows || [];
       } catch (e) {
         this.itemsError = (e && e.message) || 'Could not load the line items.';
         this.items = [];
