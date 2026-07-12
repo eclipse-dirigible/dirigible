@@ -90,8 +90,8 @@
         <table x-h-table data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
-              <template x-for="col in itemColumns()" :key="col.key">
-                <th x-h-table-head scope="col" :class="(col.number || col.kind === 'number') ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
+              <template x-for="col in itemColumns()" :key="col.name">
+                <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
               </template>
               <th x-h-table-head scope="col"></th>
             </tr>
@@ -99,8 +99,8 @@
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
               <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="openItem(row)">
-                <template x-for="col in itemColumns()" :key="col.key">
-                  <td x-h-table-cell :class="(col.number || col.kind === 'number') ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
+                <template x-for="col in itemColumns()" :key="col.name">
+                  <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
                 <td x-h-table-cell class="text-right">
                   <button x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Delete" @click.stop="deleteItem(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
@@ -159,28 +159,28 @@
       </div>
       <div x-h-dialog-content>
         <div class="grid grid-cols-2 gap-4">
-          <template x-for="col in itemColumns()" :key="col.key">
+          <template x-for="col in itemColumns()" :key="col.name">
             <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''">
               <label x-h-label x-text="T(col.tkey, col.label)"></label>
               <template x-if="col.lookup">
                 <div x-h-select data-filter="contains">
-                  <input x-h-select-input x-model="draft[col.key]" placeholder="Select..." />
+                  <input x-h-select-input x-model="draft[col.name]" placeholder="Select..." />
                   <div x-h-select-content>
                     <div x-h-select-search></div>
-                    <template x-for="opt in (itemOptions[col.key] || [])" :key="opt.value">
+                    <template x-for="opt in (itemOptions[col.name] || [])" :key="opt.value">
                       <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
                     </template>
                   </div>
                 </div>
               </template>
-              <template x-if="!col.lookup && (col.number || col.kind === 'number')">
-                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.key]" /></div>
+              <template x-if="!col.lookup && col.number">
+                <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
               </template>
               <template x-if="!col.lookup && col.date">
-                <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.key]"></div></div>
+                <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
               </template>
-              <template x-if="!col.lookup && !col.date && !(col.number || col.kind === 'number')">
-                <input x-h-input type="text" x-model="draft[col.key]" />
+              <template x-if="!col.lookup && !col.date && !col.number">
+                <input x-h-input type="text" x-model="draft[col.name]" />
               </template>
             </div>
           </template>

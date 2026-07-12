@@ -49,8 +49,17 @@ document.addEventListener('alpine:init', () => {
     draft: {},
     itemOptions: {},
 
+    // The item column metadata, reused from detail-register (App.detailsFor). Resolved lazily: the
+    // detail-register script may run after this component's init, so re-resolve until it is present.
+    def() {
+      if (!this.itemsDef) {
+        this.itemsDef = App.detailsFor('${name}').find((d) => d.entity === '${documentItemsEntity}') || null;
+      }
+      return this.itemsDef;
+    },
+
     async init() {
-      this.itemsDef = App.detailsFor('${name}').find((d) => d.entity === '${documentItemsEntity}') || null;
+      this.def();
       await this.loadOwnerName();
       await this.loadOptions();
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
@@ -159,13 +168,14 @@ document.addEventListener('alpine:init', () => {
 
     // ----- Items (personal items controller) ------------------------------------------------------
     async loadItems() {
-      if (!this.itemsDef || this.id == null) return;
+      const d = this.def();
+      if (!d || this.id == null) return;
       this.itemsError = null;
       try {
         const rows = await App.services.api.getAll(this.itemsApiPath);
         // The personal items controller returns only the user's own items across documents; keep
         // just this document's (filter by the master FK the detail-register recorded).
-        const fk = this.itemsDef.masterEntityId;
+        const fk = d.masterEntityId;
         this.items = (rows || []).filter((r) => String(r[fk]) === String(this.id));
       } catch (e) {
         this.itemsError = (e && e.message) || 'Could not load the line items.';
@@ -173,25 +183,26 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    itemColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
+    itemColumns() { const d = this.def(); return (d && d.editColumns) || []; },
 
     displayItem(row, col) {
-      const v = row[col.name != null ? col.name : col.key];
+      const v = row[col.name];
       if (v == null || v === '') return '—';
-      if (col.lookup && this.itemOptions[col.key]) {
-        const opt = (this.itemOptions[col.key] || []).find((o) => String(o.value) === String(v));
+      if (col.lookup && this.itemOptions[col.name]) {
+        const opt = (this.itemOptions[col.name] || []).find((o) => String(o.value) === String(v));
         if (opt) return opt.text;
       }
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
-      if (col.number || col.kind === 'number') return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
+      if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
       return String(v);
     },
 
     async openItem(row) {
+      const d = this.def();
       await this.ensureItemOptions();
       this.itemMode = row ? 'edit' : 'create';
       this.draft = row ? { ...row } : {};
-      this.draft[this.itemsDef.masterEntityId] = String(this.id);
+      this.draft[d.masterEntityId] = String(this.id);
       this.itemDialog = true;
     },
 
@@ -202,19 +213,20 @@ document.addEventListener('alpine:init', () => {
         if (col.lookup && col.lookup.url) {
           try {
             const rows = await App.services.api.getAll(col.lookup.url, { baseUrl: '' });
-            loaded[col.key] = (rows || []).map((r) => ({ value: r[col.lookup.key], text: r[col.lookup.value] }));
-          } catch (e) { loaded[col.key] = []; }
+            loaded[col.name] = (rows || []).map((r) => ({ value: r[col.lookup.key], text: r[col.lookup.text] }));
+          } catch (e) { loaded[col.name] = []; }
         }
       }
       this.itemOptions = loaded;
     },
 
     async saveItem() {
+      const d = this.def();
       const body = { ...this.draft };
       for (const key of Object.keys(body)) { if (body[key] === '') body[key] = null; }
-      body[this.itemsDef.masterEntityId] = this.id;
+      body[d.masterEntityId] = this.id;
       try {
-        const pk = this.itemsDef.primaryKey;
+        const pk = d.primaryKey;
         if (this.itemMode === 'edit' && body[pk] != null) {
           await App.services.api.put(this.itemsApiPath + '/' + encodeURIComponent(body[pk]), body);
         } else {
@@ -230,7 +242,7 @@ document.addEventListener('alpine:init', () => {
 
     async deleteItem(row) {
       try {
-        await App.services.api.delete(this.itemsApiPath + '/' + encodeURIComponent(row[this.itemsDef.primaryKey]));
+        await App.services.api.delete(this.itemsApiPath + '/' + encodeURIComponent(row[this.def().primaryKey]));
         await this.loadItems();
         await this.reloadHeaderTotals();
       } catch (e) {
