@@ -175,6 +175,7 @@ public final class IntentParser {
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
         validateViews(model, issues);
+        validateDocumentItemsLayout(model, issues);
         validateOrders(model, issues);
         validateProcesses(model, entityNames, issues);
         validateForms(model, entityNames, issues);
@@ -296,6 +297,93 @@ public final class IntentParser {
             }
         }
         return flagged || compositionChildren == 1;
+    }
+
+    /**
+     * The document line-items child of {@code master} (the composition child flagged
+     * {@code function: DocumentItem} / named {@code *Item}, else the sole composition child), or
+     * {@code null} when the master has no resolvable items child.
+     */
+    private static EntityIntent itemsChild(IntentModel model, Map<String, String> compositionParent, String master) {
+        EntityIntent flagged = null;
+        EntityIntent sole = null;
+        int compositionChildren = 0;
+        for (EntityIntent entity : model.getEntities()) {
+            String child = entity.getName();
+            if (child == null || !master.equals(compositionParent.get(child))) {
+                continue;
+            }
+            compositionChildren++;
+            sole = entity;
+            if (entity.isDocumentItem() || child.endsWith("Item")) {
+                flagged = entity;
+            }
+        }
+        if (flagged != null) {
+            return flagged;
+        }
+        return compositionChildren == 1 ? sole : null;
+    }
+
+    /**
+     * Validate the optional {@code documentItemsLayout} selector on a document master: the only
+     * supported value is {@code chat}; the entity must resolve a line-items child; and that child must
+     * declare exactly one {@code messageBody} field plus {@code audit: true} (the bubble's author and
+     * timestamp come from the audit columns). An optional {@code messageInternal} field must be
+     * boolean.
+     */
+    private static void validateDocumentItemsLayout(IntentModel model, List<String> issues) {
+        Map<String, String> compositionParent = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() == null) {
+                continue;
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isComposition() && relation.getTo() != null) {
+                    compositionParent.put(entity.getName(), relation.getTo());
+                    break;
+                }
+            }
+        }
+        for (EntityIntent entity : model.getEntities()) {
+            String name = entity.getName();
+            String layout = entity.getDocumentItemsLayout();
+            if (name == null || layout == null || layout.isBlank()) {
+                continue;
+            }
+            if (!"chat".equalsIgnoreCase(layout.trim())) {
+                issues.add("entity [" + name + "] has unknown documentItemsLayout [" + layout + "] (supported: chat)");
+                continue;
+            }
+            if (!hasItemsChild(model, compositionParent, name)) {
+                issues.add("entity [" + name + "] declares documentItemsLayout: chat but is not a document master"
+                        + " (no composition line-items child)");
+                continue;
+            }
+            EntityIntent child = itemsChild(model, compositionParent, name);
+            if (child == null) {
+                continue;
+            }
+            long bodyFields = child.getFields()
+                                   .stream()
+                                   .filter(FieldIntent::isMessageBody)
+                                   .count();
+            if (bodyFields != 1) {
+                issues.add("entity [" + name + "] documentItemsLayout: chat requires its items child [" + child.getName()
+                        + "] to declare exactly one messageBody field (found " + bodyFields + ")");
+            }
+            if (!child.isAudited()) {
+                issues.add("entity [" + name + "] documentItemsLayout: chat requires its items child [" + child.getName()
+                        + "] to declare audit: true (message author and timestamp)");
+            }
+            for (FieldIntent field : child.getFields()) {
+                if (field.isMessageInternal() && !"boolean".equalsIgnoreCase(field.getType())) {
+                    issues.add("entity [" + name + "] items child [" + child.getName() + "] messageInternal field [" + field.getName()
+                            + "] must be boolean");
+                }
+            }
+        }
     }
 
     /**

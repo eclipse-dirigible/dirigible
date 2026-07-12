@@ -98,6 +98,13 @@ public class EntityIntent {
      * inferred from structure.
      */
     private String view;
+    /**
+     * Optional rendering of a document master's line-items pane. Default (unset) renders the items as
+     * an editable table; {@code documentItemsLayout: chat} renders them as a conversation thread
+     * (bubbles + a composer) - the document header/status/process stay intact. Only meaningful on a
+     * document master.
+     */
+    private String documentItemsLayout;
     /** Calendar-view configuration; used when {@code view: calendar} or {@code view: range}. */
     private CalendarIntent calendar;
     /** Slots-view configuration; used when {@code view: slots}. */
@@ -195,6 +202,22 @@ public class EntityIntent {
     /** Whether this entity is rendered as a slot picker ({@code view: slots}). */
     public boolean isSlots() {
         return viewIs("slots");
+    }
+
+    public String getDocumentItemsLayout() {
+        return documentItemsLayout;
+    }
+
+    public void setDocumentItemsLayout(String documentItemsLayout) {
+        this.documentItemsLayout = documentItemsLayout;
+    }
+
+    /**
+     * Whether this document master renders its line-items as a chat thread ({@code documentItemsLayout:
+     * chat}) instead of the default editable table.
+     */
+    public boolean isChatItems() {
+        return documentItemsLayout != null && "chat".equalsIgnoreCase(documentItemsLayout.trim());
     }
 
     public CalendarIntent getCalendar() {

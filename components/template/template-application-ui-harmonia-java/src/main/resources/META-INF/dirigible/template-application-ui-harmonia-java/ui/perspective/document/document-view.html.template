@@ -155,6 +155,47 @@
 
     </form>
 
+#if($documentItemsLayout == "chat")
+    <!-- ===== Conversation thread (chat items) — bubbles + composer, only once the document exists.
+         Own vs other alignment keys on the audit CreatedBy vs the logged-in user; an internal memo is
+         tinted distinctly (data-variant) so it can't be mistaken for a reply shared with the requester. -->
+    <div class="vbox gap-2 w-full" x-show="itemsEnabled">
+      <div x-h-toolbar data-variant="transparent">
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
+      </div>
+      <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
+
+      <div x-h-chat="$store.currentUser.name" class="w-full rounded-control border border-input bg-input-inner" style="max-height: 28rem" :data-label="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'">
+        <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
+          <div x-h-chat-message :data-author="row.CreatedBy"#if($chatInternalProperty) :data-variant="row.${chatInternalProperty} ? 'internal' : 'external'"#end>
+            <div class="hbox items-baseline gap-2">
+              <span x-h-chat-message-author x-text="row.CreatedBy || T('$projectName:${tprefix}.defaults.system', 'System')"></span>
+              <span x-h-chat-message-timestamp x-text="window.HarmoniaFormat.value(row.CreatedAt, true)"></span>
+#if($chatInternalProperty)
+              <span x-show="row.${chatInternalProperty}" x-h-badge data-variant="warning" x-text="T('$projectName:${tprefix}.defaults.internal', 'Internal')"></span>
+#end
+            </div>
+            <div x-h-chat-message-body x-text="row.${chatBodyProperty}"></div>
+          </div>
+        </template>
+        <div x-show="items.length === 0" x-h-text.muted class="p-2" x-text="T('$projectName:${tprefix}.messages.noData', 'No messages yet.')"></div>
+      </div>
+
+      <!-- Composer: Enter sends (Shift+Enter newlines); the send button also submits. -->
+      <div class="vbox gap-2" x-show="!isPreview">
+#if($chatInternalProperty)
+        <label class="hbox items-center gap-2 text-sm">
+          <span x-h-switch data-size="sm"><input type="checkbox" x-model="chatInternal" /></span>
+          <span x-text="T('$projectName:${tprefix}.defaults.internalNote', 'Internal note (not visible to the requester)')"></span>
+        </label>
+#end
+        <div x-h-chat-composer @send="sendMessage($event.detail.value)">
+          <textarea x-h-textarea.group rows="1" :disabled="chatSending" :aria-label="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message')" :placeholder="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message...')"></textarea>
+          <button type="button" x-h-button data-variant="primary" data-slot="chat-composer-send" :disabled="chatSending" :aria-label="T('$projectName:${tprefix}.defaults.send', 'Send')"><i role="img" x-h-lucide data-lucide="send"></i></button>
+        </div>
+      </div>
+    </div>
+#else
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
     <div class="vbox gap-2 w-full" x-show="itemsEnabled">
       <div x-h-toolbar data-variant="transparent">
@@ -195,6 +236,7 @@
         </tbody>
       </table>
     </div>
+#end
 
     <!-- ===== Totals footer (aggregate fields, read-only, right-aligned) — only once the document exists ===== -->
     <div class="hbox justify-end w-full" x-show="itemsEnabled">

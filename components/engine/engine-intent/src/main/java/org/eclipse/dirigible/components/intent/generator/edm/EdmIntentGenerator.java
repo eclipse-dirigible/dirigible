@@ -279,6 +279,24 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 if (entity.isDuplicable()) {
                     entityMap.put("duplicable", "true");
                 }
+                // Chat items: render the line-items pane as a conversation thread instead of the editable
+                // table. Resolve which child property is the message body (and the optional internal
+                // flag) from the items child's field roles; author + timestamp come from its audit
+                // columns. The Harmonia document template branches on documentItemsLayout == "chat".
+                if (entity.isChatItems()) {
+                    entityMap.put("documentItemsLayout", "chat");
+                    EntityIntent itemsChild = byName.get(itemsEntity);
+                    if (itemsChild != null) {
+                        for (FieldIntent itemField : itemsChild.getFields()) {
+                            if (itemField.isMessageBody()) {
+                                entityMap.put("chatBodyProperty", IntentNaming.pascalCase(itemField.getName()));
+                            }
+                            if (itemField.isMessageInternal()) {
+                                entityMap.put("chatInternalProperty", IntentNaming.pascalCase(itemField.getName()));
+                            }
+                        }
+                    }
+                }
             }
             // A plain PRIMARY entity with NO composition children of its own is standalone, not a
             // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,

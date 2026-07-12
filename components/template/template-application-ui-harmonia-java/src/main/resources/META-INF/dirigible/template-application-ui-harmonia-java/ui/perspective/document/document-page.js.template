@@ -168,6 +168,11 @@ document.addEventListener('alpine:init', () => {
     items: [],
     itemsState: 'loading',   // loading | error | empty | default
     itemsError: null,
+#if($documentItemsLayout == "chat")
+    // Chat composer state (documentItemsLayout: chat): appends a message as a new child row.
+    chatSending: false,
+    chatInternal: false,
+#end
     itemOptions: {},         // edit-column name -> [{ value, text }] for relationship cells
     // Depends-On-filtered options for the OPEN item dialog only. Kept apart from itemOptions,
     // which the items table uses to resolve labels for ALL rows and must stay the full set.
@@ -565,6 +570,33 @@ document.addEventListener('alpine:init', () => {
       }
       this.refreshIcons();
     },
+#if($documentItemsLayout == "chat")
+
+    // Append a chat message as a new items child (documentItemsLayout: chat). The message body maps to
+    // the messageBody property; the internal flag (if the child declares one) rides the composer toggle;
+    // the master FK is forced server-side by the child controller anyway. Author + timestamp are stamped
+    // by the audit columns. Reloads the thread so the new bubble (and its audit values) appear.
+    async sendMessage(value) {
+      const body = (value || '').trim();
+      if (!body || this.chatSending || !this.itemsDef || this.id == null) return;
+      this.chatSending = true;
+      this.itemsError = null;
+      try {
+        const payload = { '${chatBodyProperty}': body };
+        payload[this.itemsDef.masterEntityId] = this.id;
+#if($chatInternalProperty)
+        payload['${chatInternalProperty}'] = !!this.chatInternal;
+#end
+        await App.services.api.post(this.itemsDef.apiPath, payload);
+        this.chatInternal = false;
+        await this.loadItems();
+      } catch (e) {
+        this.itemsError = App.services.apiErrors.messageFor(e, 'Could not send the message.');
+      } finally {
+        this.chatSending = false;
+      }
+    },
+#end
 
     async loadItemOptions() {
       for (const col of this.editColumns) {
