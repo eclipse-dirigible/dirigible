@@ -186,7 +186,7 @@
               <span x-show="row.${chatInternalProperty}" x-h-badge data-variant="warning" x-text="T('$projectName:${tprefix}.defaults.internal', 'Internal')"></span>
 #end
             </div>
-            <div class="text-sm" style="border-radius: 0.5rem; padding: 0.5rem 0.75rem; white-space: pre-wrap; word-break: break-word"
+            <div class="text-sm" style="border-radius: 0.5rem; padding: 0.5rem 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere"
                  :style="#if($chatInternalProperty)row.${chatInternalProperty} ? 'background:var(--muted);color:var(--foreground)' : (#end(row.CreatedBy === $store.currentUser.name ? 'background:var(--primary);color:var(--primary-foreground)' : 'background:var(--secondary);color:var(--secondary-foreground)')#if($chatInternalProperty))#end"
                  x-text="row.${chatBodyProperty}"></div>
           </div>
