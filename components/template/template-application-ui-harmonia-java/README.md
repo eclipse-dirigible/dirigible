@@ -115,7 +115,7 @@ currently 1.8.0); an unknown name renders blank.
 | **slots** | `uiSlotsModels` | ✅ `view: slots` (+ a `slots:` block: start/open/close/step/disabledDays) → `layoutType MANAGE_SLOTS`; a Harmonia `x-h-slot-picker` (3-day time-slot grid). Free slots are bookable; already-booked datetimes are crossed off (built from the entity's own records); slot-click opens the shared create form prefilled with the chosen datetime (`?<Start>=`). For appointment booking. |
 | main-details | (within master) | ⬜ stub |
 | setting | `uiSettingModels` | ✅ reuses the manage CRUD templates, grouped under a "Settings" sidebar section |
-| report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ in-SPA table page (data table + CSV export) + chart page (chart.js bar/line/pie/doughnut/polarArea/radar) against the Java report controller |
+| report / report-chart / report-table | `uiReportTableModels` / `uiReportChartModels` | ✅ in-SPA table page (data table + CSV export) + chart page (native Harmonia `x-h-chart-*` bar/line/pie/doughnut/polar-area/radar - no external chart library) against the Java report controller |
 | **standalone report** (a `.report` file) | `reportModels` / `generateReportModels` | ✅ `template/template-report-file.js` ("Application Report - Table - Harmonia"): reuses the framework-neutral Java backend (reportFileEntity Repository + Controller) and generates a self-contained Harmonia page (`gen/<genFolder>/reports/<name>/`: index.html + report.js — list with `$limit`/`$offset`, count, pagination, CSV export). This is the intent recipe's `report` default |
 | navigation (generated nav data) | `uiNavigations` | ⬜ folded into index.html for now |
 | dialogs (filter/window) | per view | ⬜ |

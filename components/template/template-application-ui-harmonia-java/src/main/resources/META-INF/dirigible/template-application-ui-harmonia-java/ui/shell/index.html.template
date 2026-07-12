@@ -523,8 +523,8 @@
     <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
     <!-- opt-in Harmonia Lucide plugin: registers x-h-lucide (renders Lucide icons + keeps them in sync); needs window.lucide (above). -->
     <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
-    <!-- 5. Chart.js (webjar) — used by REPORT_BAR/LINE/PIE/... chart pages -->
-    <script src="/webjars/chart.js/dist/chart.umd.js"></script>
+    <!-- Report chart pages (REPORT_BAR/LINE/PIE/...) render with the native Harmonia x-h-chart-*
+         directives from the harmonia bundle above - no separate chart library is loaded. -->
     <!-- Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle above): it upgrades
          icons on init and inside router-swapped views, so no manual createIcons scan is needed. -->
 

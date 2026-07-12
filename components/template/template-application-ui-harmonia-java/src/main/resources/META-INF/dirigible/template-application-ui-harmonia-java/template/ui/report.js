@@ -11,8 +11,8 @@
  * perspective is "Reports", so the page apiPath resolves to <restBase>/reports/<Name>Controller.
  *
  *   - REPORT_TABLE  (uiReportTableModels) -> a data table.
- *   - REPORT_BAR/LINE/PIE/DOUGHNUT/POLARAREA/RADAR (uiReportChartModels) -> a chart.js chart,
- *     labelled by the report's primary-key column with one dataset per other column.
+ *   - REPORT_BAR/LINE/PIE/DOUGHNUT/POLARAREA/RADAR (uiReportChartModels) -> a native Harmonia
+ *     x-h-chart-* chart, labelled by the report's primary-key column with one series per other column.
  */
 export function getSources(parameters) {
     return [

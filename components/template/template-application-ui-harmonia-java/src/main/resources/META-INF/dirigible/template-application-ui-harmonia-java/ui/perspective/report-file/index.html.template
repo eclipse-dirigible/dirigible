@@ -134,9 +134,11 @@
 
       <div x-show="state === 'default'" class="vbox gap-2 p-4 flex-1 overflow-auto">
 #if($chart)
-        <!-- Chart surface: the report's aggregated rows rendered as a ${chart} chart (Chart.js). -->
-        <div x-show="view === 'chart'" class="flex-1" style="position: relative; min-height: 60vh;">
-          <canvas x-ref="chartCanvas"></canvas>
+## Native Harmonia chart directive for this report's chart type (a generation-time constant).
+#if($chart == "line")#set($chartDirective = "x-h-chart-line")#elseif($chart == "pie")#set($chartDirective = "x-h-chart-pie")#elseif($chart == "doughnut")#set($chartDirective = "x-h-chart-doughnut")#elseif($chart == "polarArea")#set($chartDirective = "x-h-chart-polar-area")#elseif($chart == "radar")#set($chartDirective = "x-h-chart-radar")#else#set($chartDirective = "x-h-chart-bar")#end
+        <!-- Chart surface: the report's aggregated rows rendered as a native ${chart} Harmonia chart. -->
+        <div x-show="view === 'chart'" class="flex-1" style="min-height: 60vh;">
+          <div x-ref="chartEl" ${chartDirective}="chartConfig" class="size-full"></div>
         </div>
         <div x-show="view === 'table'" class="vbox gap-2">
 #end
@@ -179,10 +181,6 @@
       </div>
     </div>
 
-#if($chart)
-    <!-- Chart.js (webjar): drives the ${chart} chart rendering for this report page. -->
-    <script src="/webjars/chart.js/dist/chart.umd.js"></script>
-#end
     <!-- Value formatter (window.HarmoniaFormat): report.js formats numeric cells through it; must load before Alpine inits. -->
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
     <script src="./report.js"></script>
