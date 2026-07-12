@@ -171,6 +171,9 @@ document.addEventListener('alpine:init', () => {
       const d = this.def();
       if (!d || this.id == null) return;
       this.itemsError = null;
+      // Pre-load the lookup options so the items TABLE resolves FK columns to their labels (not raw
+      // ids) on first render - not only after the item dialog has been opened once.
+      await this.ensureItemOptions();
       try {
         // The personal items controller requires the master id as a query param (?<masterEntityId>=<id>);
         // it returns only that document's items and enforces ownership (requireMyParent).
