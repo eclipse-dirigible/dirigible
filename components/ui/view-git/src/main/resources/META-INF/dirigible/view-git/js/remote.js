@@ -247,7 +247,7 @@ remoteBranchesView.controller('RemoteBranchesViewController', ($scope, GitServic
         GitService.branches($scope.selectedWorkspace, $scope.selectedRepository, false).then(
             (response) => {
                 $scope.$evalAsync(() => {
-                    $scope.branches = response.data.remote;
+                    $scope.branches = response.data.remote.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
                     for (let i = 0; i < $scope.branches.length; i++) {
                         if ($scope.branches[i].current) {
                             $scope.activeBranch.name = $scope.branches[i].name;
