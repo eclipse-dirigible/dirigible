@@ -1166,8 +1166,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * same-model target declares an identity; a resolved cross-model target without one fails loudly
      * here, while an unresolved target (the unit-test convention fallback) is skipped.
      */
-    private static void putPersonal(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty, String targetIdentityLabel,
-            boolean resolved) {
+    private static void putPersonal(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty,
+            String targetIdentityLabel, boolean resolved) {
         if (!relation.isPersonal()) {
             return;
         }
@@ -1182,7 +1182,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("relationshipIdentityProperty", targetIdentityProperty);
         // The identity entity's display/label field - the personal controller's /me returns it so the
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.
-        p.put("relationshipIdentityLabel", (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
+        p.put("relationshipIdentityLabel",
+                (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
     }
 
     /** YAML integers arrive as Long/Double - render {@code 1} not {@code 1.0} for whole numbers. */
