@@ -311,6 +311,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
         String myLineForm = contentOf("gen/emission/js/components/pages/my/ClaimLineMyFormPage.js");
         assertTrue(myLineForm.contains("ClaimLineMyController"), "a personal child gets its own my form page");
+        // Regression guard (#6263): the personal pages must call the shared shell service object
+        // App.services.api. The bug emitted App.api - which does not exist - so every personal list
+        // and form load, save and delete threw "Cannot read properties of undefined (reading 'get')"
+        // at runtime while emission stayed green (the assert above only checked the controller name,
+        // which is present regardless of the API object). Assert the object, not just the path.
+        String myFormPage = contentOf("gen/emission/js/components/pages/my/ClaimMyFormPage.js");
+        for (String personalPage : new String[] {myList, myFormPage, myLineForm}) {
+            assertTrue(personalPage.contains("App.services.api"), "a personal page must call the shared API service App.services.api");
+            assertTrue(!personalPage.contains("App.api."),
+                    "a personal page must not call the nonexistent App.api object (regression #6263)");
+        }
         String spaIndex = contentOf("gen/emission/index.html");
         assertTrue(spaIndex.contains("/my/Claim"), "the SPA must route the personal pages");
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
