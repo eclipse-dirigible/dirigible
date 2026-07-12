@@ -42,6 +42,23 @@ export const getSources = () => [
         collection: "personalModels"
     },
     {
+        // Personal DOCUMENT layout: a MANAGE_DOCUMENT personal root renders as a document (header form
+        // + inline items table + status pill + totals) scoped to its MyController, instead of the plain
+        // my-form above (which excludes document roots).
+        location: "/template-application-ui-harmonia-java/ui/my/my-document-page.js.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/js/components/pages/my/{{name}}MyDocumentPage.js",
+        collection: "personalDocumentModels"
+    },
+    {
+        location: "/template-application-ui-harmonia-java/ui/my/my-document-view.html.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/views/my/{{name}}-document.html",
+        collection: "personalDocumentModels"
+    },
+    {
         location: "/template-application-ui-harmonia-java/ui/my/my-perspective.js.template",
         action: "generate",
         engine: "velocity",

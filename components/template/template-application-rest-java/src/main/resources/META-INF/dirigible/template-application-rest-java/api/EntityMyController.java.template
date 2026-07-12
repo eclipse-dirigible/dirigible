@@ -165,6 +165,26 @@ public class ${name}MyController {
         return matches.isEmpty() ? null : matches.get(0).Id;
     }
 
+    /**
+     * The logged-in user's own display name (the identity record's ${personalIdentityLabel}), for the
+     * personal pages' "New/Edit ... for &lt;owner&gt;" title. Falls back to the username when no
+     * identity record maps. Exposes only the display name - never the whole identity record.
+     */
+    @Get("/me")
+    @Documentation("The logged-in user's own display name")
+    public Map<String, Object> currentIdentity() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String username = User.getName();
+        result.put("name", username);
+        if (username != null && !username.isBlank()) {
+            var matches = identityRepository.findAll(Criteria.create().eq("${personalIdentityProperty}", username));
+            if (!matches.isEmpty() && matches.get(0).${personalIdentityLabel} != null) {
+                result.put("name", String.valueOf(matches.get(0).${personalIdentityLabel}));
+            }
+        }
+        return result;
+    }
+
     /** Load the record and prove it is mine - a foreign or missing record is the same 404. */
     private ${name}Entity requireMine(Object id) {
         var me = me();

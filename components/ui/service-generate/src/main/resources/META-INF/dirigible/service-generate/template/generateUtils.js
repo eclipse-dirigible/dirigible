@@ -265,9 +265,15 @@ export function generateFiles(model, parameters, templateSources) {
     // Personal (my) surface: entities owned by the logged-in user - a direct personal FK
     // (intent `personal: true`) or the scope inherited from the direct composition parent
     // (derived by parameterUtils). Each gets an additional scoped REST controller / UI.
-    const personalModels = model.entities.filter(e => e.personalProperty || e.personalParent);
+    // A personal document root (MANAGE_DOCUMENT + a direct personal owner) gets the personal DOCUMENT
+    // layout (header form + inline items table + status pill + totals) scoped to its MyController,
+    // NOT the plain my-form - so it is excluded from personalModels below.
+    const personalDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.personalProperty);
+    const personalModels = model.entities.filter(e => (e.personalProperty || e.personalParent)
+        && !(e.layoutType === "MANAGE_DOCUMENT" && e.personalProperty));
     // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
-    // reach their forms through the parent's panels, never through navigation.
+    // reach their forms through the parent's panels, never through navigation. Document roots keep
+    // their list + perspective here (only their FORM is the document layout, from personalDocumentModels).
     const personalRootModels = model.entities.filter(e => e.personalProperty);
 
     // UI Reports
@@ -345,6 +351,9 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "personalRootModels":
                     generatedFiles.push(...generateCollection(location, content, template, personalRootModels, parameters));
+                    break;
+                case "personalDocumentModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalDocumentModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
