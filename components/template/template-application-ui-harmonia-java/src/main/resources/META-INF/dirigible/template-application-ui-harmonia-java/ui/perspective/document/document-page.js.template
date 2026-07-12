@@ -170,6 +170,7 @@ document.addEventListener('alpine:init', () => {
     itemsError: null,
 #if($documentItemsLayout == "chat")
     // Chat composer state (documentItemsLayout: chat): appends a message as a new child row.
+    chatDraft: '',
     chatSending: false,
     chatInternal: false,
 #end
@@ -588,6 +589,7 @@ document.addEventListener('alpine:init', () => {
         payload['${chatInternalProperty}'] = !!this.chatInternal;
 #end
         await App.services.api.post(this.itemsDef.apiPath, payload);
+        this.chatDraft = '';
         this.chatInternal = false;
         await this.loadItems();
       } catch (e) {

@@ -361,8 +361,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(intentModel.contains("\"chatBodyProperty\": \"Body\""), "the chat body property must be resolved into the .model");
         assertTrue(intentModel.contains("\"chatInternalProperty\": \"Internal\""),
                 "the chat internal-flag property must be resolved into the .model");
+        // The thread is composed from shipped Harmonia primitives (a role="log" bubble list + a
+        // textarea composer bound to chatDraft) - the x-h-chat component is a later swap-in (TODO in
+        // the template), so assert the primitives that render the chat, not that directive.
         String ticketDoc = contentOf("gen/emission/views/Ticket/Ticket-document.html");
-        assertTrue(ticketDoc.contains("x-h-chat"), "documentItemsLayout: chat must emit the x-h-chat thread into the document view");
+        assertTrue(ticketDoc.contains("role=\"log\""),
+                "documentItemsLayout: chat must emit the conversation thread (role=log) into the document view");
+        assertTrue(ticketDoc.contains("x-model=\"chatDraft\""),
+                "documentItemsLayout: chat must emit the message composer into the document view");
         String ticketPage = contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js");
         assertTrue(ticketPage.contains("sendMessage"), "the chat document page must emit the append-message composer handler");
 
