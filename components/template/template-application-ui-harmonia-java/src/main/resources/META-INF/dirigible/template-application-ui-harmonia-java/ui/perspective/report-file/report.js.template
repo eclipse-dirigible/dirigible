@@ -66,11 +66,13 @@ document.addEventListener('alpine:init', () => {
     // the ?preview=1 query param the dashboard tile passes when it embeds this page in an iframe.
     preview: false,
 #if($chart)
-    // Chart rendering (chart: ${chart} in the .report). `view` toggles the chart/table surfaces; the
-    // chart labels come from the grouping dimension column and one dataset per aggregate (measure).
+    // Chart rendering (chart: ${chart} in the .report), drawn by the native x-h-chart-* directive in
+    // the view (no external chart library). `view` toggles the chart/table surfaces; labels come from
+    // the grouping dimension column and one series per aggregate (measure). chartConfig is reactive -
+    // the directive redraws whenever it changes.
     chartType: '${chart}',
     view: 'chart',      // 'chart' | 'table'
-    _chart: null,
+    chartConfig: { labels: [], series: [] },
 #end
 
     init() {
@@ -179,7 +181,7 @@ document.addEventListener('alpine:init', () => {
       }
       this.refreshIcons();
 #if($chart)
-      if (this.chartType && this.view === 'chart' && this.rows.length) this.${dollar}nextTick(() => this.renderChart());
+      if (this.chartType && this.rows.length) this.chartConfig = this.buildChartConfig();
 #end
     },
 #if($chart)
@@ -187,37 +189,22 @@ document.addEventListener('alpine:init', () => {
     // Toggle between the chart and the raw data table (both driven by the same fetched rows).
     toggleView() {
       this.view = this.view === 'chart' ? 'table' : 'chart';
-      if (this.view === 'chart') this.${dollar}nextTick(() => this.renderChart());
       this.refreshIcons();
     },
 
-    // Render the aggregated rows as a Chart.js chart: the grouping dimension (aggregate NONE) labels
-    // the axis, each aggregate column becomes a dataset. Re-created on every load/filter/toggle.
-    renderChart() {
-      if (!this.chartType || typeof Chart === 'undefined') return;
-      const canvas = this.${dollar}refs.chartCanvas;
-      if (!canvas) return;
+    // Build the native chart config from the aggregated rows: the grouping dimension (aggregate NONE)
+    // labels the axis, each aggregate column becomes a series. Recomputed on every load/filter.
+    buildChartConfig() {
       const category = this.reportColumns.find(c => c.agg === 'NONE') || this.reportColumns[0];
       let series = this.reportColumns.filter(c => c.agg && c.agg !== 'NONE');
       if (!series.length) series = this.reportColumns.filter(c => c !== category);
       const labels = this.rows.map(r => this.axisLabel(category ? r[category.key] : ''));
-      const palette = ['#3584e4', '#26a269', '#e9a319', '#9141ac', '#c64600', '#708090'];
-      const datasets = series.map((c, i) => ({
-        label: c.key,
-        data: this.rows.map(r => Number(r[c.key]) || 0),
-        backgroundColor: palette[i % palette.length],
-        borderColor: palette[i % palette.length],
-        borderWidth: 1,
-      }));
-      this.destroyChart();
-      this._chart = new Chart(canvas, {
-        type: this.chartType,
-        data: { labels, datasets },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: datasets.length > 1 } } },
-      });
+      return {
+        labels,
+        series: series.map(c => ({ name: c.key, data: this.rows.map(r => Number(r[c.key]) || 0) })),
+        legend: series.length > 1,
+      };
     },
-
-    destroyChart() { if (this._chart) { this._chart.destroy(); this._chart = null; } },
 
     // month(date) buckets are YYYYMM integers (e.g. 202607) - render them as "2026-07".
     axisLabel(v) {
