@@ -659,4 +659,30 @@ class EdmIntentGeneratorTest {
                                                                 .toString()
                                                                 .replace("Name", "Name"));
     }
+
+    @Test
+    void partnerRelationEmitsThePartnerOwnerAttributesFromTheTargetIdentity() {
+        String yaml = """
+                name: services
+                entities:
+                  - name: Customer
+                    identity: email
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: name,  type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: Case
+                    fields:
+                      - { name: id,      type: integer, primaryKey: true, generated: true }
+                      - { name: subject, type: string, length: 200 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, required: true, partner: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "services");
+        Map<String, Object> fk = propertyByName(entityByName(entities(model), "Case"), "Customer");
+
+        assertEquals("true", fk.get("relationshipPartner"));
+        assertEquals("Email", fk.get("relationshipPartnerIdentityProperty"));
+        assertEquals("Name", fk.get("relationshipPartnerIdentityLabel"));
+    }
 }

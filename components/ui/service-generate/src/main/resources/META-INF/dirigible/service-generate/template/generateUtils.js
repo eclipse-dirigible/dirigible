@@ -279,6 +279,15 @@ export function generateFiles(model, parameters, templateSources) {
     const personalFormModels = model.entities.filter(e => (e.personalProperty || e.personalParent)
         && !(e.layoutType === "MANAGE_DOCUMENT" && e.personalProperty));
 
+    // partner (intent `partner: true`): the EXTERNAL-partner mirror of personal (Customer/Supplier
+    // owners). Each gets an additional scoped REST controller + UI registered on the disjoint
+    // application-partner-perspectives extension point (the Partner shell), never the My shell.
+    const partnerModels = model.entities.filter(e => e.partnerProperty || e.partnerParent);
+    const partnerRootModels = model.entities.filter(e => e.partnerProperty);
+    const partnerDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.partnerProperty);
+    const partnerFormModels = model.entities.filter(e => (e.partnerProperty || e.partnerParent)
+        && !(e.layoutType === "MANAGE_DOCUMENT" && e.partnerProperty));
+
     // UI Reports
     const uiReportChartModels = reportModels.filter(e => e.layoutType !== "REPORT_TABLE");
     const uiReportTableModels = reportModels.filter(e => e.layoutType === "REPORT_TABLE");
@@ -360,6 +369,18 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "personalFormModels":
                     generatedFiles.push(...generateCollection(location, content, template, personalFormModels, parameters));
+                    break;
+                case "partnerModels":
+                    generatedFiles.push(...generateCollection(location, content, template, partnerModels, parameters));
+                    break;
+                case "partnerRootModels":
+                    generatedFiles.push(...generateCollection(location, content, template, partnerRootModels, parameters));
+                    break;
+                case "partnerDocumentModels":
+                    generatedFiles.push(...generateCollection(location, content, template, partnerDocumentModels, parameters));
+                    break;
+                case "partnerFormModels":
+                    generatedFiles.push(...generateCollection(location, content, template, partnerFormModels, parameters));
                     break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));

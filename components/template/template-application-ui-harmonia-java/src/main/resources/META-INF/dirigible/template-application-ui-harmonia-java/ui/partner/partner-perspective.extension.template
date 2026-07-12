@@ -1,0 +1,5 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/perspectives/partner/${name}/perspective.js",
+    "extensionPoint": "application-partner-perspectives",
+    "description": "${projectName} - Partner perspective - ${name}"
+}

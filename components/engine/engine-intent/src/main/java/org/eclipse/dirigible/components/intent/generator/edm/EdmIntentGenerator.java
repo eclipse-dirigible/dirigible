@@ -378,6 +378,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putOptionsFilter(fkProperty, relation, info.propertyNames());
                     putLeafOnly(fkProperty, relation, info.hierarchyProperty(), info.resolved());
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
+                    putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
                     continue;
@@ -393,6 +394,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 putLeafOnly(fkProperty, relation,
                         target == null || target.getHierarchy() == null ? null : IntentNaming.pascalCase(target.getHierarchy()), true);
                 putPersonal(fkProperty, relation,
+                        target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
+                        target == null ? null : labelFieldName(target), true);
+                putPartner(fkProperty, relation,
                         target == null || target.getIdentity() == null ? null : IntentNaming.pascalCase(target.getIdentity()),
                         target == null ? null : labelFieldName(target), true);
                 properties.add(fkProperty);
@@ -1201,6 +1205,31 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // The identity entity's display/label field - the personal controller's /me returns it so the
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.
         p.put("relationshipIdentityLabel",
+                (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
+    }
+
+    /**
+     * Emit the partner-owner attributes for a relation that declares {@code partner: true} - the exact
+     * mirror of {@link #putPersonal} for the external Partner shell. The generated partner REST
+     * controller scopes reads by this FK against the logged-in partner's identity record and forces it
+     * on writes; the partner perspective registers on {@code application-partner-perspectives}. Reuses
+     * the target's {@code identity} field (Customer / Supplier carry {@code email}).
+     */
+    private static void putPartner(Map<String, Object> p, RelationIntent relation, String targetIdentityProperty,
+            String targetIdentityLabel, boolean resolved) {
+        if (!relation.isPartner()) {
+            return;
+        }
+        if (targetIdentityProperty == null || targetIdentityProperty.isBlank()) {
+            if (resolved) {
+                throw new IntentValidationException(java.util.List.of("relation [" + relation.getName()
+                        + "] declares partner but its target [" + relation.getTo() + "] declares no identity"));
+            }
+            return;
+        }
+        p.put("relationshipPartner", "true");
+        p.put("relationshipPartnerIdentityProperty", targetIdentityProperty);
+        p.put("relationshipPartnerIdentityLabel",
                 (targetIdentityLabel == null || targetIdentityLabel.isBlank()) ? targetIdentityProperty : targetIdentityLabel);
     }
 

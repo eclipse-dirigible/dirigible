@@ -1227,6 +1227,7 @@ public final class IntentParser {
                 continue;
             }
             int personalCount = 0;
+            int partnerCount = 0;
             for (RelationIntent relation : entity.getRelations()) {
                 if (relation.getName() == null || relation.getName()
                                                           .isBlank()) {
@@ -1295,10 +1296,18 @@ public final class IntentParser {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
                 }
+                if (relation.isPartner()) {
+                    partnerCount++;
+                    validatePartner(entity, relation, byName, issues);
+                }
             }
             if (personalCount > 1) {
                 issues.add("entity [" + entity.getName() + "] declares " + personalCount
                         + " personal relations - exactly one owner is allowed");
+            }
+            if (partnerCount > 1) {
+                issues.add(
+                        "entity [" + entity.getName() + "] declares " + partnerCount + " partner relations - exactly one owner is allowed");
             }
             if (entity.getHierarchy() != null && !entity.getHierarchy()
                                                         .isBlank()) {
@@ -1454,6 +1463,33 @@ public final class IntentParser {
             if (target != null && (target.getIdentity() == null || target.getIdentity()
                                                                          .isBlank())) {
                 issues.add(subject + " declares personal but its target [" + relation.getTo() + "] declares no identity");
+            }
+        }
+    }
+
+    /**
+     * {@code partner: true} - the exact mirror of {@link #validatePersonal} for the external Partner
+     * shell: a to-one owner relation whose target declares {@code identity}, not a composition parent
+     * (children inherit the scope). A same-model target's identity is checked here; a cross-model one
+     * at generation.
+     */
+    private static void validatePartner(EntityIntent entity, RelationIntent relation, java.util.Map<String, EntityIntent> byName,
+            List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares partner but only a manyToOne/oneToOne relation can own the record");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent - a child inherits the partner scope through it; mark the parent's relation");
+            return;
+        }
+        if (!relation.isCrossModel()) {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target != null && (target.getIdentity() == null || target.getIdentity()
+                                                                         .isBlank())) {
+                issues.add(subject + " declares partner but its target [" + relation.getTo() + "] declares no identity");
             }
         }
     }
