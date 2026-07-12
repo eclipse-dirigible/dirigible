@@ -585,6 +585,7 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
                 }
                 $scope.projects.push(project);
             }
+            $scope.projects.sort((a, b) => a.text.localeCompare(b.text, undefined, { numeric: true, sensitivity: 'base' }));
             $scope.$evalAsync(() => {
                 $scope.state.isBusy = false;
             });
@@ -939,6 +940,13 @@ gitProjectsView.controller('GitProjectsController', ($scope, StatusBar, Dialogs,
             }
             treeChildren.push(child);
         }
+        // Folders first, then files, each ordered alphabetically (case-insensitive, natural).
+        treeChildren.sort((a, b) => {
+            const rankA = a.type === 'folder' ? 0 : 1;
+            const rankB = b.type === 'folder' ? 0 : 1;
+            if (rankA !== rankB) return rankA - rankB;
+            return a.text.localeCompare(b.text, undefined, { numeric: true, sensitivity: 'base' });
+        });
         return treeChildren;
     }
 

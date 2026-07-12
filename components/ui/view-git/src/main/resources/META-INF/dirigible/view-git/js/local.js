@@ -196,7 +196,7 @@ localBranchesView.controller('LocalBranchesViewController', ($scope, GitService,
         GitService.branches($scope.selectedWorkspace, $scope.selectedRepository, true).then(
             (response) => {
                 $scope.$evalAsync(() => {
-                    $scope.branches = response.data.local;
+                    $scope.branches = response.data.local.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
                     for (let i = 0; i < $scope.branches.length; i++) {
                         if ($scope.branches[i].current) {
                             $scope.activeBranch.name = $scope.branches[i].name;
