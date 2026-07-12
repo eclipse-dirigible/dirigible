@@ -153,6 +153,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
+              # documentItemsLayout: chat - the document master's line-items child renders as a
+              # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
+              # the body maps to the messageBody field, author/timestamp to the child's audit columns.
+              - name: Ticket
+                function: Document
+                documentItemsLayout: chat
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string, length: 200 }
+              - name: TicketMessage
+                function: DocumentItem
+                audit: true
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: body,     type: text, messageBody: true }
+                  - { name: internal, type: boolean, messageInternal: true }
+                relations:
+                  - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
+
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
             schedules:
@@ -333,6 +352,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
+
+        // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
+        // messageBody field), and the Harmonia document view + page render the items pane as an
+        // x-h-chat thread with an append-message composer instead of the editable table.
+        String intentModel = contentOf("emission.model");
+        assertTrue(intentModel.contains("\"documentItemsLayout\": \"chat\""), "documentItemsLayout: chat must reach the .model");
+        assertTrue(intentModel.contains("\"chatBodyProperty\": \"Body\""), "the chat body property must be resolved into the .model");
+        assertTrue(intentModel.contains("\"chatInternalProperty\": \"Internal\""),
+                "the chat internal-flag property must be resolved into the .model");
+        // The thread is composed from shipped Harmonia primitives (a role="log" bubble list + a
+        // textarea composer bound to chatDraft) - the x-h-chat component is a later swap-in (TODO in
+        // the template), so assert the primitives that render the chat, not that directive.
+        String ticketDoc = contentOf("gen/emission/views/Ticket/Ticket-document.html");
+        assertTrue(ticketDoc.contains("role=\"log\""),
+                "documentItemsLayout: chat must emit the conversation thread (role=log) into the document view");
+        assertTrue(ticketDoc.contains("x-model=\"chatDraft\""),
+                "documentItemsLayout: chat must emit the message composer into the document view");
+        String ticketPage = contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js");
+        assertTrue(ticketPage.contains("sendMessage"), "the chat document page must emit the append-message composer handler");
 
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");

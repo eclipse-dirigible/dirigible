@@ -13,6 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.List;
+
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.junit.jupiter.api.Test;
 
@@ -1153,5 +1155,67 @@ class IntentParserTest {
                       .stream()
                       .anyMatch(i -> i.contains("requires a match")),
                 "expected a match issue, got: " + ex2.getIssues());
+    }
+
+    private static final String CHAT_HEAD = """
+            name: services
+            entities:
+              - name: Case
+                function: Document
+                documentItemsLayout: chat
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string }
+              - name: CaseMessage
+                function: DocumentItem
+            """;
+
+    @Test
+    void chatDocumentWithABodyFieldAndAuditParses() {
+        String yaml = CHAT_HEAD + """
+                    audit: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text, messageBody: true }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals("chat", model.getEntities()
+                                  .get(0)
+                                  .getDocumentItemsLayout());
+    }
+
+    @Test
+    void chatDocumentRejectsUnknownLayoutAndMissingBodyOrAudit() {
+        // Unknown layout value.
+        String badLayout = CHAT_HEAD.replace("documentItemsLayout: chat", "documentItemsLayout: timeline") + """
+                    audit: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text, messageBody: true }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(badLayout)).getIssues()
+                                                                                                     .stream()
+                                                                                                     .anyMatch(i -> i.contains(
+                                                                                                             "unknown documentItemsLayout")));
+
+        // No messageBody field + no audit on the items child.
+        String noBody = CHAT_HEAD + """
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        List<String> issues = assertThrows(IntentValidationException.class, () -> IntentParser.parse(noBody)).getIssues();
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("messageBody")),
+                "expected a messageBody issue, got: " + issues);
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("audit: true")),
+                "expected an audit issue, got: " + issues);
     }
 }

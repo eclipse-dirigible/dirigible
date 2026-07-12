@@ -412,6 +412,36 @@ renamed and is now REJECTED with a migration message - use `function: EntityStat
 Reserved values for upcoming templates (e.g. `Calendar`) are recognised but rejected with a clear
 "not yet available" message until the template ships.
 
+**`documentItemsLayout: chat` - render the items as a conversation thread.** On a document master, set
+`documentItemsLayout: chat` to render its line-items child as a chat thread (message bubbles + a
+composer to append a message) instead of the editable table - the document header, status pill, process
+tasks and print stay exactly as in a normal document. It is the shape for support cases, ticket
+conversations and comment threads. The items child must declare `audit: true` (the bubble's author and
+timestamp come from the audit `CreatedBy` / `CreatedAt`) and exactly one field with `messageBody: true`
+(the bubble text); an optional boolean field with `messageInternal: true` marks a memo as internal (a
+distinct tint, and hidden from the external partner surface). Own vs other alignment keys on the audit
+author vs the logged-in user.
+
+```yaml
+- name: Case
+  function: Document
+  documentItemsLayout: chat
+  fields:
+    - { name: id,      type: integer, primaryKey: true, generated: true }
+    - { name: subject, type: string, length: 200 }
+  relations:
+    - { name: Status, kind: manyToOne, to: CaseStatus, function: EntityStatus, init: 1 }
+- name: CaseMessage
+  function: DocumentItem
+  audit: true
+  fields:
+    - { name: id,       type: integer, primaryKey: true, generated: true }
+    - { name: body,     type: text,    messageBody: true }
+    - { name: internal, type: boolean, messageInternal: true }
+  relations:
+    - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+```
+
 ### processes - workflows and approvals
 
 **Use when:** a record needs a multi-step flow - approvals, hand-offs, branching, or automated steps.

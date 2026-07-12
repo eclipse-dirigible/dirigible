@@ -85,6 +85,19 @@ public class FieldIntent {
     /** Explicit field role selecting a document slot - currently {@code DocumentTitle}. */
     private String function;
     /**
+     * Chat role: marks this field (on a document's line-items child) as the <b>message body</b> when
+     * the master declares {@code documentItemsLayout: chat}. The document view then renders each item
+     * as a chat bubble whose text is this field; the author and timestamp come from the child's audit
+     * columns.
+     */
+    private boolean messageBody;
+    /**
+     * Chat role: an optional boolean field (on the chat items child) flagging an <b>internal</b> memo -
+     * the bubble is tinted distinctly (and hidden from the external partner surface). External by
+     * default.
+     */
+    private boolean messageInternal;
+    /**
      * Whether the field appears as a column in the entity <b>list</b> table (the model's
      * {@code widgetIsMajor}). Defaults to {@code true}; set {@code major: false} to keep the field off
      * the list/table view (it is still shown in forms and the record details pane). {@code Boolean}
@@ -250,6 +263,24 @@ public class FieldIntent {
      */
     public boolean isDocumentTitle() {
         return documentTitle || (function != null && "DocumentTitle".equalsIgnoreCase(function.trim()));
+    }
+
+    /** Whether this field is the chat message body ({@code messageBody: true}). */
+    public boolean isMessageBody() {
+        return messageBody;
+    }
+
+    public void setMessageBody(boolean messageBody) {
+        this.messageBody = messageBody;
+    }
+
+    /** Whether this field is the chat internal/external flag ({@code messageInternal: true}). */
+    public boolean isMessageInternal() {
+        return messageInternal;
+    }
+
+    public void setMessageInternal(boolean messageInternal) {
+        this.messageInternal = messageInternal;
     }
 
     public void setDocumentTitle(boolean documentTitle) {

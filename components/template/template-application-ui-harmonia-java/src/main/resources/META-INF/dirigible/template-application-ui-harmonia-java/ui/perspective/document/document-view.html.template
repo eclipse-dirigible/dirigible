@@ -155,6 +155,61 @@
 
     </form>
 
+#if($documentItemsLayout == "chat")
+    <!-- ===== Conversation thread (chat items) — bubbles + composer, only once the document exists.
+         Own vs other alignment keys on the audit CreatedBy vs the logged-in user; an internal memo is
+         tinted distinctly (bg-muted + an Internal badge) so it can't be mistaken for a reply shared
+         with the requester.
+         TODO(harmonia): once @codbex/harmonia ships the x-h-chat component family (x-h-chat /
+         x-h-chat-message[-author|-timestamp|-body] / x-h-chat-composer), replace this hand-rolled
+         thread + composer with those directives. This version is composed from primitives already in
+         the shipped Harmonia webjar so it works before that component lands. -->
+    <div class="vbox gap-2 w-full" x-show="itemsEnabled">
+      <div x-h-toolbar data-variant="transparent">
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
+      </div>
+      <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
+
+      <!-- Load-bearing visuals (alignment, bubble colours, wrapping, scroll) use inline styles +
+           semantic CSS vars rather than utility classes: the shipped Harmonia webjar's prebuilt CSS
+           only contains classes its own source scanned, so a utility not in that bundle would silently
+           no-op. Inline styles + theme vars (var(--primary) etc., defined in the webjar's globals.css)
+           are robust. The x-h-chat swap-in (TODO above) will own this styling as a real component. -->
+      <div class="vbox gap-3 w-full rounded-control border border-input bg-input-inner p-4" style="max-height: 28rem; overflow-y: auto" role="log" aria-live="polite">
+        <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
+          <div class="vbox gap-1" style="max-width: 85%"
+               :style="row.CreatedBy === $store.currentUser.name ? 'align-self:flex-end;align-items:flex-end' : 'align-self:flex-start;align-items:flex-start'">
+            <div class="hbox items-baseline gap-2">
+              <span class="text-foreground text-xs font-medium" x-text="row.CreatedBy || T('$projectName:${tprefix}.defaults.system', 'System')"></span>
+              <span class="text-muted-foreground text-xs" x-text="window.HarmoniaFormat.value(row.CreatedAt, true)"></span>
+#if($chatInternalProperty)
+              <span x-show="row.${chatInternalProperty}" x-h-badge data-variant="warning" x-text="T('$projectName:${tprefix}.defaults.internal', 'Internal')"></span>
+#end
+            </div>
+            <div class="text-sm" style="border-radius: 0.5rem; padding: 0.5rem 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere"
+                 :style="#if($chatInternalProperty)row.${chatInternalProperty} ? 'background:var(--muted);color:var(--foreground)' : (#end(row.CreatedBy === $store.currentUser.name ? 'background:var(--primary);color:var(--primary-foreground)' : 'background:var(--secondary);color:var(--secondary-foreground)')#if($chatInternalProperty))#end"
+                 x-text="row.${chatBodyProperty}"></div>
+          </div>
+        </template>
+        <div x-show="items.length === 0" x-h-text.muted class="p-2" x-text="T('$projectName:${tprefix}.messages.noData', 'No messages yet.')"></div>
+      </div>
+
+      <!-- Composer: Enter sends; the send button also submits. (x-h-chat-composer will add Shift+Enter
+           newline handling once it ships.) -->
+      <div class="vbox gap-2" x-show="!isPreview">
+#if($chatInternalProperty)
+        <label class="hbox items-center gap-2 text-sm">
+          <span x-h-switch data-size="sm"><input type="checkbox" x-model="chatInternal" /></span>
+          <span x-text="T('$projectName:${tprefix}.defaults.internalNote', 'Internal note (not visible to the requester)')"></span>
+        </label>
+#end
+        <div class="hbox items-end gap-2 w-full">
+          <textarea x-h-textarea rows="1" class="grow" x-model="chatDraft" @keydown.enter.prevent="sendMessage(chatDraft)" :disabled="chatSending" :aria-label="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message')" :placeholder="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message...')"></textarea>
+          <button type="button" x-h-button data-variant="primary" @click="sendMessage(chatDraft)" :disabled="chatSending || !chatDraft.trim()" :aria-label="T('$projectName:${tprefix}.defaults.send', 'Send')"><i role="img" x-h-lucide data-lucide="send"></i></button>
+        </div>
+      </div>
+    </div>
+#else
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
     <div class="vbox gap-2 w-full" x-show="itemsEnabled">
       <div x-h-toolbar data-variant="transparent">
@@ -195,6 +250,7 @@
         </tbody>
       </table>
     </div>
+#end
 
     <!-- ===== Totals footer (aggregate fields, read-only, right-aligned) — only once the document exists ===== -->
     <div class="hbox justify-end w-full" x-show="itemsEnabled">

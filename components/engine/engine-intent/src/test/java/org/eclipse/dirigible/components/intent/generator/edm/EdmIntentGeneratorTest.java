@@ -520,6 +520,37 @@ class EdmIntentGeneratorTest {
         assertEquals(null, primary.get("detailCalendar"));
     }
 
+    @Test
+    void chatDocumentMasterCarriesTheChatLayoutAndResolvedMessageProperties() {
+        String yaml = """
+                name: services
+                entities:
+                  - name: Case
+                    function: Document
+                    documentItemsLayout: chat
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: subject, type: string }
+                  - name: CaseMessage
+                    function: DocumentItem
+                    audit: true
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text, messageBody: true }
+                      - { name: internal, type: boolean, messageInternal: true }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "services");
+        Map<String, Object> master = entityByName(entities(model), "Case");
+
+        assertEquals("MANAGE_DOCUMENT", master.get("layoutType"));
+        assertEquals("CaseMessage", master.get("documentItemsEntity"));
+        assertEquals("chat", master.get("documentItemsLayout"));
+        assertEquals("Body", master.get("chatBodyProperty"));
+        assertEquals("Internal", master.get("chatInternalProperty"));
+    }
+
     private static List<Map<String, Object>> entities(Map<String, Object> modelJson) {
         return (List<Map<String, Object>>) ((Map<String, Object>) modelJson.get("model")).get("entities");
     }
