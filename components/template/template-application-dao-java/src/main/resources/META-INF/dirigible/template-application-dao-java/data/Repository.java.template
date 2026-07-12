@@ -61,7 +61,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
                 }
                 java.math.BigDecimal guardIncoming = entity.${rollupGuard.ofField} == null ? java.math.BigDecimal.ZERO : entity.${rollupGuard.ofField};
                 if (guardConsumed.add(guardIncoming).compareTo(guardParent.${rollupGuard.capacityField}) > 0) {
-                    throw new IllegalStateException("${rollupGuard.parentEntity} capacity exceeded (id " + entity.${rollupGuard.fkProperty}
+                    throw new ValidationException("${rollupGuard.parentEntity} capacity exceeded (id " + entity.${rollupGuard.fkProperty}
                             + "): capacity " + guardParent.${rollupGuard.capacityField} + ", already consumed " + guardConsumed
                             + ", requested " + guardIncoming);
                 }
@@ -73,6 +73,9 @@ import org.eclipse.dirigible.components.data.store.java.repository.JavaRepositor
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard)
+import org.eclipse.dirigible.sdk.db.ValidationException;
+#end
 #if($multilingual == "true")
 #if(!$documentMaster)
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
@@ -210,8 +213,9 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #if($documentChecks && $documentChecks.size() > 0)
     /**
      * Declarative document checks (intent {@code checks:}): each runs when the document is persisted
-     * carrying its gate status. Throws {@code IllegalStateException} with the authored message, which
-     * fails the transaction (and thereby a workflow task completion attempting an invalid transition).
+     * carrying its gate status. Throws {@code ValidationException} with the authored message - mapped to
+     * HTTP 400 on a REST write, and failing the transaction (and thereby a workflow task completion
+     * attempting an invalid transition) on the BPMN path.
      */
     private void enforceChecks(${name}Entity entity) {
 #foreach($check in $documentChecks)
@@ -229,12 +233,12 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
                 }
             }
             if (sum${check.overA}.compareTo(sum${check.overB}) != 0) {
-                throw new IllegalStateException("${check.message}");
+                throw new ValidationException("${check.message}");
             }
 #else
             if (new ${check.itemsEntity}Repository().findAll(
                     Criteria.create().eq("${check.itemsFk}", entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end)).size() < ${check.count}) {
-                throw new IllegalStateException("${check.message}");
+                throw new ValidationException("${check.message}");
             }
 #end
         }

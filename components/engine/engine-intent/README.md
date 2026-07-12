@@ -10,8 +10,10 @@ the registry until normal publish.
 This README is the quick index: one line + one snippet per construct. The authoritative reference
 (rules, edge cases, validation messages) is
 [`src/main/resources/intent-assistant-guide.md`](src/main/resources/intent-assistant-guide.md);
-contributor internals live in [`CLAUDE.md`](CLAUDE.md). Every enforcement-bearing construct below
-is covered end to end (generated tokens + runtime behavior) by `IntentEmissionCoverageIT`.
+contributor internals live in [`CLAUDE.md`](CLAUDE.md). Enforcement- and behaviour-bearing constructs
+below are covered end to end (generated token + runtime behavior where the construct has a server-side
+effect) by `IntentEmissionCoverageIT`; presentation-only constructs (calendar views, `where` option
+filters) are covered at the generation layer by `IntentEngineIT` and the parser / EDM unit tests.
 
 ## Index
 
@@ -123,15 +125,20 @@ message).
     - { kind: exactlyOne, fields: [debit, credit], message: "Exactly one of debit/credit" }
 ```
 
-## immutableIn - status-keyed immutability
+## immutableWhen / immutable - user-write immutability
 
 ```yaml
 - name: JournalEntry
-  immutableIn: [2]     # while Status holds seed id 2 (POSTED), REST update/delete return 409
+  immutableWhen: "Status == 2"   # while Status holds seed id 2 (POSTED), REST update/delete return 409
+# or, unconditionally append-only from creation:
+- name: SentSnapshot
+  immutable: true                # every record is read-only to user writes the moment it is created
 ```
 
-Requires a `function: EntityStatus` relation. Workflow/system writes through the repository stay
-possible - corrections are flow-generated reversals, never edits.
+`immutableWhen` requires a `function: EntityStatus` relation and takes a boolean expression over its
+seed ids (terms joined with `||`). `immutable: true` is the unconditional append-only variant, mutually
+exclusive with `immutableWhen`. Workflow/system writes through the repository stay possible -
+corrections are flow-generated reversals, never edits.
 
 ## hierarchy / leafOnly - tree entities
 

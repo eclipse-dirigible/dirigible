@@ -158,6 +158,25 @@ class ControllerInvokerBindingTest {
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, e.getStatusCode());
     }
 
+    @Test
+    void validation_exception_yields_400() {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("reject"))
+                           .findFirst()
+                           .orElseThrow();
+
+        ResponseStatusException e = assertThrows(ResponseStatusException.class,
+                () -> invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), new FakeResponse()));
+        // A domain validation (checks: gate, capacity guard, hand-written) is a user-fixable client
+        // error - the dispatcher maps ValidationException to 400 with the authored message, not a 500.
+        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
+        assertEquals("debits must equal credits", e.getReason());
+    }
+
     // --- fixtures --------------------------------------------------------------------------------
 
     @Controller
@@ -181,6 +200,11 @@ class ControllerInvokerBindingTest {
         @Get("/boom")
         public String boom() {
             throw new RuntimeException("kaboom");
+        }
+
+        @Get("/reject")
+        public String reject() {
+            throw new org.eclipse.dirigible.sdk.db.ValidationException("debits must equal credits");
         }
     }
 

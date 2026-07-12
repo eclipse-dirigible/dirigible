@@ -59,8 +59,17 @@ public class ${className}Generate {
         // status now that the target exists (e.g. a proforma flips to INVOICED). A workflow-style
         // system write - no "-updated" re-fire (no onUpdate reactions), but the dedicated
         // "-transitioned" topic IS published so posting glue / integrations observe the transition.
-        source.${sourceStatusProperty} = ${sourceStatusValue};
-        new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository().updateWithoutEvent(source);
+        // Flip ONLY the status column through the targeted single-column primitive. A full-row
+        // updateWithoutEvent(source) would merge the snapshot loaded at the top of run() - taken BEFORE
+        // the target and its items were created - and silently revert any concurrent write to the source
+        // row in that window (recalculated totals, a workflow status). Same reason the process trigger
+        // writes ProcessId via updateProperty rather than update().
+        gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository();
+        sourceRepository.updateProperty(req.id, "${sourceStatusProperty}", ${sourceStatusValue});
+        // Reload so the "-transitioned" payload carries the committed row (the flipped status plus any
+        // write the target creation performed on the source), not the stale pre-generation snapshot.
+        source = sourceRepository.findById(req.id);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
                 "${projectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
 #end

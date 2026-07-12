@@ -19,6 +19,7 @@ import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.sdk.db.ValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -103,6 +104,15 @@ public class ControllerInvoker {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
             if (cause instanceof ResponseStatusException rse) {
                 throw rse;
+            }
+            if (cause instanceof ValidationException) {
+                // A client-side domain validation (a generated repository's checks: gate or capacity
+                // guard, or hand-written validation) is a user-fixable client error, not a server
+                // fault - surface it as 400 with the authored message instead of a 500.
+                LOGGER.debug("Controller [{}#{}] rejected the request: {}", match.entry()
+                                                                                 .fqn(),
+                        method.getName(), cause.getMessage());
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, cause.getMessage(), cause);
             }
             LOGGER.error("Controller [{}#{}] threw: {}", match.entry()
                                                               .fqn(),

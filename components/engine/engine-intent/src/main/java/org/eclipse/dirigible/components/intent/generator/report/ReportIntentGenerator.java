@@ -612,8 +612,35 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
         // Authors used to the intent's guard syntax write `Status == 2`; SQL equality is a single
         // `=` (H2 tolerates `==`, PostgreSQL rejects it), so normalize. `<=`/`>=`/`!=` are untouched.
-        where = where.replace("==", "=");
+        // Normalize only OUTSIDE single-quoted string literals so a value literal that itself contains
+        // `==` (e.g. Code == 'A==B') is left intact.
+        where = normalizeEqualityOperator(where);
         return where.trim();
+    }
+
+    /**
+     * Collapse the guard-style {@code ==} equality operator to SQL {@code =}, but only outside
+     * single-quoted string literals so a literal value containing {@code ==} is preserved verbatim.
+     *
+     * @param where the WHERE fragment
+     * @return the fragment with operator-level {@code ==} collapsed to {@code =}
+     */
+    private static String normalizeEqualityOperator(String where) {
+        StringBuilder result = new StringBuilder(where.length());
+        boolean inStringLiteral = false;
+        for (int i = 0; i < where.length(); i++) {
+            char current = where.charAt(i);
+            if (current == '\'') {
+                inStringLiteral = !inStringLiteral;
+                result.append(current);
+            } else if (!inStringLiteral && current == '=' && i + 1 < where.length() && where.charAt(i + 1) == '=') {
+                result.append('=');
+                i++;
+            } else {
+                result.append(current);
+            }
+        }
+        return result.toString();
     }
 
     /**

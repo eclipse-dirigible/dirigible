@@ -17,10 +17,13 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * - binds the -transitioned topic (workflow status writes publish it; -updated reactions never see
  *   it, so no loops) and RE-LOADS the source by id - the payload is as-of the transition and lacks
  *   later-step data such as a stamped document number;
- * - at-most-once via the ${backRefProperty} back-reference (an event redelivery must not double-post);
+ * - idempotent + resumable via the ${backRefProperty} back-reference: a redelivery of a complete post
+ *   is a no-op, and a redelivery of a half-post (an item write failed after the target was saved)
+ *   rebuilds the items so the post completes - so it never throws or leaves a half-post. Concurrent
+ *   de-duplication is best-effort until a UNIQUE back-reference key lands with schema constraints; a
+ *   genuinely failed post is undone by a compensation action, not this handler;
  * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
- *   unposted worklist - final-status documents with no back-referencing ${targetEntity}) - it never
- *   throws or half-posts;
+ *   unposted worklist - final-status documents with no back-referencing ${targetEntity});
  * - all writes go through the generated repositories (numbering, status init, validations, checks).
  */
 @Component
@@ -49,12 +52,9 @@ public class ${className}Posting implements MessageHandler {
         if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
             return;
         }
-        // At-most-once: the back-reference is the guard.
-        if (!new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository().findAll(
-                Criteria.create().eq("${backRefProperty}", source.${sourceKeyField})).isEmpty()) {
-            return;
-        }
 #if($hasRule)
+        // Determination rule first (the item derivation depends on it): a missing rule or a null
+        // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.
         java.util.List<gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Entity> ruleRows =
                 new gen.${javaGenFolderName}.data.${ruleJavaPerspective}.${ruleEntity}Repository().findAll(
                         Criteria.create().eq("${ruleMatchProperty}", ${ruleMatchValueJava}));
@@ -68,14 +68,49 @@ public class ${className}Posting implements MessageHandler {
         }
 #end
 #end
-        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target =
-                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
-#foreach($a in $headerAssignments)
-        target.${a.targetProp} = ${a.expr};
+        // Idempotent + resumable posting (cloud-native: no cross-step transaction). The back-reference
+        // identifies an existing post: a fresh source posts a new target + items; a redelivery of a
+        // COMPLETE post is a no-op; a redelivery of a HALF-post (an item write failed after the target
+        // was saved) rebuilds the items so the post completes. Concurrent-redelivery de-duplication is
+        // best-effort until a UNIQUE key on the back-reference lands with schema constraint emission; a
+        // genuinely failed post is reversed by a compensation action, not by this handler.
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository targetRepository =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository();
+        gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository itemsRepository =
+                new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository();
+        int expectedItems = 0;
+#foreach($row in $itemRows)
+#if($row.guard != "")
+        if (${row.guard}) {
+            expectedItems++;
+        }
+#else
+        expectedItems++;
 #end
-        target.${backRefProperty} = source.${sourceKeyField};
-        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved =
-                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository().save(target);
+#end
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
+                targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved;
+        if (!existingTargets.isEmpty()) {
+            saved = existingTargets.get(0);
+            java.util.List<gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity> currentItems =
+                    itemsRepository.findAll(Criteria.create().eq("${itemsFk}", saved.${targetPk}));
+            if (currentItems.size() >= expectedItems) {
+                return; // already fully posted - nothing to do
+            }
+            // Half-post: clear the partial items and recreate the full derived set below.
+            for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity stale : currentItems) {
+                itemsRepository.delete(stale);
+            }
+        } else {
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity target =
+                    new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity();
+#foreach($a in $headerAssignments)
+            target.${a.targetProp} = ${a.expr};
+#end
+            target.${backRefProperty} = source.${sourceKeyField};
+            saved = targetRepository.save(target);
+        }
 #foreach($row in $itemRows)
 #if($row.guard != "")
         if (${row.guard}) {
@@ -87,7 +122,7 @@ public class ${className}Posting implements MessageHandler {
             item.${a.targetProp} = ${a.expr};
 #end
             item.${itemsFk} = saved.${targetPk};
-            new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository().save(item);
+            itemsRepository.save(item);
         }
 #if($row.guard != "")
         }

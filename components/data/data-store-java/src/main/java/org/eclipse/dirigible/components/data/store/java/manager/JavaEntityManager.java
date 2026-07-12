@@ -14,10 +14,10 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-import java.util.WeakHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.sql.DataSource;
 
@@ -76,10 +76,17 @@ public class JavaEntityManager implements DisposableBean {
     /**
      * Metadata views for callers whose entity {@link Class} belongs to an OLDER client-classloader
      * generation than the currently registered one — e.g. a Flowable-cached delegate instance that
-     * resolved its classes before its module was republished. Weakly keyed by the caller's class so a
-     * retired generation's entries are garbage-collected together with its classloader.
+     * resolved its classes before its module was republished. Keyed by the caller's class.
+     *
+     * <p>
+     * Deliberately NOT a {@code WeakHashMap}: each value re-reflects the entity against the caller's
+     * class and therefore strongly references that class (through its {@code Field}s), which would pin
+     * the key and make weak-key collection impossible — the map would leak the retired
+     * {@code ClientClassLoader} forever. The cache is instead invalidated explicitly on every
+     * {@link #rebuildSessionFactory()}: a generation change makes the prior generation's views
+     * obsolete, and once dropped the retired classloader becomes collectable.
      */
-    private final Map<Class<?>, RegisteredEntity> staleGenerationViews = Collections.synchronizedMap(new WeakHashMap<>());
+    private final Map<Class<?>, RegisteredEntity> staleGenerationViews = Collections.synchronizedMap(new HashMap<>());
 
     private final ReentrantLock rebuildLock = new ReentrantLock();
 
@@ -230,6 +237,11 @@ public class JavaEntityManager implements DisposableBean {
     }
 
     private void rebuildSessionFactory() {
+        // Any registration change retires the prior client-classloader generation. Drop the stale
+        // metadata views now: each strongly references a caller class from an older generation, so
+        // leaving them in place would pin that generation's ClientClassLoader indefinitely.
+        staleGenerationViews.clear();
+
         // Capture for close-after-swap; Hibernate sessions in flight can finish against the old
         // factory before it's released — but for our hot-reload use case we don't have long-lived
         // open sessions, so closing here is safe.

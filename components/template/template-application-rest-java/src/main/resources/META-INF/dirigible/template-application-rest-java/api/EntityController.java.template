@@ -278,6 +278,9 @@ public class ${name}Controller {
             if (type == Double.class) {
                 return Double.valueOf(s);
             }
+            if (type == Boolean.class || type == boolean.class) {
+                return Boolean.valueOf(s);
+            }
         } catch (ReflectiveOperationException | RuntimeException e) {
             // Unknown field or unparseable value: leave as-is and let Hibernate's validator report it.
         }
@@ -345,6 +348,12 @@ public class ${name}Controller {
     // moment it is created - e.g. the snapshot stored when a document is sent. Workflow / system
     // writes through the repository are deliberately unaffected.
     private void requireMutable(Object id) {
+        // A non-existent record is a 404, not a 409: return and let the caller's not-found check report
+        // it (delete checks existence first; update reaches its findOne right after). Only an EXISTING
+        // record is append-only - matching the status-gated variant below and the delete path.
+        if (repository.findOne(id).isEmpty()) {
+            return;
+        }
         throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "This ${name} is append-only - records can neither be edited nor deleted");
     }
