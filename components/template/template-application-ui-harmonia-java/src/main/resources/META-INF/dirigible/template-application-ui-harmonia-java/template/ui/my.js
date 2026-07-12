@@ -32,14 +32,14 @@ export const getSources = () => [
         action: "generate",
         engine: "velocity",
         rename: "gen/{{genFolderName}}/js/components/pages/my/{{name}}MyFormPage.js",
-        collection: "personalModels"
+        collection: "personalFormModels"
     },
     {
         location: "/template-application-ui-harmonia-java/ui/my/my-form-view.html.template",
         action: "generate",
         engine: "velocity",
         rename: "gen/{{genFolderName}}/views/my/{{name}}-form.html",
-        collection: "personalModels"
+        collection: "personalFormModels"
     },
     {
         // Personal DOCUMENT layout: a MANAGE_DOCUMENT personal root renders as a document (header form
