@@ -1,0 +1,5 @@
+{
+    "module": "partner/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Partner Shell"
+}

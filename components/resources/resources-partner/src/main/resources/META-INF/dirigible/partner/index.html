@@ -1,0 +1,339 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  The Harmonia application shell (pure Java + Harmonia; the IDE stays AngularJS + BlimpKit). It
+  REUSES the shared Harmonia runtime served from /services/web/application-core/shell for the
+  built-in pages (Dashboard/Inbox/Documents/Reports) and aggregates the `application-perspectives`
+  extension point for the domain apps, which it hosts in an iframe (their generated SPA, embedded).
+-->
+<!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
+<html lang="en" data-brand-title>
+
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Partner</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
+    <link href="./css/app.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+  </head>
+
+  <body class="vbox size-full" x-data="app">
+
+    <!-- Narrow-viewport drawer host. -->
+    <div x-h-sheet-overlay="isOpen">
+      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    </div>
+
+    <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
+    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+
+      <!-- Sidebar -->
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
+           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar">
+          <!-- Instance brand mark (DIRIGIBLE_BRANDING_LOGO / _NAME / _SUBTITLE via the `branding` store),
+               the Harmonia counterpart of the AngularJS shell header. With 2+ projections declared
+               (the application-projections extension point) it becomes the Harmonia
+               product-switch-header: the selected projection filters the shell. -->
+          <div x-h-sidebar-header>
+            <template x-if="projections.length > 1">
+              <div>
+                <button x-h-sidebar-menu-button data-size="lg" x-h-menu-trigger.dropdown>
+                  <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-9 rounded-control" />
+                  <div class="vbox min-w-0 text-left">
+                    <span class="truncate font-medium" x-text="projectionLabel()"></span>
+                    <span class="truncate text-xs font-normal" x-text="projectionSubtitle()"></span>
+                  </div>
+                  <i x-h-lucide role="img" data-lucide="chevrons-up-down"></i>
+                </button>
+                <ul x-h-menu aria-label="Projections" data-align="bottom-start">
+                  <div x-h-menu-label x-text="T('application-core:shell.projections.title', 'Applications')"></div>
+                  <template x-for="p in projections" :key="p.id">
+                    <li x-h-menu-item @click="selectProjection(p)">
+                      <template x-if="isSvgIcon(p.icon)"><svg x-h-icon :data-link="p.icon" class="size-4" role="presentation"></svg></template>
+                      <template x-if="isImageIcon(p.icon)"><img :src="p.icon" alt="" class="size-4" /></template>
+                      <template x-if="!isSvgIcon(p.icon) && !isImageIcon(p.icon)"><i role="img" x-h-lucide :data-lucide="p.icon || 'box'"></i></template>
+                      <span class="flex-1" x-text="p.tkey ? T(p.tkey, p.label) : p.label"></span>
+                      <!-- svg placeholder: x-show on an <i x-h-lucide> is lost when the i is replaced by the svg -->
+                      <svg x-h-lucide x-show="projectionId === p.id" role="img" data-lucide="check"></svg>
+                    </li>
+                  </template>
+                </ul>
+              </div>
+            </template>
+            <template x-if="projections.length <= 1">
+              <div class="hbox items-center gap-2 p-1">
+                <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
+                <div class="vbox gap-0">
+                  <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
+                  <span x-show="$store.branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="$store.branding.subtitle"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div x-h-sidebar-content>
+            <!-- Built-in shell sections (native Harmonia, reused from the shared runtime). -->
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.application', 'Application')"></div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <!-- The shell is task-first (inherited from the My shell copy; partner-scoped Inbox is a later phase): the Inbox IS the home page - a personal task
+                       ("Fill & confirm your July timesheet") is how work arrives here. -->
+                  <li x-h-sidebar-menu-item>
+                    <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/inbox') || isBuiltinActive('/')" @click="navigate('/inbox')">
+                      <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Loading / empty states for the aggregated domain apps. -->
+            <div x-show="loading" x-cloak x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.apps.loading', 'Loading applications...')"></div>
+            <div x-show="!loading && groups.length === 0" x-cloak x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.apps.empty', 'No applications published yet.')"></div>
+
+            <!-- Domain apps: one group per navigation group (filtered by the active projection),
+                 items host the embedded app. -->
+            <template x-for="group in visibleGroups()" :key="group.id">
+              <div x-h-sidebar-group>
+                <div x-h-sidebar-group-label x-text="group.tkey ? T(group.tkey, group.label) : group.label"></div>
+                <div x-h-sidebar-group-content>
+                  <ul x-h-sidebar-menu>
+                    <template x-for="item in group.items" :key="item.id">
+                      <li x-h-sidebar-menu-item>
+                        <button x-h-sidebar-menu-button :data-active="isAppActive(item)" @click="openApp(item)">
+                          <template x-if="isSvgIcon(item.icon)"><svg x-h-icon :data-link="item.icon" class="size-4" role="presentation"></svg></template>
+                          <template x-if="isImageIcon(item.icon)"><img :src="item.icon" alt="" class="size-4" /></template>
+                          <template x-if="!isSvgIcon(item.icon) && !isImageIcon(item.icon)"><i role="img" x-h-lucide :data-lucide="item.icon || 'box'"></i></template>
+                          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
+                        </button>
+                      </li>
+                    </template>
+                  </ul>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Settings pinned to the footer; it aggregates every app's SETTING entities. -->
+          <div x-h-sidebar-footer>
+            <ul x-h-sidebar-menu>
+              <li x-h-sidebar-menu-item x-show="visibleSettingsItems().length > 0">
+                <button x-h-sidebar-menu-button :data-active="settingsMode" @click="openSettings()">
+                  <i role="img" x-h-lucide data-lucide="settings"></i><span x-text="T('application-core:shell.nav.settings', 'Settings')"></span>
+                </button>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main panel -->
+      <div x-h-split-panel>
+        <div class="vbox size-full">
+          <div x-h-toolbar data-variant="transparent" x-cloak>
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <i role="img" x-h-lucide data-lucide="menu"></i>
+            </button>
+            <span x-h-toolbar-title x-text="T('application-core:shell.nav.partnerPortal', 'Partner Portal')"></span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
+              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            </button>
+
+            <!-- Notifications: the bell shows the unread count; the popover lists them. -->
+            <button x-h-button x-h-popover-trigger data-variant="transparent" data-size="icon-sm" aria-label="Notifications" class="relative">
+              <i role="img" x-h-lucide data-lucide="bell"></i>
+              <span x-show="$store.notifications.unreadCount > 0" class="absolute" x-text="$store.notifications.unreadCount"
+                    style="right:-2px; bottom:-2px; min-width:15px; height:15px; padding:0 3px; border-radius:9999px; background:#e01b24; color:#fff; font-size:9px; line-height:15px; text-align:center; font-weight:700;"></span>
+            </button>
+            <div class="w-80" x-h-popover data-innerclicks="true">
+              <div x-h-toolbar data-size="sm">
+                <span x-h-toolbar-title class="shrink-0" x-text="T('application-core:shell.notifications.title', 'Notifications') + ' (' + $store.notifications.unreadCount + ')'"></span>
+                <div x-h-toolbar-spacer></div>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.notifications.markAllRead()"
+                        title="Mark all as read" aria-label="Mark all as read"><i role="img" x-h-lucide data-lucide="check-check"></i></button>
+              </div>
+              <div x-show="$store.notifications.items.length === 0" x-h-text.muted class="p-3 text-sm" x-text="T('application-core:shell.notifications.caughtUp', 'You\u2019re all caught up.')"></div>
+              <ol x-show="$store.notifications.items.length" x-h-notification-list>
+                <template x-for="n in $store.notifications.items" :key="n.id">
+                  <li x-h-notification class="hbox" :data-unread="n.unread ? 'true' : 'false'"
+                      :class="n.task ? 'cursor-pointer' : ''" @click="openNotification(n)">
+                    <div x-h-notification-media><svg x-h-icon data-icon="circle-info" class="size-5" role="img" aria-label="info"></svg></div>
+                    <div class="vbox flex-1">
+                      <h1 x-h-notification-title x-text="n.title"></h1>
+                      <p x-h-notification-description x-text="n.description"></p>
+                    </div>
+                  </li>
+                </template>
+              </ol>
+            </div>
+
+            <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
+            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="$store.currentUser.name || 'Account'">
+              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+            </button>
+            <ul x-h-menu aria-label="User menu" data-align="bottom-end">
+              <div x-h-tile class="mb-1">
+                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
+                <div x-h-tile-content>
+                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                </div>
+              </div>
+              <div x-h-menu-separator></div>
+              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
+                <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted
+               domain app shows in the iframe instead. -->
+          <div id="app" x-show="!hostedUrl" class="size-full overflow-auto flex-1">
+            <!-- Pinecone Router renders the matched built-in view fragment here. -->
+          </div>
+          <div x-show="hostedUrl" class="flex-1 size-full" style="position: relative;">
+            <iframe :src="hostedUrl" title="Application" @load="onIframeLoad($event)"
+                    style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- App-wide BPM task form dialog (driven by the processTasks store). Opened from a task
+         notification in the bell popover; the store re-fetches on close so badges update. -->
+    <div x-h-dialog-overlay :data-open="$store.processTasks.formOpen">
+      <div x-h-dialog style="width: 92vw; max-width: 1100px;">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="$store.processTasks.formTitle"></h2>
+          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"></button>
+        </div>
+        <div x-h-dialog-content>
+          <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl"
+                  title="Task form" style="width:100%; height:70vh; border:0;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- App-wide dialog for developer-contributed custom actions (driven by the customActions store).
+         The contributed action page is shown in an iframe; it posts harmonia.form.close to dismiss and
+         the store then raises harmonia:action-done so the originating view refreshes. -->
+    <div x-h-dialog-overlay :data-open="$store.customActions.dialogOpen">
+      <div x-h-dialog style="width: 92vw; max-width: 1100px;">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="$store.customActions.dialogTitle"></h2>
+          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"></button>
+        </div>
+        <div x-h-dialog-content>
+          <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
+                  title="Action" style="width:100%; height:70vh; border:0;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- App-wide transient toasts (raised through Harmonia's notifications magic with this template). -->
+    <section x-h-notification-overlay>
+      <template id="toast">
+        <li x-h-notification.floating data-variant="toast" class="hbox items-center gap-3 min-w-3xs max-w-md">
+          <div x-h-notification-media>
+            <span x-h-avatar class="rounded-full" :data-variant="variant">
+              <template x-if="variant === 'positive'"><svg x-h-icon data-icon="circle-success" role="img" aria-label="success"></svg></template>
+              <template x-if="variant === 'negative'"><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></template>
+              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
+            </span>
+          </div>
+          <span x-h-notification-title class="flex-1" x-text="message"></span>
+          <div x-h-notification-actions data-orientation="vertical">
+            <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
+              <svg x-h-icon data-icon="close" role="img" aria-label="close"></svg>
+            </button>
+          </div>
+        </li>
+      </template>
+    </section>
+
+    <!-- Built-in routes. Dashboard is local (generic landing); the rest reuse the shared runtime. -->
+    <template x-route="/" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
+    <template x-route="/dashboard" x-template.target.app="./views/_dashboard.html"></template>
+    <template x-route="/inbox" x-template.target.app="/services/web/application-core/shell/views/_inbox.html"></template>
+    <template x-route="/documents" x-template.target.app="/services/web/application-core/shell/views/_documents.html"></template>
+    <!-- Settings: list (/settings) or a selected entity (/settings/<perspective-id>). The master-detail
+         fragment renders into #app (visible) so its split lays out correctly. -->
+    <template x-route="/settings" x-template.target.app="./views/_settings.html"></template>
+    <template x-route="/settings/:id" x-template.target.app="./views/_settings.html"></template>
+    <!-- Hosted domain apps: /app/<perspective-id>[/<inner-route>]. No template - the iframe renders them;
+         the optional inner segment mirrors the embedded app's own hash route (deep-linkable). -->
+    <template x-route="/app/:id/:inner*"></template>
+    <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
+
+    <!-- 1. Plugins (vendored) -->
+    <script src="/webjars/pinecone-router/dist/router.min.js"></script>
+
+    <!-- 2. Shared Harmonia runtime (served from application-core) + local config/shell (defer keeps order) -->
+    <script src="/services/web/application-core/shell/js/app.js" defer></script>
+    <script src="./js/config.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform
+         service sets top.PlatformBranding; the adapter applies the favicon/title and exposes it as the
+         Alpine `branding` store. Load the source before the adapter. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/basePage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/notifications.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/processTasks.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/customActions.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/reports.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
+    <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>
+    <script src="./js/appShell.js" defer></script>
+
+    <!-- 3. Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <!-- 4. Lucide icons -->
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <!-- opt-in Harmonia Lucide plugin: registers x-h-lucide (renders Lucide icons + keeps them in sync); needs window.lucide (above). -->
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+    <!-- Lucide icons render via the x-h-lucide directive (harmonia-lucide bundle above): it upgrades
+         icons on init and inside router-swapped views, so no manual createIcons scan is needed. -->
+  </body>
+
+</html>
