@@ -1,0 +1,262 @@
+package gen.${javaGenFolderName}.api.${javaPerspectiveName};
+
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.platform.Documentation;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Delete;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.PathParam;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.Put;
+import org.eclipse.dirigible.sdk.http.QueryParam;
+import org.eclipse.dirigible.sdk.security.User;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.server.ResponseStatusException;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * The PARTNER surface of ${name}: every read is scoped to the logged-in EXTERNAL partner's identity
+ * record (Customer / Supplier, matched by email) and every write is forced onto it - a partner can
+ * neither see nor touch another partner's rows, and sensitive fields are stripped from responses and
+ * ignored on writes. Reached only through the Partner shell (its perspective registers on the disjoint
+ * application-partner-perspectives extension point); the power surface (${name}Controller) and the
+ * personal My surface are unaffected.
+ *
+ * Generated from the intent partner attribute - do not edit; it is re-generated with the application.
+ */
+@Controller
+@Documentation("${projectName} - ${name} partner controller")
+public class ${name}PartnerController {
+
+    private final ${name}Repository repository;
+    private final ${partnerIdentityRepositoryClass} identityRepository;
+#if($partnerParent)
+    private final ${partnerParent.repositoryClass} parentRepository;
+#end
+
+    public ${name}PartnerController(${name}Repository repository, ${partnerIdentityRepositoryClass} identityRepository#if($partnerParent),
+            ${partnerParent.repositoryClass} parentRepository#end) {
+        this.repository = repository;
+        this.identityRepository = identityRepository;
+#if($partnerParent)
+        this.parentRepository = parentRepository;
+#end
+    }
+
+#if($partnerParent)
+    @Get
+    @Documentation("List my ${name} of one ${partnerParent.entity}")
+    public List<${name}Entity> getAll(@QueryParam("${partnerParent.fkProperty}") String ${partnerParent.fkProperty}) {
+        if (${partnerParent.fkProperty} == null || me() == null) {
+            return List.of();
+        }
+        requireMyParent(${partnerParent.fkProperty});
+        Map<String, Object> params = new LinkedHashMap<>();
+        params.put("parent", ${partnerParent.fkProperty});
+        List<${name}Entity> result = repository.query("from ${name}Entity e where e.${partnerParent.fkProperty} = :parent", params);
+        result.forEach(this::scrub);
+        return result;
+    }
+#else
+    @Get
+    @Documentation("List my ${name}")
+    public List<${name}Entity> getAll() {
+        ${partnerFkJavaClass} me = me();
+        if (me == null) {
+            return List.of();
+        }
+        List<${name}Entity> result = repository.findAll(Criteria.create().eq("${partnerProperty}", me));
+        result.forEach(this::scrub);
+        return result;
+    }
+
+    @Get("/count")
+    @Documentation("Count my ${name}")
+    public Map<String, Long> count() {
+        ${partnerFkJavaClass} me = me();
+        return Map.of("count", me == null ? 0L : (long) repository.findAll(Criteria.create().eq("${partnerProperty}", me)).size());
+    }
+#end
+
+    @Get("/{id}")
+    @Documentation("Get my ${name} by id")
+    public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        return scrub(requireMine(id));
+    }
+
+    @Post
+    @Documentation("Create a ${name} of mine")
+    public ${name}Entity create(@Body ${name}Entity entity) {
+#if($partnerParent)
+        if (entity.${partnerParent.fkProperty} == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "${partnerParent.fkProperty} is required");
+        }
+        requireMyParent(String.valueOf(entity.${partnerParent.fkProperty}));
+#else
+        ${partnerFkJavaClass} me = me();
+        if (me == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "No identity record is mapped to the current user");
+        }
+        // The owner is the server's decision - whatever the client sent is overwritten.
+        entity.${partnerProperty} = me;
+#end
+#foreach($sensitive in $sensitiveProperties)
+        entity.${sensitive} = null;
+#end
+        return scrub(repository.save(entity));
+    }
+
+    @Put("/{id}")
+    @Documentation("Update my ${name} by id")
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+        ${name}Entity existing = requireMine(id);
+#if($immutableAlways || $immutableStatusProperty)
+        requireMutable(existing);
+#end
+        entity.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end = id;
+#if($partnerParent)
+        // Re-parenting is not a partner-surface operation - the parent stays what it was.
+        entity.${partnerParent.fkProperty} = existing.${partnerParent.fkProperty};
+#else
+        entity.${partnerProperty} = existing.${partnerProperty};
+#end
+#foreach($sensitive in $sensitiveProperties)
+        // Sensitive fields are not writable here - the stored value is kept.
+        entity.${sensitive} = existing.${sensitive};
+#end
+        return scrub(repository.update(entity));
+    }
+
+    @Delete("/{id}")
+    @Documentation("Delete my ${name} by id")
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        ${name}Entity existing = requireMine(id);
+#if($immutableAlways || $immutableStatusProperty)
+        requireMutable(existing);
+#end
+        try {
+            repository.deleteById(id);
+        } catch (RuntimeException e) {
+            if (isConstraintViolation(e)) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is referenced by other records and cannot be deleted");
+            }
+            throw e;
+        }
+    }
+
+    /**
+     * The current user's identity record id: the ${partnerIdentityProperty} of the identity entity
+     * matched against the logged-in username. Null when no record maps (the partner surface is then
+     * empty, never an error).
+     */
+    private #if($partnerParent)${partnerParent.partnerFkJavaClass}#else${partnerFkJavaClass}#end me() {
+        String username = User.getName();
+        if (username == null || username.isBlank()) {
+            return null;
+        }
+        var matches = identityRepository.findAll(Criteria.create().eq("${partnerIdentityProperty}", username));
+        return matches.isEmpty() ? null : matches.get(0).Id;
+    }
+
+    /**
+     * The logged-in user's own display name (the identity record's ${partnerIdentityLabel}), for the
+     * partner pages' "New/Edit ... for &lt;owner&gt;" title. Falls back to the username when no
+     * identity record maps. Exposes only the display name - never the whole identity record.
+     */
+    @Get("/me")
+    @Documentation("The logged-in user's own display name")
+    public Map<String, Object> currentIdentity() {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String username = User.getName();
+        result.put("name", username);
+        if (username != null && !username.isBlank()) {
+            var matches = identityRepository.findAll(Criteria.create().eq("${partnerIdentityProperty}", username));
+            if (!matches.isEmpty() && matches.get(0).${partnerIdentityLabel} != null) {
+                result.put("name", String.valueOf(matches.get(0).${partnerIdentityLabel}));
+            }
+        }
+        return result;
+    }
+
+    /** Load the record and prove it is mine - a foreign or missing record is the same 404. */
+    private ${name}Entity requireMine(Object id) {
+        var me = me();
+        ${name}Entity entity = me == null ? null
+                : repository.findOne(id)
+                            .orElse(null);
+#if($partnerParent)
+        if (entity != null && entity.${partnerParent.fkProperty} != null) {
+            var parent = parentRepository.findOne(entity.${partnerParent.fkProperty})
+                                         .orElse(null);
+            if (parent != null && me.equals(parent.${partnerParent.partnerProperty})) {
+                return entity;
+            }
+        }
+#else
+        if (entity != null && me.equals(entity.${partnerProperty})) {
+            return entity;
+        }
+#end
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found");
+    }
+#if($partnerParent)
+
+    /** Prove the ${partnerParent.entity} the operation targets is mine - else the same 404. */
+    private void requireMyParent(String parentId) {
+        var me = me();
+        var parent = me == null ? null
+                : parentRepository.findOne(${partnerParent.fkJavaClass}.valueOf(parentId))
+                                  .orElse(null);
+        if (parent == null || !me.equals(parent.${partnerParent.partnerProperty})) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "${partnerParent.entity} not found");
+        }
+    }
+#end
+#if($immutableAlways)
+
+    private void requireMutable(${name}Entity existing) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} is append-only - records can neither be edited nor deleted");
+    }
+#elseif($immutableStatusProperty)
+
+    private void requireMutable(${name}Entity existing) {
+        if (existing.${immutableStatusProperty} == null) {
+            return;
+        }
+        for (String immutable : "${immutableStatusValues}".split(",")) {
+            if (immutable.equals(String.valueOf(existing.${immutableStatusProperty}))) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT,
+                        "This ${name} is immutable in its current status - corrections go through the workflow");
+            }
+        }
+    }
+#end
+
+    /** Strip sensitive fields from a response - they exist only on the power surface. */
+    private ${name}Entity scrub(${name}Entity entity) {
+#foreach($sensitive in $sensitiveProperties)
+        entity.${sensitive} = null;
+#end
+        return entity;
+    }
+
+    /** Whether a persistence failure is (caused by) a database constraint violation. */
+    private static boolean isConstraintViolation(Throwable e) {
+        for (Throwable cause = e; cause != null; cause = cause.getCause() == cause ? null : cause.getCause()) {
+            String type = cause.getClass().getName();
+            if (type.contains("ConstraintViolation") || type.contains("DataIntegrityViolation")) {
+                return true;
+            }
+        }
+        return false;
+    }
+}

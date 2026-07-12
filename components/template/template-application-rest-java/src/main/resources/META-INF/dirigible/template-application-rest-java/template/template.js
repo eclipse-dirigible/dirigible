@@ -34,6 +34,15 @@ export function getTemplate(parameters) {
         engine: "velocity",
         collection: "personalModels"
     }, {
+        // The PARTNER surface: the external-partner (Customer/Supplier) mirror of the my controller,
+        // scoped to the logged-in partner's identity record - generated for entities with a
+        // `partner: true` owner relation (or the scope inherited from their composition parent).
+        location: "/template-application-rest-java/api/EntityPartnerController.java.template",
+        action: "generate",
+        rename: "gen/{{javaGenFolderName}}/api/{{javaPerspectiveName}}/{{name}}PartnerController.java",
+        engine: "velocity",
+        collection: "partnerModels"
+    }, {
         location: "/template-application-rest-java/project.json.mjs",
         action: "generate",
         rename: "project.json",

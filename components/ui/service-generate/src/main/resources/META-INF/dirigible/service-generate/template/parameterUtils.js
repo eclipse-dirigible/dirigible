@@ -199,6 +199,16 @@ export function process(model, parameters) {
                         e.personalIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
                         e.personalIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
                     }
+                    // partner (intent `partner: true`): the external-partner mirror of the personal
+                    // owner - resolves the current external user through the TARGET's repository.
+                    if (p.relationshipPartner && p.relationshipPartnerIdentityProperty) {
+                        e.partnerProperty = p.name;
+                        e.partnerFkJavaClass = p.dataTypeJavaClass;
+                        e.partnerIdentityProperty = p.relationshipPartnerIdentityProperty;
+                        e.partnerIdentityLabel = p.relationshipPartnerIdentityLabel || p.relationshipPartnerIdentityProperty;
+                        e.partnerIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
+                        e.partnerIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
+                    }
                     // The target's own Harmonia SPA (for the FK "Add new" iframe dialog). The web assets
                     // live under the RAW genFolderName, while the Java controllers use the sanitized one
                     // - so this must be derived from targetGenFolder directly, NOT by rewriting the
@@ -238,8 +248,30 @@ export function process(model, parameters) {
             e.personalIdentityEntityClass = parent.personalIdentityEntityClass;
             e.personalIdentityRepositoryClass = parent.personalIdentityRepositoryClass;
         });
+        // partner composition-child inheritance (the external-partner mirror of the personal one).
         model.entities.forEach(e => {
-            if (!e.personalProperty && !e.personalParent) return;
+            if (e.partnerProperty) return;
+            const parentFk = (e.properties || []).find(p => p.relationshipType === 'COMPOSITION');
+            if (!parentFk) return;
+            const parent = model.entities.find(x => x.name === parentFk.relationshipEntityName);
+            if (!parent || !parent.partnerProperty) return;
+            const parentPerspective = sanitizeJavaIdentifier(parentFk.relationshipEntityPerspectiveName);
+            e.partnerParent = {
+                fkProperty: parentFk.name,
+                fkJavaClass: parentFk.dataTypeJavaClass,
+                entity: parent.name,
+                entityClass: `gen.${parameters.javaGenFolderName}.data.${parentPerspective}.${parent.name}Entity`,
+                repositoryClass: `gen.${parameters.javaGenFolderName}.data.${parentPerspective}.${parent.name}Repository`,
+                partnerProperty: parent.partnerProperty,
+                partnerFkJavaClass: parent.partnerFkJavaClass
+            };
+            e.partnerIdentityProperty = parent.partnerIdentityProperty;
+            e.partnerIdentityLabel = parent.partnerIdentityLabel;
+            e.partnerIdentityEntityClass = parent.partnerIdentityEntityClass;
+            e.partnerIdentityRepositoryClass = parent.partnerIdentityRepositoryClass;
+        });
+        model.entities.forEach(e => {
+            if (!e.personalProperty && !e.personalParent && !e.partnerProperty && !e.partnerParent) return;
             e.sensitiveProperties = (e.properties || []).filter(p => p.sensitiveProperty === 'true' || p.sensitiveProperty === true)
                                                         .map(p => p.name);
         });
@@ -261,6 +293,23 @@ export function process(model, parameters) {
                                              } : null,
                                              columns: (c.properties || []).filter(cp => !cp.sensitiveProperty && !cp.dataAutoIncrement
                                                      && cp.name !== c.personalParent.fkProperty && cp.name !== 'ProcessId'
+                                                     && (!cp.auditType || cp.auditType === 'NONE') && cp.widgetIsMajor !== 'false')
+                                                                          .map(cp => ({ name: cp.name, label: cp.widgetLabel || cp.name,
+                                                                              number: !!cp.isNumberType, date: !!cp.isDateType }))
+                                         }));
+        });
+        // Partner child panels (the external-partner mirror of myChildren) - talk to the child's
+        // PartnerController.
+        model.entities.forEach(e => {
+            if (!(e.partnerProperty || e.partnerParent)) return;
+            e.partnerChildren = model.entities.filter(c => c.partnerParent && c.partnerParent.entity === e.name)
+                                         .map(c => ({
+                                             name: c.name,
+                                             label: c.menuLabel || c.name,
+                                             fkProperty: c.partnerParent.fkProperty,
+                                             apiPath: '/' + sanitizeJavaIdentifier(c.perspectiveName) + '/' + c.name + 'PartnerController',
+                                             columns: (c.properties || []).filter(cp => !cp.sensitiveProperty && !cp.dataAutoIncrement
+                                                     && cp.name !== c.partnerParent.fkProperty && cp.name !== 'ProcessId'
                                                      && (!cp.auditType || cp.auditType === 'NONE') && cp.widgetIsMajor !== 'false')
                                                                           .map(cp => ({ name: cp.name, label: cp.widgetLabel || cp.name,
                                                                               number: !!cp.isNumberType, date: !!cp.isDateType }))

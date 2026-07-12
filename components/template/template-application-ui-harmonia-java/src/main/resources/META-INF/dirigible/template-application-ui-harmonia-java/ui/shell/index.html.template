@@ -426,6 +426,20 @@
     <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-form.html"></template>
 #end
 #end
+    <!-- PARTNER surface: an external partner's own records, reached from the Partner shell (embedded
+         at #/partner/<Entity>). Same shapes as the my surface, scoped to the partner's identity. -->
+#foreach($entity in $models)
+#if($entity.partnerProperty)
+    <template x-route="/partner/${entity.name}" x-template.target.app="./views/partner/${entity.name}-list.html"></template>
+#end
+#if($entity.partnerProperty && $entity.layoutType == "MANAGE_DOCUMENT")
+    <template x-route="/partner/${entity.name}/create" x-template.target.app="./views/partner/${entity.name}-document.html"></template>
+    <template x-route="/partner/${entity.name}/:id/edit" x-template.target.app="./views/partner/${entity.name}-document.html"></template>
+#elseif($entity.partnerProperty || $entity.partnerParent)
+    <template x-route="/partner/${entity.name}/create" x-template.target.app="./views/partner/${entity.name}-form.html"></template>
+    <template x-route="/partner/${entity.name}/:id/edit" x-template.target.app="./views/partner/${entity.name}-form.html"></template>
+#end
+#end
     <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
 
     <!-- Route segment -> nav label, from the model — read by appShell for the breadcrumb so the
@@ -517,6 +531,14 @@
     <script src="./js/components/pages/my/${entity.name}MyDocumentPage.js" defer></script>
 #elseif($entity.personalProperty || $entity.personalParent)
     <script src="./js/components/pages/my/${entity.name}MyFormPage.js" defer></script>
+#end
+#if($entity.partnerProperty)
+    <script src="./js/components/pages/partner/${entity.name}PartnerListPage.js" defer></script>
+#end
+#if($entity.partnerProperty && $entity.layoutType == "MANAGE_DOCUMENT")
+    <script src="./js/components/pages/partner/${entity.name}PartnerDocumentPage.js" defer></script>
+#elseif($entity.partnerProperty || $entity.partnerParent)
+    <script src="./js/components/pages/partner/${entity.name}PartnerFormPage.js" defer></script>
 #end
 #end
 

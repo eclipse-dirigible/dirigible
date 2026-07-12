@@ -172,6 +172,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
 
+              # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
+              # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
+              - name: PartnerTicket
+                fields:
+                  - { name: id,      type: integer, primaryKey: true, generated: true }
+                  - { name: subject, type: string, length: 200 }
+                  - { name: secret,  type: decimal, sensitive: true }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
+
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
             schedules:
@@ -346,6 +356,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
         assertTrue(myPerspective.contains("application-personal-perspectives"),
                 "the personal perspective must register on the My Shell's extension point");
+
+        // partner: the EXTERNAL-partner surface - an ADDITIONAL scoped controller (identity match +
+        // forced owner FK + sensitive strip) and a perspective on the DISJOINT Partner-shell point.
+        String partnerController = contentOf("gen/emission/api/partnerticket/PartnerTicketPartnerController.java");
+        assertTrue(partnerController.contains("eq(\"Email\", username)"),
+                "partner must emit the identity match against the logged-in username");
+        assertTrue(partnerController.contains("entity.Person = me"), "partner must force the owner FK server-side on create");
+        assertTrue(partnerController.contains("entity.Secret = null"), "sensitive must be stripped in the partner controller");
+        String partnerPerspective = contentOf("gen/emission/perspectives/partner/PartnerTicket/perspective.extension");
+        assertTrue(partnerPerspective.contains("application-partner-perspectives"),
+                "the partner perspective must register on the Partner shell's DISJOINT extension point");
+        assertTrue(!partnerPerspective.contains("application-personal-perspectives"),
+                "the partner perspective must NOT register on the personal point (disjoint by construction)");
+        String partnerList = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerListPage.js");
+        assertTrue(partnerList.contains("PartnerTicketPartnerController"),
+                "the partner list page must talk to the scoped partner controller");
+        assertTrue(spaIndex.contains("/partner/PartnerTicket"), "the SPA must route the partner pages");
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
         String job = contentOf("gen/events/MonthlyClaimsJob.java");
@@ -588,6 +615,33 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body(org.hamcrest.Matchers.containsString("emission-test-my-Claim")),
+                30);
+
+        // partner: the partner controller scopes to the logged-in partner (admin -> Person 1); a
+        // created PartnerTicket comes back with the owner forced and the sensitive field stripped.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Subject\":\"help\",\"Secret\":99}")
+                                                 .when()
+                                                 .post(API + "/partnerticket/PartnerTicketPartnerController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Person", equalTo(1))
+                                                 .body("Secret", nullValue()));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/partnerticket/PartnerTicketPartnerController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("$", hasSize(1)));
+        // Partner shell: served + aggregates the published partner perspective (the disjoint point).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/web/partner/index.html")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-partner-perspectives")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(org.hamcrest.Matchers.containsString("emission-test-partner-PartnerTicket")),
                 30);
     }
 
