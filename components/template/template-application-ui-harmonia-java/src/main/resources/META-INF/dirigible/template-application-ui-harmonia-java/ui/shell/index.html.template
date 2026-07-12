@@ -418,7 +418,10 @@
 #if($entity.personalProperty)
     <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-list.html"></template>
 #end
-#if($entity.personalProperty || $entity.personalParent)
+#if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")
+    <template x-route="/my/${entity.name}/create" x-template.target.app="./views/my/${entity.name}-document.html"></template>
+    <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-document.html"></template>
+#elseif($entity.personalProperty || $entity.personalParent)
     <template x-route="/my/${entity.name}/create" x-template.target.app="./views/my/${entity.name}-form.html"></template>
     <template x-route="/my/${entity.name}/:id/edit" x-template.target.app="./views/my/${entity.name}-form.html"></template>
 #end
@@ -510,7 +513,9 @@
 #if($entity.personalProperty)
     <script src="./js/components/pages/my/${entity.name}MyListPage.js" defer></script>
 #end
-#if($entity.personalProperty || $entity.personalParent)
+#if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")
+    <script src="./js/components/pages/my/${entity.name}MyDocumentPage.js" defer></script>
+#elseif($entity.personalProperty || $entity.personalParent)
     <script src="./js/components/pages/my/${entity.name}MyFormPage.js" defer></script>
 #end
 #end

@@ -195,6 +195,7 @@ export function process(model, parameters) {
                         e.personalProperty = p.name;
                         e.personalFkJavaClass = p.dataTypeJavaClass;
                         e.personalIdentityProperty = p.relationshipIdentityProperty;
+                        e.personalIdentityLabel = p.relationshipIdentityLabel || p.relationshipIdentityProperty;
                         e.personalIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
                         e.personalIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
                     }
@@ -233,6 +234,7 @@ export function process(model, parameters) {
                 personalFkJavaClass: parent.personalFkJavaClass
             };
             e.personalIdentityProperty = parent.personalIdentityProperty;
+            e.personalIdentityLabel = parent.personalIdentityLabel;
             e.personalIdentityEntityClass = parent.personalIdentityEntityClass;
             e.personalIdentityRepositoryClass = parent.personalIdentityRepositoryClass;
         });
