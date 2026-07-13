@@ -5,11 +5,11 @@ on:
       releaseVersion:
         description: Release Version
         required: true
-        default: 13.0.0
+        default: 14.0.0
       snapshotVersion:
         description: Snapshot Version
         required: true
-        default: 14.0.0-SNAPSHOT
+        default: 15.0.0-SNAPSHOT
       code-scans:
         description: Perform SAST and DAST code scans
         type: boolean
