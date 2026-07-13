@@ -78,10 +78,12 @@ public class SecurityFilter implements Filter {
     public void init(FilterConfig filterConfig) {
         SECURED_PREFIXES.add("/services/js");
         SECURED_PREFIXES.add("/services/ts");
+        SECURED_PREFIXES.add("/services/java");
         SECURED_PREFIXES.add("/services/public");
         SECURED_PREFIXES.add("/services/web");
         SECURED_PREFIXES.add("/services/wiki");
         SECURED_PREFIXES.add("/services/command");
+        SECURED_PREFIXES.add("/public/java");
 
         ALLOWED_PREFIXES.add("/services/web/resources");
         ALLOWED_PREFIXES.add("/services/js/platform");

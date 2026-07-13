@@ -156,4 +156,18 @@ public class RestAssuredExecutor {
         this.execute(callable, "localhost", user, password);
     }
 
+    public void execute(CallableNoResultAndNoException callable, String user, String password, long timeoutSeconds) {
+        await().atMost(timeoutSeconds, TimeUnit.SECONDS)
+               .pollInterval(500, TimeUnit.MILLISECONDS)
+               .until(() -> {
+                   try {
+                       this.execute(callable, user, password);
+                       return true;
+                   } catch (AssertionError err) {
+                       LOGGER.warn("Assertion error. Will try again until timeout is reached.", err);
+                       return false;
+                   }
+               });
+    }
+
 }
