@@ -251,7 +251,7 @@
         <!-- Tests -->
         <testcontainers.version>2.0.5</testcontainers.version>
         <selenide.version>7.16.2</selenide.version>
-        <rest-assured.version>6.0.0</rest-assured.version>
+        <rest-assured.version>6.0.1</rest-assured.version>
 
         <antlr4-maven-plugin.version>4.13.2</antlr4-maven-plugin.version>
         <antlr4-runtime.version>4.13.2</antlr4-runtime.version>
