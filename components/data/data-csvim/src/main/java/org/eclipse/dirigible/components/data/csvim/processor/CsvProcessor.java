@@ -427,9 +427,17 @@ public class CsvProcessor {
             preparedStatement.setBinaryStream(paramIdx, new ByteArrayInputStream(bytes), bytes.length);
         } else if (Types.CLOB == DataTypeUtils.getSqlTypeByDataType(dataType)
                 || Types.LONGVARCHAR == DataTypeUtils.getSqlTypeByDataType(dataType)) {
-            byte[] bytes = Base64.getDecoder()
-                                 .decode(value);
-            preparedStatement.setAsciiStream(paramIdx, new ByteArrayInputStream(bytes), bytes.length);
+            // A CLOB/LONGVARCHAR cell may be base64-encoded (binary-safe round-tripping) or plain,
+            // human-authored text. Decode when it is valid base64; otherwise bind the raw string so a
+            // hand-written CSV (spaces, punctuation, Unicode) seeds directly instead of failing with
+            // "Illegal base64 character". setString handles a CLOB and preserves non-ASCII text.
+            try {
+                byte[] bytes = Base64.getDecoder()
+                                     .decode(value);
+                preparedStatement.setAsciiStream(paramIdx, new ByteArrayInputStream(bytes), bytes.length);
+            } catch (IllegalArgumentException notBase64) {
+                preparedStatement.setString(paramIdx, value);
+            }
         } else if (Types.OTHER == DataTypeUtils.getSqlTypeByDataType(dataType)) {
             if (SqlDialectFactory.getDialect(preparedStatement.getConnection()) instanceof PostgresSqlDialect) {
                 if (!value.trim()
