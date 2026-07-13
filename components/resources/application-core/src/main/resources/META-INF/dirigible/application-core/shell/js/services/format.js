@@ -172,6 +172,14 @@
     },
 
     /**
+     * DISPLAY-format a date/date-time value against the active date pattern. Convenience alias for
+     * value(v, true) - a backend LocalDate array, epoch number, or ISO string renders as a date.
+     */
+    date(v) {
+      return this.value(v, true);
+    },
+
+    /**
      * Convert a date/datetime value to the FIXED shape an HTML <input> requires — NOT pattern-driven.
      * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH (case-insensitive). Empty -> ''.
      */
@@ -201,6 +209,20 @@
         case 'MONTH': return y + '-' + pad(mo);
         default: return date;
       }
+    },
+
+    /**
+     * Inverse of toDateInput: convert an HTML <input> value to the payload value the backend expects.
+     * DATE / DATETIME-LOCAL / MONTH -> a full ISO instant (…Z) so a Jackson java.time.* field binds;
+     * TIME -> passes through unchanged; empty -> null. An unparseable value is returned unchanged.
+     * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH (case-insensitive).
+     */
+    toPayload(value, widget) {
+      if (value === null || value === undefined || value === '') return null;
+      const w = String(widget || 'DATE').toUpperCase();
+      if (w === 'TIME') return value;
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? value : d.toISOString();
     },
   };
 
