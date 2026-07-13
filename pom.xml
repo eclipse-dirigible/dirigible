@@ -143,7 +143,7 @@
 
         <!-- Spring -->
         <spring.boot.version>4.1.0</spring.boot.version>
-        <spring.admin.version>4.1.1</spring.admin.version>
+        <spring.admin.version>4.1.2</spring.admin.version>
         <springdoc.version>3.0.3</springdoc.version>
 
         <!-- Webjars -->
