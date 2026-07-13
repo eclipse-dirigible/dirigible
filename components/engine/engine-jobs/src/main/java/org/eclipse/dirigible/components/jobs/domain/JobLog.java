@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.base.artefact.Artefact;
 
 import java.sql.Timestamp;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * The JobLogDefinition serialization object.
@@ -25,6 +26,13 @@ public class JobLog extends Artefact {
 
     /** The Constant ARTEFACT_TYPE. */
     public static final String ARTEFACT_TYPE = "job-log";
+
+    /**
+     * Per-JVM monotonic suffix guaranteeing a unique artefact key even when two log rows for the same
+     * job+tenant are created within the same millisecond (the timestamp alone is not unique enough,
+     * which tripped the DIRIGIBLE_JOB_LOGS unique index and silently skipped that job execution).
+     */
+    private static final AtomicLong KEY_SEQUENCE = new AtomicLong();
 
     /** The id. */
     @Id
@@ -259,7 +267,7 @@ public class JobLog extends Artefact {
     @Override
     public void updateKey() {
         super.updateKey();
-        this.key = this.key + KEY_SEPARATOR + tenantId;
+        this.key = this.key + KEY_SEPARATOR + tenantId + KEY_SEPARATOR + KEY_SEQUENCE.incrementAndGet();
     }
 
     /**
