@@ -378,7 +378,7 @@ class IntentEngineIT extends IntegrationTest {
                                                          hasItems("orders.edm", "orders.model", "OrderApproval.bpmn", "ApproveOrder.form",
                                                                  "OrdersByCustomer.report", "OrderBalance.report", "orders.roles",
                                                                  "orders.glue", "countries.csvim", "countries.csv",
-                                                                 "doc/Templates/Order/Print/en/standard.print"))
+                                                                 "doc/Templates/Order/Print/en/standard.print", "orders.test"))
                                                  .body("scrubbed", hasSize(0))
                                                  // The model-to-code plan the editor replays: one entry per generated model with a
                                                  // recipe in .settings, naming the template + parameters.
@@ -401,6 +401,7 @@ class IntentEngineIT extends IntegrationTest {
         assertSeeds();
         assertGlue();
         assertSettings();
+        assertAppTestManifest();
     }
 
     @Test
@@ -1752,6 +1753,28 @@ class IntentEngineIT extends IntegrationTest {
         // Rollups: the two recompute listeners for the customerOrderCount counter.
         assertTrue(glue.contains("\"rollups\"") && glue.contains("\"className\": \"OrderCustomerRollupOnCreate\"")
                 && glue.contains("\"countField\": \"OrderCount\""), "glue should carry the customerOrderCount rollup listeners");
+    }
+
+    private void assertAppTestManifest() {
+        assertTrue(resource("orders.test").exists(), "the .test app-test manifest should be generated");
+        String manifest = contentOf("orders.test");
+        // module-level coordinates: module id + the sanitized REST base + standalone shell + id property
+        assertTrue(manifest.contains("\"module\": \"orders\""), "the manifest names the module");
+        assertTrue(manifest.contains("\"restBase\": \"/services/java/" + PROJECT + "/gen/orders/api\""),
+                "the manifest carries the sanitized REST base");
+        assertTrue(manifest.contains("\"standaloneShell\": \"/services/web/" + PROJECT + "/gen/orders/index.html\""),
+                "the manifest carries the standalone shell URL");
+        assertTrue(manifest.contains("\"idProperty\": \"Id\""), "the manifest carries the id property");
+        // the document master renders as a document layout; the composition detail child is excluded
+        assertTrue(manifest.contains("\"name\": \"Order\"") && manifest.contains("\"layout\": \"document\""),
+                "the Order document master should be a document layout");
+        assertFalse(manifest.contains("\"name\": \"OrderItem\""), "the composition detail child should be excluded");
+        // a plain entity is a manage-list with its controller + route
+        assertTrue(manifest.contains("\"name\": \"Customer\"") && manifest.contains("CustomerController")
+                && manifest.contains("\"#/Customer\""), "the Customer entity should carry its controller api and route");
+        // the multilingual setting entity is flagged
+        assertTrue(manifest.contains("\"name\": \"Country\"") && manifest.contains("\"multilingual\": true"),
+                "the multilingual Country entity should be flagged");
     }
 
     private void assertSettings() {
