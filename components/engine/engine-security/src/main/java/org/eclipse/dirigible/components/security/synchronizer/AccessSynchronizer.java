@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.security.domain.Access;
 import org.eclipse.dirigible.components.security.domain.Constraints;
 import org.eclipse.dirigible.components.security.service.AccessService;
+import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +57,11 @@ public class AccessSynchronizer extends BaseSynchronizer<Access, Long> {
     private final AccessService securityAccessService;
 
     /**
+     * The security access verifier.
+     */
+    private final AccessVerifier securityAccessVerifier;
+
+    /**
      * The synchronization callback.
      */
     private SynchronizerCallback callback;
@@ -64,10 +70,12 @@ public class AccessSynchronizer extends BaseSynchronizer<Access, Long> {
      * Instantiates a new security access synchronizer.
      *
      * @param securityAccessService the security access service
+     * @param securityAccessVerifier the security access verifier
      */
     @Autowired
-    public AccessSynchronizer(AccessService securityAccessService) {
+    public AccessSynchronizer(AccessService securityAccessService, AccessVerifier securityAccessVerifier) {
         this.securityAccessService = securityAccessService;
+        this.securityAccessVerifier = securityAccessVerifier;
     }
 
     /**
@@ -177,6 +185,19 @@ public class AccessSynchronizer extends BaseSynchronizer<Access, Long> {
             callback.addError(e.getMessage());
             callback.registerState(this, access, ArtefactLifecycle.DELETED, e);
         }
+    }
+
+    /**
+     * Called once at the end of every synchronization round. Reloads the {@link AccessVerifier} cache
+     * so that constraints synchronized into the database are enforced as soon as the round completes.
+     * The verifier's scheduled refresh reacts to registry filesystem events only, which never fire on
+     * instances whose registry content is pre-baked into the container image - and even on
+     * publish-driven instances the synchronization round consumes the watcher flag before the
+     * verifier's poll can observe it.
+     */
+    @Override
+    public void finishing() {
+        securityAccessVerifier.refreshCache(true);
     }
 
     /**

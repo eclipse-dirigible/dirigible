@@ -34,12 +34,14 @@ public class SecurityFilterConfig {
         filterRegistrationBean.addUrlPatterns(//
                 "/services/js/*", //
                 "/services/ts/*", //
+                "/services/java/*", //
                 "/services/public/*", //
                 "/services/web/*", //
                 "/services/wiki/*", //
                 "/services/command/*", //
                 "/public/js/*", //
                 "/public/ts/*", //
+                "/public/java/*", //
                 "/public/public/*", //
                 "/public/web/*", //
                 "/public/wiki/*", //
