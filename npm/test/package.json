@@ -1,0 +1,30 @@
+{
+  "name": "@aerokit/test",
+  "version": "0.1.0",
+  "description": "Generic Playwright runner that executes an intent module's generated <name>.test manifest against a running Eclipse Dirigible instance",
+  "license": "EPL-2.0",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./fixtures": "./src/fixtures.js"
+  },
+  "files": [
+    "src"
+  ],
+  "keywords": [
+    "dirigible",
+    "playwright",
+    "integration-test",
+    "intent",
+    "low-code"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eclipse-dirigible/dirigible.git",
+    "directory": "npm/test"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.45"
+  }
+}

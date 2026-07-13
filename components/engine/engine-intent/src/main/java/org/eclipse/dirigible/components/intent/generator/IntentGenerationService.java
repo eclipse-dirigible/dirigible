@@ -47,7 +47,7 @@ public class IntentGenerationService {
      * project root are owned (and scrubbed) by the generation pass.
      */
     private static final Set<String> INTENT_OWNED_EXTENSIONS = Set.of(".edm", ".model", ".bpmn", ".form", ".report", ".roles", ".access",
-            ".dsm", ".schema", ".table", ".view", ".csvim", ".csv", ".glue", ".print", ".extension");
+            ".dsm", ".schema", ".table", ".view", ".csvim", ".csv", ".glue", ".print", ".extension", ".test");
 
     private final List<IntentTargetGenerator> generators;
     private final IRepository repository;
