@@ -9,12 +9,11 @@
  */
 package org.eclipse.dirigible.components.intent.generator.bpmn;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Deque;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -67,8 +66,10 @@ import org.springframework.stereotype.Component;
  * <p>
  * The <b>{@code bpmndi:BPMNDiagram}</b> block IS emitted (see {@link #appendBpmnDiagram}): the
  * Flowable/Oryx modeler renders the canvas only from the diagram interchange, so a process with no
- * shapes opens empty. Nodes are laid out left-to-right on a fixed lane for deterministic,
- * byte-stable output; the modeler re-routes on first manual edit.
+ * shapes opens empty. Nodes are laid out with a deterministic layered (Sugiyama-style) placement -
+ * column by longest-path distance from the start event, lane by predecessor barycentre - with
+ * orthogonally-routed edges, so branching processes read cleanly without manual reordering; the
+ * output stays byte-stable and the modeler re-routes on first manual edit.
  *
  * <p>
  * <b>{@code flowable:formKey} is the form page URL.</b> The Inbox / Process perspective opens a
@@ -771,42 +772,34 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
 
     // ----- BPMN diagram interchange (bpmndi) ---------------------------------------------------
 
-    private static final int LANE_Y = 140;
-    /**
-     * The lane a decision's secondary (default / {@code else}) branch target sits on, dropped below the
-     * main lane so the gateway's two outgoing flows diverge visibly instead of overlapping on one line.
-     */
-    private static final int SECONDARY_LANE_Y = 300;
-    private static final int NODE_SPACING = 160;
+    /** X of the first (start) column's centre. */
     private static final int FIRST_NODE_CENTER_X = 100;
+    /** Horizontal distance between the centres of adjacent rank columns (task width 100 + gap). */
+    private static final int COLUMN_PITCH = 180;
+    /** Y of the centre lane (lane offset 0); branches fan out above and below it. */
+    private static final int CENTER_Y = 260;
+    /** Vertical distance between adjacent lanes. */
+    private static final int LANE_HEIGHT = 130;
 
     /**
      * Append the {@code bpmndi:BPMNDiagram} block. The Flowable/Oryx modeler renders the canvas
      * <b>only</b> from this diagram interchange (a process with no {@code BPMNShape}s opens empty), so
-     * it is mandatory. Nodes are laid out left-to-right along the linear chain at a fixed lane, except
-     * a decision's secondary ({@code else}) branch target, which drops to a lower lane so the gateway's
-     * two outgoing flows are visibly distinct rather than overlapping on one line; edges connect the
-     * right edge of the source to the left edge of the target. The layout is deterministic so
-     * re-generation is byte-stable; the modeler re-routes on first manual edit.
+     * it is mandatory.
+     *
+     * <p>
+     * The layout is a deterministic <b>layered (Sugiyama-style) placement</b> rather than a single
+     * line: each node's <b>column</b> (X) is its longest-path distance from the start event, so
+     * parallel branches of a gateway share a column and the flow always reads left-to-right; each
+     * node's <b>lane</b> (Y) is assigned per column by the barycentre of its predecessors' lanes and
+     * centred on {@link #CENTER_Y}, so branches fan out above and below the main line instead of piling
+     * onto one of two fixed lanes. Edges are routed <b>orthogonally</b> (an L/Z of right-angle
+     * segments) when the endpoints are on different lanes, and as a straight segment when they line up
+     * - the same shape a modeler draws by hand. The whole computation is a pure function of the step
+     * graph, so re-generation stays byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
             List<StepIntent> steps) {
-        // A decision's secondary branch target (the default / `else` flow's target) is dropped to a lower
-        // lane so the gateway's two outgoing flows are visibly distinct instead of running along one line.
-        Set<String> secondaryNodes = secondaryBranchTargets(flows);
-        Map<String, int[]> bounds = new java.util.LinkedHashMap<>();
-        for (int i = 0; i < effectiveIds.size(); i++) {
-            String id = effectiveIds.get(i);
-            if (bounds.containsKey(id)) {
-                continue;
-            }
-            int[] size = nodeSize(id, steps);
-            int centerX = FIRST_NODE_CENTER_X + i * NODE_SPACING;
-            int laneY = secondaryNodes.contains(id) ? SECONDARY_LANE_Y : LANE_Y;
-            int x = centerX - size[0] / 2;
-            int y = laneY - size[1] / 2;
-            bounds.put(id, new int[] {x, y, size[0], size[1]});
-        }
+        Map<String, int[]> bounds = layout(effectiveIds, flows, steps);
 
         sb.append("  <bpmndi:BPMNDiagram id=\"BPMNDiagram_")
           .append(escapeXmlAttribute(processId))
@@ -838,75 +831,151 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             if (source == null || target == null) {
                 continue;
             }
-            int x1 = source[0] + source[2];
-            int y1 = source[1] + source[3] / 2;
-            int x2 = target[0];
-            int y2 = target[1] + target[3] / 2;
             sb.append("      <bpmndi:BPMNEdge bpmnElement=\"")
               .append(escapeXmlAttribute(flow.id()))
               .append("\" id=\"BPMNEdge_")
               .append(escapeXmlAttribute(flow.id()))
-              .append("\">\n        <omgdi:waypoint x=\"")
-              .append(x1)
-              .append("\" y=\"")
-              .append(y1)
-              .append("\"/>\n        <omgdi:waypoint x=\"")
-              .append(x2)
-              .append("\" y=\"")
-              .append(y2)
-              .append("\"/>\n      </bpmndi:BPMNEdge>\n");
+              .append("\">\n");
+            for (int[] point : edgeWaypoints(source, target)) {
+                sb.append("        <omgdi:waypoint x=\"")
+                  .append(point[0])
+                  .append("\" y=\"")
+                  .append(point[1])
+                  .append("\"/>\n");
+            }
+            sb.append("      </bpmndi:BPMNEdge>\n");
         }
         sb.append("    </bpmndi:BPMNPlane>\n");
         sb.append("  </bpmndi:BPMNDiagram>\n");
     }
 
     /**
-     * The nodes of each decision's default ({@code else}) branch - its "second option" - placed on the
-     * lower lane so the gateway's flows diverge and a later main-lane edge (e.g. a {@code next: end}
-     * jump) does not visually cross them. Starts from each default-flow target and walks the branch
-     * forward along the sequence flows, collecting every node until it reaches {@code end} or rejoins
-     * the main path (a node entered by a conditioned {@code then} flow). The end event is never
-     * dropped.
-     * <p>
-     * Without the full walk, only the immediate target dropped: a multi-node reject branch (e.g.
-     * {@code else -> cancel} followed by more steps) left those steps on the main lane between
-     * {@code send} and {@code end}, so the {@code send -> end} edge ran straight through them and
-     * looked like {@code send -> cancel}.
+     * Compute the {@code [x, y, width, height]} bounds of every node with a layered layout: column by
+     * longest-path rank from the start event, lane by predecessor-barycentre within the column. The
+     * returned map preserves {@code effectiveIds} order so the emitted shapes are byte-stable.
      */
-    private static Set<String> secondaryBranchTargets(List<SequenceFlow> flows) {
-        Map<String, List<String>> adjacency = new HashMap<>();
-        Set<String> thenTargets = new HashSet<>();
-        Deque<String> frontier = new ArrayDeque<>();
+    private static Map<String, int[]> layout(List<String> effectiveIds, List<SequenceFlow> flows, List<StepIntent> steps) {
+        // Forward adjacency and predecessor lists, restricted to nodes that actually have a shape.
+        Set<String> nodes = new LinkedHashSet<>(effectiveIds);
+        Map<String, List<String>> predecessors = new LinkedHashMap<>();
+        for (String id : effectiveIds) {
+            predecessors.put(id, new ArrayList<>());
+        }
         for (SequenceFlow flow : flows) {
-            adjacency.computeIfAbsent(flow.source(), k -> new ArrayList<>())
-                     .add(flow.target());
-            if (flow.id() == null) {
-                continue;
-            }
-            if (flow.id()
-                    .endsWith("_then")) {
-                thenTargets.add(flow.target());
-            } else if (flow.id()
-                           .endsWith("_default")
-                    && !END_ID.equals(flow.target())) {
-                frontier.add(flow.target());
+            if (nodes.contains(flow.source()) && nodes.contains(flow.target()) && !flow.source()
+                                                                                       .equals(flow.target())) {
+                predecessors.get(flow.target())
+                            .add(flow.source());
             }
         }
-        // Forward walk of the else branch(es). Stop at the end event and where the branch rejoins the
-        // main path (a `then` target), so a shared convergence/end node stays on the main lane.
-        Set<String> secondary = new HashSet<>();
-        while (!frontier.isEmpty()) {
-            String node = frontier.poll();
-            if (node == null || END_ID.equals(node) || thenTargets.contains(node) || !secondary.add(node)) {
+
+        Map<String, Integer> rank = rankByLongestPath(effectiveIds, flows, nodes);
+        // Group nodes by rank in a stable (effectiveIds) order, then compress ranks to contiguous
+        // columns so an empty rank leaves no visual gap.
+        Map<Integer, List<String>> byRank = new java.util.TreeMap<>();
+        for (String id : effectiveIds) {
+            byRank.computeIfAbsent(rank.get(id), k -> new ArrayList<>())
+                  .add(id);
+        }
+        Map<Integer, Integer> columnOf = new HashMap<>();
+        int column = 0;
+        for (Integer r : byRank.keySet()) {
+            columnOf.put(r, column++);
+        }
+
+        // Lane assignment, one column at a time in rank order: sort a column's nodes by the average
+        // lane of their already-placed predecessors (barycentre - the classic crossing-reduction
+        // heuristic), then spread them symmetrically around the centre lane (offset 0).
+        Map<String, Double> laneOf = new HashMap<>();
+        for (List<String> columnNodes : byRank.values()) {
+            columnNodes.sort(java.util.Comparator.<String>comparingDouble(id -> barycentre(id, predecessors, laneOf))
+                                                 .thenComparingInt(effectiveIds::indexOf));
+            double first = -(columnNodes.size() - 1) / 2.0;
+            for (int i = 0; i < columnNodes.size(); i++) {
+                laneOf.put(columnNodes.get(i), first + i);
+            }
+        }
+
+        Map<String, int[]> bounds = new LinkedHashMap<>();
+        for (String id : effectiveIds) {
+            if (bounds.containsKey(id)) {
                 continue;
             }
-            for (String next : adjacency.getOrDefault(node, List.of())) {
-                if (!END_ID.equals(next) && !thenTargets.contains(next)) {
-                    frontier.add(next);
+            int[] size = nodeSize(id, steps);
+            int centerX = FIRST_NODE_CENTER_X + columnOf.get(rank.get(id)) * COLUMN_PITCH;
+            int centerY = CENTER_Y + (int) Math.round(laneOf.get(id) * LANE_HEIGHT);
+            bounds.put(id, new int[] {centerX - size[0] / 2, centerY - size[1] / 2, size[0], size[1]});
+        }
+        return bounds;
+    }
+
+    /**
+     * Longest-path rank of each node from {@link #START_ID}, computed by Bellman-Ford-style relaxation
+     * (bounded to {@code |nodes|} passes so a stray back edge cannot loop forever). The end event is
+     * pinned to the deepest rank so nothing sits to its right.
+     */
+    private static Map<String, Integer> rankByLongestPath(List<String> effectiveIds, List<SequenceFlow> flows, Set<String> nodes) {
+        Map<String, Integer> rank = new HashMap<>();
+        for (String id : effectiveIds) {
+            rank.put(id, 0);
+        }
+        for (int pass = 0; pass < nodes.size(); pass++) {
+            boolean changed = false;
+            for (SequenceFlow flow : flows) {
+                Integer source = rank.get(flow.source());
+                Integer target = rank.get(flow.target());
+                if (source == null || target == null || flow.source()
+                                                            .equals(flow.target())) {
+                    continue;
+                }
+                if (target < source + 1) {
+                    rank.put(flow.target(), source + 1);
+                    changed = true;
                 }
             }
+            if (!changed) {
+                break;
+            }
         }
-        return secondary;
+        int deepest = rank.values()
+                          .stream()
+                          .mapToInt(Integer::intValue)
+                          .max()
+                          .orElse(0);
+        rank.put(END_ID, deepest);
+        return rank;
+    }
+
+    /** Average lane of a node's already-placed predecessors, or {@code 0} when none are placed yet. */
+    private static double barycentre(String id, Map<String, List<String>> predecessors, Map<String, Double> laneOf) {
+        double sum = 0;
+        int count = 0;
+        for (String predecessor : predecessors.getOrDefault(id, List.of())) {
+            Double lane = laneOf.get(predecessor);
+            if (lane != null) {
+                sum += lane;
+                count++;
+            }
+        }
+        return count == 0 ? 0 : sum / count;
+    }
+
+    /**
+     * Waypoints for an edge from the {@code source} bounds to the {@code target} bounds: a straight
+     * right-to-left segment when the two shapes share a lane, otherwise an orthogonal L/Z stepping out
+     * of the source's right side, across to the midpoint column, up or down to the target's lane, and
+     * into the target's left side.
+     */
+    private static List<int[]> edgeWaypoints(int[] source, int[] target) {
+        int x1 = source[0] + source[2];
+        int y1 = source[1] + source[3] / 2;
+        int x2 = target[0];
+        int y2 = target[1] + target[3] / 2;
+        if (y1 == y2) {
+            return List.of(new int[] {x1, y1}, new int[] {x2, y2});
+        }
+        int midX = (x1 + x2) / 2;
+        return List.of(new int[] {x1, y1}, new int[] {midX, y1}, new int[] {midX, y2}, new int[] {x2, y2});
     }
 
     /** Width/height of a node's shape by its element id / step kind. */
