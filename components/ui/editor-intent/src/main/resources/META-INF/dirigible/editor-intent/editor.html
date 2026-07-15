@@ -158,7 +158,7 @@
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="transparent" glyph="sap-icon--save" title="Save" aria-label="Save" ng-click="save()" ng-disabled="!changed || state.isBusy"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
-            <bk-button state="emphasized" glyph="sap-icon--generate-shortcut" label="Generate" title="Generate the model files into the project" aria-label="Generate" ng-click="generate()" ng-disabled="state.isBusy || issues.length"></bk-button>
+            <bk-button state="emphasized" glyph="sap-icon--generate-shortcut" label="Generate" title="Generate the model files into the project" aria-label="Generate" ng-click="generate()" ng-disabled="state.isBusy"></bk-button>
             <bk-toolbar-separator></bk-toolbar-separator>
             <bk-button state="{{chat.open ? 'emphasized' : 'transparent'}}" glyph="sap-icon--discussion" title="AI assistant" aria-label="AI assistant" ng-click="toggleChat()"></bk-button>
         </bk-toolbar>
