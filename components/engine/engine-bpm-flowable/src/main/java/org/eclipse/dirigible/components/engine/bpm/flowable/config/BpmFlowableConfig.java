@@ -110,6 +110,14 @@ public class BpmFlowableConfig {
         ClassLoader parent = BpmFlowableConfig.class.getClassLoader();
         config.setClassLoader(new ClientAwareClassLoader(parent, clientClassLoaderHolder));
 
+        // Resolve delegate classes via ClassLoader.loadClass (which ClientAwareClassLoader overrides to
+        // consult the current client generation) instead of Class.forName. Class.forName caches the
+        // resolved class in the JVM against the loader instance Flowable captured at boot, so a
+        // recompiled flowable:class delegate would keep running its old version until a restart; the
+        // loadClass path lets each resolution pick up the freshly compiled bytecode
+        // (FlowableClientClassLoaderRefresher additionally evicts the parsed-process cache on rebuild).
+        config.setUseClassForNameClassLoading(false);
+
         return config;
     }
 

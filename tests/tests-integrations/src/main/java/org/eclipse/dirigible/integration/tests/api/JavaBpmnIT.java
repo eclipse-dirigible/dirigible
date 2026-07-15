@@ -82,6 +82,29 @@ class JavaBpmnIT extends IntegrationTest {
         assertHistoricVariable(processInstanceId, "pureTaskRan", "yes");
     }
 
+    /**
+     * A {@code flowable:class} delegate must pick up a recompiled version without a server restart.
+     * Deploys a v1 delegate, runs the process, then overwrites the same {@code .java} with v2 (the
+     * {@code .bpmn} is untouched) and runs again — the second run must observe v2. Without the
+     * per-rebuild classloader refresh, the JVM's initiating-loader cache keeps returning v1.
+     */
+    @Test
+    void pure_class_delegate_reflects_a_recompiled_version_without_restart() {
+        write(JAVA_TASK_REGISTRY_PATH, javaTaskSource(), "text/x-java");
+        write(PURE_TASK_REGISTRY_PATH, versionedPureTaskSource("v1"), "text/x-java");
+        write(BPMN_REGISTRY_PATH, bpmnSource(), "application/xml");
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        String firstInstanceId = startProcess();
+        assertHistoricVariable(firstInstanceId, "pureVersion", "v1");
+
+        write(PURE_TASK_REGISTRY_PATH, versionedPureTaskSource("v2"), "text/x-java");
+        synchronizationProcessor.forceProcessSynchronizers();
+
+        String secondInstanceId = startProcess();
+        assertHistoricVariable(secondInstanceId, "pureVersion", "v2");
+    }
+
     @AfterEach
     void cleanup() {
         boolean removed = false;
@@ -148,6 +171,20 @@ class JavaBpmnIT extends IntegrationTest {
                     }
                 }
                 """;
+    }
+
+    private static String versionedPureTaskSource(String version) {
+        return """
+                package com.acme;
+                import org.flowable.engine.delegate.DelegateExecution;
+                import org.flowable.engine.delegate.JavaDelegate;
+                public class PureJavaTask implements JavaDelegate {
+                    @Override
+                    public void execute(DelegateExecution execution) {
+                        execution.setVariable("pureVersion", "%s");
+                    }
+                }
+                """.formatted(version);
     }
 
     private static String bpmnSource() {

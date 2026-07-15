@@ -17,23 +17,26 @@ import org.eclipse.dirigible.engine.java.runtime.ClientClassLoaderHolder;
  * resolve to a class compiled from a {@code .java} file in the user's project.
  *
  * <p>
- * Resolution order on {@link #findClass(String)}:
- * <ol>
- * <li>Defer to the parent (platform) classloader — every {@code dirigible-*} class and every
- * Flowable / Spring class is reachable here.</li>
- * <li>If the parent does not have it, consult the current {@link ClientClassLoader} (or fail with
- * {@link ClassNotFoundException} if no rebuild has happened yet).</li>
- * </ol>
+ * {@link #loadClass(String)} always delegates to the <em>current</em> {@link ClientClassLoader}
+ * (whose own parent is the platform classloader, so every {@code dirigible-*} / Flowable / Spring
+ * class stays reachable). This is deliberately <em>not</em> the standard
+ * {@code findLoadedClass → parent → findClass} delegation: this loader instance is captured once by
+ * Flowable's {@code CommandContextInterceptor} at engine boot and cannot be swapped at runtime, so
+ * if it cached resolutions itself (or was used as the initiating loader for
+ * {@code Class.forName(name, true, this)}) it would keep returning the class from the first
+ * generation and a recompiled delegate would need a server restart. Routing every call to
+ * {@code holder.current().loadClass(name)} makes the fixed instance a transparent pass-through to
+ * the latest generation instead.
  *
  * <p>
- * The holder is hot-swapped on every client rebuild, so {@link #findClass(String)} sees the latest
- * generation on first resolution. The JVM, however, records this loader as an <em>initiating
- * loader</em> for every name it has resolved through {@code findClass}; subsequent
- * {@code Class.forName(name, true, this)} calls from Flowable bypass {@code findClass} and return
- * the cached class from the previous generation. Hot-reload safety for the {@code class=} path
- * therefore requires a process restart. Users that need bulletproof hot-reload should use the
- * {@code ${JavaTask}} delegate-expression path (see {@code DirigibleJavaCallDelegate}) which
- * resolves through the holder every execution.
+ * Two collaborators make this effective: {@code BpmFlowableConfig} sets
+ * {@code useClassForNameClassLoading = false} so Flowable resolves delegates via
+ * {@code ClassLoader.loadClass} (this override) rather than {@code Class.forName} (which the JVM
+ * caches against the loader instance); and {@code FlowableClientClassLoaderRefresher} evicts the
+ * parsed-process cache on every rebuild, because Flowable caches the instantiated delegate on the
+ * parsed service task. The {@code ${JavaTask}} delegate-expression path (see
+ * {@code DirigibleJavaCallDelegate}) resolves through the holder on every execution and is
+ * hot-reload-safe by construction.
  */
 final class ClientAwareClassLoader extends ClassLoader {
 
@@ -42,6 +45,16 @@ final class ClientAwareClassLoader extends ClassLoader {
     ClientAwareClassLoader(ClassLoader parent, ClientClassLoaderHolder holder) {
         super(parent);
         this.holder = holder;
+    }
+
+    @Override
+    public Class<?> loadClass(String name) throws ClassNotFoundException {
+        ClientClassLoader current = holder.current();
+        if (current == null) {
+            // No client code compiled yet — fall back to the platform delegation.
+            return super.loadClass(name);
+        }
+        return current.loadClass(name);
     }
 
     @Override
