@@ -99,7 +99,8 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         });
     };
 
-    $scope.save = () => {
+    $scope.save = (keySet = 'ctrl+s', event) => {
+        event?.preventDefault();
         if (!$scope.changed || $scope.state.error) return;
         $scope.state.isBusy = true;
         WorkspaceService.saveContent($scope.dataParameters.filePath, $scope.text).then(() => {
