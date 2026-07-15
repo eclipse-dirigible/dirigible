@@ -97,6 +97,8 @@ composition is opt-in.
 - `major: false` - keep the field <b>off the entity list table</b> (it is still shown in forms and the
   record details pane). Defaults to `true` (every field is a list column). Use it to declutter the list
   of wide/secondary fields (e.g. `uuid`, long notes).
+- `aggregate: true` - include this numeric field in a document's **totals footer** (the sum across the
+  line items is shown under the items table). Use it on money / quantity columns of a `DocumentItem`.
 - `readOnly: true` - the field is not editable in generated forms; it renders in the read-only details
   block (Label: Value) above the action buttons. Use it for system/workflow-managed fields like a
   `status` driven by the process. (`ProcessId`, the audit columns and `uuid` fields are flagged
@@ -422,8 +424,9 @@ entities:
 (a `DocumentItem`/`*Item` child, or a single composition child). Prefer `function` over the legacy
 `*Item` naming and the `documentTitle`/`kind: setting` flags (still accepted); `documentStatus` was
 renamed and is now REJECTED with a migration message - use `function: EntityStatus` on the status relation.
-Reserved values for upcoming templates (e.g. `Calendar`) are recognised but rejected with a clear
-"not yet available" message until the template ships.
+`Calendar` is **available** (see the **views** section below). The values `Board` / `Gantt` /
+`Timeline` are reserved for upcoming templates and are recognised but rejected with a clear
+"not yet available" message until those templates ship.
 
 **`documentItemsLayout: chat` - render the items as a conversation thread.** On a document master, set
 `documentItemsLayout: chat` to render its line-items child as a chat thread (message bubbles + a
@@ -455,6 +458,59 @@ author vs the logged-in user.
     - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
 ```
 
+### views - calendar, range, and slots
+
+**Use when:** an entity's records read better on a time surface than in a table - appointments,
+bookings, day allocations, anything keyed by a date. Set `view:` on the entity (or `function: Calendar`,
+the role alias for `view: calendar`) and add the matching config block. The generated REST controller
+and form are reused unchanged; only the presentation differs.
+
+- **`view: calendar`** (or `function: Calendar`) + a `calendar:` block renders the records as events on
+  the Harmonia calendar. **`view: range`** uses the same block for start/end spans.
+  ```yaml
+  - name: Appointment
+    view: calendar                 # or  function: Calendar
+    fields:
+      - { name: id,    type: integer, primaryKey: true, generated: true }
+      - { name: at,    type: timestamp }
+      - { name: until, type: timestamp }
+      - { name: title, type: string, length: 200 }
+    relations:
+      - { name: Status, kind: manyToOne, to: AppointmentStatus, function: EntityStatus }
+    calendar:
+      start: at              # date/datetime field placed on the timeline (REQUIRED)
+      end: until             # optional end field for multi-hour / multi-day events
+      title: title           # field or to-one relation labelling the event pill (default: the name/title)
+      color: Status          # field or to-one relation the event colour is keyed by (categorical)
+      scope: <relation>      # optional: a to-one relation to filter/prefill by (see below)
+      initialView: month     # month (default) | week | day
+  ```
+  When the calendar entity is a **composition child**, it renders as an embedded calendar in its
+  master's detail pane instead of a standalone page. A `scope:` to-one relation filters the events to
+  the parent whose id arrives as `?<Scope>=<id>` and prefills that FK on create - so e.g. a timesheet's
+  day allocations show only that timesheet's entries.
+
+- **`view: slots`** + a `slots:` block renders an appointment/booking picker (a 3-day grid of
+  selectable time slots); a free slot opens the create form prefilled with the chosen date + time.
+  ```yaml
+  - name: Booking
+    view: slots
+    fields:
+      - { name: id, type: integer, primaryKey: true, generated: true }
+      - { name: at, type: timestamp }
+    slots:
+      start: at              # the datetime field a picked slot writes to (REQUIRED)
+      open: "08:00"          # first slot of the day (default 08:00)
+      close: "18:00"         # exclusive end of the day (default 18:00)
+      step: 30               # slot length in minutes (default 30)
+      disabledDays: [0, 6]   # weekdays always closed (0 = Sunday .. 6 = Saturday)
+  ```
+
+**Rules:** `view` is one of `calendar` / `range` / `slots`. `calendar.start` (calendar/range) and
+`slots.start` (slots) are required and must name a declared `date`/`timestamp` field; `calendar.end`
+likewise when set; `calendar.title`/`color` must be a declared field or relation; `calendar.scope` a
+declared to-one relation. `function: Calendar` cannot be combined with a different `view:`.
+
 ### processes - workflows and approvals
 
 **Use when:** a record needs a multi-step flow - approvals, hand-offs, branching, or automated steps.
@@ -474,6 +530,12 @@ processes:
 the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared entity -
 `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
 guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+
+**Assignees.** A `userTask`'s `assignee` is normally a role / candidate-group name (e.g. `manager`).
+Use the literal **`assignee: personal`** to route the task to the **record owner's** Inbox instead -
+the task lands with whoever owns the triggering record. This requires the trigger entity to declare a
+`personal:` relation (see *Personal surfaces*), which is how the owner is resolved; the parser rejects
+`assignee: personal` when there is no personal relation to resolve the owner from.
 
 **Approve/Reject on a user task = branch on the chosen `action`.** A task form's button (e.g. Approve,
 Reject) completes the task with an `action` variable; put a `decision` immediately after the task that
@@ -923,10 +985,35 @@ schedules:
         Period: now
 ```
 
+**Per-matched-row child rows (`generate.children`).** A scheduled `generate` may also fan out into
+**child rows** via a `children:` list. Each entry names a `to` target and its `parent`, and a `forEach`
+that iterates either another entity (`forEach: { entity: <E>, match: { ... } }`) or the working days of
+the period (`forEach: { days: workingDays }`), writing one child per iteration (`map` / `defaults` /
+`dayField` as usual; nesting is capped at two levels). Use it for "create a monthly timesheet per active
+employee, with a day row per working day" style recurring generation.
+
+```yaml
+schedules:
+  - name: monthlyTimesheets
+    cron: "0 0 1 1 * ?"
+    entity: Employee
+    where: [ { field: status, op: eq, value: ACTIVE } ]
+    generate:
+      to: EmployeeTimesheet
+      map: { Employee: id }
+      defaults: { Period: now }
+      children:
+        - to: EmployeeDayAllocation
+          parent: EmployeeTimesheet
+          forEach: { days: workingDays }   # one child per working day of the period
+          dayField: day
+```
+
 **Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and
 **exactly one** of `notify` (valid recipient) / `generate` (a declared/cross-model `to`, a `map` over
-the row's fields/to-one relations). Composition-item cloning is **not** available on a schedule (it
-needs a selected document) - use an on-demand `generates` action for document-to-document cloning.
+the row's fields/to-one relations, optional `children`). Composition-item cloning via `items:` is
+**not** available on a schedule (it needs a selected document) - use an on-demand `generates` action
+for document-to-document cloning, or `generate.children` for the fan-out shape above.
 
 ### integrations - outbound HTTP on a data change
 
@@ -1047,6 +1134,16 @@ payment's unallocated balance; entity writes go only through the generated repos
 | notification `channel` | `email` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
+| entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
+| field `function` | `DocumentTitle` |
+| relation `function` | `EntityStatus` |
+| entity `view` | `calendar`, `range`, `slots` |
+| report `kind` | `balance` |
+| report `chart` | `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar` |
+| report `widget.kind` | `count`, `value`, `list` |
+| custom `widgets` `kind` | `kpi`, `page` |
+| rollup `op` | `count` (default), `sum` |
+| expansion `unit` | `day`, `week`, `month` |
 
 ## Mapping requests to capabilities (quick reference)
 
