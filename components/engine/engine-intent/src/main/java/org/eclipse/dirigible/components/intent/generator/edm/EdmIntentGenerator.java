@@ -19,6 +19,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
@@ -1745,24 +1746,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             propertyCellId.put(name, props);
         }
 
+        // Placement pass: pick an entity order that clusters FK-related entities, then pack each into
+        // the currently shortest column. Emission below still walks `entities` in declaration order (so
+        // the XML element order stays stable across regenerations); positions come from this map.
+        Map<String, int[]> placement = placeEntities(entities, document);
+
         sb.append(" <mxGraphModel>\n  <root>\n");
         sb.append("   <mxCell id=\"0\"/>\n");
         sb.append("   <mxCell id=\"1\" parent=\"0\"/>\n");
 
-        int[] columnY = new int[GRID_COLUMNS];
-        for (int i = 0; i < GRID_COLUMNS; i++) {
-            columnY[i] = GRID_ORIGIN;
-        }
-        int index = 0;
         for (Map<String, Object> entity : entities) {
             String name = (String) entity.get("name");
             List<Map<String, Object>> properties = propertiesOf(entity);
-            int column = index % GRID_COLUMNS;
-            int x = GRID_ORIGIN + column * (CELL_WIDTH + COLUMN_GAP);
-            int y = columnY[column];
-            int height = TITLE_HEIGHT + ROW_HEIGHT * Math.max(properties.size(), 1);
-            columnY[column] = y + height + ROW_GAP;
-            index++;
+            int[] pos = placement.get(name);
+            int x = pos[0];
+            int y = pos[1];
+            int height = pos[2];
 
             sb.append("   <mxCell id=\"")
               .append(entityCellId.get(name))
@@ -1829,6 +1828,94 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
 
         sb.append("  </root>\n </mxGraphModel>\n");
+    }
+
+    /**
+     * Compute the {@code [x, y, height]} grid position of every entity. Entities are visited in a
+     * relationship-aware order - a breadth-first walk over the (undirected) FK graph seeded in
+     * declaration order - so connected entities are laid out consecutively and land near each other;
+     * each is then packed into the currently shortest of the {@link #GRID_COLUMNS} columns so the
+     * columns stay balanced regardless of how tall individual cards are. Deterministic: the seed order
+     * and the shortest-column tie-break (lowest index) are both stable.
+     */
+    private static Map<String, int[]> placeEntities(List<Map<String, Object>> entities, EdmDocument document) {
+        Map<String, List<Map<String, Object>>> byName = new LinkedHashMap<>();
+        for (Map<String, Object> entity : entities) {
+            byName.put((String) entity.get("name"), propertiesOf(entity));
+        }
+        List<String> order = relationshipOrder(byName.keySet(), document);
+
+        int[] columnBottom = new int[GRID_COLUMNS];
+        for (int i = 0; i < GRID_COLUMNS; i++) {
+            columnBottom[i] = GRID_ORIGIN;
+        }
+        Map<String, int[]> placement = new HashMap<>();
+        for (String name : order) {
+            int column = shortestColumn(columnBottom);
+            int x = GRID_ORIGIN + column * (CELL_WIDTH + COLUMN_GAP);
+            int y = columnBottom[column];
+            int height = TITLE_HEIGHT + ROW_HEIGHT * Math.max(byName.get(name)
+                                                                    .size(),
+                    1);
+            columnBottom[column] = y + height + ROW_GAP;
+            placement.put(name, new int[] {x, y, height});
+        }
+        return placement;
+    }
+
+    /**
+     * A breadth-first ordering of the entities over the undirected FK graph, seeded in declaration
+     * order, so each connected cluster of entities comes out contiguously (and any entity with no
+     * relations still appears, in declaration order).
+     */
+    private static List<String> relationshipOrder(Set<String> names, EdmDocument document) {
+        Map<String, List<String>> adjacency = new LinkedHashMap<>();
+        for (String name : names) {
+            adjacency.put(name, new ArrayList<>());
+        }
+        for (Map.Entry<String, List<Map<String, Object>>> entry : document.relationsByEntity.entrySet()) {
+            String owner = entry.getKey();
+            for (Map<String, Object> relation : entry.getValue()) {
+                String referenced = (String) relation.get("referenced");
+                if (adjacency.containsKey(owner) && adjacency.containsKey(referenced)) {
+                    adjacency.get(owner)
+                             .add(referenced);
+                    adjacency.get(referenced)
+                             .add(owner);
+                }
+            }
+        }
+        List<String> order = new ArrayList<>(names.size());
+        Set<String> seen = new HashSet<>();
+        for (String seed : names) {
+            if (seen.contains(seed)) {
+                continue;
+            }
+            Queue<String> queue = new java.util.ArrayDeque<>();
+            queue.add(seed);
+            seen.add(seed);
+            while (!queue.isEmpty()) {
+                String current = queue.poll();
+                order.add(current);
+                for (String neighbour : adjacency.get(current)) {
+                    if (seen.add(neighbour)) {
+                        queue.add(neighbour);
+                    }
+                }
+            }
+        }
+        return order;
+    }
+
+    /** Index of the column whose stacked cards currently reach the smallest Y (ties: lowest index). */
+    private static int shortestColumn(int[] columnBottom) {
+        int best = 0;
+        for (int i = 1; i < columnBottom.length; i++) {
+            if (columnBottom[i] < columnBottom[best]) {
+                best = i;
+            }
+        }
+        return best;
     }
 
     @SuppressWarnings("unchecked")
