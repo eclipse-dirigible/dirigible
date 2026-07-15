@@ -248,9 +248,9 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
 
     // Re-parse and re-validate the current buffer on demand. Generate resolves cross-model
     // dependencies against other projects' already-generated .model files; when one is missing it
-    // fails with issues that stay pinned (blocking Generate) until the buffer is re-parsed. After
-    // generating the dependency project, Refresh clears those stale issues and re-renders — no browser
-    // reload needed.
+    // fails with issues that stay pinned in the strip until the buffer is re-parsed (Generate itself
+    // stays clickable — it re-validates server-side). After generating the dependency project,
+    // Refresh clears those stale issues and re-renders — no browser reload needed.
     $scope.refresh = () => {
         refreshPreview().then(() => {
             statusBarHub.showMessage('Re-validated the intent');
@@ -319,6 +319,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         dialogHub.showBusyDialog('Generating model files');
         $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
              .then((response) => {
+                 $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
                  const written = (response.data.written || []).length;
                  const scrubbed = (response.data.scrubbed || []).length;
                  const plan = response.data.codeGenerations || [];
