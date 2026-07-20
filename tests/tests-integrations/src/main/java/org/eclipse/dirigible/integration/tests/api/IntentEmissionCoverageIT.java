@@ -143,6 +143,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
 
+              # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
+              # layout must resolve the status FK to a label lookup and render it as a badge in
+              # the table column and the detail pane, exactly like the list layout does.
+              - name: Campaign
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
+              - name: CampaignNote
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
+
               # identity/personal/sensitive: Person maps the logged-in user (the IT runs as
               # admin - the seed below maps it); Claim is the personal entity with a sensitive
               # field; ClaimLine inherits the personal scope through its composition parent.
@@ -376,6 +393,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(accountsCsv.contains("ACCOUNT_PARENT"), "a seed row's relation key must emit the FK column into the seed CSV");
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
+
+        // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
+        // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id
+        // regression class: the lookup loop skipped DOCUMENT_STATUS widgets).
+        String campaignMasterPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js");
+        assertTrue(campaignMasterPage.contains("all['Status']"),
+                "the master page must load the EntityStatus label lookup like any dropdown relation");
+        String campaignMasterView = contentOf("gen/emission/views/Campaign/Campaign-master.html");
+        assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
+                "the master table must render the EntityStatus column as a resolved badge, not a raw id");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
