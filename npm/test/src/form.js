@@ -25,7 +25,14 @@ export async function pickDropdown(page, relation, optionText) {
   const label = relation.label ?? relation.name;
   const anchored = new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
   await page.getByRole('combobox', { name: anchored }).first().click();
-  await page.getByRole('option', { name: optionText }).first().click();
+  const option = page.getByRole('option', { name: optionText }).first();
+  try {
+    await option.click({ timeout: 10_000 });
+  } catch {
+    // the option list re-rendered mid-click (async option load reflow) - reopen and retry
+    await page.getByRole('combobox', { name: anchored }).first().click();
+    await option.click({ force: true });
+  }
 }
 
 // Resolve a live option for each to-one relation: take the first suitable row of the
@@ -54,18 +61,31 @@ export async function resolveRelationSamples(request, manifest, entity) {
   for (const relation of entity.relations ?? []) {
     if (relation.entityStatus) continue;
     // a filtered picker needs a matching candidate, so fetch a page and filter client-side
-    const { rows: fetched, labelFrom } = await fetchRows(relation, relation.where ? 100 : 1);
-    const rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
+    const wide = relation.where || relation.leafOnly;
+    const { rows: fetched, labelFrom } = await fetchRows(relation, wide ? 200 : 1);
+    let rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
+    if (relation.leafOnly && rows?.length) {
+      // the generated validation rejects a non-leaf target - pick a row no other row parents
+      const prop = relation.leafOnly.hierarchyProperty;
+      const idProp = manifest.idProperty ?? 'Id';
+      rows = rows.filter((row) => !fetched.some((other) => other[prop] === row[idProp]));
+    }
     if (!rows?.length) {
       // a required FK cannot be satisfied - fail loudly; an optional one is simply left unset
       if (relation.required) throw new Error(`Relation ${entity.name}.${relation.name}: no ${relation.to} rows to pick from`);
+      continue;
+    }
+    const label = rows[0][labelFrom];
+    if (label == null && !relation.required) {
+      // no display label to pick by (the target has no name-like field) - leave the optional
+      // relation unset rather than clicking blind
       continue;
     }
     samples.push({
       relation,
       row: rows[0],
       id: rows[0][idProperty],
-      label: rows[0][labelFrom],
+      label: label ?? String(rows[0][idProperty]),
     });
   }
 

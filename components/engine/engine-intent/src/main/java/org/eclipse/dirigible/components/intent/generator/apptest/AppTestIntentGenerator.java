@@ -305,6 +305,11 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 out.put("apiAbsolute", "/services/java/" + uses.resolveProject() + "/gen/" + sanitizeJavaIdentifier(uses.getModel())
                         + "/api/" + sanitizeJavaIdentifier(info.perspectiveName()) + "/" + relation.getTo() + "Controller");
                 out.put("labelFrom", info.labelField());
+                // leafOnly: the generated validation rejects a non-leaf target - the runner must
+                // pick a row no other row references via the target's hierarchy edge
+                if (relation.isLeafOnly() && info.hierarchyProperty() != null) {
+                    out.put("leafOnly", Map.of("hierarchyProperty", info.hierarchyProperty()));
+                }
             } else {
                 // relative controller path of the same-model target - resolvable even when the
                 // target is a composition detail (excluded from this manifest's entities list)
@@ -314,6 +319,15 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                             "/" + sanitizeJavaIdentifier(string(targetEdm.get("perspectiveName"))) + "/" + relation.getTo() + "Controller");
                 }
                 out.put("labelFrom", labelFieldOf(relation.getTo(), model));
+                if (relation.isLeafOnly()) {
+                    for (EntityIntent target : model.getEntities()) {
+                        if (relation.getTo()
+                                    .equals(target.getName())
+                                && target.getHierarchy() != null) {
+                            out.put("leafOnly", Map.of("hierarchyProperty", IntentNaming.pascalCase(target.getHierarchy())));
+                        }
+                    }
+                }
             }
             relations.add(out);
         }

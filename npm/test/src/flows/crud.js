@@ -39,7 +39,8 @@ export function crudFlow(manifest, entity, opts = {}) {
     await fillForm(page, manifest, entity, record, relationSamples, opts);
     await page.getByRole('button', { name: 'Create', exact: true }).click();
     if (entity.layout === 'document') {
-      // a document create lands on the new record's page (line-item editing continues there)
+      // a document create lands on the NEW record's page (line-item editing continues there);
+      // saving an edit is what returns to the list
       await expect(page).toHaveURL(/\/edit$/);
       await page.goto(manifest.standaloneShell + entity.route);
     } else {
@@ -56,15 +57,12 @@ export function crudFlow(manifest, entity, opts = {}) {
       // exact: substring name matching would also hit e.g. a "Credit Notes" sidebar item
       await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
       await expect(page).toHaveURL(/\/edit$/);
+      // the record loads async after the form renders - filling before the fetch completes
+      // gets overwritten by the load and Save persists the OLD value
+      await expect(page.locator('#f_' + handle.name)).toHaveValue(record[handle.name]);
       await fillField(page, handle, updated, opts);
       await page.getByRole('button', { name: 'Save', exact: true }).click();
-      if (entity.layout === 'document') {
-        // a document form stays on the record after save (header-items editing continues)
-        await expect(page).toHaveURL(/\/edit$/);
-        await page.goto(manifest.standaloneShell + entity.route);
-      } else {
-        await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
-      }
+      await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
       await filterBy(page, updated);
       await expect(dataRow(page, updated)).toHaveCount(1);
       record[handle.name] = updated;
