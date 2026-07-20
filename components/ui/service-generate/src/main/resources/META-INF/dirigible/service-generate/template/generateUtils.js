@@ -898,6 +898,38 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "transitions":
+                    // On-demand status transitions (intent layer): per declaration, a REST @Controller
+                    // that validates the status/field guards and flips ONLY the status column. All
+                    // guard expressions are pre-rendered by the glue generator - passed through
+                    // untouched; here only the Java package segment is sanitized. The topic keeps the
+                    // RAW perspective (matches the setter publisher).
+                    if (model.transitions) {
+                        for (let i = 0; i < model.transitions.length; i++) {
+                            const t = model.transitions[i];
+                            const transitionParameters = {
+                                ...parameters,
+                                name: t.name,
+                                className: t.className,
+                                entity: t.entity,
+                                perspective: t.perspective,
+                                javaPerspective: sanitizeJavaIdentifier(t.perspective),
+                                statusProperty: t.statusProperty,
+                                setStatus: t.setStatus,
+                                allowedExpr: t.allowedExpr,
+                                fromStatuses: t.fromStatuses,
+                                guardExpr: t.guardExpr,
+                                guardText: t.guardText
+                            };
+                            const cleanTransitionParameters = cleanData(transitionParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanTransitionParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanTransitionParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "postings":
                     // Declarative postings (intent layer): a MessageHandler on the source's
                     // -transitioned topic creating a local document + computed items. Everything is

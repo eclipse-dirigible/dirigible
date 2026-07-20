@@ -1,0 +1,63 @@
+package gen.events;
+
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.http.Response;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Transition ${name}: the guarded on-demand status flip on a ${entity} (loaded by the id in the
+ * posted body). The record must currently be in one of the allowed statuses [${fromStatuses}]#if($guardExpr != "")
+ * and satisfy the guard [${guardText}]#end; otherwise 409 and the record stays untouched. On success
+ * ONLY the status column is written - through the targeted updateProperty primitive, a
+ * workflow-style system write (no "-updated" re-fire; a full-row update would merge the stale
+ * pre-check snapshot and revert concurrent writes) - and the "-transitioned" topic is published so
+ * posting glue / integrations observe the transition.
+ *
+ * Generated from the intent transitions block - do not edit; it is re-generated with the application.
+ * Entity access goes ONLY through the generated repositories.
+ * The endpoint is served under /services/java/<project>/gen/events/${className}Transition/run.
+ */
+@Controller
+public class ${className}Transition {
+
+    public static class Request {
+        public Integer id;
+    }
+
+    @Post("/run")
+    public String run(@Body Request req) {
+        // Every branch returns a JSON body - the guard errors carry {"error": reason}.
+        Response.setContentType("application/json");
+        if (req == null || req.id == null) {
+            Response.setStatus(400);
+            return "{\"error\": \"missing record id\"}";
+        }
+        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository repository =
+                new gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository();
+        gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source = repository.findById(req.id);
+        if (source == null) {
+            Response.setStatus(404);
+            return "{\"error\": \"${entity} not found\"}";
+        }
+        // The status FK read with the Calc semantics (null reads as 0 - never an allowed seed id).
+        int currentStatus = org.eclipse.dirigible.sdk.utils.Calc.eval("${statusProperty}", source, 0).intValue();
+        if (!(${allowedExpr})) {
+            Response.setStatus(409);
+            return "{\"error\": \"${name} is allowed only from status [${fromStatuses}] - current status is [" + currentStatus + "]\"}";
+        }
+#if($guardExpr != "")
+        if (!(${guardExpr})) {
+            Response.setStatus(409);
+            return "{\"error\": \"${name} requires ${guardText}\"}";
+        }
+#end
+        repository.updateProperty(req.id, "${statusProperty}", ${setStatus});
+        // Reload so the "-transitioned" payload carries the committed row, not the pre-check snapshot.
+        source = repository.findById(req.id);
+        org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
+                "${projectName}-${perspective}-${entity}-transitioned", Json.stringify(source));
+        return Json.stringify(source);
+    }
+}

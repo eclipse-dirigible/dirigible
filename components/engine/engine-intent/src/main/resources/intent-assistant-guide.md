@@ -682,6 +682,44 @@ selected record's id to the opened page (as `?id=`). External projects may contr
 point; the app's own declared actions and third-party contributions render through one path. The
 opened page dismisses the dialog by posting `{ type: 'harmonia.form.close' }` to its parent.
 
+### transitions - guarded on-demand status flips (void / cancel / close / reopen)
+
+**Use when:** a document needs a manual status change AFTER its create-time process has ended - void
+an issued invoice, cancel a confirmed order, close a case, reopen a ticket. A process `trigger` fires
+only on create/update/delete, so a finished document has no declarative affordance left; `transitions`
+adds one: a per-record button whose click moves the record into a designated status, guarded
+server-side.
+
+```yaml
+transitions:
+  - name: VoidInvoice
+    forEntity: Invoice          # must declare a function: EntityStatus relation
+    from: [3, 4]                # allowed source status seed ids - 409 from any other status
+    setStatus: 8                # the target status seed id
+    when: "Paid == 0"           # optional extra guard: <Field> == <number> or <Field> != <number>
+    label: Void                 # button label (defaults to a humanized name)
+    icon: ban                   # optional Lucide icon
+```
+
+**Rules:** unique `name`; `forEntity` must be a declared entity with a `function: EntityStatus`
+relation (the column the transition writes); `from` is a non-empty list of positive seed ids;
+`setStatus` is a positive seed id not contained in `from` (a transition must change the status). The
+optional `when` guard is a single `<Field> ==|!= <number>` comparison over an own field or to-one
+relation of the entity, evaluated server-side with the SDK `Calc` semantics (a `null` field reads as
+`0` - so `Paid == 0` also passes on a document that was never paid at all).
+
+Two halves are generated (the `generates` pattern): a client button (a
+`<name>-transition-action.extension` + `.js` contribution to the app's `<project>-custom-action`
+point, carrying an `endpoint`; always per-record) and a server-side Java `@Controller`
+(`<ClassName>Transition`, via the `.glue` file) served at
+`/services/java/<project>/gen/events/<ClassName>Transition/run`. The controller re-loads the record,
+validates the status + `when` guards (a failure returns **409** with the reason and leaves the record
+untouched), then flips ONLY the status column through the targeted `updateProperty` primitive - a
+workflow-style system write: no `-updated` re-fire (no onUpdate reactions), but the `-transitioned`
+topic IS published, so `postings:` glue and integrations observe the transition exactly as they
+observe a workflow status set. Pair it with a posting on the same status to derive follow-up records
+(e.g. void -> reversal entry).
+
 ### generates - create one document from another (create-from)
 
 **Use when:** a record should spawn a new record of another type - often a document in another model:
@@ -1144,6 +1182,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 | custom `widgets` `kind` | `kpi`, `page` |
 | rollup `op` | `count` (default), `sum` |
 | expansion `unit` | `day`, `week`, `month` |
+| transition `when` op | `==`, `!=` |
 
 ## Mapping requests to capabilities (quick reference)
 
@@ -1151,6 +1190,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
+- "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
 - "create a Y from an X / generate an invoice from a timesheet / turn a quote into an order" (on a button, per selected record) -> **generates**
 - "a list / dashboard / count of X by Y" -> **reports**
 - "who can do what" -> **permissions**
