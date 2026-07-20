@@ -46,6 +46,11 @@ export function editableFields(entity) {
 export function sampleRecord(entity) {
   const record = {};
   for (const field of editableFields(entity)) record[field.name] = sampleValue(field);
+  // an exactlyOne check rejects a record where more than one of the named fields is set -
+  // keep only the first of each declared set
+  for (const set of entity.exactlyOne ?? []) {
+    for (const name of set.slice(1)) delete record[name];
+  }
   return record;
 }
 

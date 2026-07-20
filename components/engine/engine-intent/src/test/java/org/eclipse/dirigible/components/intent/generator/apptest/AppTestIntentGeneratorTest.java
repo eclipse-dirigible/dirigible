@@ -57,6 +57,9 @@ class AppTestIntentGeneratorTest {
                 relations:
                   - { name: Country, kind: manyToOne, to: Country, required: true }
                   - { name: Currency, kind: manyToOne, to: Currency, model: kf-mod-currencies, required: true }
+                  - { name: Twin, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country }, where: { name: Plovdiv } }
+                checks:
+                  - { kind: exactlyOne, fields: [uuid, slug], message: "one of uuid/slug" }
               - name: Account
                 group: master-data
                 hierarchy: Parent
@@ -171,7 +174,7 @@ class AppTestIntentGeneratorTest {
                 entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "City");
         List<Map<String, Object>> relations = (List<Map<String, Object>>) city.get("relations");
         assertNotNull(relations);
-        assertEquals(2, relations.size());
+        assertEquals(3, relations.size());
         Map<String, Object> country = relations.get(0);
         assertEquals("Country", country.get("name"));
         assertEquals("manyToOne", country.get("kind"));
@@ -183,6 +186,18 @@ class AppTestIntentGeneratorTest {
         // composition detail excluded from the manifest's entities list)
         assertEquals("/settings/CountryController", country.get("api"));
         assertNull(country.get("crossModel"));
+
+        // dependsOn + where ride into the manifest so the runner picks consistent, offered samples
+        Map<String, Object> twin = relations.get(2);
+        assertEquals("Twin", twin.get("name"));
+        assertEquals("Country", ((Map<String, Object>) twin.get("dependsOn")).get("relation"));
+        assertEquals("Country", ((Map<String, Object>) twin.get("dependsOn")).get("filterBy"));
+        assertEquals("Name", ((Map<String, Object>) twin.get("where")).get("by"));
+        assertEquals("Plovdiv", ((Map<String, Object>) twin.get("where")).get("value"));
+
+        Map<String, Object> cityEntity =
+                entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "City");
+        assertEquals(List.of(List.of("Uuid", "Slug")), cityEntity.get("exactlyOne"));
 
         // the cross-model relation resolves an absolute controller URL in the OWNER module (naming
         // convention here - no generation context; the real pass resolves against the owner's .model)

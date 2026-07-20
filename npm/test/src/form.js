@@ -28,33 +28,34 @@ export async function pickDropdown(page, relation, optionText) {
   await page.getByRole('option', { name: optionText }).first().click();
 }
 
-// Resolve a live option for each to-one relation: take the first existing row of the
+// Resolve a live option for each to-one relation: take the first suitable row of the
 // target entity and use its label field's value as the visible option text.
 // - an entityStatus relation is skipped: it renders as a status pill (not an editable
 //   input in any form) and its value comes from the init: DB default;
 // - a cross-model relation's rows come from its apiAbsolute controller URL (the target
-//   lives in another module and is not in this manifest).
+//   lives in another module and is not in this manifest);
+// - a where: option filter narrows the candidate rows to matching ones;
+// - a dependsOn cascade forces CONSISTENT samples: the dependent row is chosen first and
+//   its filterBy FK becomes the trigger sibling's sample (independent first rows would
+//   pick e.g. Country=Afghanistan + City=Sofia, and the cascade then offers no options).
 export async function resolveRelationSamples(request, manifest, entity) {
   const api = makeApi(request, manifest);
+  const idProperty = manifest.idProperty ?? 'Id';
+
+  async function fetchRows(relation, limit) {
+    if (relation.apiAbsolute) return { rows: await api.listPath(relation.apiAbsolute, limit), labelFrom: relation.labelFrom ?? 'Name' };
+    if (relation.api) return { rows: await api.listPath(manifest.restBase + relation.api, limit), labelFrom: relation.labelFrom ?? 'Name' };
+    const target = manifest.entities.find((e) => e.name === relation.to);
+    if (!target) throw new Error(`Relation ${entity.name}.${relation.name}: target ${relation.to} not in manifest`);
+    return { rows: await api.list(target, limit), labelFrom: relation.labelFrom ?? handleField(target)?.name ?? 'Name' };
+  }
+
   const samples = [];
   for (const relation of entity.relations ?? []) {
     if (relation.entityStatus) continue;
-    let rows;
-    let labelFrom = relation.labelFrom;
-    if (relation.apiAbsolute) {
-      rows = await api.listPath(relation.apiAbsolute, 1);
-      labelFrom = labelFrom ?? 'Name';
-    } else if (relation.api) {
-      // same-model target via its relative controller path (works even for a composition
-      // detail excluded from the manifest's entities list)
-      rows = await api.listPath(manifest.restBase + relation.api, 1);
-      labelFrom = labelFrom ?? 'Name';
-    } else {
-      const target = manifest.entities.find((e) => e.name === relation.to);
-      if (!target) throw new Error(`Relation ${entity.name}.${relation.name}: target ${relation.to} not in manifest`);
-      rows = await api.list(target, 1);
-      labelFrom = labelFrom ?? handleField(target)?.name ?? 'Name';
-    }
+    // a filtered picker needs a matching candidate, so fetch a page and filter client-side
+    const { rows: fetched, labelFrom } = await fetchRows(relation, relation.where ? 100 : 1);
+    const rows = relation.where ? fetched?.filter((r) => String(r[relation.where.by]) === String(relation.where.value)) : fetched;
     if (!rows?.length) {
       // a required FK cannot be satisfied - fail loudly; an optional one is simply left unset
       if (relation.required) throw new Error(`Relation ${entity.name}.${relation.name}: no ${relation.to} rows to pick from`);
@@ -62,14 +63,38 @@ export async function resolveRelationSamples(request, manifest, entity) {
     }
     samples.push({
       relation,
-      id: rows[0][manifest.idProperty ?? 'Id'],
+      row: rows[0],
+      id: rows[0][idProperty],
       label: rows[0][labelFrom],
     });
+  }
+
+  // cascade consistency: re-point each dependsOn trigger at the row the dependent's choice implies
+  for (const sample of samples) {
+    const dependsOn = sample.relation.dependsOn;
+    if (!dependsOn?.filterBy) continue;
+    const trigger = samples.find((s) => s.relation.name === dependsOn.relation);
+    const impliedId = sample.row[dependsOn.filterBy];
+    if (!trigger || impliedId == null || trigger.id === impliedId) continue;
+    const path = trigger.relation.apiAbsolute ?? (trigger.relation.api ? manifest.restBase + trigger.relation.api : null);
+    if (!path) continue;
+    const row = await api.getPath(`${path}/${impliedId}`);
+    if (!row) continue;
+    trigger.row = row;
+    trigger.id = impliedId;
+    trigger.label = row[trigger.relation.labelFrom ?? 'Name'];
   }
   return samples;
 }
 
 export async function fillForm(page, manifest, entity, record, relationSamples, opts = {}) {
-  for (const field of editableFields(entity)) await fillField(page, field, record[field.name], opts);
-  for (const sample of relationSamples) await pickDropdown(page, sample.relation, sample.label);
+  for (const field of editableFields(entity)) {
+    if (record[field.name] === undefined) continue;
+    await fillField(page, field, record[field.name], opts);
+  }
+  // cascade order: a dependsOn trigger must be picked BEFORE its dependent, so the narrowed
+  // option list is the one the dependent's sample was chosen from
+  const triggers = relationSamples.filter((s) => !s.relation.dependsOn);
+  const dependents = relationSamples.filter((s) => s.relation.dependsOn);
+  for (const sample of [...triggers, ...dependents]) await pickDropdown(page, sample.relation, sample.label);
 }

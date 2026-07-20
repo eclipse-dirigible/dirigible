@@ -38,7 +38,13 @@ export function crudFlow(manifest, entity, opts = {}) {
     await cfg.beforeCreate?.(page, record);
     await fillForm(page, manifest, entity, record, relationSamples, opts);
     await page.getByRole('button', { name: 'Create', exact: true }).click();
-    await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
+    if (entity.layout === 'document') {
+      // a document create lands on the new record's page (line-item editing continues there)
+      await expect(page).toHaveURL(/\/edit$/);
+      await page.goto(manifest.standaloneShell + entity.route);
+    } else {
+      await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
+    }
     await filterBy(page, record[handle.name]);
     await expect(dataRow(page, record[handle.name])).toHaveCount(1);
     await cfg.afterCreate?.(page, record);

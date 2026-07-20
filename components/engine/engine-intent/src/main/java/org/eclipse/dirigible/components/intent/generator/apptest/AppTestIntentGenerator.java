@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
+import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
@@ -167,6 +168,21 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (hasSeed(model, name)) {
             out.put("expectSeedData", true);
         }
+        // exactlyOne checks: exactly one of the named fields may be non-null - a sample record
+        // filling all of them is rejected with 400, so the runner keeps only the first
+        List<List<String>> exactlyOne = new ArrayList<>();
+        for (CheckIntent check : entity.getChecks() == null ? List.<CheckIntent>of() : entity.getChecks()) {
+            if ("exactlyOne".equals(check.getKind()) && check.getFields() != null && !check.getFields()
+                                                                                           .isEmpty()) {
+                exactlyOne.add(check.getFields()
+                                    .stream()
+                                    .map(IntentNaming::pascalCase)
+                                    .toList());
+            }
+        }
+        if (!exactlyOne.isEmpty()) {
+            out.put("exactlyOne", exactlyOne);
+        }
         out.put("fields", fields(entity));
         List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
         if (!relations.isEmpty()) {
@@ -197,8 +213,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             // Read-only must mirror the generated form exactly, or the runner waits forever on an
             // input that is not there: an author-marked field and a uuid render in the read-only
             // details block (no #f_<Name> input), a calculated field renders as a non-editable
-            // input, and an aggregate renders in the document totals footer.
-            if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated() || field.isAggregate()) {
+            // input, an aggregate renders in the document totals footer, and a dependsOn field is
+            // auto-populated by its trigger relation's watcher (the runner must not fill it).
+            if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated() || field.isAggregate()
+                    || field.getDependsOn() != null) {
                 out.put("readOnly", true);
             }
             out.put("major", field.isMajor());
@@ -240,6 +258,32 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             out.put("widget", "dropdown");
             if (relation.isEntityStatus()) {
                 out.put("entityStatus", true);
+            }
+            // dependsOn cascade: the option list narrows to target rows whose filterBy equals the
+            // trigger sibling's value - the runner must pick MATCHING samples (the dependent row
+            // first, then its FK as the trigger's sample), not independent first rows.
+            if (relation.getDependsOn() != null) {
+                Map<String, Object> dependsOn = new LinkedHashMap<>();
+                dependsOn.put("relation", IntentNaming.pascalCase(relation.getDependsOn()
+                                                                          .getRelation()));
+                if (relation.getDependsOn()
+                            .getFilterBy() != null) {
+                    dependsOn.put("filterBy", IntentNaming.pascalCase(relation.getDependsOn()
+                                                                              .getFilterBy()));
+                }
+                out.put("dependsOn", dependsOn);
+            }
+            // where: static option filter - only matching target rows are offered as options
+            if (relation.getWhere() != null && relation.getWhere()
+                                                       .size() == 1) {
+                Map.Entry<String, Object> condition = relation.getWhere()
+                                                              .entrySet()
+                                                              .iterator()
+                                                              .next();
+                Map<String, Object> where = new LinkedHashMap<>();
+                where.put("by", IntentNaming.pascalCase(condition.getKey()));
+                where.put("value", condition.getValue());
+                out.put("where", where);
             }
             if (relation.isCrossModel()) {
                 UsesIntent uses = usesByAlias.get(relation.getModel());
