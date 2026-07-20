@@ -903,7 +903,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         p.put("auditType", "NONE");
         // Document role: the number/title field renders in the document form's title, not as an input.
-        p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForType(dataType));
+        p.put("widgetType", field.isDocumentTitle() ? "DOCUMENT_NUMBER" : widgetForField(field, dataType));
         p.put("widgetSize", field.getSize() == null ? ""
                 : field.getSize()
                        .toString());
@@ -1572,13 +1572,26 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return keyFieldName(target);
     }
 
-    /** Declared length, with type-derived defaults ({@code uuid} -> 36). */
+    /**
+     * Declared length, with type-derived defaults ({@code uuid} -> 36, {@code month} -> 7, {@code week}
+     * -> 8).
+     */
     private static Integer fieldLength(FieldIntent field) {
         if (field.getLength() != null) {
             return field.getLength();
         }
-        if (field.getType() != null && "uuid".equalsIgnoreCase(field.getType())) {
-            return 36;
+        if (field.getType() != null) {
+            switch (field.getType()
+                         .toLowerCase(Locale.ROOT)) {
+                case "uuid":
+                    return 36;
+                case "month": // YYYY-MM
+                    return 7;
+                case "week": // YYYY-Www
+                    return 8;
+                default:
+                    break;
+            }
         }
         return defaultLength(mapDataType(field.getType()));
     }
@@ -1606,8 +1619,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 return "CLOB";
             case "uuid":
             case "string":
+            case "month": // stored as the picker's YYYY-MM string
+            case "week": // stored as the picker's YYYY-Www ISO-week string
             default:
                 return "VARCHAR";
+        }
+    }
+
+    /**
+     * Widget for a field. {@code month}/{@code week} are both stored as {@code VARCHAR}, so they are
+     * indistinguishable at the JDBC-type level - the picker widget is chosen from the logical type (the
+     * same reason {@code documentTitle} is special-cased at the call site).
+     */
+    private static String widgetForField(FieldIntent field, String dataType) {
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase(Locale.ROOT);
+        switch (type) {
+            case "month":
+                return "MONTH";
+            case "week":
+                return "WEEK";
+            default:
+                return widgetForType(dataType);
         }
     }
 

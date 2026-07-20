@@ -107,10 +107,12 @@ document.addEventListener('alpine:init', () => {
 
     lookups: {},   // relationship property name -> { fkValue: label }
     // Fetch the referenced rows for each relationship (DROPDOWN) property once, mapping FK -> label.
+    // The EntityStatus FK (DOCUMENT_STATUS) is included too - the table column and the detail pane
+    // render it as a resolved badge, exactly like the list layout.
     async loadLookups() {
       const all = {};
 #foreach($property in $properties)
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS")
       try {
         const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
         const map${property.name} = {};

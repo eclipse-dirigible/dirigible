@@ -1,9 +1,11 @@
 package gen.events;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
-import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 
 /**
@@ -11,9 +13,12 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * from the intent .glue file - do not edit; it is re-generated with the application. Runs as a BPMN
  * service task (flowable:delegateExpression="\${JavaTask}") inserted immediately after the user task,
  * so a field the reviewer edited on the (otherwise read-only) task form is persisted on completion. It
- * loads the ${entity} by its process-variable id, assigns each editable field from its variable, and
- * persists via the repository's updateWithoutEvent - a workflow-driven system write that must not
- * re-fire onUpdate reactions. Each editable field is coerced from its process variable to the entity's
+ * collects each present variable, coerced to the entity's Java type, and persists them all in ONE
+ * TARGETED multi-column write (updateProperties): only the edited columns are in the UPDATE statement,
+ * so a concurrent write to any other column of the row (a recalculated total, a workflow status, the
+ * trigger's ProcessId) cannot be reverted - unlike the load-then-full-row-merge shape this replaces. A
+ * workflow-driven system write that must not re-fire onUpdate reactions, so no event is published.
+ * Each editable field is coerced from its process variable to the entity's
  * Java type (LocalDate/Instant/Integer/Long/BigDecimal/Double/Boolean/String); the form-builder sends
  * date/timestamp values ISO-shaped so LocalDate.parse / Instant.parse accept them.
  */
@@ -27,32 +32,31 @@ public class ${className} implements JavaDelegate {
         if (!(key instanceof Number)) {
             return;
         }
-        ${entity}Entity entity = repository.findById(((Number) key).${keyAccessor}());
-        if (entity == null) {
-            return;
-        }
+        Map<String, Object> values = new LinkedHashMap<>();
 #foreach($field in $fields)
         Object ${field.property}Value = execution.getVariable("${field.property}");
         if (${field.property}Value != null) {
 #if($field.coercion == "integer")
-            entity.${field.property} = ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).intValue() : Integer.valueOf(${field.property}Value.toString().trim());
+            values.put("${field.property}", ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).intValue() : Integer.valueOf(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "long")
-            entity.${field.property} = ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).longValue() : Long.valueOf(${field.property}Value.toString().trim());
+            values.put("${field.property}", ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).longValue() : Long.valueOf(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "decimal")
-            entity.${field.property} = new java.math.BigDecimal(${field.property}Value.toString().trim());
+            values.put("${field.property}", new java.math.BigDecimal(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "double")
-            entity.${field.property} = ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).doubleValue() : Double.valueOf(${field.property}Value.toString().trim());
+            values.put("${field.property}", ${field.property}Value instanceof Number ? ((Number) ${field.property}Value).doubleValue() : Double.valueOf(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "boolean")
-            entity.${field.property} = ${field.property}Value instanceof Boolean ? (Boolean) ${field.property}Value : Boolean.valueOf(${field.property}Value.toString().trim());
+            values.put("${field.property}", ${field.property}Value instanceof Boolean ? (Boolean) ${field.property}Value : Boolean.valueOf(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "date")
-            entity.${field.property} = java.time.LocalDate.parse(${field.property}Value.toString().trim());
+            values.put("${field.property}", java.time.LocalDate.parse(${field.property}Value.toString().trim()));
 #elseif($field.coercion == "timestamp")
-            entity.${field.property} = java.time.Instant.parse(${field.property}Value.toString().trim());
+            values.put("${field.property}", java.time.Instant.parse(${field.property}Value.toString().trim()));
 #else
-            entity.${field.property} = ${field.property}Value.toString();
+            values.put("${field.property}", ${field.property}Value.toString());
 #end
         }
 #end
-        repository.updateWithoutEvent(entity);
+        if (!values.isEmpty()) {
+            repository.updateProperties(((Number) key).${keyAccessor}(), values);
+        }
     }
 }

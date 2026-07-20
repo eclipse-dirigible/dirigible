@@ -545,6 +545,10 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 return new Control("input-date", "date");
             case "timestamp":
                 return new Control("input-datetime-local", "datetime-local");
+            case "month":
+                return new Control("input-month", "month");
+            case "week":
+                return new Control("input-week", "week");
             case "uuid":
             case "string":
             default:

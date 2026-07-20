@@ -94,12 +94,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
+                && postings.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -118,6 +120,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansions", expansions);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
+        glue.put("transitions", transitions);
         glue.put("postings", postings);
         glue.put("printFeeders", printFeeders);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
@@ -601,6 +604,83 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Transitions: one entry per {@code transitions} declaration - the guarded on-demand status flip.
+     * EVERYTHING is pre-rendered here so the Velocity template contains no expression logic: the
+     * allowed-statuses check is a Java boolean expression over an {@code int currentStatus} local, and
+     * the optional {@code when} guard is a full SDK {@code Calc} comparison over the loaded
+     * {@code source} entity (Calc semantics: a null field reads as 0 - identical to calculated fields).
+     */
+    private static List<Map<String, Object>> buildTransitions(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.TransitionIntent t : model.getTransitions()) {
+            if (t.getName() == null || t.getName()
+                                        .isBlank()
+                    || t.getForEntity() == null || t.getSetStatus() == null || t.getFrom() == null || t.getFrom()
+                                                                                                       .isEmpty()) {
+                continue; // parser already reported the malformed declaration
+            }
+            EntityIntent entity = byName.get(t.getForEntity());
+            if (entity == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("transitions", t.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)", t.getName());
+                continue;
+            }
+            String statusProperty = "";
+            for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : entity.getRelations()) {
+                if (relation.isEntityStatus()) {
+                    statusProperty = IntentNaming.pascalCase(relation.getName());
+                }
+            }
+            if (statusProperty.isEmpty()) {
+                continue; // parser already reported the missing EntityStatus relation
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", t.getName());
+            e.put("className", IntentNaming.pascalIdentifier(t.getName()));
+            e.put("entity", t.getForEntity());
+            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
+            e.put("statusProperty", statusProperty);
+            e.put("setStatus", String.valueOf(t.getSetStatus()));
+            List<String> terms = new ArrayList<>();
+            List<String> fromIds = new ArrayList<>();
+            for (Integer from : t.getFrom()) {
+                terms.add("currentStatus == " + from);
+                fromIds.add(String.valueOf(from));
+            }
+            e.put("allowedExpr", String.join(" || ", terms));
+            e.put("fromStatuses", String.join(", ", fromIds));
+            String guardExpr = "";
+            String guardText = "";
+            if (t.getWhen() != null && !t.getWhen()
+                                         .isBlank()) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(-?\\d+(?:\\.\\d+)?)\\s*")
+                                                                         .matcher(t.getWhen());
+                if (matcher.matches()) {
+                    // Calc reads the field with the calculated-field semantics (null -> 0); compareTo
+                    // keeps the comparison exact for decimals.
+                    guardExpr = "org.eclipse.dirigible.sdk.utils.Calc.eval(\"" + IntentNaming.pascalCase(matcher.group(1))
+                            + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + matcher.group(3) + "\")) "
+                            + ("==".equals(matcher.group(2)) ? "==" : "!=") + " 0";
+                    guardText = t.getWhen()
+                                 .trim();
+                }
+            }
+            e.put("guardExpr", guardExpr);
+            e.put("guardText", guardText);
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Test hook: build the {@code transitions} glue collection without a repository. */
+    static List<Map<String, Object>> buildTransitionsForTest(IntentModel model) {
+        return buildTransitions(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+    }
+
+    /**
      * Test hook: build the {@code generates} glue collection without a repository. With a null context
      * a cross-model target falls back to {@link CrossModelSupport}'s naming-convention defaults
      * (perspective = entity name, key = {@code Id}), which is deterministic and enough to assert the
@@ -622,17 +702,45 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static List<Map<String, Object>> buildPostings(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> out = new ArrayList<>();
+        // A reversal posting's storno link doubles as the discriminator between the reversed
+        // sibling's own documents (link empty) and reversals (link set) - the SIBLING's handler
+        // must filter its idempotency lookup by it too, so map: base posting name -> storno.
+        Map<String, String> stornoOfReversed = new LinkedHashMap<>();
         for (org.eclipse.dirigible.components.intent.model.PostingIntent posting : model.getPostings()) {
+            if (posting.getReverses() != null && !posting.getReverses()
+                                                         .isBlank()
+                    && posting.getStorno() != null) {
+                stornoOfReversed.put(posting.getReverses(), IntentNaming.pascalCase(posting.getStorno()));
+            }
+        }
+        for (org.eclipse.dirigible.components.intent.model.PostingIntent posting : model.getPostings()) {
+            boolean isReverse = posting.getReverses() != null && !posting.getReverses()
+                                                                         .isBlank();
+            // Reversal mode: creates/backReference/rule/map/items come from the reversed sibling;
+            // the reversal contributes its own event plus the storno link, and every item amount
+            // expression is negated (same sides - red storno).
+            org.eclipse.dirigible.components.intent.model.PostingIntent effective = posting;
+            if (isReverse) {
+                for (org.eclipse.dirigible.components.intent.model.PostingIntent candidate : model.getPostings()) {
+                    if (candidate != posting && posting.getReverses()
+                                                       .equals(candidate.getName())) {
+                        effective = candidate;
+                    }
+                }
+                if (effective == posting || posting.getStorno() == null) {
+                    continue; // parser already reported it
+                }
+            }
             if (posting.getName() == null || posting.getName()
                                                     .isBlank()
-                    || posting.getEvent() == null || posting.getCreates() == null) {
+                    || posting.getEvent() == null || effective.getCreates() == null) {
                 continue; // parser already reported it
             }
             if (!settings.shouldGenerate("postings", posting.getName())) {
                 LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)", posting.getName());
                 continue;
             }
-            EntityIntent creates = byName.get(posting.getCreates());
+            EntityIntent creates = byName.get(effective.getCreates());
             EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, byName);
             if (creates == null || itemsEntity == null) {
                 continue; // parser already reported it
@@ -689,22 +797,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
-            e.put("backRefProperty", IntentNaming.pascalCase(posting.getBackReference()));
+            e.put("backRefProperty", IntentNaming.pascalCase(effective.getBackReference()));
+            // Reversal coordinates: the reversal handler locates the original through the empty
+            // storno link and stamps it on its own creation; the reversed sibling's handler filters
+            // reversals OUT of its idempotency lookup through the same property.
+            e.put("stornoProperty", isReverse ? IntentNaming.pascalCase(posting.getStorno()) : "");
+            e.put("stornoFilterProperty", isReverse ? "" : stornoOfReversed.getOrDefault(posting.getName(), ""));
             // Rule lookup: a single match selector, columns referenced from the items.
-            boolean hasRule = posting.getRule() != null && posting.getRule()
-                                                                  .get("entity") != null;
+            boolean hasRule = effective.getRule() != null && effective.getRule()
+                                                                      .get("entity") != null;
             e.put("hasRule", hasRule);
             java.util.Set<String> usedRuleColumns = new java.util.LinkedHashSet<>();
             if (hasRule) {
-                String ruleEntityName = String.valueOf(posting.getRule()
-                                                              .get("entity"));
+                String ruleEntityName = String.valueOf(effective.getRule()
+                                                                .get("entity"));
                 e.put("ruleEntity", ruleEntityName);
                 // A setting rule entity (the normal case) lives under the global Settings perspective.
                 EntityIntent ruleEntityIntent = byName.get(ruleEntityName);
                 e.put("rulePerspective", ruleEntityIntent != null && ruleEntityIntent.isSetting() ? "Settings"
                         : IntentEntities.resolvePerspective(ruleEntityName, compositionParents));
-                Map<?, ?> match = (Map<?, ?>) posting.getRule()
-                                                     .get("match");
+                Map<?, ?> match = (Map<?, ?>) effective.getRule()
+                                                       .get("match");
                 Map.Entry<?, ?> selector = match.entrySet()
                                                 .iterator()
                                                 .next();
@@ -713,16 +826,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             // Header assignments: copy / literal / {placeholder} template - pre-rendered Java.
             List<Map<String, Object>> headerAssignments = new ArrayList<>();
-            if (posting.getMap() != null) {
-                for (Map.Entry<String, String> entry : posting.getMap()
-                                                              .entrySet()) {
+            if (effective.getMap() != null) {
+                for (Map.Entry<String, String> entry : effective.getMap()
+                                                                .entrySet()) {
                     headerAssignments.add(postingAssignment(entry.getKey(), entry.getValue()));
                 }
             }
             e.put("headerAssignments", headerAssignments);
             // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source.
             List<Map<String, Object>> itemRows = new ArrayList<>();
-            for (Map<String, String> row : posting.getItems() == null ? List.<Map<String, String>>of() : posting.getItems()) {
+            for (Map<String, String> row : effective.getItems() == null ? List.<Map<String, String>>of() : effective.getItems()) {
                 Map<String, Object> rendered = new LinkedHashMap<>();
                 List<Map<String, Object>> assigns = new ArrayList<>();
                 String rowGuard = "";
@@ -752,7 +865,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     } else {
                         FieldIntent target = fieldOf(itemsEntity, cell.getKey());
                         int scale = target != null && target.getScale() != null ? target.getScale() : 2;
-                        assign.put("expr", "Calc.eval(\"" + value.replace("\"", "\\\"") + "\", source, " + scale + ")");
+                        // Reversal: the SAME expression negated on the SAME side (red storno).
+                        String expr = isReverse ? "-(" + value + ")" : value;
+                        assign.put("expr", "Calc.eval(\"" + expr.replace("\"", "\\\"") + "\", source, " + scale + ")");
                     }
                     assigns.add(assign);
                 }
@@ -1074,7 +1189,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("spreadRound", spread == null || spread.getRound() == null ? "2"
                     : spread.getRound()
                             .toString());
-            base.put("countAssign", expansionCountAssign(master, expansion));
+            base.put("countProperty", expansionCountProperty(master, expansion));
+            base.put("countValue", expansionCountValue(master, expansion));
             base.put("criteriaExpression",
                     "Criteria.create().eq(\"" + fkProperty + "\", master." + IntentEntities.keyFieldName(master) + ")");
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
@@ -1123,8 +1239,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return String.valueOf(value);
     }
 
-    /** The count write-back assignment (typed to the master field), or empty when not declared. */
-    private static String expansionCountAssign(EntityIntent master, ExpansionIntent expansion) {
+    /** The PascalCase master property receiving the count write-back, or empty when not declared. */
+    private static String expansionCountProperty(EntityIntent master, ExpansionIntent expansion) {
+        if (expansion.getCount() == null || expansion.getCount()
+                                                     .isBlank()) {
+            return "";
+        }
+        if (fieldNamed(master, expansion.getCount()) == null) {
+            return "";
+        }
+        return IntentNaming.pascalCase(expansion.getCount());
+    }
+
+    /**
+     * The count write-back value expression, typed to the master field. Paired with
+     * {@link #expansionCountProperty} so the template persists the count as a targeted single-column
+     * {@code updateProperty} instead of a full-row merge.
+     */
+    private static String expansionCountValue(EntityIntent master, ExpansionIntent expansion) {
         if (expansion.getCount() == null || expansion.getCount()
                                                      .isBlank()) {
             return "";
@@ -1133,12 +1265,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (field == null) {
             return "";
         }
-        String property = IntentNaming.pascalCase(expansion.getCount());
         String type = field.getType() == null ? "decimal" : field.getType();
         return switch (type) {
-            case "integer", "int" -> "master." + property + " = Integer.valueOf(periods.size());";
-            case "long" -> "master." + property + " = Long.valueOf(periods.size());";
-            default -> "master." + property + " = java.math.BigDecimal.valueOf(periods.size());";
+            case "integer", "int" -> "Integer.valueOf(periods.size())";
+            case "long" -> "Long.valueOf(periods.size())";
+            default -> "java.math.BigDecimal.valueOf(periods.size())";
         };
     }
 

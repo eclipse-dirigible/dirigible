@@ -24,7 +24,12 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   genuinely failed post is undone by a compensation action, not this handler;
  * - a missing rule row or a null referenced rule column SKIPS the posting (the document stays on the
  *   unposted worklist - final-status documents with no back-referencing ${targetEntity});
- * - all writes go through the generated repositories (numbering, status init, validations, checks).
+ * - all writes go through the generated repositories (numbering, status init, validations, checks);
+ * - REVERSAL mode (intent reverses:): the handler locates the ORIGINAL document (back-reference set,
+ *   storno link empty), skips fail-soft when none exists, and creates the negated copy (same sides,
+ *   negative amounts - red storno) with the storno link stamped; its idempotency guard counts only
+ *   documents CARRYING the storno link, while the reversed sibling's guard counts only documents
+ *   WITHOUT it.
  */
 @Component
 public class ${className}Posting implements MessageHandler {
@@ -88,8 +93,40 @@ public class ${className}Posting implements MessageHandler {
         expectedItems++;
 #end
 #end
-        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> relatedTargets =
                 targetRepository.findAll(Criteria.create().eq("${backRefProperty}", source.${sourceKeyField}));
+#if($stornoProperty != "")
+        // Reversal (red storno): the ORIGINAL is the reversed posting's document for the SAME
+        // source - back-reference set, storno link empty. No original -> the source was never
+        // posted, nothing to reverse (fail-soft skip). Rows carrying the link are THIS handler's
+        // own creations (the idempotency set).
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity original = null;
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
+                new java.util.ArrayList<>();
+        for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity candidate : relatedTargets) {
+            if (candidate.${stornoProperty} == null) {
+                original = candidate;
+            } else {
+                existingTargets.add(candidate);
+            }
+        }
+        if (original == null) {
+            return; // nothing was posted for this source - nothing to reverse
+        }
+#elseif($stornoFilterProperty != "")
+        // A sibling reversal posting back-references the same source (with its storno link set) -
+        // only rows WITHOUT the link are THIS posting's own documents.
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
+                new java.util.ArrayList<>();
+        for (gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity candidate : relatedTargets) {
+            if (candidate.${stornoFilterProperty} == null) {
+                existingTargets.add(candidate);
+            }
+        }
+#else
+        java.util.List<gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity> existingTargets =
+                relatedTargets;
+#end
         gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity saved;
         if (!existingTargets.isEmpty()) {
             saved = existingTargets.get(0);
@@ -109,6 +146,9 @@ public class ${className}Posting implements MessageHandler {
             target.${a.targetProp} = ${a.expr};
 #end
             target.${backRefProperty} = source.${sourceKeyField};
+#if($stornoProperty != "")
+            target.${stornoProperty} = original.${targetPk};
+#end
             saved = targetRepository.save(target);
         }
 #foreach($row in $itemRows)

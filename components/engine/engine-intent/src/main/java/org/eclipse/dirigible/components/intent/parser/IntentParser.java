@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
+import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -73,8 +74,8 @@ import com.google.gson.ToNumberPolicy;
  */
 public final class IntentParser {
 
-    private static final Set<String> FIELD_TYPES =
-            Set.of("string", "text", "integer", "int", "long", "decimal", "double", "boolean", "date", "timestamp", "uuid");
+    private static final Set<String> FIELD_TYPES = Set.of("string", "text", "integer", "int", "long", "decimal", "double", "boolean",
+            "date", "timestamp", "uuid", "month", "week");
     /**
      * Primary keys must be an integer type - the Dirigible model convention is integer identifiers
      * (auto-increment), and a non-integer auto-increment column is invalid SQL on most databases.
@@ -181,6 +182,7 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
         validateGenerates(model, entityNames, usesAliases, issues);
+        validateTransitions(model, entityNames, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -2278,6 +2280,47 @@ public final class IntentParser {
                     issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
                 }
             }
+            // Reversal mode: creates/backReference/rule/map/items are inherited from the reversed
+            // sibling; the reversal declares only its own event + the storno self-link.
+            if (posting.getReverses() != null && !posting.getReverses()
+                                                         .isBlank()) {
+                PostingIntent sibling = null;
+                for (PostingIntent candidate : model.getPostings()) {
+                    if (candidate != posting && posting.getReverses()
+                                                       .equals(candidate.getName())) {
+                        sibling = candidate;
+                    }
+                }
+                if (sibling == null) {
+                    issues.add(subject + " reverses unknown posting [" + posting.getReverses() + "] - it must name a sibling"
+                            + " posting in this block");
+                    continue;
+                }
+                if (posting.getCreates() != null || posting.getBackReference() != null || posting.getRule() != null
+                        || posting.getMap() != null || (posting.getItems() != null && !posting.getItems()
+                                                                                              .isEmpty())) {
+                    issues.add(subject + " is a reversal - creates/backReference/rule/map/items are inherited from ["
+                            + posting.getReverses() + "] and must not be declared");
+                }
+                EntityIntent reversed = sibling.getCreates() == null ? null : byName.get(sibling.getCreates());
+                if (posting.getStorno() == null || posting.getStorno()
+                                                          .isBlank()) {
+                    issues.add(subject + " requires `storno: <self relation>` - the created entity's link to the reversed document");
+                } else if (reversed != null) {
+                    RelationIntent storno = toOneRelationByName(reversed, posting.getStorno());
+                    if (storno == null || !reversed.getName()
+                                                   .equals(storno.getTo())
+                            || storno.isCrossModel()) {
+                        issues.add(subject + " storno [" + posting.getStorno() + "] must be a to-one SELF-relation of ["
+                                + reversed.getName() + "]");
+                    }
+                }
+                continue;
+            }
+            if (posting.getStorno() != null && !posting.getStorno()
+                                                       .isBlank()) {
+                issues.add(subject + " declares storno without reverses - the storno link belongs to the reversal posting");
+            }
             // creates + items child + backReference
             EntityIntent creates = posting.getCreates() == null ? null : byName.get(posting.getCreates());
             if (creates == null) {
@@ -2458,6 +2501,91 @@ public final class IntentParser {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+            }
+        }
+    }
+
+    /** The compiled shape of a transition {@code when} guard: {@code <Field> ==|!= <number>}. */
+    private static final java.util.regex.Pattern TRANSITION_WHEN =
+            java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(-?\\d+(?:\\.\\d+)?)\\s*");
+
+    /**
+     * A {@code transitions} declaration is a guarded on-demand status flip: it requires the entity to
+     * declare a {@code function: EntityStatus} relation (the column it writes), a non-empty
+     * {@code from} list of allowed source seed ids, and a positive {@code setStatus} target outside
+     * that list. The optional {@code when} guard is a single {@code <Field> ==|!= <number>} comparison
+     * over an own field of the entity (the postings row-guard grammar - evaluated with the Calc
+     * semantics, where a null field reads as 0).
+     */
+    private static void validateTransitions(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (TransitionIntent t : model.getTransitions()) {
+            if (t.getName() == null || t.getName()
+                                        .isBlank()) {
+                issues.add("transition has no name");
+                continue;
+            }
+            String subject = "transition [" + t.getName() + "]";
+            if (!names.add(t.getName())) {
+                issues.add("duplicate " + subject);
+            }
+            EntityIntent entity = null;
+            if (t.getForEntity() == null || t.getForEntity()
+                                             .isBlank()) {
+                issues.add(subject + " has no forEntity");
+            } else if (!entityNames.contains(t.getForEntity())) {
+                issues.add(subject + " forEntity references unknown entity [" + t.getForEntity() + "]");
+            } else {
+                entity = byName.get(t.getForEntity());
+            }
+            if (entity != null) {
+                boolean hasStatus = false;
+                if (entity.getRelations() != null) {
+                    for (RelationIntent relation : entity.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            hasStatus = true;
+                        }
+                    }
+                }
+                if (!hasStatus) {
+                    issues.add(subject + " requires the entity [" + entity.getName()
+                            + "] to declare a function: EntityStatus relation - the transition writes the status");
+                }
+            }
+            if (t.getFrom() == null || t.getFrom()
+                                        .isEmpty()) {
+                issues.add(subject + " has no from statuses - list the seed ids the transition is allowed from");
+            } else {
+                for (Integer from : t.getFrom()) {
+                    if (from == null || from <= 0) {
+                        issues.add(subject + " from seed ids must be positive");
+                        break;
+                    }
+                }
+            }
+            if (t.getSetStatus() == null || t.getSetStatus() <= 0) {
+                issues.add(subject + " has no setStatus - the target status seed id");
+            } else if (t.getFrom() != null && t.getFrom()
+                                               .contains(t.getSetStatus())) {
+                issues.add(subject + " setStatus [" + t.getSetStatus() + "] is also in from - a transition must change the status");
+            }
+            if (t.getWhen() != null && !t.getWhen()
+                                         .isBlank()) {
+                java.util.regex.Matcher matcher = TRANSITION_WHEN.matcher(t.getWhen());
+                if (!matcher.matches()) {
+                    issues.add(subject + " when [" + t.getWhen() + "] must be `<Field> == <number>` or `<Field> != <number>`");
+                } else if (entity != null && !hasPropertyIgnoreCase(entity, matcher.group(1))) {
+                    // The identifier follows the Calc convention (PascalCase entity property), while
+                    // the field is authored camelCase - resolve case-insensitively.
+                    issues.add(subject + " when references [" + matcher.group(1) + "] which is not a field or to-one relation of ["
+                            + entity.getName() + "]");
+                }
             }
         }
     }

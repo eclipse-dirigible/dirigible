@@ -29,6 +29,7 @@
   },
   "files": [
     "dist",
+    "test",
     "LICENSE",
     "README.md",
     "package.json"
@@ -42,6 +43,8 @@
       "require": "./dist/cjs/index.js",
       "types": "./dist/dts/index.d.ts"
     },
+    "./test": "./test/index.js",
+    "./test/fixtures": "./test/fixtures.js",
     "./*": {
       "import": "./dist/esm/*/index.mjs",
       "require": "./dist/cjs/*/index.js",
@@ -53,6 +56,14 @@
       "*": [
         "dist/dts/*/index.d.ts"
       ]
+    }
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.45"
+  },
+  "peerDependenciesMeta": {
+    "@playwright/test": {
+      "optional": true
     }
   }
 }

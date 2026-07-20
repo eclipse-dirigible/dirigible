@@ -228,7 +228,12 @@ public class ControllerInvoker {
         }
         try {
             if (returnValue instanceof CharSequence cs) {
-                response.setContentType(MediaType.TEXT_PLAIN_VALUE + ";charset=UTF-8");
+                // Respect a content type the controller set explicitly (e.g. a JSON string returned
+                // with sdk.http.Response.setContentType("application/json")); default to text/plain
+                // only when the method left it unset.
+                if (response.getContentType() == null) {
+                    response.setContentType(MediaType.TEXT_PLAIN_VALUE + ";charset=UTF-8");
+                }
                 byte[] bytes = cs.toString()
                                  .getBytes(StandardCharsets.UTF_8);
                 response.setContentLength(bytes.length);

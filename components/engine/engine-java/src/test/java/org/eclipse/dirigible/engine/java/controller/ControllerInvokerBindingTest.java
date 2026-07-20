@@ -78,6 +78,44 @@ class ControllerInvokerBindingTest {
     }
 
     @Test
+    void string_return_defaults_to_text_plain() {
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("byId"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse resp = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of("id", "42")), mockRequest(null), resp);
+
+        assertEquals("text/plain;charset=UTF-8", resp.getContentType());
+    }
+
+    @Test
+    void string_return_keeps_an_explicitly_set_content_type() {
+        // A controller returning a JSON string may set the content type itself (via
+        // sdk.http.Response.setContentType) - the dispatcher must not stamp text/plain over it.
+        ControllerEntry entry = consumer.build(loaded(Demo.class));
+        Route route = entry.routes()
+                           .stream()
+                           .filter(r -> r.method()
+                                         .getName()
+                                         .equals("byId"))
+                           .findFirst()
+                           .orElseThrow();
+
+        FakeResponse resp = new FakeResponse();
+        resp.setContentType("application/json");
+        invoker.invoke(new RouteMatch(entry, route, Map.of("id", "42")), mockRequest(null), resp);
+
+        assertEquals("application/json", resp.getContentType());
+        assertEquals("got-42", resp.body());
+    }
+
+    @Test
     void query_param_can_be_missing_for_boxed_type() {
         ControllerEntry entry = consumer.build(loaded(Demo.class));
         Route route = entry.routes()

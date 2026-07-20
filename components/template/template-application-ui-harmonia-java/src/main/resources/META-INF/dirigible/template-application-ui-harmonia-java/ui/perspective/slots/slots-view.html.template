@@ -31,7 +31,33 @@
   </div>
 
   <div x-show="state === 'default'" class="bk-stretch" style="flex: 1; min-height: 0; padding: 0.5rem; overflow: auto;">
-    <div x-h-slot-picker="slotCfg" @slot-click="onSlotClick"></div>
+    <!--
+      Harmonia 2.5+ - the slot picker renders only the day grid; the date-navigation toolbar is composed
+      here from the x-h-slot-picker-* control directives (they must be descendants of x-h-slot-picker).
+    -->
+    <div x-h-slot-picker="slotCfg" @slot-click="onSlotClick">
+      <div x-h-toolbar data-variant="transparent">
+        <div x-h-button-group>
+          <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-previous
+                  :aria-label="T('$projectName:${tprefix}.defaults.previous', 'Previous')">
+            <svg x-h-icon data-icon="chevron-left" role="presentation"></svg>
+          </button>
+          <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-calendar
+                  :aria-label="T('$projectName:${tprefix}.defaults.chooseDate', 'Choose date')">
+            <svg x-h-icon data-icon="calendar" role="presentation"></svg>
+          </button>
+          <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-next
+                  :aria-label="T('$projectName:${tprefix}.defaults.next', 'Next')">
+            <svg x-h-icon data-icon="chevron-right" role="presentation"></svg>
+          </button>
+        </div>
+        <span x-h-toolbar-spacer></span>
+        <div x-h-slot-picker-title></div>
+        <span x-h-toolbar-spacer></span>
+        <button x-h-button data-variant="outline" x-h-slot-picker-today
+                x-text="T('$projectName:${tprefix}.defaults.today', 'Today')"></button>
+      </div>
+    </div>
   </div>
 
 </div>

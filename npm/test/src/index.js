@@ -8,8 +8,8 @@ import { shellFlow } from './flows/shell.js';
 
 // Entry point: execute a module's generated <name>.test manifest. Accepts the parsed
 // manifest object or a path to the file. opts.extend hosts the custom-UI hooks (widget
-// fillers, per-entity skip lists, before/afterCreate) - see kf-catalog PROPOSAL_APPTEST.md.
-export function runAppTest(manifestRef, opts = {}) {
+// fillers, per-entity skip lists, before/afterCreate).
+export function runTest(manifestRef, opts = {}) {
   const manifest = typeof manifestRef === 'string' ? JSON.parse(fs.readFileSync(manifestRef, 'utf8')) : manifestRef;
   for (const entity of manifest.entities ?? []) {
     test.describe(`${manifest.module} / ${entity.name}`, () => {
@@ -21,3 +21,6 @@ export function runAppTest(manifestRef, opts = {}) {
     });
   }
 }
+
+// Deprecated alias - the pre-subpath name; use runTest.
+export const runAppTest = runTest;

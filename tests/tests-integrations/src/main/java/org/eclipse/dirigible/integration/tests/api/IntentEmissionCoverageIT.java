@@ -47,9 +47,12 @@ import org.springframework.beans.factory.annotation.Autowired;
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
  * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
- * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, and the personal
- * (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner,
- * stripped fields).
+ * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, {@code transitions}
+ * (the guarded on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code postings}
+ * with {@code reverses} (post on a transition; red-storno reversal on void - negated amounts,
+ * storno link, fail-soft), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -110,10 +113,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: date,   type: date, required: true }
                   - { name: debit,  type: decimal, aggregate: true }
                   - { name: credit, type: decimal, aggregate: true }
+                  - { name: paid,   type: decimal }
                   - { name: note,   type: string, length: 200 }
                 relations:
                   - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
                   - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # postings back-reference + the reversal's storno self-link (reverses fixture).
+                  - { name: Doc,    kind: manyToOne, to: Doc }
+                  - { name: Storno, kind: manyToOne, to: Entry }
+
+              # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
+              # CANCELLED (the reverses posting fires - red storno).
+              - name: Doc
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               - name: EntryLine
                 checks:
@@ -125,6 +142,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
+
+              # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
+              # layout must resolve the status FK to a label lookup and render it as a badge in
+              # the table column and the detail pane, exactly like the list layout does.
+              - name: Campaign
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
+              - name: CampaignNote
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Campaign, kind: manyToOne, to: Campaign, composition: true, required: true }
 
               # identity/personal/sensitive: Person maps the logged-in user (the IT runs as
               # admin - the seed below maps it); Claim is the personal entity with a sensitive
@@ -208,6 +242,47 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: confirm, kind: userTask, args: { assignee: personal } }
                   - { name: end, kind: end }
 
+            # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
+            # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
+            # entry passes).
+            transitions:
+              - name: CancelEntry
+                forEntity: Entry
+                from: [1]
+                setStatus: 3
+                when: "Paid == 0"
+                label: Cancel
+                icon: ban
+              - name: PostDoc
+                forEntity: Doc
+                from: [1]
+                setStatus: 2
+                label: Post
+                icon: check
+              - name: VoidDoc
+                forEntity: Doc
+                from: [2]
+                setStatus: 3
+                label: Void
+                icon: ban
+
+            # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
+            # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
+            # linked to the original through Entry.Storno, fail-soft when nothing was posted.
+            postings:
+              - name: docPosting
+                event: { onTransition: Doc, when: "Status == 2" }
+                creates: Entry
+                backReference: Doc
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
+              - name: docStorno
+                event: { onTransition: Doc, when: "Status == 3" }
+                reverses: docPosting
+                storno: Storno
+
             seeds:
               - name: people
                 entity: Person
@@ -224,6 +299,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, name: DRAFT }
                   - { id: 2, name: POSTED }
+                  - { id: 3, name: CANCELLED }
               - name: units
                 entity: Unit
                 rows:
@@ -295,6 +371,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "checks: itemsMin must emit its authored message into the repository gate");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
+        // A workflow setter/writer persists via the TARGETED updateProperty/updateProperties write - the
+        // checks-bearing repository must OVERRIDE it to still run the posting gate, so converting the
+        // setter from a full-row merge to a targeted write did not silently drop the check (the
+        // silent-degradation class this IT exists to catch).
+        assertTrue(entryRepository.contains("public int updateProperties(") && entryRepository.contains("enforceChecks(entity)"),
+                "a checks-bearing entity must enforce its document checks on the targeted updateProperties write path");
 
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
@@ -311,6 +393,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(accountsCsv.contains("ACCOUNT_PARENT"), "a seed row's relation key must emit the FK column into the seed CSV");
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
+
+        // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
+        // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id
+        // regression class: the lookup loop skipped DOCUMENT_STATUS widgets).
+        String campaignMasterPage = contentOf("gen/emission/js/components/pages/Campaign/CampaignMasterPage.js");
+        assertTrue(campaignMasterPage.contains("all['Status']"),
+                "the master page must load the EntityStatus label lookup like any dropdown relation");
+        String campaignMasterView = contentOf("gen/emission/views/Campaign/Campaign-master.html");
+        assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
+                "the master table must render the EntityStatus column as a resolved badge, not a raw id");
 
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
@@ -399,11 +491,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String ticketPage = contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js");
         assertTrue(ticketPage.contains("sendMessage"), "the chat document page must emit the append-message composer handler");
 
+        // transitions: the server half is a controller that guards the source status + the when
+        // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
+        // half is a custom-action contribution carrying the endpoint.
+        String transition = contentOf("gen/events/CancelEntryTransition.java");
+        assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
+        assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
+        assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
+        assertTrue(transition.contains("updateProperty"), "the status flip must be the targeted single-column write");
+        assertTrue(transition.contains("-transitioned"), "the flip must publish the -transitioned topic");
+        String transitionExtension = contentOf("CancelEntry-transition-action.extension");
+        assertTrue(transitionExtension.contains("-custom-action"),
+                "the transition button must contribute to the app's custom-action extension point");
+
+        // postings reverses: the reversal handler negates the sibling's amount expressions on the
+        // SAME side, locates the original through the empty storno link (fail-soft skip when none)
+        // and stamps the link; the sibling's idempotency guard symmetrically excludes linked rows.
+        String stornoPosting = contentOf("gen/events/DocStornoPosting.java");
+        assertTrue(stornoPosting.contains("Calc.eval(\"-(Amount)\", source, 2)"),
+                "the reversal must negate the sibling's amount expression on the same side");
+        assertTrue(stornoPosting.contains("nothing to reverse"), "the reversal must skip fail-soft when the source was never posted");
+        assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
+        String basePosting = contentOf("gen/events/DocPostingPosting.java");
+        assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
         assertTrue(claimRepository.contains("related.Name"),
                 "a one-hop label token must load the related record and read its display property");
+        // A workflow setter/writer targeted write keeps the stored display Name current: the label
+        // repository OVERRIDES updateProperties to recompute it on that path too.
+        assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
+                "a label entity must recompute its display Name on the targeted updateProperties write path");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -522,6 +642,107 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
                                                  .statusCode(409));
+
+        // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
+        String transitionRun = "/services/java/" + PROJECT + "/gen/events/CancelEntryTransition/run";
+        AtomicInteger cancellable = new AtomicInteger();
+        restAssuredExecutor.execute(() -> cancellable.set(given().contentType("application/json")
+                                                                 .body("{\"Date\":\"2026-01-16\",\"Account\":2}")
+                                                                 .when()
+                                                                 .post(API + "/entry/EntryController")
+                                                                 .then()
+                                                                 .statusCode(200)
+                                                                 .extract()
+                                                                 .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + cancellable.get() + "}")
+                                                 .when()
+                                                 .post(transitionRun)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        // ...a second cancel is rejected from the wrong status (409, record untouched)...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + cancellable.get() + "}")
+                                                 .when()
+                                                 .post(transitionRun)
+                                                 .then()
+                                                 .statusCode(409));
+        // ...and the when guard rejects a DRAFT entry with something paid, leaving it DRAFT.
+        AtomicInteger guarded = new AtomicInteger();
+        restAssuredExecutor.execute(() -> guarded.set(given().contentType("application/json")
+                                                             .body("{\"Date\":\"2026-01-16\",\"Account\":2,\"Paid\":100}")
+                                                             .when()
+                                                             .post(API + "/entry/EntryController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + guarded.get() + "}")
+                                                 .when()
+                                                 .post(transitionRun)
+                                                 .then()
+                                                 .statusCode(409));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + guarded.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1)));
+
+        // postings: posting a Doc creates the balanced Entry (async handler - poll)...
+        AtomicInteger doc = new AtomicInteger();
+        restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
+                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250}")
+                                                         .when()
+                                                         .post(API + "/doc/DocController")
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .extract()
+                                                         .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + doc.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/PostDocTransition/run")
+                                                 .then()
+                                                 .statusCode(200));
+        AtomicInteger originalEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> originalEntry.set(given().when()
+                                                                   .get(API + "/entry/EntryController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .body("findAll { it.Doc == " + doc.get()
+                                                                           + " && it.Storno == null }.size()", equalTo(1))
+                                                                   .extract()
+                                                                   .path("find { it.Doc == " + doc.get() + " && it.Storno == null }.Id")),
+                30);
+        // ...and reverses: voiding the Doc creates the red storno - the SAME lines negated on the
+        // SAME sides, linked to the original through the storno self-relation.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + doc.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/VoidDocTransition/run")
+                                                 .then()
+                                                 .statusCode(200));
+        AtomicInteger reversalEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> reversalEntry.set(given().when()
+                                                                   .get(API + "/entry/EntryController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .body("findAll { it.Doc == " + doc.get() + " && it.Storno == "
+                                                                           + originalEntry.get() + " }.size()", equalTo(1))
+                                                                   .extract()
+                                                                   .path("find { it.Doc == " + doc.get() + " && it.Storno == "
+                                                                           + originalEntry.get() + " }.Id")),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + reversalEntry.get()
+                                                         + " && it.Debit != null && it.Debit < 0 }.size()", equalTo(1))
+                                                 .body("findAll { it.Entry == " + reversalEntry.get()
+                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
 
         // personal: the my-surface lists ONLY the current user's rows, with the sensitive field
         // stripped; a foreign record is a 404 (indistinguishable from missing).

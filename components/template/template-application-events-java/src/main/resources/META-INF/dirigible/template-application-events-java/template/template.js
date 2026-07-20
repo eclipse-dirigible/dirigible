@@ -129,6 +129,13 @@ export function getTemplate(parameters) {
                 collection: "generates"
             },
             {
+                location: "/template-application-events-java/events/Transition.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Transition.java",
+                engine: "velocity",
+                collection: "transitions"
+            },
+            {
                 location: "/template-application-events-java/events/Posting.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}Posting.java",
