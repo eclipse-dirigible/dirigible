@@ -181,11 +181,14 @@
 
     /**
      * Convert a date/datetime value to the FIXED shape an HTML <input> requires — NOT pattern-driven.
-     * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH (case-insensitive). Empty -> ''.
+     * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH, WEEK (case-insensitive). Empty -> ''.
+     * MONTH (YYYY-MM) and WEEK (YYYY-Www) are stored as plain strings, so they slice through unchanged.
      */
     toDateInput(value, widget) {
       if (value === null || value === undefined || value === '') return '';
       const w = String(widget || 'DATE').toUpperCase();
+      // WEEK (YYYY-Www) has no calendar-date form, so it is always a stored string.
+      if (w === 'WEEK') return String(value).slice(0, 8);
       let y, mo = 1, da = 1, h = 0, mi = 0;
       if (Array.isArray(value)) {
         y = value[0]; mo = value[1] || 1; da = value[2] || 1; h = value[3] || 0; mi = value[4] || 0;
@@ -213,14 +216,15 @@
 
     /**
      * Inverse of toDateInput: convert an HTML <input> value to the payload value the backend expects.
-     * DATE / DATETIME-LOCAL / MONTH -> a full ISO instant (…Z) so a Jackson java.time.* field binds;
-     * TIME -> passes through unchanged; empty -> null. An unparseable value is returned unchanged.
-     * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH (case-insensitive).
+     * DATE / DATETIME-LOCAL -> a full ISO instant (…Z) so a Jackson java.time.* field binds;
+     * TIME / MONTH / WEEK -> pass through unchanged (they are stored as plain strings, not instants);
+     * empty -> null. An unparseable value is returned unchanged.
+     * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH, WEEK (case-insensitive).
      */
     toPayload(value, widget) {
       if (value === null || value === undefined || value === '') return null;
       const w = String(widget || 'DATE').toUpperCase();
-      if (w === 'TIME') return value;
+      if (w === 'TIME' || w === 'MONTH' || w === 'WEEK') return value;
       const d = new Date(value);
       return isNaN(d.getTime()) ? value : d.toISOString();
     },

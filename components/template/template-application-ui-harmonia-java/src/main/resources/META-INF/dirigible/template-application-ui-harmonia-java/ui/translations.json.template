@@ -50,6 +50,8 @@
         "clearFilters": "Clear filters",
         "previous": "Previous",
         "next": "Next",
+        "today": "Today",
+        "chooseDate": "Choose date",
         "details": "Details",
         "selectTitle": "Select a {{name}}",
         "back": "Back",

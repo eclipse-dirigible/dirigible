@@ -64,7 +64,9 @@ phases land.
    Harmonia were fixed: `upload` -> built-in `import`; `inbox`/`eye` -> Lucide.
    (`x-h-info-page-media.icon` still exists in 2.x - left as is.)
 3. Refreshed the vendored `template-application-ui-harmonia-java/reference/harmonia/`
-   skill from the 2.1.0-shipped `skills/harmonia/`.
+   skill from the 2.1.0-shipped `skills/harmonia/`. (Since removed - the skill is now
+   consulted upstream at <https://github.com/codbex/harmonia/blob/main/skills/harmonia/SKILL.md>
+   / <https://codbex.com/harmonia/> to avoid drift.)
 4. Synced version strings in `CLAUDE.md` and `HARMONIA_RUNTIME_PLAN.md`
    (`data-size` split note re-verified - still accurate in 2.1.0).
 5. Also fixed a pre-existing bug found during runtime verification: the

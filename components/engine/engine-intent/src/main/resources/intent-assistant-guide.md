@@ -1179,7 +1179,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 
 | Where | Allowed |
 |---|---|
-| field `type` | `string`, `text`, `integer`, `int`, `long`, `decimal`, `double`, `boolean`, `date`, `timestamp`, `uuid` |
+| field `type` | `string`, `text`, `integer`, `int`, `long`, `decimal`, `double`, `boolean`, `date`, `timestamp`, `uuid`, `month` (a `YYYY-MM` string, month picker), `week` (a `YYYY-Www` ISO-week string, week picker) |
 | primary-key `type` | `integer`, `int`, `long` (integer only) |
 | relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany` |
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `end` |

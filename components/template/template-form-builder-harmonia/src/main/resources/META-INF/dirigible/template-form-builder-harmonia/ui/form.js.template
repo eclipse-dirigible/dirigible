@@ -206,7 +206,8 @@ document.addEventListener('alpine:init', () => {
     fmtDate(value, controlId) {
       const widget = controlId === 'input-datetime-local' ? 'DATETIME-LOCAL'
         : controlId === 'input-time' ? 'TIME'
-        : controlId === 'input-month' ? 'MONTH' : 'DATE';
+        : controlId === 'input-month' ? 'MONTH'
+        : controlId === 'input-week' ? 'WEEK' : 'DATE';
       return window.HarmoniaFormat.toDateInput(value, widget) || '—';
     },
 

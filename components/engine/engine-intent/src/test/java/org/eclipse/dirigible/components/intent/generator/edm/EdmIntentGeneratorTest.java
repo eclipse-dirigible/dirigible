@@ -187,6 +187,33 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void monthAndWeekMapToVarcharWithTheirPickerWidgets() {
+        String yaml = """
+                name: planning
+                entities:
+                  - name: Plan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                      - { name: sprint, type: week }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "planning");
+        Map<String, Object> plan = entityByName(entities(model), "Plan");
+
+        // Both are stored as VARCHAR (indistinguishable at the JDBC level), so the picker widget is
+        // chosen from the logical type - the crux of the feature.
+        Map<String, Object> period = propertyByName(plan, "Period");
+        assertEquals("VARCHAR", period.get("dataType"));
+        assertEquals("MONTH", period.get("widgetType"));
+        assertEquals("7", period.get("dataLength"), "a month column is sized for YYYY-MM");
+
+        Map<String, Object> sprint = propertyByName(plan, "Sprint");
+        assertEquals("VARCHAR", sprint.get("dataType"));
+        assertEquals("WEEK", sprint.get("widgetType"));
+        assertEquals("8", sprint.get("dataLength"), "a week column is sized for YYYY-Www");
+    }
+
+    @Test
     void immutableAlwaysEmitsTheAppendOnlyAttribute() {
         String yaml = """
                 name: ledger

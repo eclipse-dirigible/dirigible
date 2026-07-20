@@ -67,6 +67,24 @@
             <div x-h-time-picker-popup></div>
           </div>
         </div>
+#elseif($el.controlId == "input-month")
+        <div x-h-field>
+          <label x-h-label for="$el.id">$!el.label</label>
+          <div x-h-month-picker>
+            <input type="text" id="$el.id"#if($el.readonly) disabled#end />
+            <button x-h-month-picker-trigger aria-label="Choose month"></button>
+            <div x-h-month-picker-popup x-model="model.$el.model"></div>
+          </div>
+        </div>
+#elseif($el.controlId == "input-week")
+        <div x-h-field>
+          <label x-h-label for="$el.id">$!el.label</label>
+          <div x-h-week-picker>
+            <input type="text" id="$el.id"#if($el.readonly) disabled#end />
+            <button x-h-week-picker-trigger aria-label="Choose week"></button>
+            <div x-h-week-picker-popup x-model="model.$el.model"></div>
+          </div>
+        </div>
 #elseif($el.controlId == "input-color")
         <div x-h-field>
           <label x-h-label for="$el.id">$!el.label</label>
@@ -83,7 +101,7 @@
 #end
 #end
 #macro(dateMeta $el)
-#if($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
+#if($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month" || $el.controlId == "input-week")
         { model: '$el.model', controlId: '$el.controlId', editable: #if($el.readonly)false#{else}true#end },
 #end
 #end
