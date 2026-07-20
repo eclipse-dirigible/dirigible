@@ -209,6 +209,60 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
         return super.update(entity);
     }
+#if(($documentChecks && $documentChecks.size() > 0) || $hasLabel)
+
+    /**
+     * Targeted single-column write with the document semantics preserved: routed through
+     * {@link #updateProperties} so the gate checks (and the stored label Name) still run.
+     */
+    @Override
+    public int updateProperty(Object id, String property, Object value) {
+        java.util.Map<String, Object> single = new java.util.LinkedHashMap<>();
+        single.put(property, value);
+        return updateProperties(id, single);
+    }
+
+    /**
+     * Targeted multi-column write with the document semantics preserved: the incoming values are
+     * applied to a FRESH copy of the row first, so the declarative gate checks (and the stored label
+     * Name) see the row as it will be after the write - then only the named columns (plus a changed
+     * Name) are persisted in one statement. The workflow setters/writers come through here; a plain
+     * pass-through to the base targeted write would silently skip the posting gate.
+     */
+    @Override
+    public int updateProperties(Object id, java.util.Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return 0;
+        }
+        ${name}Entity entity = findOne(id).orElse(null);
+        if (entity != null) {
+            values = new java.util.LinkedHashMap<>(values);
+            for (java.util.Map.Entry<String, Object> value : values.entrySet()) {
+                try {
+                    ${name}Entity.class.getField(value.getKey())
+                                       .set(entity, value.getValue());
+                } catch (ReflectiveOperationException e) {
+                    throw new IllegalArgumentException("Unknown property [" + value.getKey() + "]", e);
+                }
+            }
+#if($hasLabel)
+            // A targeted write may change a label input (a workflow status hop, a stamped number) -
+            // recompute the display name from the post-write row and carry it in the same statement.
+            String nameBefore = entity.Name;
+            computeName(entity);
+            if (entity.Name == null ? nameBefore != null : !entity.Name.equals(nameBefore)) {
+                values.put("Name", entity.Name);
+            }
+#end
+#if($documentChecks && $documentChecks.size() > 0)
+            // The workflow transition (the setter flipping the status to POSTED) comes through here -
+            // the gate check makes an unbalanced document fail the transition, not silently post.
+            enforceChecks(entity);
+#end
+        }
+        return super.updateProperties(id, values);
+    }
+#end
 
 #if($documentChecks && $documentChecks.size() > 0)
     /**

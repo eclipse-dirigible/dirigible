@@ -94,6 +94,23 @@ public abstract class JavaRepository<T> {
     }
 
     /**
+     * Update several properties of one row in a single atomic statement, touching nothing else — the
+     * multi-column sibling of {@link #updateProperty(Object, String, Object)} for workflow/system
+     * write-backs that persist more than one field (e.g. a user task's reviewed edits). Every column
+     * not named in {@code values} is untouched, so a concurrent write to an unrelated column cannot be
+     * reverted. No validations, no events, no translation overlay — reserve it for system writes; user
+     * data goes through the generated repository's normal write path.
+     *
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public int updateProperties(Object id, Map<String, Object> values) {
+        return store().updateProperties(entityClass, id, values);
+    }
+
+    /**
      * Look up an entity by primary key.
      *
      * @param id the primary-key value
