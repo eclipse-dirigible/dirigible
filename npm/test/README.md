@@ -1,4 +1,10 @@
-# @aerokit/test
+# @aerokit/test (published as the `@aerokit/sdk/test` subpath)
+
+> **Publishing note:** this package is NOT published standalone - the release workflow bundles
+> `src/` into the `@aerokit/sdk` npm package as its `./test` subpath export (the npm token cannot
+> create new packages in the scope). Consumers depend on `@aerokit/sdk` and import
+> `@aerokit/sdk/test` / `@aerokit/sdk/test/fixtures`; this folder stays the source of truth and the
+> local-development identity (`file:` installs during development resolve `@aerokit/test` directly).
 
 Generic [Playwright](https://playwright.dev) runner that executes an intent module's generated
 `<name>.test` manifest against a running Eclipse Dirigible instance. The manifest (emitted by the
