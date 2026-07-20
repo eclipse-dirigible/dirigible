@@ -14,8 +14,12 @@ export async function fillField(page, field, value, opts = {}) {
 // The x-h-select directive hides its input and builds a span[role=combobox] trigger
 // labelled by the field label; options carry role=option.
 export async function pickDropdown(page, relation, optionText) {
-  // exact: a substring match collides with longer sibling labels ("Type" vs "Chart Type")
-  await page.getByRole('combobox', { name: relation.label ?? relation.name, exact: true }).click();
+  // Anchored prefix match: the combobox accessible name is the label plus the placeholder or
+  // selected value ("Country Select a Country..."), so exact matching finds nothing - while a
+  // bare substring match collides with longer sibling labels ("Type" also hits "Chart Type").
+  const label = relation.label ?? relation.name;
+  const anchored = new RegExp('^' + label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b');
+  await page.getByRole('combobox', { name: anchored }).first().click();
   await page.getByRole('option', { name: optionText }).first().click();
 }
 

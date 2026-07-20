@@ -20,8 +20,10 @@ export function listFlow(manifest, entity) {
       await expect(page.locator('[x-h-calendar], [x-h-slot-picker]').first()).toBeVisible();
       return;
     }
-    const firstHeader = page.getByRole('columnheader').first();
-    const emptyState = page.getByText('Get started by creating the first record').first();
+    // filter({ visible: true }): the empty-state markup stays in the DOM (x-show) above the
+    // table, so an unfiltered union's .first() would pick the hidden element and always fail
+    const firstHeader = page.getByRole('columnheader').filter({ visible: true }).first();
+    const emptyState = page.getByText('Get started by creating the first record').filter({ visible: true }).first();
     await expect(firstHeader.or(emptyState).first()).toBeVisible();
     if (entity.expectSeedData || (await firstHeader.isVisible())) {
       for (const field of (entity.fields ?? []).filter((f) => f.major !== false && !f.primaryKey)) {
