@@ -25,6 +25,7 @@ import org.eclipse.dirigible.components.data.store.java.manager.RegisteredEntity
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.hibernate.Session;
 import org.hibernate.Transaction;
+import org.hibernate.query.MutationQuery;
 import org.hibernate.query.Query;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -143,6 +144,59 @@ public class JavaEntityStore {
                                  .setParameter("value", value)
                                  .setParameter("id", id)
                                  .executeUpdate();
+            tx.commit();
+            return updated;
+        }
+    }
+
+    /**
+     * Update several properties of one entity row in a single statement, touching nothing else — the
+     * multi-column sibling of {@link #updateProperty(Class, Object, String, Object)} for
+     * workflow/system write-backs that persist more than one field (e.g. a user task's reviewed edits).
+     * All named columns are written atomically by one mutation query; every other column is untouched,
+     * so a concurrent write to an unrelated column cannot be reverted. No audit stamping, no events — a
+     * system write, not a user edit.
+     *
+     * @param <T> the entity type
+     * @param type the entity class
+     * @param id the primary-key value
+     * @param values the properties to set (plain identifiers) with their new values; iteration order is
+     *        the statement's column order
+     * @return the number of updated rows ({@code 0} when the id does not exist or {@code values} is
+     *         empty)
+     */
+    public <T> int updateProperties(Class<T> type, Object id, Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return 0;
+        }
+        StringBuilder assignments = new StringBuilder();
+        int index = 0;
+        for (String property : values.keySet()) {
+            if (property == null || !PLAIN_PROPERTY.matcher(property)
+                                                   .matches()) {
+                throw new IllegalArgumentException("Invalid property name: [" + property + "]");
+            }
+            if (index > 0) {
+                assignments.append(", ");
+            }
+            assignments.append(property)
+                       .append(" = :value")
+                       .append(index++);
+        }
+        RegisteredEntity meta = resolve(type);
+        String idProperty = meta.idField()
+                                .getName();
+        try (Session session = entityManager.getSessionFactory()
+                                            .openSession()) {
+            Transaction tx = session.beginTransaction();
+            MutationQuery query =
+                    session.createMutationQuery("update " + meta.entityName() + " set " + assignments + " where " + idProperty + " = :id");
+            index = 0;
+            for (Object value : values.values()) {
+                query.setParameter("value" + index++, value);
+            }
+            int updated = query.setParameter("id", id)
+                               .executeUpdate();
             tx.commit();
             return updated;
         }

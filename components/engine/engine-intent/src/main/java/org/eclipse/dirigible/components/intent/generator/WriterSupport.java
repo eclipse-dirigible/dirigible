@@ -33,10 +33,11 @@ import org.slf4j.LoggerFactory;
  * This is the write-side mirror of {@link ProcessResolverSupport} (which loads entity data
  * <em>into</em> the context) and the variable-valued sibling of {@link SetFieldSupport} (which
  * writes a literal): where a setter assigns a fixed value, a writer assigns the value the form
- * captured into the {@code <Property>} process variable when the task completed. It loads the
- * entity by its PK process variable, assigns each editable field, and persists via the repository's
- * {@code updateWithoutEvent} - a workflow-driven system write that must not re-fire
- * {@code onUpdate} reactions (the same rule the trigger and setters follow).
+ * captured into the {@code <Property>} process variable when the task completed. It collects each
+ * present variable, coerced to the entity's Java type, and persists them all in one targeted
+ * multi-column {@code updateProperties} - only the edited columns are in the UPDATE statement, so a
+ * concurrent write to any other column cannot be reverted, and no {@code onUpdate} reaction
+ * re-fires (a workflow-driven system write, the same rule the trigger and setters follow).
  * <p>
  * Editable fields may be any plain field of the trigger entity; each carries a
  * {@link WriteField#coercion() coercion} category so the generated Writer converts the form's

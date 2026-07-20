@@ -102,18 +102,14 @@ ${defaultsBlock}#if($spreadTotalProperty != "")
 #end
             children.save(child);
         }
-#if($countAssign != "")
+#if($countProperty != "")
 
-        // Write the generated row count back to the master WITHOUT an event - a normal update would
-        // re-trigger this handler and every onUpdate reaction for a system write. The master is
-        // RELOADED first: updateWithoutEvent persists the full row, and the message copy may be stale
-        // (the same clobber trap as the trigger's ProcessId write-back).
-        ${masterEntity}Repository masters = new ${masterEntity}Repository();
-        master = masters.findById(master.${masterPk});
-        if (master != null) {
-            ${countAssign}
-            masters.updateWithoutEvent(master);
-        }
+        // Write the generated row count back to the master as a TARGETED single-column write - only
+        // the count column is in the UPDATE statement, so the (possibly stale) message copy of the
+        // master cannot revert concurrent writes to other columns (the ProcessId clobber trap), and
+        // no event fires - a normal update would re-trigger this handler and every onUpdate reaction
+        // for a system write.
+        new ${masterEntity}Repository().updateProperty(master.${masterPk}, "${countProperty}", ${countValue});
 #end
     }
 }

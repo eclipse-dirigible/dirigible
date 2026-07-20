@@ -13,12 +13,14 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Sets ${entity}.${field} for the ${process} process (a string field via setField, or a to-one
  * relation's FK to a seed id via setRelationField). Generated from the intent .glue file - do not edit;
  * it is re-generated with the application. Runs
- * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it loads the ${entity} by its
- * process-variable id and persists the change WITHOUT publishing an "-updated" event, because this is
- * a workflow-driven system write, not a user edit, and must not re-fire onUpdate reactions. It DOES
- * publish the dedicated "-transitioned" topic: the channel for status-reached consumers (posting
- * glue, integrations) that reactions never listen on - so a transition is observable without
- * re-firing onUpdate.
+ * as a BPMN service task (flowable:delegateExpression="\${JavaTask}"): it persists the change as a
+ * TARGETED single-column write (updateProperty) - only ${field} is in the UPDATE statement, so a
+ * concurrent write to any other column of the row (a recalculated total, a minted document number,
+ * the trigger's ProcessId) cannot be reverted, unlike the load-then-full-row-merge shape this
+ * replaces. No "-updated" event is published, because this is a workflow-driven system write, not a
+ * user edit, and must not re-fire onUpdate reactions. It DOES publish the dedicated "-transitioned"
+ * topic: the channel for status-reached consumers (posting glue, integrations) that reactions never
+ * listen on - so a transition is observable without re-firing onUpdate.
  */
 public class ${className} implements JavaDelegate {
 
@@ -30,14 +32,19 @@ public class ${className} implements JavaDelegate {
         if (!(key instanceof Number)) {
             return;
         }
-        ${entity}Entity entity = repository.findById(((Number) key).${keyAccessor}());
-        if (entity != null) {
 #if($relation == "true")
-            entity.${field} = ${value};
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", ${value});
 #else
-            entity.${field} = "${value}";
+        int updated = repository.updateProperty(((Number) key).${keyAccessor}(), "${field}", "${value}");
 #end
-            repository.updateWithoutEvent(entity);
+        if (updated == 0) {
+            return;
+        }
+        // Re-load AFTER the targeted write so the published payload reflects the committed row
+        // (including concurrent writes the old pre-load snapshot would have missed).
+        ${entity}Entity entity = repository.findOne(((Number) key).${keyAccessor}())
+                                           .orElse(null);
+        if (entity != null) {
             // Publish the transition AFTER the current BPMN chain commits: service tasks that follow
             // this setter in the same synchronous chain (e.g. a number-generation delegate) run in the
             // same Flowable command, and the asynchronous consumer (posting glue, integrations)

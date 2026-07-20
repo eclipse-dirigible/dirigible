@@ -1074,7 +1074,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("spreadRound", spread == null || spread.getRound() == null ? "2"
                     : spread.getRound()
                             .toString());
-            base.put("countAssign", expansionCountAssign(master, expansion));
+            base.put("countProperty", expansionCountProperty(master, expansion));
+            base.put("countValue", expansionCountValue(master, expansion));
             base.put("criteriaExpression",
                     "Criteria.create().eq(\"" + fkProperty + "\", master." + IntentEntities.keyFieldName(master) + ")");
             String className = IntentNaming.pascalIdentifier(expansion.getName()) + "Expansion";
@@ -1123,8 +1124,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         return String.valueOf(value);
     }
 
-    /** The count write-back assignment (typed to the master field), or empty when not declared. */
-    private static String expansionCountAssign(EntityIntent master, ExpansionIntent expansion) {
+    /** The PascalCase master property receiving the count write-back, or empty when not declared. */
+    private static String expansionCountProperty(EntityIntent master, ExpansionIntent expansion) {
+        if (expansion.getCount() == null || expansion.getCount()
+                                                     .isBlank()) {
+            return "";
+        }
+        if (fieldNamed(master, expansion.getCount()) == null) {
+            return "";
+        }
+        return IntentNaming.pascalCase(expansion.getCount());
+    }
+
+    /**
+     * The count write-back value expression, typed to the master field. Paired with
+     * {@link #expansionCountProperty} so the template persists the count as a targeted single-column
+     * {@code updateProperty} instead of a full-row merge.
+     */
+    private static String expansionCountValue(EntityIntent master, ExpansionIntent expansion) {
         if (expansion.getCount() == null || expansion.getCount()
                                                      .isBlank()) {
             return "";
@@ -1133,12 +1150,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (field == null) {
             return "";
         }
-        String property = IntentNaming.pascalCase(expansion.getCount());
         String type = field.getType() == null ? "decimal" : field.getType();
         return switch (type) {
-            case "integer", "int" -> "master." + property + " = Integer.valueOf(periods.size());";
-            case "long" -> "master." + property + " = Long.valueOf(periods.size());";
-            default -> "master." + property + " = java.math.BigDecimal.valueOf(periods.size());";
+            case "integer", "int" -> "Integer.valueOf(periods.size())";
+            case "long" -> "Long.valueOf(periods.size())";
+            default -> "java.math.BigDecimal.valueOf(periods.size())";
         };
     }
 
