@@ -65,9 +65,19 @@ public class IntentModel {
     private List<GeneratesIntent> generates = new ArrayList<>();
     /** Declarative postings: source-document status → generated local document + items. */
     private List<PostingIntent> postings = new ArrayList<>();
+    /** Declarative on-demand status transitions - guarded per-record buttons (void/cancel/close). */
+    private List<TransitionIntent> transitions = new ArrayList<>();
 
     public List<ActionIntent> getActions() {
         return actions;
+    }
+
+    public List<TransitionIntent> getTransitions() {
+        return transitions;
+    }
+
+    public void setTransitions(List<TransitionIntent> transitions) {
+        this.transitions = transitions == null ? new ArrayList<>() : transitions;
     }
 
     public void setActions(List<ActionIntent> actions) {

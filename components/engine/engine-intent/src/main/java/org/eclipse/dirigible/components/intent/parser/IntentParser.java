@@ -45,6 +45,7 @@ import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
+import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.model.WidgetIntent;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
@@ -181,6 +182,7 @@ public final class IntentParser {
         validateForms(model, entityNames, issues);
         validateActions(model, entityNames, issues);
         validateGenerates(model, entityNames, usesAliases, issues);
+        validateTransitions(model, entityNames, issues);
         validatePostings(model, usesAliases, issues);
         validateReports(model, entityNames, issues);
         validateWidgets(model, issues);
@@ -2458,6 +2460,91 @@ public final class IntentParser {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+            }
+        }
+    }
+
+    /** The compiled shape of a transition {@code when} guard: {@code <Field> ==|!= <number>}. */
+    private static final java.util.regex.Pattern TRANSITION_WHEN =
+            java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(-?\\d+(?:\\.\\d+)?)\\s*");
+
+    /**
+     * A {@code transitions} declaration is a guarded on-demand status flip: it requires the entity to
+     * declare a {@code function: EntityStatus} relation (the column it writes), a non-empty
+     * {@code from} list of allowed source seed ids, and a positive {@code setStatus} target outside
+     * that list. The optional {@code when} guard is a single {@code <Field> ==|!= <number>} comparison
+     * over an own field of the entity (the postings row-guard grammar - evaluated with the Calc
+     * semantics, where a null field reads as 0).
+     */
+    private static void validateTransitions(IntentModel model, Set<String> entityNames, List<String> issues) {
+        Map<String, EntityIntent> byName = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        Set<String> names = new HashSet<>();
+        for (TransitionIntent t : model.getTransitions()) {
+            if (t.getName() == null || t.getName()
+                                        .isBlank()) {
+                issues.add("transition has no name");
+                continue;
+            }
+            String subject = "transition [" + t.getName() + "]";
+            if (!names.add(t.getName())) {
+                issues.add("duplicate " + subject);
+            }
+            EntityIntent entity = null;
+            if (t.getForEntity() == null || t.getForEntity()
+                                             .isBlank()) {
+                issues.add(subject + " has no forEntity");
+            } else if (!entityNames.contains(t.getForEntity())) {
+                issues.add(subject + " forEntity references unknown entity [" + t.getForEntity() + "]");
+            } else {
+                entity = byName.get(t.getForEntity());
+            }
+            if (entity != null) {
+                boolean hasStatus = false;
+                if (entity.getRelations() != null) {
+                    for (RelationIntent relation : entity.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            hasStatus = true;
+                        }
+                    }
+                }
+                if (!hasStatus) {
+                    issues.add(subject + " requires the entity [" + entity.getName()
+                            + "] to declare a function: EntityStatus relation - the transition writes the status");
+                }
+            }
+            if (t.getFrom() == null || t.getFrom()
+                                        .isEmpty()) {
+                issues.add(subject + " has no from statuses - list the seed ids the transition is allowed from");
+            } else {
+                for (Integer from : t.getFrom()) {
+                    if (from == null || from <= 0) {
+                        issues.add(subject + " from seed ids must be positive");
+                        break;
+                    }
+                }
+            }
+            if (t.getSetStatus() == null || t.getSetStatus() <= 0) {
+                issues.add(subject + " has no setStatus - the target status seed id");
+            } else if (t.getFrom() != null && t.getFrom()
+                                               .contains(t.getSetStatus())) {
+                issues.add(subject + " setStatus [" + t.getSetStatus() + "] is also in from - a transition must change the status");
+            }
+            if (t.getWhen() != null && !t.getWhen()
+                                         .isBlank()) {
+                java.util.regex.Matcher matcher = TRANSITION_WHEN.matcher(t.getWhen());
+                if (!matcher.matches()) {
+                    issues.add(subject + " when [" + t.getWhen() + "] must be `<Field> == <number>` or `<Field> != <number>`");
+                } else if (entity != null && !hasPropertyIgnoreCase(entity, matcher.group(1))) {
+                    // The identifier follows the Calc convention (PascalCase entity property), while
+                    // the field is authored camelCase - resolve case-insensitively.
+                    issues.add(subject + " when references [" + matcher.group(1) + "] which is not a field or to-one relation of ["
+                            + entity.getName() + "]");
+                }
             }
         }
     }

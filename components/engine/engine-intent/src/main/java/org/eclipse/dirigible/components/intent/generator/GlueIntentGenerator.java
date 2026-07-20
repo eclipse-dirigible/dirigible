@@ -94,12 +94,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
                 && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
+                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
+                && postings.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -118,6 +120,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("expansions", expansions);
         glue.put("settlements", settlements);
         glue.put("generates", generates);
+        glue.put("transitions", transitions);
         glue.put("postings", postings);
         glue.put("printFeeders", printFeeders);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
@@ -598,6 +601,83 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * Transitions: one entry per {@code transitions} declaration - the guarded on-demand status flip.
+     * EVERYTHING is pre-rendered here so the Velocity template contains no expression logic: the
+     * allowed-statuses check is a Java boolean expression over an {@code int currentStatus} local, and
+     * the optional {@code when} guard is a full SDK {@code Calc} comparison over the loaded
+     * {@code source} entity (Calc semantics: a null field reads as 0 - identical to calculated fields).
+     */
+    private static List<Map<String, Object>> buildTransitions(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.TransitionIntent t : model.getTransitions()) {
+            if (t.getName() == null || t.getName()
+                                        .isBlank()
+                    || t.getForEntity() == null || t.getSetStatus() == null || t.getFrom() == null || t.getFrom()
+                                                                                                       .isEmpty()) {
+                continue; // parser already reported the malformed declaration
+            }
+            EntityIntent entity = byName.get(t.getForEntity());
+            if (entity == null) {
+                continue; // parser already reported the bad reference
+            }
+            if (!settings.shouldGenerate("transitions", t.getName())) {
+                LOGGER.info("Settings opt-out: keeping existing controller for transition [{}] (not generated)", t.getName());
+                continue;
+            }
+            String statusProperty = "";
+            for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : entity.getRelations()) {
+                if (relation.isEntityStatus()) {
+                    statusProperty = IntentNaming.pascalCase(relation.getName());
+                }
+            }
+            if (statusProperty.isEmpty()) {
+                continue; // parser already reported the missing EntityStatus relation
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", t.getName());
+            e.put("className", IntentNaming.pascalIdentifier(t.getName()));
+            e.put("entity", t.getForEntity());
+            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
+            e.put("statusProperty", statusProperty);
+            e.put("setStatus", String.valueOf(t.getSetStatus()));
+            List<String> terms = new ArrayList<>();
+            List<String> fromIds = new ArrayList<>();
+            for (Integer from : t.getFrom()) {
+                terms.add("currentStatus == " + from);
+                fromIds.add(String.valueOf(from));
+            }
+            e.put("allowedExpr", String.join(" || ", terms));
+            e.put("fromStatuses", String.join(", ", fromIds));
+            String guardExpr = "";
+            String guardText = "";
+            if (t.getWhen() != null && !t.getWhen()
+                                         .isBlank()) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*(==|!=)\\s*(-?\\d+(?:\\.\\d+)?)\\s*")
+                                                                         .matcher(t.getWhen());
+                if (matcher.matches()) {
+                    // Calc reads the field with the calculated-field semantics (null -> 0); compareTo
+                    // keeps the comparison exact for decimals.
+                    guardExpr = "org.eclipse.dirigible.sdk.utils.Calc.eval(\"" + IntentNaming.pascalCase(matcher.group(1))
+                            + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + matcher.group(3) + "\")) "
+                            + ("==".equals(matcher.group(2)) ? "==" : "!=") + " 0";
+                    guardText = t.getWhen()
+                                 .trim();
+                }
+            }
+            e.put("guardExpr", guardExpr);
+            e.put("guardText", guardText);
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Test hook: build the {@code transitions} glue collection without a repository. */
+    static List<Map<String, Object>> buildTransitionsForTest(IntentModel model) {
+        return buildTransitions(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
     }
 
     /**
