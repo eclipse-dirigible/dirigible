@@ -540,8 +540,8 @@ processes:
       - { name: managerReview, kind: userTask, args: { assignee: manager, form: ApproveLoan } }
 ```
 
-**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `end`. A
-`decision` must have `if` + `then`; `else` is optional. `then` / `else` must name a declared step or
+**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` / `end`.
+A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name a declared step or
 the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared entity -
 `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
 guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
@@ -635,6 +635,62 @@ an entity must live in that entity's project** and manage it through the generat
 entity-agnostic helpers (e.g. a number generator over its own repository) belong in a shared project
 and are called from the delegate (client Java compiles across all published projects). `delegate`
 cannot be combined with `setField` / `setRelationField` / `call`; `fields` values must be scalars.
+
+**Waiting for a data event: `wait`.** A `wait` step **parks the process** until an entity lifecycle
+event resumes it - a support case waiting for the requester's reply, a dunning flow waiting for a
+payment, an order flow waiting for its goods receipt. Never model this as a user task looping back to
+itself; use a `wait`:
+
+```yaml
+processes:
+  - name: CaseHandling
+    trigger: { onCreate: Case }
+    steps:
+      - { name: requestInfo, kind: serviceTask, args: { setRelationField: Status, value: 4, next: awaitReply } }
+      # Park until a NON-internal CaseMessage is created for THIS case, then continue at `work`.
+      - { name: awaitReply,  kind: wait, args: { onCreate: CaseMessage, via: case, when: "internal == 0", next: work } }
+      - { name: work,        kind: userTask, args: { assignee: agent, form: WorkCase } }
+```
+
+- `onCreate` / `onUpdate: <Entity>` (exactly one) - the entity event that resumes the wait; the
+  entity must be declared in this model. `onDelete` is not allowed.
+- `via: <relation>` - when the event entity is NOT the trigger entity: the to-one relation of the
+  **event** entity that walks to the trigger entity (here `CaseMessage.case`). Omit it when the event
+  entity IS the trigger entity itself; required otherwise. Same-model relations only.
+- `when:` - optional guard over the **event record** (`field == literal` / `!=`), so e.g. an internal
+  note does not resume the wait.
+- The process must have a `trigger:` entity - its stamped `ProcessId` is how the resuming event finds
+  the parked instance. No parked instance (or a guard miss) is simply a no-op.
+
+**Boundary timers on a user task: `timeout:` and `expire:`.** Generated flows can react to time
+passing while a task sits in the Inbox. Both are optional attributes of a `userTask`'s args, and both
+route `then` to a declared step or `end` exactly like a decision branch (route the main flow around
+the branch steps with `next`, as with decision branches):
+
+```yaml
+steps:
+  - name: approve
+    kind: userTask
+    args:
+      assignee: approver
+      form: ApproveQuotation
+      timeout: { after: P3D, then: remind }          # non-cancelling: the task STAYS, remind runs alongside
+      expire:  { until: validUntil, then: markExpired }  # cancelling: the task is WITHDRAWN, flow continues at then
+      next: done
+  - { name: remind,      kind: serviceTask, args: { next: end } }                                # e.g. a notification hook
+  - { name: markExpired, kind: serviceTask, args: { setRelationField: Status, value: 6, next: end } }
+  - { name: done,        kind: end }
+```
+
+- `timeout: { after: <ISO-8601 duration>, then: <step> }` - a **non-cancelling** reminder/escalation
+  (SLA): after the duration (`PT4H`, `P3D`) the `then` branch runs while the task stays claimable.
+- `expire: { until: <field>, then: <step> }` - a **cancelling**, date-driven expiry: `until` names a
+  `date`/`timestamp` field of the trigger entity (e.g. a quotation's `validUntil`); when that moment
+  passes, the task is withdrawn and the flow continues at `then`. The field is re-read when the task
+  is entered, so editing the date mid-flow moves the timer. A `date` field expires at the end of its
+  day (the field names the last valid day); a `null` date never expires.
+- Use `timeout` for "remind/escalate if not handled in N days" and `expire` for "this offer/request
+  is only valid until a date on the record".
 
 ### forms - data-entry UI
 

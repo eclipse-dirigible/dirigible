@@ -96,7 +96,7 @@ public final class IntentParser {
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
     /** Implemented relation {@code function} values (lower-cased). */
     private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus");
-    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "end");
+    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
@@ -1888,6 +1888,8 @@ public final class IntentParser {
             }
             validateDecisionTargets(process, issues);
             validateSetFieldSteps(process, triggerEntity, byName, issues);
+            validateWaitSteps(process, triggerEntity, byName, issues);
+            validateUserTaskTimers(process, triggerEntity, byName, issues);
             validateTaskFormActions(process, model, issues);
         }
     }
@@ -2092,6 +2094,167 @@ public final class IntentParser {
             if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
                 issues.add(
                         "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
+            }
+        }
+    }
+
+    /**
+     * A {@code wait} step parks the process on an entity lifecycle event: exactly one of
+     * {@code onCreate}/{@code onUpdate} naming a declared entity; when that entity is not the trigger
+     * entity itself, {@code via:} must name the to-one relation of the <b>event</b> entity that walks
+     * to the trigger entity (the record carrying the parked instance's {@code ProcessId}). Without
+     * these checks a typo would leave the process parked forever instead of failing at parse time.
+     */
+    private static void validateWaitSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        for (StepIntent step : process.getSteps()) {
+            if (!"wait".equals(step.getKind()) || step.getName() == null) {
+                continue;
+            }
+            if (stepArg(step, "onDelete") != null) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName()
+                        + "] cannot bind onDelete - a deleted record cannot resume a wait (use onCreate/onUpdate)");
+            }
+            int events = 0;
+            String eventEntity = null;
+            for (String kind : List.of("onCreate", "onUpdate")) {
+                String target = stepArg(step, kind);
+                if (target != null) {
+                    events++;
+                    eventEntity = target;
+                }
+            }
+            if (events != 1) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName()
+                        + "] must declare exactly one of onCreate/onUpdate naming the resuming entity event");
+                continue;
+            }
+            if (!byName.containsKey(eventEntity)) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] references unknown entity [" + eventEntity
+                        + "]");
+                continue;
+            }
+            if (triggerEntity == null) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName()
+                        + "] needs a process trigger entity - its ProcessId identifies the parked instance to resume");
+                continue;
+            }
+            String via = stepArg(step, "via");
+            if (eventEntity.equals(triggerEntity)) {
+                if (via != null && !via.isBlank()) {
+                    issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] must not declare via - the event entity ["
+                            + eventEntity + "] is the trigger entity itself");
+                }
+                continue;
+            }
+            if (via == null || via.isBlank()) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] must declare via - the to-one relation of ["
+                        + eventEntity + "] that walks to the trigger entity [" + triggerEntity + "]");
+                continue;
+            }
+            RelationIntent relation = toOneRelationByName(byName.get(eventEntity), via);
+            if (relation == null) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] via [" + via
+                        + "] is not a manyToOne/oneToOne relation of [" + eventEntity + "]");
+            } else if (relation.isCrossModel()) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] via [" + via
+                        + "] must be a same-model relation (cross-model waits are not supported)");
+            } else if (!triggerEntity.equals(relation.getTo())) {
+                issues.add("process [" + process.getName() + "] wait [" + step.getName() + "] via [" + via + "] targets ["
+                        + relation.getTo() + "] but must target the trigger entity [" + triggerEntity + "]");
+            }
+        }
+    }
+
+    /**
+     * Boundary timers on a user task: {@code timeout: { after: <ISO-8601 duration>, then: <step> }}
+     * (non-cancelling reminder/escalation) and {@code expire: { until: <date field>, then: <step> }}
+     * (cancelling, date-field-driven expiry). {@code then} must reference a declared step or the
+     * literal {@code end}, exactly like a decision branch; {@code until} must name a
+     * {@code date}/{@code timestamp} field of the trigger entity, re-read at task entry.
+     */
+    private static void validateUserTaskTimers(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        Set<String> stepNames = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                stepNames.add(step.getName());
+            }
+        }
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null || step.getArgs() == null) {
+                continue;
+            }
+            for (String timer : List.of("timeout", "expire")) {
+                Object raw = step.getArgs()
+                                 .get(timer);
+                if (raw == null) {
+                    continue;
+                }
+                if (!"userTask".equals(step.getKind())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] declares " + timer
+                            + " but is not a userTask - boundary timers attach to user tasks only");
+                    continue;
+                }
+                if (!(raw instanceof Map<?, ?> map)) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer + " must be a map (e.g. `"
+                            + timer + ": { " + ("timeout".equals(timer) ? "after: P3D" : "until: validUntil") + ", then: <step> }`)");
+                    continue;
+                }
+                Object then = map.get("then");
+                if (then == null || then.toString()
+                                        .isBlank()) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer + " must declare `then`");
+                } else if (!"end".equalsIgnoreCase(then.toString()) && !stepNames.contains(then.toString())) {
+                    issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer
+                            + " `then` references unknown step [" + then + "]");
+                }
+                if ("timeout".equals(timer)) {
+                    Object after = map.get("after");
+                    if (after == null || after.toString()
+                                              .isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName()
+                                + "] timeout must declare `after` (an ISO-8601 duration, e.g. PT4H or P3D)");
+                    } else if (!isIso8601Duration(after.toString())) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName() + "] timeout `after` [" + after
+                                + "] is not an ISO-8601 duration (e.g. PT4H, P3D)");
+                    }
+                } else {
+                    Object until = map.get("until");
+                    if (until == null || until.toString()
+                                              .isBlank()) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName()
+                                + "] expire must declare `until` (a date/timestamp field of the trigger entity)");
+                    } else if (trigger == null) {
+                        issues.add("process [" + process.getName() + "] step [" + step.getName()
+                                + "] expire needs a process trigger entity to read `until` from");
+                    } else {
+                        FieldIntent field = fieldByName(trigger, until.toString());
+                        if (field == null) {
+                            issues.add("process [" + process.getName() + "] step [" + step.getName() + "] expire `until` [" + until
+                                    + "] is not a field of [" + triggerEntity + "]");
+                        } else if (!"date".equals(field.getType()) && !"timestamp".equals(field.getType())) {
+                            issues.add("process [" + process.getName() + "] step [" + step.getName() + "] expire `until` [" + until
+                                    + "] must be a date/timestamp field");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** Whether the value parses as an ISO-8601 duration ({@code PT4H}) or period ({@code P3D}). */
+    private static boolean isIso8601Duration(String value) {
+        try {
+            java.time.Duration.parse(value);
+            return true;
+        } catch (java.time.format.DateTimeParseException ignoredDuration) {
+            try {
+                java.time.Period.parse(value);
+                return true;
+            } catch (java.time.format.DateTimeParseException ignoredPeriod) {
+                return false;
             }
         }
     }

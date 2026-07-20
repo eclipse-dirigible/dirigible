@@ -30,6 +30,9 @@ import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.TimerLoad;
+import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
@@ -134,6 +137,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // Field loaders: a decision on the trigger entity's own field gets a JavaDelegate inserted before
         // the gateway that loads the owner by id and publishes the referenced fields (clear-D id-only).
         List<FieldLoad> allFieldLoads = ProcessFieldLoadSupport.fieldLoads(model);
+        // Expire date loaders: a user task with `expire: { until: <date field> }` gets a JavaDelegate
+        // inserted before it that re-reads the trigger entity's date field at task entry and publishes
+        // the process variable the boundary timer's timeDate binds to.
+        List<TimerLoad> allTimerLoads = ProcessTimerSupport.timerLoads(model);
         // Writers: a user task with editable fields gets a JavaDelegate (gen.events.<Process><Task>Write)
         // inserted after it to persist the reviewer's edits. Index by process+task so render() can place
         // it right after the matching user task.
@@ -199,11 +206,19 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     processFieldLoads.add(load);
                 }
             }
+            List<TimerLoad> processTimerLoads = new ArrayList<>();
+            for (TimerLoad load : allTimerLoads) {
+                if (process.getName()
+                           .equals(load.process())) {
+                    processTimerLoads.add(load);
+                }
+            }
             String taskPrefix = process.getName() + "/";
             Map<String, String> writerByTask = stripProcessPrefix(writerByProcessTask, taskPrefix);
             Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
-            context.writeModelFile(fileName, render(process, rolesByLowerName, context.getProjectName(), processResolvers,
-                    processFieldLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask, setterByTask));
+            context.writeModelFile(fileName,
+                    render(process, rolesByLowerName, context.getProjectName(), processResolvers, processFieldLoads, processTimerLoads,
+                            ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask, setterByTask));
         }
     }
 
@@ -270,18 +285,26 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            List<FieldLoad> fieldLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
+            List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
             Map<String, String> writerByTask, Map<String, String> setterByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
         // original relation.field condition). Also insert a field-loader service task before an
-        // own-field decision, and writer/setter service tasks after a user task with editable fields or a
+        // own-field decision, an expire-date-loader service task before a user task with an `expire:`
+        // timer, and writer/setter service tasks after a user task with editable fields or a
         // setRelationField.
         List<StepIntent> steps =
-                augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, ownFieldPascalCase, writerByTask, setterByTask);
+                augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, timerLoads, ownFieldPascalCase, writerByTask, setterByTask);
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
+        // Boundary timers on user tasks (timeout: non-cancelling reminder; expire: cancelling,
+        // date-field-driven). Their outgoing flow to `then` joins the sequence flows; the branch steps
+        // are declared steps the author routes around with `next`, like decision branches.
+        List<BoundaryTimer> boundaryTimers = collectBoundaryTimers(steps);
+        for (BoundaryTimer timer : boundaryTimers) {
+            flows.add(new SequenceFlow("flow_" + timer.id() + "_then", timer.id(), effectiveTarget(timer.thenTarget(), steps), null));
+        }
         String processId = process.getName();
         StringBuilder sb = new StringBuilder(4096);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -295,6 +318,19 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append(" typeLanguage=\"http://www.w3.org/2001/XMLSchema\"");
         sb.append(" expressionLanguage=\"http://www.w3.org/1999/XPath\"");
         sb.append(" targetNamespace=\"http://www.flowable.org/processdef\">\n");
+        // Message definitions live at the definitions level; each wait step's catch event references
+        // one by id. The name is process + step (unique per file; correlation additionally scopes by
+        // process-instance id, so the compound name is for readability, not disambiguation).
+        for (StepIntent step : steps) {
+            if ("wait".equals(step.getKind()) && step.getName() != null) {
+                String message = ProcessWaitSupport.messageName(processId, step.getName());
+                sb.append("  <message id=\"")
+                  .append(escapeXmlAttribute(message))
+                  .append("\" name=\"")
+                  .append(escapeXmlAttribute(message))
+                  .append("\"></message>\n");
+            }
+        }
         sb.append("  <process id=\"")
           .append(escapeXmlAttribute(processId))
           .append("\" name=\"")
@@ -310,14 +346,69 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             appendStepElement(sb, step, rolesByLowerName, projectName, processId, candidateGroupsExtra);
         }
+        for (BoundaryTimer timer : boundaryTimers) {
+            appendBoundaryTimer(sb, timer);
+        }
         sb.append("    <endEvent id=\"")
           .append(END_ID)
           .append("\"></endEvent>\n");
         writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
-        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps);
+        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers);
         sb.append("</definitions>\n");
         return sb.toString();
+    }
+
+    /**
+     * A boundary timer attached to a user task: {@code timeout:} is non-cancelling (the task stays; a
+     * reminder/escalation branch runs alongside) with a literal {@code timeDuration}; {@code expire:}
+     * is cancelling (the task is withdrawn) with a {@code timeDate} bound to the process variable the
+     * expire date loader publishes at task entry.
+     */
+    private record BoundaryTimer(String id, String attachedTo, boolean cancelActivity, String timerType, String timeExpression,
+            String thenTarget) {
+    }
+
+    /** The boundary timers declared across the (augmented) step list, in declaration order. */
+    private static List<BoundaryTimer> collectBoundaryTimers(List<StepIntent> steps) {
+        List<BoundaryTimer> timers = new ArrayList<>();
+        for (StepIntent step : steps) {
+            if (!"userTask".equals(step.getKind()) || step.getName() == null) {
+                continue;
+            }
+            String after = ProcessTimerSupport.timerAttribute(step, "timeout", "after");
+            String timeoutThen = ProcessTimerSupport.timerAttribute(step, "timeout", "then");
+            if (after != null && timeoutThen != null) {
+                timers.add(new BoundaryTimer(step.getName() + "Timeout", step.getName(), false, "timeDuration", after, timeoutThen));
+            }
+            String until = ProcessTimerSupport.timerAttribute(step, "expire", "until");
+            String expireThen = ProcessTimerSupport.timerAttribute(step, "expire", "then");
+            if (until != null && expireThen != null) {
+                timers.add(new BoundaryTimer(step.getName() + "Expire", step.getName(), true, "timeDate",
+                        "${" + ProcessTimerSupport.expireVariable(step.getName()) + "}", expireThen));
+            }
+        }
+        return timers;
+    }
+
+    private static void appendBoundaryTimer(StringBuilder sb, BoundaryTimer timer) {
+        sb.append("    <boundaryEvent id=\"")
+          .append(escapeXmlAttribute(timer.id()))
+          .append("\" attachedToRef=\"")
+          .append(escapeXmlAttribute(timer.attachedTo()))
+          .append("\" cancelActivity=\"")
+          .append(timer.cancelActivity())
+          .append("\">\n");
+        sb.append("      <timerEventDefinition>\n");
+        sb.append("        <")
+          .append(timer.timerType())
+          .append(">")
+          .append(escapeXmlAttribute(timer.timeExpression()))
+          .append("</")
+          .append(timer.timerType())
+          .append(">\n");
+        sb.append("      </timerEventDefinition>\n");
+        sb.append("    </boundaryEvent>\n");
     }
 
     /**
@@ -329,7 +420,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
     private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers, List<FieldLoad> fieldLoads,
-            Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask, Map<String, String> setterByTask) {
+            List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask,
+            Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
             for (Resolver resolver : resolvers) {
@@ -344,6 +436,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 if (step.getName() != null && step.getName()
                                                   .equals(load.beforeStep())) {
                     // Load the trigger entity's own fields the decision tests, right before the gateway.
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
+                }
+            }
+            for (TimerLoad load : timerLoads) {
+                if (step.getName() != null && step.getName()
+                                                  .equals(load.beforeStep())) {
+                    // Re-read the expire date field at task entry, so the boundary timer arms fresh.
                     result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
                 }
             }
@@ -494,6 +593,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
+                break;
+            case "wait":
+                appendWaitCatchEvent(sb, step, processName);
                 break;
             case "end":
                 break;
@@ -664,6 +766,25 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return projectName + "/" + trimmed;
     }
 
+    /**
+     * A {@code wait} step: a message intermediate catch event that parks the process until the
+     * generated wait listener (see
+     * {@link org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport}) correlates the
+     * message on the resuming entity event. The message definition itself is emitted at the definitions
+     * level by {@code render}.
+     */
+    private static void appendWaitCatchEvent(StringBuilder sb, StepIntent step, String processName) {
+        sb.append("    <intermediateCatchEvent id=\"")
+          .append(escapeXmlAttribute(step.getName()))
+          .append("\" name=\"")
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
+          .append("\">\n");
+        sb.append("      <messageEventDefinition messageRef=\"")
+          .append(escapeXmlAttribute(ProcessWaitSupport.messageName(processName, step.getName())))
+          .append("\"></messageEventDefinition>\n");
+        sb.append("    </intermediateCatchEvent>\n");
+    }
+
     private static void appendExclusiveGateway(StringBuilder sb, StepIntent step) {
         sb.append("    <exclusiveGateway id=\"")
           .append(escapeXmlAttribute(step.getName()))
@@ -798,8 +919,28 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * graph, so re-generation stays byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
-            List<StepIntent> steps) {
-        Map<String, int[]> bounds = layout(effectiveIds, flows, steps);
+            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers) {
+        // A boundary event has no column of its own - it rides its host task's border. For the layered
+        // layout its outgoing branch still needs a rank, so each boundary flow contributes a pseudo-flow
+        // from the HOST task to the branch target (the real boundary flow is invisible to the layout:
+        // its source is not a laid-out node). The real flow keeps its own edge, drawn from the boundary
+        // shape added after the layout.
+        List<SequenceFlow> layoutFlows = new ArrayList<>(flows);
+        for (BoundaryTimer timer : boundaryTimers) {
+            layoutFlows.add(new SequenceFlow("layout_" + timer.id(), timer.attachedTo(), effectiveTarget(timer.thenTarget(), steps), null));
+        }
+        Map<String, int[]> bounds = layout(effectiveIds, layoutFlows, steps);
+        // Boundary shapes overlap the host task's bottom edge (the modeler convention), fanning left
+        // from the bottom-right corner when a task carries both a timeout and an expire timer.
+        Map<String, Integer> timersOnHost = new HashMap<>();
+        for (BoundaryTimer timer : boundaryTimers) {
+            int[] host = bounds.get(timer.attachedTo());
+            if (host == null) {
+                continue;
+            }
+            int index = timersOnHost.merge(timer.attachedTo(), 1, Integer::sum) - 1;
+            bounds.put(timer.id(), new int[] {host[0] + host[2] - 15 - index * 40, host[1] + host[3] - 15, 31, 31});
+        }
 
         sb.append("  <bpmndi:BPMNDiagram id=\"BPMNDiagram_")
           .append(escapeXmlAttribute(processId))
@@ -990,6 +1131,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         String kind = step == null ? "userTask" : step.getKind();
         if ("decision".equalsIgnoreCase(kind)) {
             return new int[] {40, 40};
+        }
+        if ("wait".equalsIgnoreCase(kind)) {
+            return new int[] {31, 31};
         }
         return new int[] {100, 80};
     }
