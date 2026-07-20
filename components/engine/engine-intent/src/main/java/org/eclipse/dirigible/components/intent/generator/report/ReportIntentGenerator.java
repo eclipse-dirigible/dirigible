@@ -610,6 +610,19 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                         Matcher.quoteReplacement(baseAlias + "." + quote(column(source.getName(), field.getName()))));
             }
         }
+        // A bare to-one RELATION name filters by its FK column (`Status != 8` -> the status FK
+        // id column) - previously it passed through untranslated and broke the generated SQL.
+        // The negative lookahead skips join-alias usages (`Customer."CUSTOMER_NAME"` from the
+        // dotted-ref pass above); the lookbehind skips already-qualified column tokens.
+        if (source.getRelations() != null) {
+            for (RelationIntent relation : source.getRelations()) {
+                if (relation.getName() != null && !relation.getName()
+                                                           .isBlank()) {
+                    where = where.replaceAll("(?<![.\"\\w])" + Pattern.quote(relation.getName()) + "\\b(?!\\s*[.\"])",
+                            Matcher.quoteReplacement(baseAlias + "." + quote(column(source.getName(), relation.getName()))));
+                }
+            }
+        }
         // Authors used to the intent's guard syntax write `Status == 2`; SQL equality is a single
         // `=` (H2 tolerates `==`, PostgreSQL rejects it), so normalize. `<=`/`>=`/`!=` are untouched.
         // Normalize only OUTSIDE single-quoted string literals so a value literal that itself contains
