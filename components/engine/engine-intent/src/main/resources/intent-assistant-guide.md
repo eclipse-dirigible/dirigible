@@ -209,6 +209,21 @@ composition is opt-in.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
   documents with no back-referencing target), never throws. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
+  **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
+  sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
+  ```yaml
+    - name: invoiceStorno
+      event: { onTransition: SalesInvoice, model: kf-billing, when: "Status == 8" }   # the void status
+      reverses: salesInvoicePosting     # sibling posting in this block
+      storno: Storno                    # the created entity's to-one SELF-relation to the original
+  ```
+  `creates`/`backReference`/`rule`/`map`/`items` are inherited from the sibling and must not be
+  declared. Semantics: locate the ORIGINAL (back-reference = this source, storno link empty) - none
+  -> skip fail-soft; create the negated copy (every item amount expression negated on the SAME
+  debit/credit side - never swapped) with the `storno` link stamped; idempotent (rows carrying the
+  link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
+  reversal lands as a normal new document (DRAFT status init, numbering, checks), dated by its own
+  `map`-inherited header - corrections post into the open period.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
   property on insert / update. Prefer a **neutral arithmetic expression** for numeric totals
   (`"Quantity * Price"`, `"round(Net * 0.2, 2)"`) - the SDK `Calc` evaluator runs it on the server and

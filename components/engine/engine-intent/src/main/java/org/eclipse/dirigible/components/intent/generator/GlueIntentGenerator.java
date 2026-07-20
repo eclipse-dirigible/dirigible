@@ -702,17 +702,45 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static List<Map<String, Object>> buildPostings(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> out = new ArrayList<>();
+        // A reversal posting's storno link doubles as the discriminator between the reversed
+        // sibling's own documents (link empty) and reversals (link set) - the SIBLING's handler
+        // must filter its idempotency lookup by it too, so map: base posting name -> storno.
+        Map<String, String> stornoOfReversed = new LinkedHashMap<>();
         for (org.eclipse.dirigible.components.intent.model.PostingIntent posting : model.getPostings()) {
+            if (posting.getReverses() != null && !posting.getReverses()
+                                                         .isBlank()
+                    && posting.getStorno() != null) {
+                stornoOfReversed.put(posting.getReverses(), IntentNaming.pascalCase(posting.getStorno()));
+            }
+        }
+        for (org.eclipse.dirigible.components.intent.model.PostingIntent posting : model.getPostings()) {
+            boolean isReverse = posting.getReverses() != null && !posting.getReverses()
+                                                                         .isBlank();
+            // Reversal mode: creates/backReference/rule/map/items come from the reversed sibling;
+            // the reversal contributes its own event plus the storno link, and every item amount
+            // expression is negated (same sides - red storno).
+            org.eclipse.dirigible.components.intent.model.PostingIntent effective = posting;
+            if (isReverse) {
+                for (org.eclipse.dirigible.components.intent.model.PostingIntent candidate : model.getPostings()) {
+                    if (candidate != posting && posting.getReverses()
+                                                       .equals(candidate.getName())) {
+                        effective = candidate;
+                    }
+                }
+                if (effective == posting || posting.getStorno() == null) {
+                    continue; // parser already reported it
+                }
+            }
             if (posting.getName() == null || posting.getName()
                                                     .isBlank()
-                    || posting.getEvent() == null || posting.getCreates() == null) {
+                    || posting.getEvent() == null || effective.getCreates() == null) {
                 continue; // parser already reported it
             }
             if (!settings.shouldGenerate("postings", posting.getName())) {
                 LOGGER.info("Settings opt-out: keeping existing handler for posting [{}] (not generated)", posting.getName());
                 continue;
             }
-            EntityIntent creates = byName.get(posting.getCreates());
+            EntityIntent creates = byName.get(effective.getCreates());
             EntityIntent itemsEntity = creates == null ? null : compositionChild(creates, byName);
             if (creates == null || itemsEntity == null) {
                 continue; // parser already reported it
@@ -769,22 +797,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("itemsEntity", itemsEntity.getName());
             e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
-            e.put("backRefProperty", IntentNaming.pascalCase(posting.getBackReference()));
+            e.put("backRefProperty", IntentNaming.pascalCase(effective.getBackReference()));
+            // Reversal coordinates: the reversal handler locates the original through the empty
+            // storno link and stamps it on its own creation; the reversed sibling's handler filters
+            // reversals OUT of its idempotency lookup through the same property.
+            e.put("stornoProperty", isReverse ? IntentNaming.pascalCase(posting.getStorno()) : "");
+            e.put("stornoFilterProperty", isReverse ? "" : stornoOfReversed.getOrDefault(posting.getName(), ""));
             // Rule lookup: a single match selector, columns referenced from the items.
-            boolean hasRule = posting.getRule() != null && posting.getRule()
-                                                                  .get("entity") != null;
+            boolean hasRule = effective.getRule() != null && effective.getRule()
+                                                                      .get("entity") != null;
             e.put("hasRule", hasRule);
             java.util.Set<String> usedRuleColumns = new java.util.LinkedHashSet<>();
             if (hasRule) {
-                String ruleEntityName = String.valueOf(posting.getRule()
-                                                              .get("entity"));
+                String ruleEntityName = String.valueOf(effective.getRule()
+                                                                .get("entity"));
                 e.put("ruleEntity", ruleEntityName);
                 // A setting rule entity (the normal case) lives under the global Settings perspective.
                 EntityIntent ruleEntityIntent = byName.get(ruleEntityName);
                 e.put("rulePerspective", ruleEntityIntent != null && ruleEntityIntent.isSetting() ? "Settings"
                         : IntentEntities.resolvePerspective(ruleEntityName, compositionParents));
-                Map<?, ?> match = (Map<?, ?>) posting.getRule()
-                                                     .get("match");
+                Map<?, ?> match = (Map<?, ?>) effective.getRule()
+                                                       .get("match");
                 Map.Entry<?, ?> selector = match.entrySet()
                                                 .iterator()
                                                 .next();
@@ -793,16 +826,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             // Header assignments: copy / literal / {placeholder} template - pre-rendered Java.
             List<Map<String, Object>> headerAssignments = new ArrayList<>();
-            if (posting.getMap() != null) {
-                for (Map.Entry<String, String> entry : posting.getMap()
-                                                              .entrySet()) {
+            if (effective.getMap() != null) {
+                for (Map.Entry<String, String> entry : effective.getMap()
+                                                                .entrySet()) {
                     headerAssignments.add(postingAssignment(entry.getKey(), entry.getValue()));
                 }
             }
             e.put("headerAssignments", headerAssignments);
             // Item rows: rule(...) refs read the rule row; expressions run through Calc on the source.
             List<Map<String, Object>> itemRows = new ArrayList<>();
-            for (Map<String, String> row : posting.getItems() == null ? List.<Map<String, String>>of() : posting.getItems()) {
+            for (Map<String, String> row : effective.getItems() == null ? List.<Map<String, String>>of() : effective.getItems()) {
                 Map<String, Object> rendered = new LinkedHashMap<>();
                 List<Map<String, Object>> assigns = new ArrayList<>();
                 String rowGuard = "";
@@ -832,7 +865,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     } else {
                         FieldIntent target = fieldOf(itemsEntity, cell.getKey());
                         int scale = target != null && target.getScale() != null ? target.getScale() : 2;
-                        assign.put("expr", "Calc.eval(\"" + value.replace("\"", "\\\"") + "\", source, " + scale + ")");
+                        // Reversal: the SAME expression negated on the SAME side (red storno).
+                        String expr = isReverse ? "-(" + value + ")" : value;
+                        assign.put("expr", "Calc.eval(\"" + expr.replace("\"", "\\\"") + "\", source, " + scale + ")");
                     }
                     assigns.add(assign);
                 }

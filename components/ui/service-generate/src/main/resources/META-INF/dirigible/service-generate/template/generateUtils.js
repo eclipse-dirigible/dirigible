@@ -958,6 +958,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 itemsJavaPerspective: sanitizeJavaIdentifier(po.itemsPerspective),
                                 itemsFk: po.itemsFk,
                                 backRefProperty: po.backRefProperty,
+                                stornoProperty: po.stornoProperty,
+                                stornoFilterProperty: po.stornoFilterProperty,
                                 hasRule: po.hasRule,
                                 ruleEntity: po.ruleEntity,
                                 ruleJavaPerspective: po.rulePerspective ? sanitizeJavaIdentifier(po.rulePerspective) : "",
