@@ -24,9 +24,9 @@ it never enters the registry or the npm package):
 ```js
 // test/app.spec.js
 import { fileURLToPath } from 'node:url';
-import { runAppTest } from '@aerokit/test';
+import { runTest } from '@aerokit/sdk/test';
 
-runAppTest(fileURLToPath(new URL('../<project>/<name>.test', import.meta.url)));
+runTest(fileURLToPath(new URL('../<project>/<name>.test', import.meta.url)));
 ```
 
 ```json
@@ -59,7 +59,7 @@ Test records carry an `APPTEST-` prefix and are removed in teardown; seed data i
 
 ## Custom UI hooks
 
-`runAppTest(manifest, { extend })`:
+`runTest(manifest, { extend })` (`runAppTest` remains a deprecated alias):
 
 - `widgets: { '<widget>': async (page, field, value) => ... }` — custom widget fillers.
 - `entities: { <Entity>: { skip: ['delete'], beforeCreate, afterCreate } }` — per-entity hooks.
