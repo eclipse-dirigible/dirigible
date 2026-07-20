@@ -29,7 +29,9 @@ export function sampleValue(field) {
       return '2026-07-08';
     case 'timestamp':
     case 'datetime':
-      return '2026-07-08T10:00';
+      // full ISO instant: the generated Java entities bind java.time.Instant, which rejects a
+      // zone-less value; the UI fill slices this to the datetime-local shape
+      return '2026-07-08T10:00:00Z';
     default:
       return 'APPTEST-' + rand(ALPHA + DIGITS, 6);
   }
@@ -44,15 +46,20 @@ export function editableFields(entity) {
 export function sampleRecord(entity) {
   const record = {};
   for (const field of editableFields(entity)) record[field.name] = sampleValue(field);
+  // an exactlyOne check rejects a record where more than one of the named fields is set -
+  // keep only the first of each declared set
+  for (const set of entity.exactlyOne ?? []) {
+    for (const name of set.slice(1)) delete record[name];
+  }
   return record;
 }
 
 // The searchable "handle" field: the first long string field shown in the list. Its
 // value identifies the record in the table across the create/edit/delete flow.
+// Null when the entity has no such field (all-numeric/date entities) - flows degrade:
+// the UI walk is skipped and the REST flow drops its update-value assertion.
 export function handleField(entity) {
-  const field = editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false);
-  if (!field) throw new Error(`Entity ${entity.name} has no string handle field for UI flows`);
-  return field;
+  return editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false) ?? null;
 }
 
 export function labelOf(field) {

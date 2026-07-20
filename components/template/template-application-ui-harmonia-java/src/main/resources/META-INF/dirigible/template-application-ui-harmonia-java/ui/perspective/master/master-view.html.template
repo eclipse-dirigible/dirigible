@@ -49,7 +49,10 @@
               <tr x-h-table-row data-hoverable="true" :data-state="isSelected(row) ? 'selected' : ''" @click="selectRow(row)">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor)
-#if($property.widgetType == "DROPDOWN")
+#if($property.widgetType == "DOCUMENT_STATUS")
+                <!-- EntityStatus column: the resolved status name as a coloured badge pill. -->
+                <td x-h-table-cell><span x-h-badge :data-variant="statusVariant(lookupText('${property.name}', row.${property.name}))" x-show="lookupText('${property.name}', row.${property.name})" x-text="lookupText('${property.name}', row.${property.name})"></span></td>
+#elseif($property.widgetType == "DROPDOWN")
                 <td x-h-table-cell x-text="lookupText('${property.name}', row.${property.name})"></td>
 #elseif($property.isDateType)
                 <td x-h-table-cell x-text="displayValue(row.${property.name}, true)"></td>
