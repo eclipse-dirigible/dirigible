@@ -2,11 +2,12 @@ import { expect, test } from '../fixtures.js';
 import { fillField, fillForm, resolveRelationSamples } from '../form.js';
 import { handleField, sampleRecord } from '../sample-values.js';
 
-// Server-side per-column filter (the documented POST /search path). The handle field is
-// the first major column, so its filter input is the first one in the filter row.
+// Server-side row lookup via the toolbar "Search <Entity>..." box - present on every list
+// layout (manage-list, master-detail, document) and searching the string columns server-side.
+// The per-column filter row is NOT used: its first input can belong to an FK or date column
+// (hidden or non-text), which made a blind fill hang.
 async function filterBy(page, value) {
-  const filter = page.getByPlaceholder('Filter…').first();
-  await filter.fill(value);
+  await page.getByPlaceholder(/^Search /).first().fill(value);
 }
 
 function dataRow(page, text) {
@@ -51,7 +52,13 @@ export function crudFlow(manifest, entity, opts = {}) {
       await expect(page).toHaveURL(/\/edit$/);
       await fillField(page, handle, updated, opts);
       await page.getByRole('button', { name: 'Save', exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
+      if (entity.layout === 'document') {
+        // a document form stays on the record after save (header-items editing continues)
+        await expect(page).toHaveURL(/\/edit$/);
+        await page.goto(manifest.standaloneShell + entity.route);
+      } else {
+        await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
+      }
       await filterBy(page, updated);
       await expect(dataRow(page, updated)).toHaveCount(1);
       record[handle.name] = updated;

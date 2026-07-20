@@ -8,6 +8,11 @@ export async function fillField(page, field, value, opts = {}) {
   if (custom) return custom(page, field, value);
   const input = page.locator('#f_' + field.name);
   if (field.type === 'boolean') return input.setChecked(!!value);
+  if (field.type === 'timestamp' || field.type === 'datetime') {
+    // the sample is a full ISO instant (what the REST layer binds); a datetime-local input
+    // takes the zone-less YYYY-MM-DDTHH:mm prefix
+    return input.fill(String(value).slice(0, 16));
+  }
   await input.fill(String(value));
 }
 
@@ -38,6 +43,11 @@ export async function resolveRelationSamples(request, manifest, entity) {
     let labelFrom = relation.labelFrom;
     if (relation.apiAbsolute) {
       rows = await api.listPath(relation.apiAbsolute, 1);
+      labelFrom = labelFrom ?? 'Name';
+    } else if (relation.api) {
+      // same-model target via its relative controller path (works even for a composition
+      // detail excluded from the manifest's entities list)
+      rows = await api.listPath(manifest.restBase + relation.api, 1);
       labelFrom = labelFrom ?? 'Name';
     } else {
       const target = manifest.entities.find((e) => e.name === relation.to);

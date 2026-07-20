@@ -131,14 +131,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if ("MANAGE_DETAILS".equals(string(edm.get("layoutType"))) || "PROJECTION".equals(string(edm.get("type")))) {
                 continue;
             }
-            entities.add(entityManifest(entity, edm, model, context));
+            entities.add(entityManifest(entity, edm, model, context, edmEntities));
         }
         manifest.put("entities", entities);
         return manifest;
     }
 
     private static Map<String, Object> entityManifest(EntityIntent entity, Map<String, Object> edm, IntentModel model,
-            IntentGenerationContext context) {
+            IntentGenerationContext context, Map<String, Map<String, Object>> edmEntities) {
         Map<String, Object> out = new LinkedHashMap<>();
         String name = entity.getName();
         out.put("name", name);
@@ -168,7 +168,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             out.put("expectSeedData", true);
         }
         out.put("fields", fields(entity));
-        List<Map<String, Object>> relations = relations(entity, model, context);
+        List<Map<String, Object>> relations = relations(entity, model, context, edmEntities);
         if (!relations.isEmpty()) {
             out.put("relations", relations);
         }
@@ -216,7 +216,8 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
      * inputs by the form templates, and its value comes from the {@code init:} DB default, so the
      * runner must neither pick nor post it.
      */
-    private static List<Map<String, Object>> relations(EntityIntent entity, IntentModel model, IntentGenerationContext context) {
+    private static List<Map<String, Object>> relations(EntityIntent entity, IntentModel model, IntentGenerationContext context,
+            Map<String, Map<String, Object>> edmEntities) {
         Map<String, UsesIntent> usesByAlias = new LinkedHashMap<>();
         for (UsesIntent uses : model.getUses()) {
             if (uses.getModel() != null) {
@@ -261,6 +262,13 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                         + "/api/" + sanitizeJavaIdentifier(info.perspectiveName()) + "/" + relation.getTo() + "Controller");
                 out.put("labelFrom", info.labelField());
             } else {
+                // relative controller path of the same-model target - resolvable even when the
+                // target is a composition detail (excluded from this manifest's entities list)
+                Map<String, Object> targetEdm = edmEntities.get(relation.getTo());
+                if (targetEdm != null) {
+                    out.put("api",
+                            "/" + sanitizeJavaIdentifier(string(targetEdm.get("perspectiveName"))) + "/" + relation.getTo() + "Controller");
+                }
                 out.put("labelFrom", labelFieldOf(relation.getTo(), model));
             }
             relations.add(out);

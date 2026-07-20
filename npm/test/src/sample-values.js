@@ -29,7 +29,9 @@ export function sampleValue(field) {
       return '2026-07-08';
     case 'timestamp':
     case 'datetime':
-      return '2026-07-08T10:00';
+      // full ISO instant: the generated Java entities bind java.time.Instant, which rejects a
+      // zone-less value; the UI fill slices this to the datetime-local shape
+      return '2026-07-08T10:00:00Z';
     default:
       return 'APPTEST-' + rand(ALPHA + DIGITS, 6);
   }

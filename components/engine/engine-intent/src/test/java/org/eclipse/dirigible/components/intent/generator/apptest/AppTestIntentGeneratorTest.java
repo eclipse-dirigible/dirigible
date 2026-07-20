@@ -179,6 +179,9 @@ class AppTestIntentGeneratorTest {
         assertEquals(Boolean.TRUE, country.get("required"));
         assertEquals("dropdown", country.get("widget"));
         assertEquals("Name", country.get("labelFrom"));
+        // same-model targets carry their relative controller path (resolvable even for a
+        // composition detail excluded from the manifest's entities list)
+        assertEquals("/settings/CountryController", country.get("api"));
         assertNull(country.get("crossModel"));
 
         // the cross-model relation resolves an absolute controller URL in the OWNER module (naming
