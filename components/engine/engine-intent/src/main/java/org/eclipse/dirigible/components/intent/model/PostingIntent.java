@@ -70,6 +70,37 @@ public class PostingIntent {
      * {@code == 0} on a source field).
      */
     private List<Map<String, String>> items;
+    /**
+     * Reversal (red storno) mode: names a SIBLING posting in this block whose created document this
+     * posting reverses. The reversal re-derives the sibling's header and items from the source with
+     * every amount expression NEGATED on the SAME side (never swapped - turnovers stay honest), links
+     * {@link #storno} to the original, and skips fail-soft when no original exists (the source was
+     * never posted). {@code creates}/{@code backReference}/{@code rule}/{@code map}/ {@code items} are
+     * inherited from the sibling and must not be declared here.
+     */
+    private String reverses;
+    /**
+     * The created entity's to-one SELF-relation linked to the reversed (original) document - required
+     * with {@link #reverses}. Doubles as the discriminator between the sibling's own documents (link
+     * empty) and reversals (link set) for both handlers' idempotency guards.
+     */
+    private String storno;
+
+    public String getReverses() {
+        return reverses;
+    }
+
+    public void setReverses(String reverses) {
+        this.reverses = reverses;
+    }
+
+    public String getStorno() {
+        return storno;
+    }
+
+    public void setStorno(String storno) {
+        this.storno = storno;
+    }
 
     public String getName() {
         return name;

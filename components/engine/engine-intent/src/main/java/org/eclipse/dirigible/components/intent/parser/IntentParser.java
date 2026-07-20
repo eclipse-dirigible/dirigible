@@ -2280,6 +2280,47 @@ public final class IntentParser {
                     issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
                 }
             }
+            // Reversal mode: creates/backReference/rule/map/items are inherited from the reversed
+            // sibling; the reversal declares only its own event + the storno self-link.
+            if (posting.getReverses() != null && !posting.getReverses()
+                                                         .isBlank()) {
+                PostingIntent sibling = null;
+                for (PostingIntent candidate : model.getPostings()) {
+                    if (candidate != posting && posting.getReverses()
+                                                       .equals(candidate.getName())) {
+                        sibling = candidate;
+                    }
+                }
+                if (sibling == null) {
+                    issues.add(subject + " reverses unknown posting [" + posting.getReverses() + "] - it must name a sibling"
+                            + " posting in this block");
+                    continue;
+                }
+                if (posting.getCreates() != null || posting.getBackReference() != null || posting.getRule() != null
+                        || posting.getMap() != null || (posting.getItems() != null && !posting.getItems()
+                                                                                              .isEmpty())) {
+                    issues.add(subject + " is a reversal - creates/backReference/rule/map/items are inherited from ["
+                            + posting.getReverses() + "] and must not be declared");
+                }
+                EntityIntent reversed = sibling.getCreates() == null ? null : byName.get(sibling.getCreates());
+                if (posting.getStorno() == null || posting.getStorno()
+                                                          .isBlank()) {
+                    issues.add(subject + " requires `storno: <self relation>` - the created entity's link to the reversed document");
+                } else if (reversed != null) {
+                    RelationIntent storno = toOneRelationByName(reversed, posting.getStorno());
+                    if (storno == null || !reversed.getName()
+                                                   .equals(storno.getTo())
+                            || storno.isCrossModel()) {
+                        issues.add(subject + " storno [" + posting.getStorno() + "] must be a to-one SELF-relation of ["
+                                + reversed.getName() + "]");
+                    }
+                }
+                continue;
+            }
+            if (posting.getStorno() != null && !posting.getStorno()
+                                                       .isBlank()) {
+                issues.add(subject + " declares storno without reverses - the storno link belongs to the reversal posting");
+            }
             // creates + items child + backReference
             EntityIntent creates = posting.getCreates() == null ? null : byName.get(posting.getCreates());
             if (creates == null) {

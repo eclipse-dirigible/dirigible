@@ -48,9 +48,11 @@ import org.springframework.beans.factory.annotation.Autowired;
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
  * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
  * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, {@code transitions}
- * (the guarded on-demand status flip: allowed-status 200, wrong-status/guard 409), and the personal
- * (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner,
- * stripped fields).
+ * (the guarded on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code postings}
+ * with {@code reverses} (post on a transition; red-storno reversal on void - negated amounts,
+ * storno link, fail-soft), and the personal (my) surface
+ * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
+ * fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -116,6 +118,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
                   - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # postings back-reference + the reversal's storno self-link (reverses fixture).
+                  - { name: Doc,    kind: manyToOne, to: Doc }
+                  - { name: Storno, kind: manyToOne, to: Entry }
+
+              # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
+              # CANCELLED (the reverses posting fires - red storno).
+              - name: Doc
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
               - name: EntryLine
                 checks:
@@ -221,6 +236,35 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 when: "Paid == 0"
                 label: Cancel
                 icon: ban
+              - name: PostDoc
+                forEntity: Doc
+                from: [1]
+                setStatus: 2
+                label: Post
+                icon: check
+              - name: VoidDoc
+                forEntity: Doc
+                from: [2]
+                setStatus: 3
+                label: Void
+                icon: ban
+
+            # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
+            # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
+            # linked to the original through Entry.Storno, fail-soft when nothing was posted.
+            postings:
+              - name: docPosting
+                event: { onTransition: Doc, when: "Status == 2" }
+                creates: Entry
+                backReference: Doc
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
+              - name: docStorno
+                event: { onTransition: Doc, when: "Status == 3" }
+                reverses: docPosting
+                storno: Storno
 
             seeds:
               - name: people
@@ -427,6 +471,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");
 
+        // postings reverses: the reversal handler negates the sibling's amount expressions on the
+        // SAME side, locates the original through the empty storno link (fail-soft skip when none)
+        // and stamps the link; the sibling's idempotency guard symmetrically excludes linked rows.
+        String stornoPosting = contentOf("gen/events/DocStornoPosting.java");
+        assertTrue(stornoPosting.contains("Calc.eval(\"-(Amount)\", source, 2)"),
+                "the reversal must negate the sibling's amount expression on the same side");
+        assertTrue(stornoPosting.contains("nothing to reverse"), "the reversal must skip fail-soft when the source was never posted");
+        assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
+        String basePosting = contentOf("gen/events/DocPostingPosting.java");
+        assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
@@ -597,6 +652,60 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Status", equalTo(1)));
+
+        // postings: posting a Doc creates the balanced Entry (async handler - poll)...
+        AtomicInteger doc = new AtomicInteger();
+        restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
+                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250}")
+                                                         .when()
+                                                         .post(API + "/doc/DocController")
+                                                         .then()
+                                                         .statusCode(200)
+                                                         .extract()
+                                                         .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + doc.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/PostDocTransition/run")
+                                                 .then()
+                                                 .statusCode(200));
+        AtomicInteger originalEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> originalEntry.set(given().when()
+                                                                   .get(API + "/entry/EntryController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .body("findAll { it.Doc == " + doc.get()
+                                                                           + " && it.Storno == null }.size()", equalTo(1))
+                                                                   .extract()
+                                                                   .path("find { it.Doc == " + doc.get() + " && it.Storno == null }.Id")),
+                30);
+        // ...and reverses: voiding the Doc creates the red storno - the SAME lines negated on the
+        // SAME sides, linked to the original through the storno self-relation.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + doc.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/VoidDocTransition/run")
+                                                 .then()
+                                                 .statusCode(200));
+        AtomicInteger reversalEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> reversalEntry.set(given().when()
+                                                                   .get(API + "/entry/EntryController")
+                                                                   .then()
+                                                                   .statusCode(200)
+                                                                   .body("findAll { it.Doc == " + doc.get() + " && it.Storno == "
+                                                                           + originalEntry.get() + " }.size()", equalTo(1))
+                                                                   .extract()
+                                                                   .path("find { it.Doc == " + doc.get() + " && it.Storno == "
+                                                                           + originalEntry.get() + " }.Id")),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + reversalEntry.get()
+                                                         + " && it.Debit != null && it.Debit < 0 }.size()", equalTo(1))
+                                                 .body("findAll { it.Entry == " + reversalEntry.get()
+                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
 
         // personal: the my-surface lists ONLY the current user's rows, with the sensitive field
         // stripped; a foreign record is a 404 (indistinguishable from missing).
