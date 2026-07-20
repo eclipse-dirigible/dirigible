@@ -256,6 +256,18 @@ jobs:
 
       #--------------- Publish aerokit/sdk to NPM -----------------#
 
+      #--------------- Publish aerokit/test to NPM -----------------#
+
+      - name: (@aerokit/test) Set the new package version
+        working-directory: ./npm/test
+        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
+
+      - name: (@aerokit/test) Publish the package to npm
+        working-directory: ./npm/test
+        run: npm publish --access public
+
+      #--------------- Publish aerokit/test to NPM -----------------#
+
       - name: "Git: Push Changes"
         run: |
           git checkout -B ${{ github.event.inputs.releaseVersion }}
