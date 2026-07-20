@@ -354,6 +354,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "checks: itemsMin must emit its authored message into the repository gate");
         assertTrue(entryRepository.contains("Debits must equal credits"),
                 "checks: itemsSumEqual must emit its authored message into the repository gate");
+        // A workflow setter/writer persists via the TARGETED updateProperty/updateProperties write - the
+        // checks-bearing repository must OVERRIDE it to still run the posting gate, so converting the
+        // setter from a full-row merge to a targeted write did not silently drop the check (the
+        // silent-degradation class this IT exists to catch).
+        assertTrue(entryRepository.contains("public int updateProperties(") && entryRepository.contains("enforceChecks(entity)"),
+                "a checks-bearing entity must enforce its document checks on the targeted updateProperties write path");
 
         String lineController = contentOf("gen/emission/api/entry/EntryLineController.java");
         assertTrue(lineController.contains("Exactly one of debit/credit"),
@@ -487,6 +493,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
         assertTrue(claimRepository.contains("related.Name"),
                 "a one-hop label token must load the related record and read its display property");
+        // A workflow setter/writer targeted write keeps the stored display Name current: the label
+        // repository OVERRIDES updateProperties to recompute it on that path too.
+        assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
+                "a label entity must recompute its display Name on the targeted updateProperties write path");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */

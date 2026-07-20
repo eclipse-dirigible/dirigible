@@ -621,18 +621,21 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(glue.contains("\"className\": \"MemberApprovalReject\"") && glue.contains("\"value\": \"REJECTED\""),
                 "the reject setter should carry its own value");
 
-        // Run the glue-code template: each setter becomes a JavaDelegate that loads the entity by id,
-        // assigns the field, and persists WITHOUT re-publishing an update event.
+        // Run the glue-code template: each setter becomes a JavaDelegate that persists the field via
+        // the TARGETED single-column updateProperty (only that column is in the UPDATE statement, so a
+        // concurrent write to another column cannot be reverted), WITHOUT re-publishing an update event.
         generateFromModel("template-application-events-java/template/template.js", "members.glue");
         String activate = contentOf("gen/events/MemberApprovalActivate.java");
         assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
                 "the setter should be generated as a Flowable JavaDelegate");
         assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
-                "the setter should import the entity from its real Java package and load it by the PK process variable");
-        assertTrue(activate.contains("entity.Status = \"ACTIVE\"") && activate.contains("repository.updateWithoutEvent(entity)"),
-                "the setter should assign the field and persist without re-firing an update event");
-        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("entity.Status = \"REJECTED\""),
-                "the reject setter should assign the rejected status");
+                "the setter should import the entity from its real Java package and read the PK process variable");
+        assertTrue(activate.contains("repository.updateProperty(((Number) key).intValue(), \"Status\", \"ACTIVE\")"),
+                "the setter should persist the field via the targeted single-column updateProperty");
+        assertFalse(activate.contains("updateWithoutEvent"),
+                "the setter must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
+        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
+                "the reject setter should persist the rejected status via the targeted write");
         // The transition IS observable: the setter publishes the dedicated -transitioned topic (the
         // status-reached channel for posting glue / integrations), which reactions never listen on -
         // so onUpdate reactions still do not re-fire, but a consumer can bind the transition. The
@@ -1243,13 +1246,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(model.contains("\"widgetType\": \"DOCUMENT_STATUS\""), "the EntityStatus FK should carry the status widget type");
 
         // Events template: the generated handler owns the child set, spreads with a last-row
-        // remainder and writes the count back without an event.
+        // remainder and writes the count back via a TARGETED single-column updateProperty (only the
+        // count column is in the UPDATE statement, so the stale message copy of the master cannot
+        // revert concurrent writes to other columns, and no event fires).
         generateFromModel("template-application-events-java/template/template.js", "loans.glue");
         String onCreate = contentOf("gen/events/InstallmentsExpansionOnCreate.java");
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
-        assertTrue(onCreate.contains("masters.updateWithoutEvent(master)"), "the count write-back must not re-fire events");
+        assertTrue(onCreate.contains("new LoanRepository().updateProperty(master.Id, \"Periods\", Integer.valueOf(periods.size()))"),
+                "the count write-back must be a targeted single-column updateProperty");
+        assertFalse(onCreate.contains("updateWithoutEvent"),
+                "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
         String onUpdate = contentOf("gen/events/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
 
@@ -1585,14 +1593,17 @@ class IntentEngineIT extends IntegrationTest {
         String writer = contentOf("gen/events/ApproveReviewWrite.java");
         assertTrue(writer.contains("class ApproveReviewWrite implements JavaDelegate"),
                 "a user task with editable fields should generate a Writer JavaDelegate");
-        assertTrue(writer.contains("entity.ShippedOn = java.time.LocalDate.parse(ShippedOnValue.toString().trim());"),
+        assertTrue(writer.contains("values.put(\"ShippedOn\", java.time.LocalDate.parse(ShippedOnValue.toString().trim()));"),
                 "a date editable should be coerced with LocalDate.parse");
-        assertTrue(writer.contains("entity.ShippedAt = java.time.Instant.parse(ShippedAtValue.toString().trim());"),
+        assertTrue(writer.contains("values.put(\"ShippedAt\", java.time.Instant.parse(ShippedAtValue.toString().trim()));"),
                 "a timestamp editable should be coerced with Instant.parse");
         assertTrue(writer.contains("((Number) QuantityValue).intValue()"), "an integer editable should be coerced to int");
         assertTrue(writer.contains("Boolean.valueOf(ApprovedValue.toString().trim())"),
                 "a boolean editable should be coerced with Boolean.valueOf");
-        assertTrue(writer.contains("repository.updateWithoutEvent(entity)"), "the writer must persist without re-firing an update event");
+        assertTrue(writer.contains("repository.updateProperties(((Number) key).intValue(), values)"),
+                "the writer must persist the edited columns in one targeted multi-column write");
+        assertFalse(writer.contains("updateWithoutEvent"),
+                "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
     }
 
     private void writeIntent(String yaml) {

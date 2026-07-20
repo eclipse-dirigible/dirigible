@@ -29,11 +29,12 @@ import org.slf4j.LoggerFactory;
  * hand-written {@code custom/} stub.
  * <p>
  * A step authored as {@code { kind: serviceTask, args: { setField: status, value: ACTIVE } }} on a
- * {@code MemberApproval} process triggered by {@code onCreate: Member} loads the {@code Member} by
- * its process-variable id, assigns {@code status = "ACTIVE"}, and saves it via the repository's
- * {@code updateWithoutEvent} (a system write that must not re-fire {@code onUpdate} reactions). Two
- * such steps on the two branches of an approve/reject decision are how "Approve -> ACTIVE, Reject
- * -> REJECTED" is expressed as glue, with no custom Java.
+ * {@code MemberApproval} process triggered by {@code onCreate: Member} persists
+ * {@code status = "ACTIVE"} for the process-variable id via the repository's targeted
+ * {@code updateProperty} - only the set column is in the UPDATE statement, so a concurrent write to
+ * any other column cannot be reverted, and no {@code onUpdate} reaction re-fires (a system write).
+ * Two such steps on the two branches of an approve/reject decision are how "Approve -> ACTIVE,
+ * Reject -> REJECTED" is expressed as glue, with no custom Java.
  * <p>
  * {@code setRelationField: Status, value: 2} is the generic counterpart for a status modelled as a
  * to-one relation (an FK to a settings/nomenclature entity): it assigns the relation's FK property
