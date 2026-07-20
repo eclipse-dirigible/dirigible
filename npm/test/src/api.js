@@ -13,6 +13,8 @@ export function makeApi(request, manifest) {
 
   return {
     list: (entity, limit = 20) => request.get(url(entity, `?$limit=${limit}`)).then(asJson),
+    // absolute controller path (a cross-model relation target owned by another module)
+    listPath: (path, limit = 20) => request.get(`${path}?$limit=${limit}`).then(asJson),
     count: (entity) => request.get(url(entity, '/count')).then(asJson).then((body) => (typeof body === 'number' ? body : body.count)),
     get: (entity, id) => request.get(url(entity, '/' + id)).then(asJson),
     getResponse: (entity, id) => request.get(url(entity, '/' + id)),

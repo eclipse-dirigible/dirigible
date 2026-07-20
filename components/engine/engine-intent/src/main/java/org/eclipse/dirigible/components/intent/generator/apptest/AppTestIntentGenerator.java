@@ -18,11 +18,13 @@ import java.util.Map;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
+import org.eclipse.dirigible.components.intent.generator.edm.CrossModelSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SeedIntent;
+import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
@@ -83,7 +85,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             return;
         }
 
-        Map<String, Object> manifest = buildManifest(baseName, context.getProjectName(), model, edmEntities);
+        Map<String, Object> manifest = buildManifest(baseName, context.getProjectName(), model, edmEntities, context);
         context.writeModelFile(baseName + ".test", GSON.toJson(manifest) + "\n");
         LOGGER.debug("Generated app-test manifest [{}.test]", baseName);
     }
@@ -102,6 +104,15 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
      */
     public static Map<String, Object> buildManifest(String baseName, String project, IntentModel model,
             Map<String, Map<String, Object>> edmEntities) {
+        return buildManifest(baseName, project, model, edmEntities, null);
+    }
+
+    /**
+     * The full variant carrying the generation context, which cross-model relation resolution needs (a
+     * {@code null} context falls back to the naming-convention target coordinates - unit tests).
+     */
+    public static Map<String, Object> buildManifest(String baseName, String project, IntentModel model,
+            Map<String, Map<String, Object>> edmEntities, IntentGenerationContext context) {
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("module", baseName);
         manifest.put("standaloneShell", "/services/web/" + project + "/gen/" + baseName + "/index.html");
@@ -120,13 +131,14 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if ("MANAGE_DETAILS".equals(string(edm.get("layoutType"))) || "PROJECTION".equals(string(edm.get("type")))) {
                 continue;
             }
-            entities.add(entityManifest(entity, edm, model));
+            entities.add(entityManifest(entity, edm, model, context));
         }
         manifest.put("entities", entities);
         return manifest;
     }
 
-    private static Map<String, Object> entityManifest(EntityIntent entity, Map<String, Object> edm, IntentModel model) {
+    private static Map<String, Object> entityManifest(EntityIntent entity, Map<String, Object> edm, IntentModel model,
+            IntentGenerationContext context) {
         Map<String, Object> out = new LinkedHashMap<>();
         String name = entity.getName();
         out.put("name", name);
@@ -156,7 +168,7 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             out.put("expectSeedData", true);
         }
         out.put("fields", fields(entity));
-        List<Map<String, Object>> relations = relations(entity, model);
+        List<Map<String, Object>> relations = relations(entity, model, context);
         if (!relations.isEmpty()) {
             out.put("relations", relations);
         }
@@ -184,8 +196,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             }
             // Read-only must mirror the generated form exactly, or the runner waits forever on an
             // input that is not there: an author-marked field and a uuid render in the read-only
-            // details block (no #f_<Name> input), a calculated field renders as a non-editable input.
-            if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated()) {
+            // details block (no #f_<Name> input), a calculated field renders as a non-editable
+            // input, and an aggregate renders in the document totals footer.
+            if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated() || field.isAggregate()) {
                 out.put("readOnly", true);
             }
             out.put("major", field.isMajor());
@@ -195,15 +208,25 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The user-pickable to-one relations rendered as dropdowns. Cross-model relations are omitted —
-     * their target lives in another module's manifest, so a single-module runner cannot resolve a
-     * sample option for them (a phase-2 concern).
+     * The user-pickable to-one relations rendered as dropdowns. A cross-model relation's target lives
+     * in another module — its option rows are resolved through an {@code apiAbsolute} controller URL
+     * (the same owner-project coordinates the generated dropdown uses), so the runner can fill the
+     * required FK without the target being in this manifest. A {@code function: EntityStatus} relation
+     * is marked {@code entityStatus} — it renders as a status pill / is excluded from the editable
+     * inputs by the form templates, and its value comes from the {@code init:} DB default, so the
+     * runner must neither pick nor post it.
      */
-    private static List<Map<String, Object>> relations(EntityIntent entity, IntentModel model) {
+    private static List<Map<String, Object>> relations(EntityIntent entity, IntentModel model, IntentGenerationContext context) {
+        Map<String, UsesIntent> usesByAlias = new LinkedHashMap<>();
+        for (UsesIntent uses : model.getUses()) {
+            if (uses.getModel() != null) {
+                usesByAlias.put(uses.getModel(), uses);
+            }
+        }
         List<Map<String, Object>> relations = new ArrayList<>();
         for (RelationIntent relation : entity.getRelations()) {
             boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-            if (!toOne || relation.isCrossModel() || relation.getTo() == null) {
+            if (!toOne || relation.getTo() == null) {
                 continue;
             }
             Map<String, Object> out = new LinkedHashMap<>();
@@ -214,7 +237,32 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
                 out.put("required", true);
             }
             out.put("widget", "dropdown");
-            out.put("labelFrom", labelFieldOf(relation.getTo(), model));
+            if (relation.isEntityStatus()) {
+                out.put("entityStatus", true);
+            }
+            if (relation.isCrossModel()) {
+                UsesIntent uses = usesByAlias.get(relation.getModel());
+                if (uses == null) {
+                    continue;
+                }
+                CrossModelSupport.TargetInfo info;
+                try {
+                    info = CrossModelSupport.resolve(context, uses, relation.getTo());
+                } catch (RuntimeException ex) {
+                    // the EDM generator (order 200) fails loudly for a truly unresolvable target;
+                    // reaching here means a degraded context - omit the relation rather than emit a
+                    // guessed URL
+                    LOGGER.warn("Omitting cross-model relation [{}] of [{}] from the app-test manifest - target unresolved",
+                            relation.getName(), entity.getName(), ex);
+                    continue;
+                }
+                out.put("crossModel", true);
+                out.put("apiAbsolute", "/services/java/" + uses.resolveProject() + "/gen/" + sanitizeJavaIdentifier(uses.getModel())
+                        + "/api/" + sanitizeJavaIdentifier(info.perspectiveName()) + "/" + relation.getTo() + "Controller");
+                out.put("labelFrom", info.labelField());
+            } else {
+                out.put("labelFrom", labelFieldOf(relation.getTo(), model));
+            }
             relations.add(out);
         }
         return relations;

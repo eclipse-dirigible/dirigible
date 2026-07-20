@@ -36,7 +36,7 @@ export function crudFlow(manifest, entity, opts = {}) {
     await expect(page).toHaveURL(/\/create$/);
     await cfg.beforeCreate?.(page, record);
     await fillForm(page, manifest, entity, record, relationSamples, opts);
-    await page.getByRole('button', { name: 'Create' }).click();
+    await page.getByRole('button', { name: 'Create', exact: true }).click();
     await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
     await filterBy(page, record[handle.name]);
     await expect(dataRow(page, record[handle.name])).toHaveCount(1);
@@ -46,10 +46,11 @@ export function crudFlow(manifest, entity, opts = {}) {
     if (!skip.has('edit')) {
       const updated = record[handle.name] + '-UPD';
       await dataRow(page, record[handle.name]).click();
-      await page.getByRole('button', { name: 'Edit' }).first().click();
+      // exact: substring name matching would also hit e.g. a "Credit Notes" sidebar item
+      await page.getByRole('button', { name: 'Edit', exact: true }).first().click();
       await expect(page).toHaveURL(/\/edit$/);
       await fillField(page, handle, updated, opts);
-      await page.getByRole('button', { name: 'Save' }).click();
+      await page.getByRole('button', { name: 'Save', exact: true }).click();
       await expect(page).toHaveURL(new RegExp(entity.route.replace(/[#/]/g, '\\$&') + '$'));
       await filterBy(page, updated);
       await expect(dataRow(page, updated)).toHaveCount(1);
@@ -61,7 +62,7 @@ export function crudFlow(manifest, entity, opts = {}) {
       await dataRow(page, record[handle.name]).click();
       await page.getByRole('button', { name: 'Delete', exact: true }).first().click();
       const dialog = page.locator('[x-h-dialog-overlay][data-open]');
-      await dialog.getByRole('button', { name: 'Delete' }).click();
+      await dialog.getByRole('button', { name: 'Delete', exact: true }).click();
       await expect(dialog).toHaveCount(0);
       await filterBy(page, record[handle.name]);
       await expect(dataRow(page, record[handle.name])).toHaveCount(0);

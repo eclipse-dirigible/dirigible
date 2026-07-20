@@ -35,6 +35,8 @@ class AppTestIntentGeneratorTest {
     private static final String INTENT = """
             name: kf-mod-countries
             languages: [en, bg]
+            uses:
+              - { model: kf-mod-currencies }
             entities:
               - name: Country
                 kind: setting
@@ -51,8 +53,10 @@ class AppTestIntentGeneratorTest {
                   - { name: name, type: string, required: true, length: 200 }
                   - { name: uuid, type: uuid }
                   - { name: slug, type: string, calculatedOnCreate: "1" }
+                  - { name: total, type: decimal, aggregate: true }
                 relations:
                   - { name: Country, kind: manyToOne, to: Country, required: true }
+                  - { name: Currency, kind: manyToOne, to: Currency, model: kf-mod-currencies, required: true }
               - name: Account
                 group: master-data
                 hierarchy: Parent
@@ -107,6 +111,11 @@ class AppTestIntentGeneratorTest {
                                          .findFirst()
                                          .orElseThrow();
         assertEquals(Boolean.TRUE, slug.get("readOnly"));
+        Map<String, Object> total = fields.stream()
+                                          .filter(f -> "Total".equals(f.get("name")))
+                                          .findFirst()
+                                          .orElseThrow();
+        assertEquals(Boolean.TRUE, total.get("readOnly"), "an aggregate renders in the totals footer, not as an input");
 
         // a hierarchy entity lists as a tree - the runner branches on the flag
         Map<String, Object> account = entity(manifest, "Account");
@@ -162,7 +171,7 @@ class AppTestIntentGeneratorTest {
                 entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "City");
         List<Map<String, Object>> relations = (List<Map<String, Object>>) city.get("relations");
         assertNotNull(relations);
-        assertEquals(1, relations.size());
+        assertEquals(2, relations.size());
         Map<String, Object> country = relations.get(0);
         assertEquals("Country", country.get("name"));
         assertEquals("manyToOne", country.get("kind"));
@@ -170,6 +179,15 @@ class AppTestIntentGeneratorTest {
         assertEquals(Boolean.TRUE, country.get("required"));
         assertEquals("dropdown", country.get("widget"));
         assertEquals("Name", country.get("labelFrom"));
+        assertNull(country.get("crossModel"));
+
+        // the cross-model relation resolves an absolute controller URL in the OWNER module (naming
+        // convention here - no generation context; the real pass resolves against the owner's .model)
+        Map<String, Object> currency = relations.get(1);
+        assertEquals("Currency", currency.get("name"));
+        assertEquals(Boolean.TRUE, currency.get("crossModel"));
+        assertEquals("/services/java/kf-mod-currencies/gen/kf_mod_currencies/api/currency/CurrencyController", currency.get("apiAbsolute"));
+        assertEquals("Name", currency.get("labelFrom"));
     }
 
     @Test

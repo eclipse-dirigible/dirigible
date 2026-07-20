@@ -25,15 +25,31 @@ export async function pickDropdown(page, relation, optionText) {
 
 // Resolve a live option for each to-one relation: take the first existing row of the
 // target entity and use its label field's value as the visible option text.
+// - an entityStatus relation is skipped: it renders as a status pill (not an editable
+//   input in any form) and its value comes from the init: DB default;
+// - a cross-model relation's rows come from its apiAbsolute controller URL (the target
+//   lives in another module and is not in this manifest).
 export async function resolveRelationSamples(request, manifest, entity) {
   const api = makeApi(request, manifest);
   const samples = [];
   for (const relation of entity.relations ?? []) {
-    const target = manifest.entities.find((e) => e.name === relation.to);
-    if (!target) throw new Error(`Relation ${entity.name}.${relation.name}: target ${relation.to} not in manifest`);
-    const rows = await api.list(target, 1);
-    if (!rows?.length) throw new Error(`Relation ${entity.name}.${relation.name}: no ${relation.to} rows to pick from`);
-    const labelFrom = relation.labelFrom ?? handleField(target).name;
+    if (relation.entityStatus) continue;
+    let rows;
+    let labelFrom = relation.labelFrom;
+    if (relation.apiAbsolute) {
+      rows = await api.listPath(relation.apiAbsolute, 1);
+      labelFrom = labelFrom ?? 'Name';
+    } else {
+      const target = manifest.entities.find((e) => e.name === relation.to);
+      if (!target) throw new Error(`Relation ${entity.name}.${relation.name}: target ${relation.to} not in manifest`);
+      rows = await api.list(target, 1);
+      labelFrom = labelFrom ?? handleField(target)?.name ?? 'Name';
+    }
+    if (!rows?.length) {
+      // a required FK cannot be satisfied - fail loudly; an optional one is simply left unset
+      if (relation.required) throw new Error(`Relation ${entity.name}.${relation.name}: no ${relation.to} rows to pick from`);
+      continue;
+    }
     samples.push({
       relation,
       id: rows[0][manifest.idProperty ?? 'Id'],
