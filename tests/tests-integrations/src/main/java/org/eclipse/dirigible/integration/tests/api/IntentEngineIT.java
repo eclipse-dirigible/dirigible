@@ -1246,13 +1246,18 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(model.contains("\"widgetType\": \"DOCUMENT_STATUS\""), "the EntityStatus FK should carry the status widget type");
 
         // Events template: the generated handler owns the child set, spreads with a last-row
-        // remainder and writes the count back without an event.
+        // remainder and writes the count back via a TARGETED single-column updateProperty (only the
+        // count column is in the UPDATE statement, so the stale message copy of the master cannot
+        // revert concurrent writes to other columns, and no event fires).
         generateFromModel("template-application-events-java/template/template.js", "loans.glue");
         String onCreate = contentOf("gen/events/InstallmentsExpansionOnCreate.java");
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
-        assertTrue(onCreate.contains("masters.updateWithoutEvent(master)"), "the count write-back must not re-fire events");
+        assertTrue(onCreate.contains("new LoanRepository().updateProperty(master.Id, \"Periods\", Integer.valueOf(periods.size()))"),
+                "the count write-back must be a targeted single-column updateProperty");
+        assertFalse(onCreate.contains("updateWithoutEvent"),
+                "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
         String onUpdate = contentOf("gen/events/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
 

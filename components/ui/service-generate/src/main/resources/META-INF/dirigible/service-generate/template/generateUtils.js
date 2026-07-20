@@ -803,7 +803,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 spreadTotalProperty: ex.spreadTotalProperty || "",
                                 spreadIntoProperty: ex.spreadIntoProperty || "",
                                 spreadRound: ex.spreadRound || "2",
-                                countAssign: ex.countAssign || "",
+                                countProperty: ex.countProperty || "",
+                                countValue: ex.countValue || "",
                                 topicSuffix: ex.topicSuffix || "",
                                 criteriaExpression: ex.criteriaExpression
                             };
