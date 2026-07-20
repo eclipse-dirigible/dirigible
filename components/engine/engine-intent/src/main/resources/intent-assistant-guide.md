@@ -546,6 +546,18 @@ the literal `end`. The `trigger` fires on exactly one lifecycle event of a decla
 `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
 guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
 
+**Business key on the trigger.** By default a started process instance's BPM business key is the
+record's primary key (a bare number in the Processes admin view). Name a more readable trigger-entity
+field with `businessKey:`, and optionally let the platform mint a value when the field is blank with
+`businessKeyStrategy: timestamp` (a `yyyyMMddHHmmss` string; the field must then be `string`/`text`):
+
+```yaml
+trigger: { onCreate: Order, businessKey: number, businessKeyStrategy: timestamp }
+```
+
+Prefer the document's number field as the business key on document (header-items) entities - the
+Processes view then reads "SO00000042" instead of "17".
+
 **Assignees.** A `userTask`'s `assignee` is normally a role / candidate-group name (e.g. `manager`).
 Use the literal **`assignee: personal`** to route the task to the **record owner's** Inbox instead -
 the task lands with whoever owns the triggering record. This requires the trigger entity to declare a
@@ -1238,7 +1250,10 @@ payment's unallocated balance; entity writes go only through the generated repos
 | field `type` | `string`, `text`, `integer`, `int`, `long`, `decimal`, `double`, `boolean`, `date`, `timestamp`, `uuid`, `month` (a `YYYY-MM` string, month picker), `week` (a `YYYY-Www` ISO-week string, week picker) |
 | primary-key `type` | `integer`, `int`, `long` (integer only) |
 | relation `kind` | `oneToMany`, `manyToOne`, `oneToOne`, `manyToMany` |
-| step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `end` |
+| step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
+| wait event | `onCreate`, `onUpdate` (never `onDelete`) |
+| userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
+| trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
 | notification `channel` | `email` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
@@ -1259,6 +1274,9 @@ payment's unallocated balance; entity writes go only through the generated repos
 
 - "store / manage X" -> **entities**
 - "approval / multi-step / workflow" -> **processes** (+ a **form** for each user task)
+- "the flow waits for a reply / a payment / a goods receipt (a data event resumes it)" -> **processes** (a `wait` step)
+- "remind / escalate if a task is not handled in N days (SLA)" -> **processes** (userTask `timeout:`)
+- "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**
