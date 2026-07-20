@@ -138,6 +138,12 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         out.put("api", "/" + sanitizeJavaIdentifier(string(edm.get("perspectiveName"))) + "/" + name + "Controller");
         out.put("table", string(edm.get("dataName")));
 
+        // A hierarchical entity renders its list as a tree (role=treeitem, no table/columnheaders),
+        // so the runner must branch on it.
+        if (entity.getHierarchy() != null && !entity.getHierarchy()
+                                                    .isBlank()) {
+            out.put("hierarchy", true);
+        }
         boolean multilingual = "true".equals(string(edm.get("multilingual")));
         if (multilingual) {
             out.put("multilingual", true);
@@ -176,7 +182,10 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (field.getLength() != null) {
                 out.put("length", field.getLength());
             }
-            if (field.isReadOnly()) {
+            // Read-only must mirror the generated form exactly, or the runner waits forever on an
+            // input that is not there: an author-marked field and a uuid render in the read-only
+            // details block (no #f_<Name> input), a calculated field renders as a non-editable input.
+            if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType()) || field.isCalculated()) {
                 out.put("readOnly", true);
             }
             out.put("major", field.isMajor());
@@ -333,6 +342,9 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     private static String layout(String layoutType) {
         return switch (layoutType == null ? "" : layoutType) {
             case "MANAGE_DOCUMENT" -> "document";
+            // the view family replaces the table page - the runner must not expect columns/rows
+            case "MANAGE_CALENDAR" -> "calendar";
+            case "MANAGE_SLOTS" -> "slots";
             default -> "manage-list";
         };
     }

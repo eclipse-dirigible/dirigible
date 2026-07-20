@@ -17,6 +17,12 @@ export function crudFlow(manifest, entity, opts = {}) {
   const cfg = opts.extend?.entities?.[entity.name] ?? {};
   const skip = new Set(cfg.skip ?? []);
   if (skip.has('crud')) return;
+  // A hierarchy entity lists as a tree, and a calendar/slots entity replaces the table page
+  // entirely - no filter row / data rows to drive the walk below; create/read/update/delete
+  // stays covered by the REST flow. Same for an entity without a string handle field (nothing
+  // searchable identifies the created row in the table).
+  if (entity.hierarchy || entity.layout === 'calendar' || entity.layout === 'slots') return;
+  if (!handleField(entity)) return;
 
   test(`${entity.name}: create, edit and delete through the UI`, async ({ page, api }) => {
     const record = sampleRecord(entity);
@@ -25,7 +31,8 @@ export function crudFlow(manifest, entity, opts = {}) {
 
     // create
     await page.goto(manifest.standaloneShell + entity.route);
-    await page.getByRole('button', { name: 'New' }).click();
+    // exact: the empty state adds a second "New <Entity>" button that a substring match also hits
+    await page.getByRole('button', { name: 'New', exact: true }).click();
     await expect(page).toHaveURL(/\/create$/);
     await cfg.beforeCreate?.(page, record);
     await fillForm(page, manifest, entity, record, relationSamples, opts);

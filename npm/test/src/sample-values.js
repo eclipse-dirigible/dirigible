@@ -49,10 +49,10 @@ export function sampleRecord(entity) {
 
 // The searchable "handle" field: the first long string field shown in the list. Its
 // value identifies the record in the table across the create/edit/delete flow.
+// Null when the entity has no such field (all-numeric/date entities) - flows degrade:
+// the UI walk is skipped and the REST flow drops its update-value assertion.
 export function handleField(entity) {
-  const field = editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false);
-  if (!field) throw new Error(`Entity ${entity.name} has no string handle field for UI flows`);
-  return field;
+  return editableFields(entity).find((f) => f.type === 'string' && (f.length ?? 64) >= 16 && f.major !== false) ?? null;
 }
 
 export function labelOf(field) {

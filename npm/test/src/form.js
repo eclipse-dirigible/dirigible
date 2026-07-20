@@ -14,7 +14,8 @@ export async function fillField(page, field, value, opts = {}) {
 // The x-h-select directive hides its input and builds a span[role=combobox] trigger
 // labelled by the field label; options carry role=option.
 export async function pickDropdown(page, relation, optionText) {
-  await page.getByRole('combobox', { name: relation.label ?? relation.name }).click();
+  // exact: a substring match collides with longer sibling labels ("Type" vs "Chart Type")
+  await page.getByRole('combobox', { name: relation.label ?? relation.name, exact: true }).click();
   await page.getByRole('option', { name: optionText }).first().click();
 }
 

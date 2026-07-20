@@ -49,8 +49,18 @@ class AppTestIntentGeneratorTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string, required: true, length: 200 }
+                  - { name: uuid, type: uuid }
+                  - { name: slug, type: string, calculatedOnCreate: "1" }
                 relations:
                   - { name: Country, kind: manyToOne, to: Country, required: true }
+              - name: Account
+                group: master-data
+                hierarchy: Parent
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 200 }
+                relations:
+                  - { name: Parent, kind: manyToOne, to: Account }
             seeds:
               - name: countries
                 entity: Country
@@ -76,7 +86,32 @@ class AppTestIntentGeneratorTest {
         assertEquals("/services/java/kf-mod-countries/gen/kf_mod_countries/api", manifest.get("restBase"));
         assertEquals("Id", manifest.get("idProperty"));
         assertEquals(List.of("en", "bg"), manifest.get("languages"));
-        assertEquals(2, ((List<Object>) manifest.get("entities")).size());
+        assertEquals(3, ((List<Object>) manifest.get("entities")).size());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void marksAutoReadOnlyFieldsAndHierarchyEntities() {
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm());
+
+        // a uuid and a calculated field render without an editable input - the runner must not fill them
+        Map<String, Object> city = entity(manifest, "City");
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) city.get("fields");
+        Map<String, Object> uuid = fields.stream()
+                                         .filter(f -> "Uuid".equals(f.get("name")))
+                                         .findFirst()
+                                         .orElseThrow();
+        assertEquals(Boolean.TRUE, uuid.get("readOnly"));
+        Map<String, Object> slug = fields.stream()
+                                         .filter(f -> "Slug".equals(f.get("name")))
+                                         .findFirst()
+                                         .orElseThrow();
+        assertEquals(Boolean.TRUE, slug.get("readOnly"));
+
+        // a hierarchy entity lists as a tree - the runner branches on the flag
+        Map<String, Object> account = entity(manifest, "Account");
+        assertEquals(Boolean.TRUE, account.get("hierarchy"));
+        assertNull(city.get("hierarchy"));
     }
 
     @SuppressWarnings("unchecked")
@@ -141,10 +176,10 @@ class AppTestIntentGeneratorTest {
     void skipsProjectionAndDetailEntities() {
         Map<String, Map<String, Object>> edm = edm();
         edm.put("Extra", edmEntity("Extra", "Extra", "Extras", "MANAGE_DETAILS", "Extras", "master-data", "KF_MOD_COUNTRIES_EXTRA", false));
-        // still only Country + City — the detail child is excluded
+        // still only Country + City + Account — the detail child is excluded
         Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm);
         List<?> entities = (List<?>) manifest.get("entities");
-        assertEquals(2, entities.size());
+        assertEquals(3, entities.size());
         assertNull(entityOrNull(manifest, "Extra"));
     }
 
@@ -155,6 +190,8 @@ class AppTestIntentGeneratorTest {
         byName.put("Country",
                 edmEntity("Country", "Country", "Countries", "MANAGE_MASTER", "Settings", "master-data", "KF_MOD_COUNTRIES_COUNTRY", true));
         byName.put("City", edmEntity("City", "City", "Cities", "MANAGE_MASTER", "Settings", "master-data", "KF_MOD_COUNTRIES_CITY", false));
+        byName.put("Account",
+                edmEntity("Account", "Account", "Accounts", "MANAGE_LIST", "Accounts", "master-data", "KF_MOD_COUNTRIES_ACCOUNT", false));
         return byName;
     }
 

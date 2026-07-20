@@ -4,7 +4,8 @@ export function makeApi(request, manifest) {
 
   async function asJson(response) {
     if (!response.ok()) {
-      throw new Error(`${response.request().method()} ${response.url()} -> ${response.status()} ${await response.text()}`);
+      // APIResponse has no request(); report url + status + body
+      throw new Error(`${response.url()} -> ${response.status()} ${await response.text()}`);
     }
     const text = await response.text();
     return text ? JSON.parse(text) : undefined;

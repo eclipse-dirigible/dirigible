@@ -25,12 +25,16 @@ export function restFlow(manifest, entity, opts = {}) {
     expect(id, 'create response carries the generated id').toBeTruthy();
     try {
       const read = await client.get(entity, id);
-      expect(read[handle.name]).toBe(payload[handle.name]);
+      expect(read[idProperty]).toBe(id);
+      // the update round-trip needs a writable string field to flip; skip it when there is none
+      if (handle) {
+        expect(read[handle.name]).toBe(payload[handle.name]);
 
-      const updatedValue = payload[handle.name] + '-UPD';
-      await client.update(entity, id, { ...read, [handle.name]: updatedValue });
-      const reread = await client.get(entity, id);
-      expect(reread[handle.name]).toBe(updatedValue);
+        const updatedValue = payload[handle.name] + '-UPD';
+        await client.update(entity, id, { ...read, [handle.name]: updatedValue });
+        const reread = await client.get(entity, id);
+        expect(reread[handle.name]).toBe(updatedValue);
+      }
     } finally {
       await client.remove(entity, id);
     }
