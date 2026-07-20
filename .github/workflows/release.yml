@@ -246,6 +246,16 @@ jobs:
 
       #--------------- Publish aerokit/sdk to NPM -----------------#
 
+      # The Playwright test runner (npm/test) ships as the @aerokit/sdk `./test` subpath export -
+      # publishing it as its own @aerokit/test package needs new-package creation rights the npm
+      # token does not have. The copy is release-runner-local only (the jar was built before this
+      # step), and the nested package.json marks the subtree ESM (the sdk root has no "type").
+      - name: (@aerokit/sdk) Bundle the test runner as the ./test subpath
+        run: |
+          mkdir -p ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test
+          cp -R ./npm/test/src/. ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/
+          printf '{\n  "type": "module"\n}\n' > ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules/test/package.json
+
       - name: (@aerokit/sdk) Set the new package version
         working-directory: ./components/api/api-modules-javascript/src/main/resources/META-INF/dirigible/modules
         run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
@@ -255,18 +265,6 @@ jobs:
         run: npm publish --access public
 
       #--------------- Publish aerokit/sdk to NPM -----------------#
-
-      #--------------- Publish aerokit/test to NPM -----------------#
-
-      - name: (@aerokit/test) Set the new package version
-        working-directory: ./npm/test
-        run: npm version "${{ github.event.inputs.releaseVersion }}" --no-git-tag-version
-
-      - name: (@aerokit/test) Publish the package to npm
-        working-directory: ./npm/test
-        run: npm publish --access public
-
-      #--------------- Publish aerokit/test to NPM -----------------#
 
       - name: "Git: Push Changes"
         run: |
