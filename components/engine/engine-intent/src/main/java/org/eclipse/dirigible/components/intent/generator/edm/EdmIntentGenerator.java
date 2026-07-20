@@ -153,6 +153,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> entityList = new ArrayList<>();
         List<Map<String, Object>> perspectiveList = new ArrayList<>();
         String tablePrefix = IntentNaming.upperSnake(intentName);
+        String projectName = context != null && notBlank(context.getProjectName()) ? context.getProjectName() : intentName;
         // Document (header-items) layout: a master that owns a composition child whose name ends in
         // "Item" (SalesInvoice -> SalesInvoiceItem) renders as a document - header form, inline items
         // table, totals footer - rather than the default master-detail. Maps master -> its items entity.
@@ -175,8 +176,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
+            String rolePerspective = resolvePerspective(name, compositionParents);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
-                    tablePrefix, perspectiveOrder);
+                    tablePrefix, perspectiveOrder, projectName, rolePerspective);
             // A navigation-group id makes the generated perspective nest under that group in the shared
             // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
             if (notBlank(entity.getGroup())) {
@@ -740,7 +742,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static Map<String, Object> entityDefaults(String name, String description, String icon, boolean dependent, boolean setting,
-            String perspective, String tablePrefix, int order) {
+            String perspective, String tablePrefix, int order, String projectName, String rolePerspective) {
         String dataName = tablePrefix + "_" + IntentNaming.upperSnake(name);
         Map<String, Object> entity = new LinkedHashMap<>();
         entity.put("name", name);
@@ -771,7 +773,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         entity.put("perspectiveNavId", "");
         entity.put("perspectiveRole", "");
         entity.put("generateReport", "false");
-        entity.put("generateDefaultRoles", "false");
+        entity.put("generateDefaultRoles", "true");
+        entity.put("roleRead", projectName + "." + rolePerspective + "." + name + "ReadOnly");
+        entity.put("roleWrite", projectName + "." + rolePerspective + "." + name + "FullAccess");
         return entity;
     }
 
@@ -1938,7 +1942,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             appendAttribute(sb, "entityType", entityType);
         }
         for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName", "importsCode"}) {
+                "menuLabel", "layoutType", "perspectiveName", "importsCode", "generateDefaultRoles", "roleRead", "roleWrite"}) {
             if (entity.get(key) != null) {
                 appendAttribute(sb, key, entity.get(key));
             }

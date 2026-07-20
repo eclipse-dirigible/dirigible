@@ -47,8 +47,11 @@ class EdmIntentGeneratorTest {
         assertEquals("Country", country.get("projectionReferencedEntity"));
         // A projection must stay out of this app's navigation - no perspective.
         assertEquals("", country.get("perspectiveName"));
+        assertEquals("false", country.get("generateDefaultRoles"));
+        assertNull(country.get("roleRead"));
 
         Map<String, Object> customer = entityByName(entities, "Customer");
+        assertEquals("true", customer.get("generateDefaultRoles"));
         Map<String, Object> countryFk = propertyByName(customer, "Country");
         assertEquals("INTEGER", countryFk.get("dataType"));
         assertEquals("DROPDOWN", countryFk.get("widgetType"));
@@ -224,6 +227,38 @@ class EdmIntentGeneratorTest {
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("immutableStatusProperty"));
         assertEquals("2,3", entry.get("immutableStatusValues"));
+    }
+
+    @Test
+    void securedByDefaultEmitsGenerateDefaultRolesAndRoleNames() {
+        String yaml = """
+                name: library
+                entities:
+                  - name: Genre
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Book
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: title, type: string, required: true }
+                    relations:
+                      - { name: Genre, kind: manyToOne, to: Genre }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "library");
+        List<Map<String, Object>> entities = entities(model);
+
+        Map<String, Object> book = entityByName(entities, "Book");
+        assertEquals("true", book.get("generateDefaultRoles"));
+        assertEquals("library.Book.BookReadOnly", book.get("roleRead"));
+        assertEquals("library.Book.BookFullAccess", book.get("roleWrite"));
+
+        Map<String, Object> genre = entityByName(entities, "Genre");
+        assertEquals("true", genre.get("generateDefaultRoles"));
+        assertEquals("Settings", genre.get("perspectiveName"));
+        assertEquals("library.Genre.GenreReadOnly", genre.get("roleRead"));
+        assertEquals("library.Genre.GenreFullAccess", genre.get("roleWrite"));
     }
 
     @Test
