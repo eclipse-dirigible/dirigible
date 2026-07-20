@@ -61,6 +61,37 @@ class IntentParserTest {
     }
 
     @Test
+    void monthAndWeekAreAcceptedFieldTypesWhileAnUnknownTypeIsRejected() {
+        String ok = """
+                name: planning
+                entities:
+                  - name: Plan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                      - { name: sprint, type: week }
+                """;
+        IntentModel model = IntentParser.parse(ok);
+        assertEquals("month", model.getEntities()
+                                   .get(0)
+                                   .getFields()
+                                   .get(1)
+                                   .getType());
+        assertEquals("week", model.getEntities()
+                                  .get(0)
+                                  .getFields()
+                                  .get(2)
+                                  .getType());
+
+        String bad = ok.replace("type: month", "type: quarter");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(bad));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("unknown type")),
+                "an unknown field type should still be rejected, got: " + ex.getIssues());
+    }
+
+    @Test
     void crossModelRelationParsesWhenModelIsDeclaredInUses() {
         String yaml = """
                 name: customers

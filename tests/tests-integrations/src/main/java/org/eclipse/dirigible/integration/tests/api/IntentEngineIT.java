@@ -1274,6 +1274,40 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void month_and_week_fields_generate_the_harmonia_pickers() {
+        // month (YYYY-MM) and week (YYYY-Www) are stored as VARCHAR strings; the widget is chosen from
+        // the logical type, and the Harmonia form renders the dedicated pickers rather than plain inputs.
+        String yaml = """
+                name: planning
+                entities:
+                  - name: Plan
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 100 }
+                      - { name: period, type: month }
+                      - { name: sprint, type: week }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // The model carries the picker widget types (both columns are VARCHAR under the hood).
+        String model = contentOf("planning.model");
+        assertTrue(model.contains("\"widgetType\": \"MONTH\""), "the month field must carry the MONTH widget type");
+        assertTrue(model.contains("\"widgetType\": \"WEEK\""), "the week field must carry the WEEK widget type");
+
+        // The Harmonia form renders the real pickers, not plain <input type="month|week">.
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "planning.model");
+        String formView = contentOf("gen/planning/views/Plan/Plan-form.html");
+        assertTrue(formView.contains("x-h-month-picker"), "the month field must render the Harmonia month picker");
+        assertTrue(formView.contains("x-h-week-picker"), "the week field must render the Harmonia week picker");
+        assertFalse(formView.contains("type=\"month\""), "the plain native month input must be gone");
+        assertFalse(formView.contains("type=\"week\""), "the plain native week input must be gone");
+    }
+
+    @Test
     void postings_generates_the_idempotent_resumable_handler() {
         // A self-contained posting: an Order transitioning into POSTED (status 2) posts a Ledger with
         // two LedgerLine rows (debit + credit) determined by a PostingRule.

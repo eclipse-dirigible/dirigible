@@ -11,8 +11,10 @@ package org.eclipse.dirigible.components.intent.model;
 
 /**
  * Single attribute on an {@link EntityIntent}. {@link #type} carries a logical type string
- * ({@code string}, {@code integer}, {@code decimal}, {@code boolean}, {@code date}, {@code uuid},
- * {@code text}) that the entity generator maps to JDBC and EDM types.
+ * ({@code string}, {@code integer}, {@code decimal}, {@code boolean}, {@code date},
+ * {@code timestamp}, {@code uuid}, {@code text}, {@code month}, {@code week}) that the entity
+ * generator maps to JDBC and EDM types. {@code month} ({@code YYYY-MM}) and {@code week}
+ * ({@code YYYY-Www}) are stored as strings and render as the Harmonia month / week pickers.
  */
 public class FieldIntent {
 

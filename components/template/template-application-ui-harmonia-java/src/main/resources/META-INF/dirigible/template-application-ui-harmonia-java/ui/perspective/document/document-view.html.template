@@ -140,6 +140,20 @@
           <input type="text" x-h-time-picker-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
           <div x-h-time-picker-popup></div>
         </div>
+#elseif($property.widgetType == "MONTH")
+        <!-- Harmonia month picker: model is a YYYY-MM string, so form.${property.name} round-trips unchanged. -->
+        <div x-h-month-picker>
+          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <button x-h-month-picker-trigger aria-label="Choose month"></button>
+          <div x-h-month-picker-popup x-model="form.${property.name}"></div>
+        </div>
+#elseif($property.widgetType == "WEEK")
+        <!-- Harmonia week picker: model is a YYYY-Www ISO-week string, so form.${property.name} round-trips unchanged. -->
+        <div x-h-week-picker>
+          <input type="text" id="f_${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#end />
+          <button x-h-week-picker-trigger aria-label="Choose week"></button>
+          <div x-h-week-picker-popup x-model="form.${property.name}"></div>
+        </div>
 #elseif($property.widgetType == "EMAIL")
         <input x-h-input type="email" id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) readonly#end />
 #else
