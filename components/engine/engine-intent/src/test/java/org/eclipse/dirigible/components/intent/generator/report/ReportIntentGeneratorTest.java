@@ -192,6 +192,49 @@ class ReportIntentGeneratorTest {
                        .get("token"));
     }
 
+    private static final String STATUS_FILTER_INTENT = """
+            name: billing
+            entities:
+              - name: InvoiceStatus
+                kind: setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string }
+                  - { name: due, type: date }
+                  - { name: balance, type: decimal }
+                relations:
+                  - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                  - { name: Customer, kind: manyToOne, to: Customer }
+            reports:
+              - name: OverdueInvoices
+                source: Invoice
+                dimensions: [number, due, Customer.name]
+                filter: "due <= CURRENT_DATE AND Customer.name != 'X' AND Status != 8"
+            """;
+
+    @Test
+    void filterTranslatesABareToOneRelationToItsFkColumn() {
+        IntentModel model = IntentParser.parse(STATUS_FILTER_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+        // A bare to-one relation name filters by its FK column - previously it passed through
+        // untranslated (`AND Status != 8`) and broke the generated SQL.
+        assertTrue(query.contains("Invoice.\"INVOICE_STATUS\" != 8"), query);
+        // The dotted ref keeps its join-alias form - the bare-relation pass must not mangle the
+        // alias token it produced.
+        assertTrue(query.contains("Customer.\"CUSTOMER_NAME\" != 'X'"), query);
+        assertTrue(!query.contains(" Status "), query);
+    }
+
     private static final String LEDGER_INTENT = """
             name: ledger
             entities:
