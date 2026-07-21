@@ -127,7 +127,12 @@ document.addEventListener('alpine:init', () => {
         harmoniaHttp.get('/services/inbox/tasks/' + encodeURIComponent(params.taskId) + '/variables')
           .then((res) => {
             const vars = (res && res.variables) || {};
-            Object.keys(vars).forEach((k) => { self.model[k] = vars[k]; });
+            // Never preload the `action` process variable into the model: it is a control value a
+            // PRIOR task in the flow set (e.g. 'submit'), not a form field, and letting it sit in the
+            // model made the next task's completion submit the stale action - a decision gateway then
+            // branched wrong (approve completing as reject). The __* locators DO stay - the runtime
+            // below reads __entityUrl / __<Fk>EntityUrl from the model.
+            Object.keys(vars).forEach((k) => { if (k !== 'action') self.model[k] = vars[k]; });
             // Clear D: the process context holds only a locator (the entity's REST URL + id), so fetch the
             // LIVE entity now and overlay its current fields onto the model. This is what makes the task
             // form show up-to-date values (e.g. a document total updated after the task was created)
