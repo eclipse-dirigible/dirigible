@@ -308,6 +308,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             else if (!dependent && !setting && !compositionParents.containsValue(name)) {
                 entityMap.put("layoutType", "MANAGE");
             }
+            // A document master (owns a *Item / DocumentItem composition child) gets a generated .print
+            // template + feeder, so its edit surface can offer a Print button. Flag it independently of
+            // the layout: the MANAGE_DOCUMENT layout renders Print in the document view already, but a
+            // document master whose UI is overridden to a calendar/slots view reuses the plain manage
+            // form for edit - the flag is what lets that shared form show Print too.
+            if (documentItems.containsKey(name)) {
+                entityMap.put("hasPrint", "true");
+            }
             // multilingual: the entity keeps per-language values in a sibling <TABLE>_LANG table. The
             // schema template generates that table and the Java DAO template overlays translated values
             // on every read for the caller's Accept-Language (same attribute the EDM editor writes).
