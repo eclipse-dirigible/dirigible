@@ -15,3 +15,8 @@ Get-ChildItem -Recurse -Include *.ts -Exclude *.d.ts | ForEach-Object {
 
 # build dts
 tsc --emitDeclarationOnly --outDir dist\dts
+
+# fail loudly if the dist is incomplete - a truncated dist ships a jar whose whole JS layer
+# fails at runtime (see eclipse-dirigible/dirigible#6339)
+node verify-dist.js
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
