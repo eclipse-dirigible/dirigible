@@ -144,6 +144,28 @@ document.addEventListener('alpine:init', () => {
       return 'default';
     },
 
+    // ----- Export / print: the FULL filtered set (not the current page), cells resolved exactly
+    // like the table (FK labels, formatted dates) via the shared basePage helpers.
+    exportColumns: [
+#foreach($property in $properties)
+#if(!$property.dataAutoIncrement && $property.widgetIsMajor)
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+#end
+#end
+    ],
+    exportCell(row, col) {
+      const v = row[col.name];
+      if (v == null || v === '') return '';
+      return col.fk ? this.lookupText(col.name, v) : this.displayValue(v, !!col.date);
+    },
+    exportCsv() {
+      this.exportRowsCsv(this.filteredMasters, this.exportColumns, (r, c) => this.exportCell(r, c), '${name}.csv');
+    },
+    printList() {
+      this.printRows(this.filteredMasters, this.exportColumns, (r, c) => this.exportCell(r, c),
+        window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}');
+    },
+
     newMaster()  { window.PineconeRouter.navigate('/${name}/create'); },
     editMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
     previewMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },

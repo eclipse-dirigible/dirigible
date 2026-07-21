@@ -474,6 +474,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(campaignMasterView.contains("statusVariant(lookupText('Status', row.Status))"),
                 "the master table must render the EntityStatus column as a resolved badge, not a raw id");
 
+        // Every list surface exports/prints its rows: the manage list and the master list emit the
+        // column metadata + toolbar actions wired to the shared basePage CSV/print helpers, with
+        // cells resolved like the table (FK labels, formatted dates - never raw ids).
+        String unitManageList = contentOf("gen/emission/js/components/pages/Settings/UnitManageListPage.js");
+        assertTrue(unitManageList.contains("exportRowsCsv(this.sortedItems"),
+                "the manage list must export its filtered+sorted rows as CSV");
+        assertTrue(unitManageList.contains("printRows(this.sortedItems"), "the manage list must print its filtered+sorted rows");
+        String unitManageView = contentOf("gen/emission/views/Settings/Unit-manage-list.html");
+        assertTrue(unitManageView.contains("defaults.export") && unitManageView.contains("printList()"),
+                "the manage list toolbar must carry the Export and Print actions");
+        assertTrue(campaignMasterPage.contains("exportRowsCsv(this.filteredMasters"),
+                "the master list must export its filtered rows as CSV");
+        assertTrue(campaignMasterView.contains("defaults.export") && campaignMasterView.contains("printList()"),
+                "the master toolbar must carry the Export and Print actions");
+
         // personal: the ADDITIONAL scoped controller exists, resolves the current user through the
         // identity entity's repository, and scrubs the sensitive field from responses.
         String claimMy = contentOf("gen/emission/api/claim/ClaimMyController.java");
@@ -535,6 +550,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // which is not rendered on the personal surface at all.
         assertTrue(myList.contains("all['Unit']"), "the my list must load the label lookup for a rendered relation column");
         assertTrue(!myList.contains("all['Person']"), "the my list must not fetch a lookup for the personal-owner relation");
+        // The personal list exports/prints the OWN rows through the same shared helpers - the
+        // sensitive/owner columns are already absent from its column set, so they never export.
+        assertTrue(myList.contains("exportRowsCsv(this.items"), "the personal list must export the own rows as CSV");
+        String myListView = contentOf("gen/emission/views/my/Claim-list.html");
+        assertTrue(myListView.contains("defaults.export") && myListView.contains("printList()"),
+                "the personal list toolbar must carry the Export and Print actions");
         String myForm = contentOf("gen/emission/views/my/Claim-form.html");
         assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
@@ -573,6 +594,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(partnerList.contains("PartnerTicketPartnerController"),
                 "the partner list page must talk to the scoped partner controller");
         assertTrue(spaIndex.contains("/partner/PartnerTicket"), "the SPA must route the partner pages");
+        assertTrue(partnerList.contains("exportRowsCsv(this.items"), "the partner list must export the own rows as CSV");
+        String partnerListView = contentOf("gen/emission/views/partner/PartnerTicket-list.html");
+        assertTrue(partnerListView.contains("defaults.export") && partnerListView.contains("printList()"),
+                "the partner list toolbar must carry the Export and Print actions");
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
         String job = contentOf("gen/events/MonthlyClaimsJob.java");

@@ -61,6 +61,7 @@
         "from": "From {{text}}",
         "filter": "Filter",
         "print": "Print",
+        "export": "Export",
         "reset": "Reset",
         "create": "Create",
         "edit": "Edit",
