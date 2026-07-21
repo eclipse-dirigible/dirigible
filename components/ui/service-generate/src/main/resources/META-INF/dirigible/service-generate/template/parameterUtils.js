@@ -13,6 +13,28 @@ import { Configurations } from "@aerokit/sdk/core";
 import { Base64 } from "@aerokit/sdk/utils";
 import { Bytes } from "@aerokit/sdk/io";
 
+// Humanize a PascalCase/camelCase identifier for display ("PaymentMethod" -> "Payment Method",
+// "TaxEventDate" -> "Tax Event Date"). Mirrors
+// org.eclipse.dirigible.components.intent.generator.IntentNaming.humanize, including its acronym
+// overrides, so a hand-authored .edm with no widgetLabel yields the same labels the intent path
+// would. Exported so generateUtils (the label catalog builder) uses the same implementation.
+const HUMANIZE_OVERRIDES = { 'uom': 'Unit of Measure' };
+
+export function humanizeName(name) {
+    if (!name) return '';
+    const override = HUMANIZE_OVERRIDES[name.toLowerCase()];
+    if (override) return override;
+    let out = '';
+    for (let i = 0; i < name.length; i++) {
+        const c = name.charAt(i);
+        if (i > 0 && c >= 'A' && c <= 'Z' && !(name.charAt(i - 1) >= 'A' && name.charAt(i - 1) <= 'Z')) {
+            out += ' ';
+        }
+        out += i === 0 ? c.toUpperCase() : c;
+    }
+    return out;
+}
+
 export function process(model, parameters) {
     parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
 
@@ -77,7 +99,7 @@ export function process(model, parameters) {
             p.isCalculatedProperty = p.isCalculatedProperty === "true";
 			p.isReadOnlyProperty = p.isReadOnlyProperty === "true";
             p.widgetIsMajor = p.widgetIsMajor === "true";
-            p.widgetLabel = p.widgetLabel ? p.widgetLabel : p.name;
+            p.widgetLabel = p.widgetLabel ? p.widgetLabel : humanizeName(p.name);
 
             if (p.name === "ProcessId") {
                 e.hasProcess = true;
