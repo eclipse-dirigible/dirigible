@@ -193,12 +193,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
               # the body maps to the messageBody field, author/timestamp to the child's audit columns.
+              # The personal owner makes it a personal root too: the PERSONAL document must render
+              # the SAME chat thread (never the generic items table), through the personal items
+              # controller.
               - name: Ticket
                 function: Document
                 documentItemsLayout: chat
                 fields:
                   - { name: id,      type: integer, primaryKey: true, generated: true }
                   - { name: subject, type: string, length: 200 }
+                relations:
+                  - { name: Agent, kind: manyToOne, to: Person, personal: true }
               - name: TicketMessage
                 function: DocumentItem
                 audit: true
@@ -593,6 +598,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "documentItemsLayout: chat must emit the message composer into the document view");
         String ticketPage = contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js");
         assertTrue(ticketPage.contains("sendMessage"), "the chat document page must emit the append-message composer handler");
+        // The PERSONAL document of a chat entity renders the SAME thread + composer (never the
+        // generic line-items table), writing through the personal items controller so ownership is
+        // enforced server-side (the my-document chat parity class).
+        String myTicketDoc = contentOf("gen/emission/views/my/Ticket-document.html");
+        assertTrue(myTicketDoc.contains("role=\"log\""),
+                "the personal document of a chat entity must render the conversation thread, not the items table");
+        assertTrue(myTicketDoc.contains("x-model=\"chatDraft\""), "the personal document must carry the message composer");
+        String myTicketPage = contentOf("gen/emission/js/components/pages/my/TicketMyDocumentPage.js");
+        assertTrue(myTicketPage.contains("sendMessage") && myTicketPage.contains("TicketMessageMyController"),
+                "the personal chat composer must append through the personal items controller");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
