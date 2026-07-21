@@ -40,6 +40,28 @@ document.addEventListener('alpine:init', () => {
       } catch (e) { this.statusOptions = []; }
 #end
       await this.load();
+      this.loadLookups();
+    },
+
+    lookups: {},   // relationship column name -> { fkValue: label }
+    // Resolve every rendered relation column to its label, exactly like the power list - the
+    // personal-owner relation and sensitive fields are not rendered, so no lookup is fetched for
+    // them. Loaded after the rows so the list paints immediately; cells re-render as maps arrive.
+    async loadLookups() {
+      const all = {};
+#foreach($property in $properties)
+#if($property.widgetType == "DROPDOWN" && $property.name != "$!{personalProperty}" && !$property.sensitiveProperty && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
+      try {
+        const opt${property.name} = await App.services.api.getAll('${property.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const map${property.name} = {};
+        (opt${property.name} || []).forEach((e) => { map${property.name}[e.${property.widgetDropDownKey}] = e.${property.widgetDropDownValue}; });
+        all['${property.name}'] = map${property.name};
+      } catch (e) {
+        console.error('[${name}MyListPage] failed to load lookup for ${property.name}', e);
+      }
+#end
+#end
+      this.lookups = all;
     },
 
     async load() {
@@ -56,6 +78,12 @@ document.addEventListener('alpine:init', () => {
     display(row, col) {
       const v = row[col.name];
       if (v == null || v === '') return '—';
+      if (col.fk) {
+        // a relation column shows its referenced label; a dangling/unloaded FK falls back to the id
+        const map = this.lookups[col.name];
+        const text = map ? map[v] : undefined;
+        if (text !== undefined && text !== null && text !== '') return String(text);
+      }
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
       return String(v);
@@ -81,7 +109,7 @@ document.addEventListener('alpine:init', () => {
     columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "$!{personalProperty}" && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.widgetIsMajor != "false")
-      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
+      { name: '${property.name}', label: '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end', tkey: '$projectName:${tprefix}.t.${property.dataName}'#if($property.widgetType == "DOCUMENT_STATUS"), status: true#elseif($property.widgetType == "DROPDOWN"), fk: true#elseif($property.isNumberType), number: true#end#if($property.isDateType), date: true#end },
 #end
 #end
     ],

@@ -178,6 +178,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: rate, type: decimal, sensitive: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+                  # a plain dropdown relation: the personal LIST must resolve it to a label (the
+                  # my-list FK-lookup emission), while the owner relation gets no lookup at all
+                  - { name: Unit, kind: manyToOne, to: Unit }
 
               - name: ClaimLine
                 fields:
@@ -522,6 +525,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // and the SPA routes + sidebar carry the personal surface.
         String myList = contentOf("gen/emission/js/components/pages/my/ClaimMyListPage.js");
         assertTrue(myList.contains("ClaimMyController"), "the my list page must talk to the scoped controller only");
+        // The personal list must resolve relation columns to labels exactly like the power list
+        // (the raw-FK-id regression class) - and never fetch a lookup for the owner relation,
+        // which is not rendered on the personal surface at all.
+        assertTrue(myList.contains("all['Unit']"), "the my list must load the label lookup for a rendered relation column");
+        assertTrue(!myList.contains("all['Person']"), "the my list must not fetch a lookup for the personal-owner relation");
         String myForm = contentOf("gen/emission/views/my/Claim-form.html");
         assertTrue(!myForm.contains("form.Rate"), "the personal form must not render the sensitive field at all");
         assertTrue(!myForm.contains("form.Person"), "the personal form must not render the owner FK control");
