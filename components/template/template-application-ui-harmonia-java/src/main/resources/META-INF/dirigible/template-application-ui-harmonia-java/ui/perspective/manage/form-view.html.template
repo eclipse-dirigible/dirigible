@@ -19,10 +19,10 @@
        (matching the list/master/document views, which have no such guard) - gate on isDialog, not
        isEmbedded. -->
   <div x-h-toolbar data-variant="transparent" x-show="!isDialog">
-    <!-- Page caption in the document title style: the uppercased entity label (e.g. CUSTOMER),
-         text-2xl normal weight - matches the document header look. This caption is intentionally only
-         on the create/edit form, NOT on the list/master browse views. -->
-    <span class="text-2xl font-normal tracking-tight shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}').toUpperCase()"></span>
+    <!-- Page caption in the unified caption style (text-2xl semibold tracking-tight, matching the
+         document header and the form-builder title): the entity label, e.g. "Customer". Intentionally
+         only on the create/edit form, NOT on the list/master browse views. -->
+    <span class="text-2xl font-semibold tracking-tight shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}')"></span>
     <div x-h-toolbar-spacer></div>
 #if($statusProp != "")
     <!-- EntityStatus badge, right-aligned like the document view's pill; shown once the record's
