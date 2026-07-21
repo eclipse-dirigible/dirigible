@@ -75,6 +75,50 @@
 #end
     </div>
 
+#if($documentItemsLayout == "chat")
+    <!-- Conversation thread (chat items) - the personal document renders the SAME chat the power
+         document does (bubbles + composer through the personal items controller), never the generic
+         line-items table. Own vs other alignment keys on the audit CreatedBy vs the logged-in user;
+         an internal memo is tinted distinctly. Composed from shipped Harmonia primitives (inline
+         styles + theme vars - see the power document view for why); the x-h-chat component family
+         will own this styling once it ships. -->
+    <div class="vbox gap-2" style="max-width: 900px" x-show="itemsEnabled">
+      <div x-h-toolbar data-variant="transparent" data-size="sm">
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
+      </div>
+      <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
+      <div class="vbox gap-3 w-full rounded-control border border-input bg-input-inner p-4" style="max-height: 28rem; overflow-y: auto" role="log" aria-live="polite">
+        <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
+          <div class="vbox gap-1" style="max-width: 85%"
+               :style="row.CreatedBy === $store.currentUser.name ? 'align-self:flex-end;align-items:flex-end' : 'align-self:flex-start;align-items:flex-start'">
+            <div class="hbox items-baseline gap-2">
+              <span class="text-foreground text-xs font-medium" x-text="row.CreatedBy || T('$projectName:${tprefix}.defaults.system', 'System')"></span>
+              <span class="text-muted-foreground text-xs" x-text="window.HarmoniaFormat.value(row.CreatedAt, true)"></span>
+#if($chatInternalProperty)
+              <span x-show="row.${chatInternalProperty}" x-h-badge data-variant="warning" x-text="T('$projectName:${tprefix}.defaults.internal', 'Internal')"></span>
+#end
+            </div>
+            <div class="text-sm" style="border-radius: 0.5rem; padding: 0.5rem 0.75rem; white-space: pre-wrap; overflow-wrap: anywhere"
+                 :style="#if($chatInternalProperty)row.${chatInternalProperty} ? 'background:var(--muted);color:var(--foreground)' : (#end(row.CreatedBy === $store.currentUser.name ? 'background:var(--primary);color:var(--primary-foreground)' : 'background:var(--secondary);color:var(--secondary-foreground)')#if($chatInternalProperty))#end"
+                 x-text="row.${chatBodyProperty}"></div>
+          </div>
+        </template>
+        <div x-show="items.length === 0" x-h-text.muted class="p-2" x-text="T('$projectName:${tprefix}.messages.noData', 'No messages yet.')"></div>
+      </div>
+      <div class="vbox gap-2">
+#if($chatInternalProperty)
+        <label class="hbox items-center gap-2 text-sm">
+          <span x-h-switch data-size="sm"><input type="checkbox" x-model="chatInternal" /></span>
+          <span x-text="T('$projectName:${tprefix}.defaults.internalNote', 'Internal note (not visible to the requester)')"></span>
+        </label>
+#end
+        <div class="hbox items-end gap-2 w-full">
+          <textarea x-h-textarea rows="1" class="grow" x-model="chatDraft" @keydown.enter.prevent="sendMessage(chatDraft)" :disabled="chatSending" :aria-label="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message')" :placeholder="T('$projectName:${tprefix}.defaults.writeMessage', 'Write a message...')"></textarea>
+          <button type="button" x-h-button data-variant="primary" @click="sendMessage(chatDraft)" :disabled="chatSending || !chatDraft.trim()" :aria-label="T('$projectName:${tprefix}.defaults.send', 'Send')"><i role="img" x-h-lucide data-lucide="send"></i></button>
+        </div>
+      </div>
+    </div>
+#else
     <!-- Line items (only once the document exists). Add/edit via a dialog; delete inline. -->
     <div class="vbox gap-2" style="max-width: 900px" x-show="itemsEnabled">
       <div x-h-toolbar data-variant="transparent" data-size="sm">
@@ -114,18 +158,21 @@
         </table>
       </div>
     </div>
+#end
 
-    <!-- Totals footer (aggregate fields, read-only). -->
+    <!-- Totals footer (aggregate fields, read-only). A SENSITIVE aggregate is omitted entirely: the
+         personal controller nulls it on the wire, so rendering the row would only show a permanently
+         empty value the owner is not meant to see. -->
 #set($hasAgg = false)
 #foreach($property in $properties)
-#if($property.aggregate == "true")#set($hasAgg = true)#end
+#if($property.aggregate == "true" && !$property.sensitiveProperty)#set($hasAgg = true)#end
 #end
 #if($hasAgg)
     <div class="hbox justify-end" style="max-width: 900px" x-show="itemsEnabled">
       <div x-h-card class="min-w-3xs">
         <div x-h-card-content class="vbox gap-1">
 #foreach($property in $properties)
-#if($property.aggregate == "true")
+#if($property.aggregate == "true" && !$property.sensitiveProperty)
           <div class="hbox items-baseline justify-between gap-4">
             <span class="text-sm text-secondary-foreground" x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>
             <span class="text-sm tabular-nums" x-text="window.HarmoniaFormat ? window.HarmoniaFormat.number(form.${property.name}) : form.${property.name}"></span>

@@ -48,6 +48,15 @@ document.addEventListener('alpine:init', () => {
     itemMode: 'create',
     draft: {},
     itemOptions: {},
+#if($documentItemsLayout == "chat")
+    // Chat composer state (documentItemsLayout: chat) - the personal document renders the same
+    // conversation thread the power document does, through the personal items controller.
+    chatDraft: '',
+    chatSending: false,
+#if($chatInternalProperty)
+    chatInternal: false,
+#end
+#end
 
     // The item column metadata, reused from detail-register (App.detailsFor). Resolved lazily: the
     // detail-register script may run after this component's init, so re-resolve until it is present.
@@ -252,6 +261,35 @@ document.addEventListener('alpine:init', () => {
         this.itemsError = (e && e.message) || 'Could not delete the line item.';
       }
     },
+#if($documentItemsLayout == "chat")
+
+    // Append a chat message through the PERSONAL items controller - ownership of the parent
+    // document is enforced server-side (requireMyParent), so a foreign document cannot be
+    // written to even by hand-crafting the request.
+    async sendMessage(value) {
+      const body = (value || '').trim();
+      if (!body || this.chatSending || !this.def() || this.id == null) return;
+      this.chatSending = true;
+      this.itemsError = null;
+      try {
+        const payload = { '${chatBodyProperty}': body };
+        payload[this.def().masterEntityId] = this.id;
+#if($chatInternalProperty)
+        payload['${chatInternalProperty}'] = !!this.chatInternal;
+#end
+        await App.services.api.post(this.itemsApiPath, payload);
+        this.chatDraft = '';
+#if($chatInternalProperty)
+        this.chatInternal = false;
+#end
+        await this.loadItems();
+      } catch (e) {
+        this.itemsError = (e && e.message) || 'Could not send the message.';
+      } finally {
+        this.chatSending = false;
+      }
+    },
+#end
 
     /** After an item change the server recomputes the header aggregates - re-read them. */
     async reloadHeaderTotals() {
