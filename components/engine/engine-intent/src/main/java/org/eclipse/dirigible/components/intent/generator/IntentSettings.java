@@ -21,6 +21,8 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
 
 /**
  * The {@code <intent>.settings} document: the per-project recipe for turning the generated model
@@ -121,7 +123,39 @@ public final class IntentSettings {
         if (settings == null) {
             settings = new IntentSettings();
         }
+        if (!hasUserTasksSection(json)) {
+            // A .settings scaffolded before the userTasks setting existed carries no such section -
+            // it must keep the documented ADMINISTRATOR default, exactly as scaffolding would have
+            // written it. Only an EXPLICIT userTasks block opts out (an empty candidateGroupsExtra
+            // is a deliberate "no extra groups"). Without this, every pre-existing settings file
+            // silently emitted single-group tasks that no administrator inbox could see.
+            if (settings.userTasks == null) {
+                settings.userTasks = new UserTasks();
+            }
+            if (settings.userTasks.candidateGroupsExtra == null) {
+                settings.userTasks.candidateGroupsExtra = new ArrayList<>();
+            }
+            settings.userTasks.candidateGroupsExtra.add("ADMINISTRATOR");
+        }
         return settings;
+    }
+
+    /**
+     * Whether the raw settings document declares a {@code userTasks} member at all (a {@code null}
+     * member counts as absent). The deserialized POJO cannot answer this - a missing section and an
+     * explicitly empty one both surface as an empty list.
+     */
+    private static boolean hasUserTasksSection(String json) {
+        if (json == null || json.isBlank()) {
+            return false;
+        }
+        JsonElement root = JsonParser.parseString(json);
+        if (!root.isJsonObject()) {
+            return false;
+        }
+        JsonElement userTasks = root.getAsJsonObject()
+                                    .get("userTasks");
+        return userTasks != null && !userTasks.isJsonNull();
     }
 
     /**
