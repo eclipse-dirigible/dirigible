@@ -114,6 +114,20 @@ document.addEventListener('alpine:init', () => {
 #end
     ],
 
+    // ----- Export / print of the own rows: same columns and cell resolution as the table
+    // (FK labels, status text, formatted dates) via the shared basePage helpers.
+    exportCell(row, col) {
+      if (row[col.name] == null || row[col.name] === '') return '';
+      return col.status ? this.statusText(row) : this.display(row, col);
+    },
+    exportCsv() {
+      this.exportRowsCsv(this.items, this.columns, (r, c) => this.exportCell(r, c), '${name}.csv');
+    },
+    printList() {
+      this.printRows(this.items, this.columns, (r, c) => this.exportCell(r, c),
+        'My ' + (window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}'));
+    },
+
     newEntity() { this.navigate('/my/${name}/create'); },
     openEntity(row) { this.navigate('/my/${name}/' + row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end + '/edit'); },
   }));

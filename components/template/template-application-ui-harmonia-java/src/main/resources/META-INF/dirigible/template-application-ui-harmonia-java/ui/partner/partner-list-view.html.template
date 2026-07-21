@@ -11,6 +11,13 @@
       <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
+    <!-- Export the own rows as CSV / print them (Save as PDF via the browser dialog). -->
+    <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="exportCsv()">
+      <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
+    </button>
+    <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="printList()">
+      <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+    </button>
   </div>
 
   <div x-show="state === 'loading'" class="p-4"><div x-h-spinner></div></div>
