@@ -53,6 +53,13 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
 - **rest** — the same CRUD over the generated Java controllers via `APIRequestContext` (isolates
   backend vs UI failures), asserting the manifest's field names bind and delete yields 404.
 - **multilingual** — switch the shared language key, reload, a seeded row shows its translated name.
+- **my** — the personal (my) surface WIRE contract, when the manifest marks an entity `personal`:
+  create through the scoped `<Entity>MyController` (owner FK forced server-side), every `sensitive`
+  field null on the personal wire, the own row in the personal list, foreign rows 404 (when the
+  owner relation is optional), own-row delete. Skips with a pointer when the test user has no
+  identity mapping (seed the dev identity row). Personal *UI* parity (resolved labels, chat,
+  calendar on the My shell) is deliberately not asserted yet — it tracks the personal-template
+  parity fixes.
 - **shell** (opt-in) — the shared application shell's nav item opens the module SPA in its iframe.
 
 Test records carry an `APPTEST-` prefix and are removed in teardown; seed data is never mutated.

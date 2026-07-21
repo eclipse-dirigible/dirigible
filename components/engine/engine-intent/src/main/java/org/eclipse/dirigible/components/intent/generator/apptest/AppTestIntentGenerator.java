@@ -168,6 +168,29 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         if (hasSeed(model, name)) {
             out.put("expectSeedData", true);
         }
+        // personal (my) surface: a `personal: true` to-one relation makes the entity a personal
+        // root - the generator emits an ADDITIONAL scoped <Entity>MyController whose contract the
+        // runner's my flow drives: reads filtered to the identity-mapped user, the owner FK forced
+        // server-side, sensitive fields stripped from the wire, foreign rows 404.
+        for (RelationIntent relation : entity.getRelations()) {
+            if (!relation.isPersonal()) {
+                continue;
+            }
+            Map<String, Object> personal = new LinkedHashMap<>();
+            personal.put("api", "/" + sanitizeJavaIdentifier(string(edm.get("perspectiveName"))) + "/" + name + "MyController");
+            personal.put("owner", IntentNaming.pascalCase(relation.getName()));
+            List<String> sensitive = new ArrayList<>();
+            for (FieldIntent field : entity.getFields()) {
+                if (field.isSensitive()) {
+                    sensitive.add(IntentNaming.pascalCase(field.getName()));
+                }
+            }
+            if (!sensitive.isEmpty()) {
+                personal.put("sensitive", sensitive);
+            }
+            out.put("personal", personal);
+            break;
+        }
         // exactlyOne checks: exactly one of the named fields may be non-null - a sample record
         // filling all of them is rejected with 400, so the runner keeps only the first
         List<List<String>> exactlyOne = new ArrayList<>();
