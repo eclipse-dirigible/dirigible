@@ -311,6 +311,14 @@ export function process(model, parameters) {
                                                  start: c.calendarStartProperty || null,
                                                  end: c.calendarEndProperty || null,
                                                  title: c.calendarTitleProperty || null,
+                                                 // a title naming a RELATION resolves to its referenced label on the panel
+                                                 titleLookup: (() => {
+                                                     const tp = c.calendarTitleProperty;
+                                                     const p = tp && (c.properties || []).find(x => x.name === tp
+                                                             && (x.widgetType === 'DROPDOWN' || x.widgetType === 'DOCUMENT_STATUS'));
+                                                     return p ? { url: p.widgetDropdownControllerUrl, key: p.widgetDropDownKey,
+                                                         value: p.widgetDropDownValue } : null;
+                                                 })(),
                                                  view: c.calendarInitialView || 'month'
                                              } : null,
                                              columns: (c.properties || []).filter(cp => !cp.sensitiveProperty && !cp.dataAutoIncrement

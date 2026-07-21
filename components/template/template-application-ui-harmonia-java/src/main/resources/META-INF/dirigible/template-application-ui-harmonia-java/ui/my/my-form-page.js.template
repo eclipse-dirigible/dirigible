@@ -182,7 +182,7 @@ document.addEventListener('alpine:init', () => {
 #foreach($child in $myChildren)
       { name: '${child.name}', label: '${child.label}', fkProperty: '${child.fkProperty}',
         apiPath: '${child.apiPath}', rows: [], state: 'loading',
-        calendar: #if($child.calendar){ start: '${child.calendar.start}', end: #if($child.calendar.end)'${child.calendar.end}'#{else}null#end, title: #if($child.calendar.title)'${child.calendar.title}'#{else}null#end, view: '${child.calendar.view}' }#{else}null#end,
+        calendar: #if($child.calendar){ start: '${child.calendar.start}', end: #if($child.calendar.end)'${child.calendar.end}'#{else}null#end, title: #if($child.calendar.title)'${child.calendar.title}'#{else}null#end, titleLookup: #if($child.calendar.titleLookup){ url: '${child.calendar.titleLookup.url}', key: '${child.calendar.titleLookup.key}', value: '${child.calendar.titleLookup.value}' }#{else}null#end, view: '${child.calendar.view}' }#{else}null#end,
         calCfg: { view: '#if($child.calendar)${child.calendar.view}#{else}month#end', events: [] },
         columns: [#foreach($col in $child.columns){ name: '${col.name}', label: '${col.label}'#if($col.number), number: true#end#if($col.date), date: true#end }#if($foreach.hasNext), #end#end] },
 #end
@@ -192,7 +192,18 @@ document.addEventListener('alpine:init', () => {
       for (const child of this.children) {
         try {
           child.rows = await App.services.api.get(child.apiPath + '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)) || [];
-          if (child.calendar) child.calCfg = { view: child.calendar.view, events: this.buildEvents(child) };
+          if (child.calendar) {
+            // a title naming a RELATION resolves to its referenced label (fail-soft: raw value stays)
+            if (child.calendar.titleLookup && !child.titleMap) {
+              try {
+                const rows = await App.services.api.getAll(child.calendar.titleLookup.url, { baseUrl: '' });
+                const m = {};
+                (rows || []).forEach(r => { m[r[child.calendar.titleLookup.key]] = r[child.calendar.titleLookup.value]; });
+                child.titleMap = m;
+              } catch (e) { child.titleMap = {}; }
+            }
+            child.calCfg = { view: child.calendar.view, events: this.buildEvents(child) };
+          }
           child.state = 'default';
         } catch (e) {
           child.state = 'error';
@@ -217,8 +228,11 @@ document.addEventListener('alpine:init', () => {
     },
     eventTitle(child, row) {
       if (child.calendar.title) {
-        const t = row[child.calendar.title];
-        if (t !== undefined && t !== null && String(t) !== '') return String(t);
+        const v = row[child.calendar.title];
+        const m = child.titleMap;
+        const resolved = m ? m[v] : undefined;
+        if (resolved !== undefined && resolved !== null && String(resolved) !== '') return String(resolved);
+        if (v !== undefined && v !== null && String(v) !== '') return String(v);
       }
       return child.label + ' #' + row.Id;
     },

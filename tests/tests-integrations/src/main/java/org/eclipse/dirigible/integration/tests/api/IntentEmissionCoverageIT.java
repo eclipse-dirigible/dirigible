@@ -214,6 +214,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
 
+              # view: calendar on a NON-ITEM composition child of a personal DOCUMENT master - the
+              # document surface renders it as an embedded calendar panel (power secondary panel +
+              # my-document children), and the relation title resolves through a label lookup.
+              - name: TicketVisit
+                view: calendar
+                calendar: { start: visitDate, title: Person }
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: visitDate, type: date, required: true }
+                relations:
+                  - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
+                  - { name: Person, kind: manyToOne, to: Person }
+
               # view: range + a personal owner - the PERSONAL surface must render the range
               # calendar (never the plain form+list), scoped to the MyController (U3 parity).
               - name: Leave
@@ -645,6 +658,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myTicketPage = contentOf("gen/emission/js/components/pages/my/TicketMyDocumentPage.js");
         assertTrue(myTicketPage.contains("sendMessage") && myTicketPage.contains("TicketMessageMyController"),
                 "the personal chat composer must append through the personal items controller");
+
+        // view: calendar on a NON-ITEM composition child of a Document master - the document
+        // surface renders the child as an embedded calendar panel on BOTH shells (the class where
+        // the calendar was realized on the master layout but silently degraded to a table - or to
+        // nothing - on the document layout), and a relation title resolves via the label lookup.
+        String ticketDoc2 = contentOf("gen/emission/views/Ticket/Ticket-document.html");
+        assertTrue(ticketDoc2.contains("def.calendar") && ticketDoc2.contains("x-h-calendar"),
+                "the power document's secondary panels must render a calendar child as an embedded calendar");
+        String visitRegister = contentOf("gen/emission/js/components/pages/Ticket/TicketVisit.detail.js");
+        assertTrue(visitRegister.contains("calendar: {"), "the calendar child's detail registration must carry the calendar config");
+        assertTrue(visitRegister.contains("lookup: {"),
+                "the calendar child's relation columns must carry their label lookups (title resolution)");
+        assertTrue(myTicketPage.contains("loadChildren") && myTicketPage.contains("TicketVisitMyController"),
+                "the personal document must load its non-item children through their scoped controllers");
+        assertTrue(myTicketPage.contains("titleLookup"),
+                "the personal document's child calendar must resolve a relation title via the label lookup");
+        assertTrue(myTicketDoc.contains("onChildEventClick"), "the personal document must render the child calendar panel markup");
 
         // view: range/calendar + personal - the personal surface renders the calendar (never the
         // plain form+list), reads through the scoped controller, and /my/<Entity> lands on it.

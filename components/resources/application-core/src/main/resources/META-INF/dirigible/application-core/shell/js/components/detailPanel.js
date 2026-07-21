@@ -67,6 +67,9 @@ function detailPanel(def, masterId) {
         }
       }
       this.lookups = all;
+      // A calendar def re-renders its events once the maps arrive - a title naming a relation
+      // column resolves to the referenced label instead of the raw FK id.
+      if (this.def.calendar) this.calCfg = { view: this.calCfg.view, events: this.buildEvents() };
       this.refreshIcons();
     },
 
@@ -160,8 +163,17 @@ function detailPanel(def, masterId) {
     eventTitle(row) {
       const cal = this.def.calendar;
       if (cal.title) {
-        const t = row[cal.title];
-        if (t !== undefined && t !== null && String(t) !== '') return String(t);
+        const v = row[cal.title];
+        // A title naming a RELATION column resolves to its referenced label, exactly like the
+        // table cell does; the raw value stays the fallback for dangling FKs / unloaded maps.
+        const col = (this.def.columns || []).find(c => c.name === cal.title && c.lookup);
+        if (col) {
+          const m = this.lookups[cal.title];
+          const ref = m ? m[v] : undefined;
+          const t = ref ? ref[col.lookup.text] : undefined;
+          if (t !== undefined && t !== null && String(t) !== '') return String(t);
+        }
+        if (v !== undefined && v !== null && String(v) !== '') return String(v);
       }
       return this.def.label + ' #' + row[this.def.primaryKey];
     },

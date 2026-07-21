@@ -184,6 +184,68 @@
     </div>
 #end
 
+#set($docChildren = [])
+#if($myChildren)
+#foreach($child in $myChildren)
+#if($child.name != "$!{documentItemsEntity}")
+#set($ignore = $docChildren.add($child))
+#end
+#end
+#end
+#if($docChildren.size() > 0)
+
+    <!-- Non-item children inheriting the personal scope: an embedded calendar (view: calendar on
+         the child) or a table - the SAME panels the my-form renders (e.g. the day-allocation
+         calendar on a timesheet document). Only once the document exists. -->
+    <template x-if="mode === 'edit'">
+      <div class="vbox gap-4" style="max-width: 900px">
+        <template x-for="child in children" :key="child.name">
+          <div x-h-card>
+            <div x-h-card-header class="hbox items-center">
+              <span x-h-card-title x-text="child.label"></span>
+              <div class="grow"></div>
+              <button x-h-button data-variant="primary" data-size="sm" @click="addChild(child)">
+                <i role="img" x-h-lucide data-lucide="plus"></i>
+                <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
+              </button>
+            </div>
+            <div x-h-card-content>
+              <div x-show="child.state === 'loading'"><div x-h-spinner></div></div>
+              <template x-if="child.calendar">
+                <div x-show="child.state === 'default'" style="min-height: 420px">
+                  <div x-h-calendar="child.calCfg" style="height: 420px"
+                       @event-click="onChildEventClick(child, $event)" @date-click="onChildDateClick(child, $event)"></div>
+                </div>
+              </template>
+              <template x-if="!child.calendar">
+                <div x-show="child.state === 'default'" x-h-table-container.scroll style="max-height: 320px">
+                  <table x-h-table data-borders="rows">
+                    <thead x-h-table-header>
+                      <tr x-h-table-row>
+                        <template x-for="col in child.columns" :key="col.name">
+                          <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="col.label"></th>
+                        </template>
+                      </tr>
+                    </thead>
+                    <tbody x-h-table-body>
+                      <template x-for="row in child.rows" :key="row.Id">
+                        <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="editChild(child, row.Id)">
+                          <template x-for="col in child.columns" :key="col.name">
+                            <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayChild(child, row, col)"></td>
+                          </template>
+                        </tr>
+                      </template>
+                    </tbody>
+                  </table>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </template>
+#end
+
     <div class="hbox gap-2" style="max-width: 900px">
       <button x-h-button data-variant="negative" x-show="mode === 'edit'" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
