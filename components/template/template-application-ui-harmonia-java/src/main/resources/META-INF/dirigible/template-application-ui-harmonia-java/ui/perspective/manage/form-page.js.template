@@ -173,6 +173,15 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($hasPrint == "true")
+
+    // Print (document master rendered through this shared form): renders the CMS-seeded .print
+    // template server-side to PDF, asking for the language when several exist.
+    printLangOpen: false,
+    printLanguages: [],
+    printBusy: false,
+    printError: null,
+#end
 
     async init() {
       // The edit/preview routes are /${name}/{id}/edit|preview — Pinecone exposes the param as `id`.
@@ -501,6 +510,67 @@ document.addEventListener('alpine:init', () => {
 #end
       return payload;
     },
+#if($hasPrint == "true")
+
+    // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
+    // can be customized via the Documents perspective. One language prints directly; several ask.
+    async openPrint() {
+      this.printError = null;
+      this.printBusy = true;
+      let languages = [];
+      try {
+        languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];
+      } catch (e) {
+        console.error('Print languages lookup failed', e);
+      }
+      this.printBusy = false;
+      if (languages.length > 1) {
+        // Several templates: ALWAYS ask (the Region & Language setting only pre-sorts the suggested
+        // default first). Auto-printing the configured language here suppresses the dialog entirely,
+        // since the locale store always resolves to a value.
+        const configured = (Alpine.store('locale') || {}).value;
+        this.printLanguages = languages.slice().sort((a, b) =>
+          (a.code === configured ? -1 : 0) - (b.code === configured ? -1 : 0));
+        this.printLangOpen = true;
+      } else {
+        // zero languages still attempts the default: the server answers with a clear 404
+        await this.printDoc(languages.length === 1 ? languages[0].code : 'en');
+      }
+    },
+
+    async printDoc(lang) {
+      this.printError = null;
+      this.printBusy = true;
+      try {
+        // The generated print feeder (gen/events/${name}PrintFeeder) loads the document + its related
+        // graph through the repositories and returns the { document, items } payload the template binds
+        // - so {{document.<Relation>.<Field>}} resolves. It is called as the logged-in user (auth +
+        // tenant + i18n are the caller's).
+        const payload = await App.services.api.get(
+          '/services/java/${projectName}/gen/events/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
+        const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          this.printError = response.status === 404
+            ? 'No print template found. Publish the project or upload one via Documents.'
+            : 'Print failed (' + response.status + ')';
+          return;
+        }
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+      } catch (e) {
+        console.error('Print failed', e);
+        this.printError = 'Print failed';
+      } finally {
+        this.printBusy = false;
+      }
+    },
+#end
 
     cancel() {
       // Only when opened as an FK "Add" iframe dialog: ask the parent to close it instead of navigating

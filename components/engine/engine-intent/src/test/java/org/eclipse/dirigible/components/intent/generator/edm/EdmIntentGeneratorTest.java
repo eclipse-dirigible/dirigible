@@ -111,6 +111,8 @@ class EdmIntentGeneratorTest {
         // render hint (shown in the footer, not the header form).
         assertEquals("MANAGE_DOCUMENT", invoice.get("layoutType"), "a master with an *Item composition child uses the document layout");
         assertEquals("SalesInvoiceItem", invoice.get("documentItemsEntity"), "the document names its line-items entity");
+        assertEquals("true", invoice.get("hasPrint"), "a document master gets a .print template, so it is flagged for a Print action");
+        assertNull(entityByName(entities, "SalesInvoiceItem").get("hasPrint"), "a line-items child is not a document master - no Print");
         assertEquals("Sales Invoice", invoice.get("documentLabel"), "the document header label is the humanized master name");
         assertEquals("Sales Invoice Items", invoice.get("documentItemsLabel"), "the items label is the humanized + pluralized child name");
         assertEquals("true", propertyByName(invoice, "Total").get("aggregate"), "a field marked aggregate carries the footer render hint");
@@ -187,6 +189,38 @@ class EdmIntentGeneratorTest {
         // An independent property carries none of the attributes.
         Map<String, Object> countryFk = propertyByName(entityByName(entities, "Customer"), "Country");
         assertNull(countryFk.get("widgetDependsOnProperty"));
+    }
+
+    @Test
+    void documentMasterWithACalendarViewStillCarriesThePrintFlag() {
+        // A document (header-items) master whose UI is overridden to a range calendar: the layout
+        // becomes MANAGE_CALENDAR (the document page is replaced by the calendar + the shared manage
+        // form for edit), but it still gets a .print template + feeder - so it must keep hasPrint, which
+        // is what lets that reused manage form show a Print button.
+        String yaml = """
+                name: leave
+                entities:
+                  - name: LeaveRequest
+                    view: range
+                    calendar: { start: fromDate, end: toDate }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: fromDate, type: date }
+                      - { name: toDate, type: date }
+                  - name: LeaveRequestItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date }
+                    relations:
+                      - { name: LeaveRequest, kind: manyToOne, to: LeaveRequest, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "leave");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> request = entityByName(entities, "LeaveRequest");
+        assertEquals("MANAGE_CALENDAR", request.get("layoutType"), "view: range overrides the document layout with the calendar");
+        assertEquals("true", request.get("hasPrint"),
+                "a document master keeps its Print flag even when the calendar view replaces the document page");
     }
 
     @Test

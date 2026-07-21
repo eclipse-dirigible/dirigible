@@ -299,6 +299,16 @@
       </template>
 #end
       <div x-h-toolbar-spacer></div>
+#if($hasPrint == "true")
+      <!-- Print: for a document master rendered through this shared form (a calendar/slots view that
+           replaced the document page), renders the CMS template (Templates/${name}/Print/<lang>/) to
+           PDF; asks for the language when several exist. Existing record only (needs an id to print). -->
+      <span class="text-sm text-secondary-foreground" x-show="printError" x-text="printError"></span>
+      <button type="button" x-h-button data-variant="outline" x-show="(isEdit || isPreview) &amp;&amp; id" :disabled="printBusy" @click="openPrint()">
+        <span x-show="printBusy" x-h-spinner></span>
+        <svg x-h-lucide role="img" data-lucide="printer" x-show="!printBusy"></svg><span x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></span>
+      </button>
+#end
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
       <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
@@ -343,5 +353,28 @@
     </div>
 #end
   </div>
+#if($hasPrint == "true")
+
+  <!-- Print language picker: shown when more than one template language exists under
+       Templates/${name}/Print/ in the CMS ("English" -> en, "Bulgarian" -> bg, ...) -->
+  <div x-h-dialog-overlay :data-open="printLangOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title>Print</h2>
+        <p x-h-dialog-description>Choose the template language.</p>
+        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"></button>
+      </div>
+      <div x-h-dialog-content>
+        <div class="vbox gap-2">
+          <template x-for="lang in printLanguages" :key="lang.code">
+            <button type="button" x-h-button data-variant="outline" @click="printLangOpen = false; printDoc(lang.code)">
+              <i role="img" x-h-lucide data-lucide="printer"></i><span x-text="lang.name"></span>
+            </button>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+#end
 
 </div>
