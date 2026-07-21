@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport
 import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport.FieldLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
+import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.TimerLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
@@ -296,6 +297,22 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // setRelationField.
         List<StepIntent> steps =
                 augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, timerLoads, ownFieldPascalCase, writerByTask, setterByTask);
+        // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
+        // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
+        // serviceTask - pull it out of the main flow (it is emitted inside the event subprocess), and
+        // hold a reference so it can be appended there.
+        boolean hasAbort = !ProcessAbortSupport.statuses(process)
+                                               .isEmpty();
+        String abortThenName = hasAbort ? ProcessAbortSupport.thenStep(process) : null;
+        StepIntent abortThenStep = null;
+        if (abortThenName != null) {
+            for (StepIntent step : steps) {
+                if (abortThenName.equals(step.getName())) {
+                    abortThenStep = step;
+                }
+            }
+            steps.removeIf(step -> abortThenName.equals(step.getName()));
+        }
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
         List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
         // Boundary timers on user tasks (timeout: non-cancelling reminder; expire: cancelling,
@@ -331,6 +348,15 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                   .append("\"></message>\n");
             }
         }
+        // The abort message the event subprocess (and the correlating glue listener) subscribes to.
+        if (hasAbort) {
+            String abortMessage = ProcessAbortSupport.messageName(processId);
+            sb.append("  <message id=\"")
+              .append(escapeXmlAttribute(abortMessage))
+              .append("\" name=\"")
+              .append(escapeXmlAttribute(abortMessage))
+              .append("\"></message>\n");
+        }
         sb.append("  <process id=\"")
           .append(escapeXmlAttribute(processId))
           .append("\" name=\"")
@@ -352,9 +378,12 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    <endEvent id=\"")
           .append(END_ID)
           .append("\"></endEvent>\n");
+        if (hasAbort) {
+            appendAbortHandler(sb, processId, abortThenStep, projectName);
+        }
         writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
-        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers);
+        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers, hasAbort, abortThenStep);
         sb.append("</definitions>\n");
         return sb.toString();
     }
@@ -409,6 +438,70 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(">\n");
         sb.append("      </timerEventDefinition>\n");
         sb.append("    </boundaryEvent>\n");
+    }
+
+    // ----- abortOn: interrupting message event subprocess --------------------------------------
+
+    /** The element ids of a process's abort event subprocess (derived from the process id). */
+    private static String abortHandlerId(String processId) {
+        return processId + "AbortHandler";
+    }
+
+    private static String abortStartId(String processId) {
+        return processId + "AbortStart";
+    }
+
+    private static String abortEndId(String processId) {
+        return processId + "AbortEnd";
+    }
+
+    /**
+     * Emit the {@code abortOn} event subprocess: a {@code triggeredByEvent} subprocess whose
+     * <b>interrupting</b> message start event ({@code <Process>Abort}) runs an optional cleanup
+     * serviceTask and then a <b>terminate</b> end event - cancelling the whole instance (its pending
+     * user tasks, parked waits and armed timers) when the correlating glue fires the message. Placing
+     * the interruption in an event subprocess avoids wrapping the main flow in a subprocess.
+     */
+    private static void appendAbortHandler(StringBuilder sb, String processId, StepIntent cleanup, String projectName) {
+        String startId = abortStartId(processId);
+        String endId = abortEndId(processId);
+        sb.append("    <subProcess id=\"")
+          .append(escapeXmlAttribute(abortHandlerId(processId)))
+          .append("\" name=\"")
+          .append(escapeXmlAttribute(IntentNaming.humanize(processId) + " Abort"))
+          .append("\" triggeredByEvent=\"true\">\n");
+        sb.append("      <startEvent id=\"")
+          .append(escapeXmlAttribute(startId))
+          .append("\" isInterrupting=\"true\">\n");
+        sb.append("        <messageEventDefinition messageRef=\"")
+          .append(escapeXmlAttribute(ProcessAbortSupport.messageName(processId)))
+          .append("\"></messageEventDefinition>\n");
+        sb.append("      </startEvent>\n");
+        String afterStart = endId;
+        if (cleanup != null) {
+            appendServiceTask(sb, cleanup, projectName, processId);
+            afterStart = cleanup.getName();
+        }
+        sb.append("      <endEvent id=\"")
+          .append(escapeXmlAttribute(endId))
+          .append("\">\n        <terminateEventDefinition></terminateEventDefinition>\n      </endEvent>\n");
+        sb.append("      <sequenceFlow id=\"flow_")
+          .append(escapeXmlAttribute(startId + "_" + afterStart))
+          .append("\" sourceRef=\"")
+          .append(escapeXmlAttribute(startId))
+          .append("\" targetRef=\"")
+          .append(escapeXmlAttribute(afterStart))
+          .append("\"></sequenceFlow>\n");
+        if (cleanup != null) {
+            sb.append("      <sequenceFlow id=\"flow_")
+              .append(escapeXmlAttribute(cleanup.getName() + "_" + endId))
+              .append("\" sourceRef=\"")
+              .append(escapeXmlAttribute(cleanup.getName()))
+              .append("\" targetRef=\"")
+              .append(escapeXmlAttribute(endId))
+              .append("\"></sequenceFlow>\n");
+        }
+        sb.append("    </subProcess>\n");
     }
 
     /**
@@ -919,7 +1012,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * graph, so re-generation stays byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
-            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers) {
+            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers, boolean hasAbort, StepIntent abortCleanup) {
         // A boundary event has no column of its own - it rides its host task's border. For the layered
         // layout its outgoing branch still needs a rank, so each boundary flow contributes a pseudo-flow
         // from the HOST task to the branch target (the real boundary flow is invisible to the layout:
@@ -986,8 +1079,82 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             sb.append("      </bpmndi:BPMNEdge>\n");
         }
+        if (hasAbort) {
+            appendAbortHandlerShapes(sb, processId, abortCleanup);
+        }
         sb.append("    </bpmndi:BPMNPlane>\n");
         sb.append("  </bpmndi:BPMNDiagram>\n");
+    }
+
+    /** Y of the abort event subprocess row, below the main flow's lanes. */
+    private static final int ABORT_ROW_Y = 470;
+
+    /**
+     * Fixed-placement DI for the {@code abortOn} event subprocess: a container box on the same plane
+     * (BPMN 2.0 expanded-subprocess children carry absolute coordinates) holding the interrupting
+     * message start event, an optional cleanup task and the terminate end event, laid left-to-right
+     * below the main flow. Deterministic, so re-generation stays byte-stable; the modeler re-lays-out
+     * on first manual edit.
+     */
+    private static void appendAbortHandlerShapes(StringBuilder sb, String processId, StepIntent cleanup) {
+        String startId = abortStartId(processId);
+        String endId = abortEndId(processId);
+        int x = FIRST_NODE_CENTER_X;
+        Map<String, int[]> shapes = new LinkedHashMap<>();
+        shapes.put(abortHandlerId(processId), null); // container, sized after its children
+        shapes.put(startId, new int[] {x - 15, ABORT_ROW_Y - 15, 30, 30});
+        String afterStart = endId;
+        if (cleanup != null) {
+            x += COLUMN_PITCH;
+            shapes.put(cleanup.getName(), new int[] {x - 50, ABORT_ROW_Y - 40, 100, 80});
+            afterStart = cleanup.getName();
+        }
+        x += COLUMN_PITCH;
+        shapes.put(endId, new int[] {x - 14, ABORT_ROW_Y - 14, 28, 28});
+        // The container box wraps its children with padding.
+        int minX = FIRST_NODE_CENTER_X - 40;
+        int maxX = x + 40;
+        int[] container = {minX, ABORT_ROW_Y - 70, maxX - minX, 140};
+        shapes.put(abortHandlerId(processId), container);
+        for (Map.Entry<String, int[]> entry : shapes.entrySet()) {
+            int[] b = entry.getValue();
+            boolean expanded = entry.getKey()
+                                    .equals(abortHandlerId(processId));
+            sb.append("      <bpmndi:BPMNShape bpmnElement=\"")
+              .append(escapeXmlAttribute(entry.getKey()))
+              .append("\" id=\"BPMNShape_")
+              .append(escapeXmlAttribute(entry.getKey()))
+              .append(expanded ? "\" isExpanded=\"true\">\n" : "\">\n")
+              .append("        <omgdc:Bounds height=\"")
+              .append(b[3])
+              .append("\" width=\"")
+              .append(b[2])
+              .append("\" x=\"")
+              .append(b[0])
+              .append("\" y=\"")
+              .append(b[1])
+              .append("\"/>\n      </bpmndi:BPMNShape>\n");
+        }
+        appendAbortEdge(sb, startId + "_" + afterStart, shapes.get(startId), shapes.get(afterStart));
+        if (cleanup != null) {
+            appendAbortEdge(sb, cleanup.getName() + "_" + endId, shapes.get(cleanup.getName()), shapes.get(endId));
+        }
+    }
+
+    private static void appendAbortEdge(StringBuilder sb, String flowSuffix, int[] source, int[] target) {
+        sb.append("      <bpmndi:BPMNEdge bpmnElement=\"flow_")
+          .append(escapeXmlAttribute(flowSuffix))
+          .append("\" id=\"BPMNEdge_flow_")
+          .append(escapeXmlAttribute(flowSuffix))
+          .append("\">\n");
+        for (int[] point : edgeWaypoints(source, target)) {
+            sb.append("        <omgdi:waypoint x=\"")
+              .append(point[0])
+              .append("\" y=\"")
+              .append(point[1])
+              .append("\"/>\n");
+        }
+        sb.append("      </bpmndi:BPMNEdge>\n");
     }
 
     /**

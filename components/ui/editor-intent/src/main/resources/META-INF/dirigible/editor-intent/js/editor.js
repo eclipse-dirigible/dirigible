@@ -520,6 +520,19 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 }
             }
 
+            // abortOn: a transition into a listed status cancels the whole in-flight process (an
+            // interrupting event subprocess in the BPMN). Draw a glue-rust "abort" node with a dashed
+            // edge from start (the whole flow is under the abort's watch) to a terminate marker or the
+            // optional cleanup step - mirrors the emitted event subprocess.
+            const abortOn = process.abortOn;
+            if (abortOn && (abortOn.status !== undefined && abortOn.status !== null)) {
+                const statuses = Array.isArray(abortOn.status) ? abortOn.status : [abortOn.status];
+                const abort = graph.insertVertex(parent, null, 'abort on status ' + statuses.join(', '), 0, 0, 150, 44, shapeStyle('ellipse', COLOR.glue));
+                graph.insertEdge(parent, null, 'transitioned', start, abort, edgeStyle(true));
+                const then = abortOn.then && String(abortOn.then).toLowerCase() !== 'end' ? abortOn.then : null;
+                graph.insertEdge(parent, null, then ? 'cleanup' : 'terminate', abort, then ? vertexFor(then) : end, edgeStyle(true));
+            }
+
             const layout = new mxHierarchicalLayout(graph, mxConstants.DIRECTION_NORTH);
             layout.intraCellSpacing = 30;
             layout.interRankCellSpacing = 60;

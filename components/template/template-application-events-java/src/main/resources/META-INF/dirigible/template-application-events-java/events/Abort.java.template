@@ -1,0 +1,54 @@
+package gen.events;
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+
+/**
+ * Aborts the ${process} process when a ${entity} transitions into an abort status.
+ *
+ * Generated from the intent abortOn block - do not edit; it is re-generated with the application.
+ * Bound to the ${entity} -transitioned topic (the channel every transition and workflow setter
+ * publishes on): when the transitioned record carries a matching status and a stamped ProcessId,
+ * it fires the "${messageName}" message, whose interrupting event subprocess cancels the whole
+ * instance - its pending user tasks, parked waits and armed boundary timers. Correlation rides the
+ * ProcessId the trigger listener already writes back; fail-soft: no ProcessId, no matching parked
+ * instance, or an instance already past the abort scope is a no-op, never an error.
+ *
+ * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
+ * interface, not an annotation; @Component makes it a managed bean.
+ */
+@Component
+public class ${process}Abort implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${perspective}-${entity}-transitioned";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${entity}Entity entity = Json.parse(message, ${entity}Entity.class);
+        if (entity == null || entity.ProcessId == null || entity.ProcessId.isBlank()) {
+            return;
+        }
+        if (!(${statusMatchExpression})) {
+            return;
+        }
+        try {
+            Process.correlateMessageEvent(entity.ProcessId, "${messageName}", java.util.Map.of());
+        } catch (RuntimeException notAborting) {
+            // The instance is not in the abort scope (already ended or never reached it) - a no-op by
+            // the fail-soft glue convention, never an error.
+        }
+    }
+}
