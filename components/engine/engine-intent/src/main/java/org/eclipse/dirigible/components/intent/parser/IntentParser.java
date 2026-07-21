@@ -831,12 +831,40 @@ public final class IntentParser {
             EntityIntent parent = byName.get(via.getTo());
             FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
             boolean sum = "sum".equals(rollup.getOp());
+            boolean latest = "latest".equals(rollup.getOp());
             if (counter == null) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
             } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be a numeric type to hold a sum");
-            } else if (!sum && !INTEGER_PK_TYPES.contains(counter.getType())) {
+            } else if (!sum && !latest && !INTEGER_PK_TYPES.contains(counter.getType())) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] must be an integer type to hold a count");
+            }
+            if (latest) {
+                // latest copies the child `of` value from the row with the greatest `by` date onto the
+                // parent field; `of`+`by` required, `by` must be date/timestamp, and the parent field
+                // should hold the same type as `of` (checked leniently: same logical type).
+                FieldIntent of = fieldByName(child, rollup.getOf());
+                FieldIntent by = fieldByName(child, rollup.getBy());
+                if (rollup.getOf() == null || rollup.getOf()
+                                                    .isBlank()) {
+                    issues.add("rollup [" + name + "] with op latest must declare `of` (the child field to copy)");
+                } else if (of == null) {
+                    issues.add("rollup [" + name + "] of [" + rollup.getOf() + "] is not a field of [" + rollup.getEntity() + "]");
+                }
+                if (rollup.getBy() == null || rollup.getBy()
+                                                    .isBlank()) {
+                    issues.add(
+                            "rollup [" + name + "] with op latest must declare `by` (the child date/timestamp field that orders the rows)");
+                } else if (by == null) {
+                    issues.add("rollup [" + name + "] by [" + rollup.getBy() + "] is not a field of [" + rollup.getEntity() + "]");
+                } else if (!"date".equals(by.getType()) && !"timestamp".equals(by.getType())) {
+                    issues.add("rollup [" + name + "] by [" + rollup.getBy() + "] must be a date/timestamp field");
+                }
+                if (of != null && counter != null && of.getType() != null && !of.getType()
+                                                                                .equals(counter.getType())) {
+                    issues.add("rollup [" + name + "] field [" + rollup.getField() + "] type [" + counter.getType()
+                            + "] must match the copied `of` field type [" + of.getType() + "]");
+                }
             }
             if (sum) {
                 // sum needs a numeric child field to add up; capacity / balance (optional) are numeric parent

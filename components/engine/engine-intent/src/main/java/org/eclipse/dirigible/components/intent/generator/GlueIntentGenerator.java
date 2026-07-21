@@ -406,9 +406,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String op = rollup.getOp() == null || rollup.getOp()
                                                         .isBlank() ? "count" : rollup.getOp();
             boolean sum = "sum".equals(op);
+            boolean latest = "latest".equals(op);
             if (sum && (rollup.getOf() == null || rollup.getOf()
                                                         .isBlank())) {
                 LOGGER.warn("Sum roll-up [{}] has no 'of' field - skipping", rollup.getName());
+                continue;
+            }
+            if (latest && (rollup.getOf() == null || rollup.getOf()
+                                                           .isBlank()
+                    || rollup.getBy() == null || rollup.getBy()
+                                                       .isBlank())) {
+                LOGGER.warn("Latest roll-up [{}] needs both 'of' and 'by' - skipping", rollup.getName());
                 continue;
             }
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
@@ -421,6 +429,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("countField", IntentNaming.pascalCase(rollup.getField()));
             base.put("op", op);
             base.put("sumField", sum ? IntentNaming.pascalCase(rollup.getOf()) : "");
+            // latest: copy the `of` value of the child row with the greatest `by` onto the parent field.
+            base.put("ofField", latest ? IntentNaming.pascalCase(rollup.getOf()) : "");
+            base.put("byField", latest ? IntentNaming.pascalCase(rollup.getBy()) : "");
             // Optional (sum) capacity/balance/status: keep a `balance` field = capacity - sum, and set a
             // `status` relation to whenFull/whenPartial at the thresholds. Empty string / -1 = not set.
             boolean withCapacity = sum && rollup.getCapacity() != null && !rollup.getCapacity()
@@ -448,8 +459,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // this one class.
             String className = rollup.getEntity() + fkProperty;
             rollups.add(rollupEntry(base, className + "RollupOnCreate", ""));
-            if (sum) {
-                // A line edit changes the sum, so a sum roll-up must also recompute on update.
+            if (sum || latest) {
+                // A line edit changes the sum (or which row is latest / its value), so sum AND latest
+                // roll-ups must also recompute on update.
                 rollups.add(rollupEntry(base, className + "RollupOnUpdate", "-updated"));
             }
             rollups.add(rollupEntry(base, className + "RollupOnDelete", "-deleted"));
@@ -713,6 +725,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code aborts} glue collection without a repository. */
     static List<Map<String, Object>> buildAbortsForTest(IntentModel model) {
         return buildAborts(model, IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code rollups} glue collection without a repository. */
+    static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
+        return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
     }
 
     /** Test hook: build the {@code waits} glue collection without a repository. */

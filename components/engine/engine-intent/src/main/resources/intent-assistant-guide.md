@@ -1218,6 +1218,18 @@ rollups:
       capacity: total, balance: balance, status: Status, statusWhenFull: 7, statusWhenPartial: 6 }
 ```
 
+**Latest child value (`op: latest`).** Keeps `field` equal to the `of` value of the **most-recent**
+child row - the row with the greatest `by` date/timestamp. Use it to mirror a latest child onto its
+parent (e.g. a currency's headline rate = the newest rate row):
+```yaml
+rollups:
+  # Currency.rate = the rate of the CurrencyRate row with the newest date.
+  - { name: latestRate, entity: CurrencyRate, via: Currency, field: rate, op: latest, of: rate, by: date }
+```
+`of` is the child field copied, `by` is the child `date`/`timestamp` field that decides "latest", and
+the parent `field` must be the same type as `of`. Recomputes on child create/update/delete; if a
+currency has no rate rows the parent field resets to null.
+
 **Transitive (chained) roll-ups.** Roll-ups compose across a multi-level composition: if the parent of
 one roll-up is itself the child of another, a change flows all the way up. Declare one roll-up per
 level and the chain maintains itself - e.g. a 3-level timesheet:
@@ -1296,7 +1308,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 | report `chart` | `bar`, `line`, `pie`, `doughnut`, `polarArea`, `radar` |
 | report `widget.kind` | `count`, `value`, `list` |
 | custom `widgets` `kind` | `kpi`, `page` |
-| rollup `op` | `count` (default), `sum` |
+| rollup `op` | `count` (default), `sum`, `latest` (needs `of` + `by`) |
 | expansion `unit` | `day`, `week`, `month` |
 | transition `when` op | `==`, `!=` |
 

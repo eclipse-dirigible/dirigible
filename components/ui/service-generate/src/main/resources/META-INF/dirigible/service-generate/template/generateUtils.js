@@ -1343,6 +1343,26 @@ function annotateDocumentModels(entities) {
 // event and the transitive cascade terminates.
 function renderRollupAggregate(ru) {
     const cf = ru.countField;
+    if (ru.op === "latest") {
+        // Copy the `of` value of the child row with the greatest `by` date onto the parent field.
+        // Type-agnostic: track the latest ROW (childEntity), then copy its of-field via `var` +
+        // Objects.equals so no knowledge of the of-field's Java type is needed; `by` is date/timestamp
+        // (Comparable). A parent with no child rows resets to null.
+        let s = "        {\n";
+        s += "            " + ru.childEntity + "Entity latestRow = null;\n";
+        s += "            for (var row : rows) {\n";
+        s += "                if (row." + ru.byField + " != null && (latestRow == null || latestRow." + ru.byField + " == null || row." + ru.byField + ".compareTo(latestRow." + ru.byField + ") > 0)) {\n";
+        s += "                    latestRow = row;\n";
+        s += "                }\n";
+        s += "            }\n";
+        s += "            var latestValue = latestRow == null ? null : latestRow." + ru.ofField + ";\n";
+        s += "            if (!java.util.Objects.equals(parent." + cf + ", latestValue)) {\n";
+        s += "                parent." + cf + " = latestValue;\n";
+        s += "                changed = true;\n";
+        s += "            }\n";
+        s += "        }\n";
+        return s;
+    }
     if (ru.op === "sum") {
         const sf = ru.sumField;
         let s = "        {\n";
