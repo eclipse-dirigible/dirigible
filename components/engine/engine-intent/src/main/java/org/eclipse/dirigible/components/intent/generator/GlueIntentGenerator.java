@@ -422,9 +422,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String fkProperty = IntentNaming.pascalCase(rollup.getVia());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("childEntity", rollup.getEntity());
-            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
+            // A setting entity's generated code lives under the shared "Settings" perspective, not its
+            // own name - so a roll-up whose child/parent is `kind: setting` must resolve there, like
+            // the relation-link / personal-assignee builders do. Without this the generated handler
+            // imports gen.<mod>.data.<entityname> (which does not exist) instead of ...data.settings
+            // and the whole client-Java batch fails to compile (a setting-entity roll-up, e.g.
+            // Currency <- CurrencyRate, is the case that exposed it).
+            base.put("childPerspective",
+                    child.isSetting() ? "Settings" : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
             base.put("parentEntity", via.getTo());
-            base.put("parentPerspective", IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+            base.put("parentPerspective",
+                    parent.isSetting() ? "Settings" : IntentEntities.resolvePerspective(via.getTo(), compositionParents));
             base.put("fkProperty", fkProperty);
             base.put("countField", IntentNaming.pascalCase(rollup.getField()));
             base.put("op", op);

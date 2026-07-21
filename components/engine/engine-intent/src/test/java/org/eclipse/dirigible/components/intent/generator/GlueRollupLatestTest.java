@@ -39,12 +39,13 @@ class GlueRollupLatestTest {
                 relations:
                   - { name: rates, kind: oneToMany, to: CurrencyRate }
               - name: CurrencyRate
+                kind: setting
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: date, type: date, required: true }
                   - { name: rate, type: decimal, precision: 18, scale: 6, required: true }
                 relations:
-                  - { name: Currency, kind: manyToOne, to: Currency, composition: true, required: true }
+                  - { name: Currency, kind: manyToOne, to: Currency, required: true }
             rollups:
               - { name: latestRate, entity: CurrencyRate, via: Currency, field: rate, op: latest, of: rate, by: date }
             """;
@@ -63,6 +64,11 @@ class GlueRollupLatestTest {
         assertEquals("Currency", create.get("fkProperty"));
         assertEquals("CurrencyRate", create.get("childEntity"));
         assertEquals("Currency", create.get("parentEntity"));
+        // Both entities are kind: setting, so their generated code lives under the shared "Settings"
+        // perspective - the roll-up glue must resolve there (data.settings), not data.<entityname>,
+        // or the generated handler's imports fail to compile.
+        assertEquals("Settings", create.get("childPerspective"));
+        assertEquals("Settings", create.get("parentPerspective"));
         assertTrue(rollups.stream()
                           .anyMatch(r -> String.valueOf(r.get("topicSuffix"))
                                                .equals("-updated")),
