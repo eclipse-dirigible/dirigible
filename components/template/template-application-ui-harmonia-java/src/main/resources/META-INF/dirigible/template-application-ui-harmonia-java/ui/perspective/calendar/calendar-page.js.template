@@ -9,6 +9,14 @@
  * Fetches through the same generated controller as the manage list; create/edit reuse the shared
  * ${name}FormPage (date-click -> /create, event-click -> /{id}/edit).
  */
+## When the calendar title property is a RELATION, resolve the FK to its referenced label exactly
+## like the list columns do - otherwise every event would carry a raw id as its title.
+#set($titleRelation = false)
+#foreach($property in $properties)
+#if($property.name == "$!{calendarTitleProperty}" && ($property.widgetType == "DROPDOWN" || $property.widgetType == "DOCUMENT_STATUS"))
+#set($titleRelation = $property)
+#end
+#end
 document.addEventListener('alpine:init', () => {
   Alpine.data('${name}CalendarPage', () => ({
     ...basePage(),
@@ -43,7 +51,24 @@ document.addEventListener('alpine:init', () => {
       this.readScope();
 #end
       await this.load();
+#if($titleRelation)
+      this.loadTitleLookup();
+#end
     },
+#if($titleRelation)
+
+    titleLookup: {},   // title relation FK -> referenced label
+    // Loaded after the rows so the calendar paints immediately; events re-render as the map arrives.
+    async loadTitleLookup() {
+      try {
+        const rows = await App.services.api.getAll('${titleRelation.widgetDropdownControllerUrl}', { baseUrl: '' });
+        const map = {};
+        (rows || []).forEach((r) => { map[r.${titleRelation.widgetDropDownKey}] = r.${titleRelation.widgetDropDownValue}; });
+        this.titleLookup = map;
+        this.calCfg = { view: this.calCfg.view, events: this.buildEvents() };
+      } catch (e) { /* fail-soft: the raw value stays the title fallback */ }
+    },
+#end
 
     async load() {
       this.state = 'loading';
@@ -90,6 +115,10 @@ document.addEventListener('alpine:init', () => {
     titleFor(row) {
 #if($calendarTitleProperty)
       const t = row.${calendarTitleProperty};
+#if($titleRelation)
+      const resolved = this.titleLookup[t];
+      if (resolved !== undefined && resolved !== null && String(resolved) !== '') return String(resolved);
+#end
       if (t !== undefined && t !== null && String(t) !== '') return String(t);
 #end
       return '${menuLabel} #' + row.${primaryKeysString};
