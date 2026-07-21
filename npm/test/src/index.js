@@ -3,6 +3,7 @@ import { test } from './fixtures.js';
 import { crudFlow } from './flows/crud.js';
 import { listFlow } from './flows/list.js';
 import { multilingualFlow } from './flows/multilingual.js';
+import { myFlow } from './flows/my.js';
 import { restFlow } from './flows/rest.js';
 import { shellFlow } from './flows/shell.js';
 
@@ -16,6 +17,7 @@ export function runTest(manifestRef, opts = {}) {
       listFlow(manifest, entity, opts);
       crudFlow(manifest, entity, opts);
       restFlow(manifest, entity, opts);
+      myFlow(manifest, entity, opts);
       multilingualFlow(manifest, entity, opts);
       shellFlow(manifest, entity, opts);
     });

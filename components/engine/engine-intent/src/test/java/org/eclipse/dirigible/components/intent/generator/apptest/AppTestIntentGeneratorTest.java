@@ -219,6 +219,43 @@ class AppTestIntentGeneratorTest {
         assertNull(entityOrNull(manifest, "Extra"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void emitsThePersonalSurfaceContract() {
+        String intent = """
+                name: kf-mod-claims
+                entities:
+                  - name: Person
+                    identity: email
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 200 }
+                      - { name: email, type: string, required: true, unique: true, length: 320 }
+                  - name: Claim
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: note, type: string, length: 200 }
+                      - { name: rate, type: decimal, sensitive: true }
+                    relations:
+                      - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+                """;
+        Map<String, Map<String, Object>> edm = new LinkedHashMap<>();
+        edm.put("Person", edmEntity("Person", "Person", "Persons", "MANAGE_LIST", "People", "hr", "KF_MOD_CLAIMS_PERSON", false));
+        edm.put("Claim", edmEntity("Claim", "Claim", "Claims", "MANAGE_LIST", "Claims", "hr", "KF_MOD_CLAIMS_CLAIM", false));
+
+        Map<String, Object> manifest =
+                AppTestIntentGenerator.buildManifest("kf-mod-claims", "kf-mod-claims", IntentParser.parse(intent), edm);
+
+        Map<String, Object> claim = entity(manifest, "Claim");
+        Map<String, Object> personal = (Map<String, Object>) claim.get("personal");
+        assertTrue(personal != null, "a personal: relation must emit the personal surface contract");
+        assertEquals("/claims/ClaimMyController", personal.get("api"));
+        assertEquals("Person", personal.get("owner"));
+        assertEquals(List.of("Rate"), personal.get("sensitive"));
+        // the identity entity itself has no personal relation - no personal block
+        assertNull(entity(manifest, "Person").get("personal"));
+    }
+
     // ---- helpers: a minimal .model-shaped metadata map -------------------------------------------
 
     private static Map<String, Map<String, Object>> edm() {
