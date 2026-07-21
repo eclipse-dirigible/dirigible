@@ -18,7 +18,7 @@
 #end
         </div>
 #elseif($el.controlId == "header")
-        <h1 x-h-text.h3 class="mb-2 col-span-full">$!el.label</h1>
+        <h1 x-h-text.h3 class="mb-2 col-span-full text-2xl font-semibold tracking-tight">$!el.label</h1>
 #elseif($el.controlId == "paragraph")
         <p x-h-text class="col-span-full">$!el.label</p>
 #elseif($el.controlId == "line")

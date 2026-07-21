@@ -6,7 +6,7 @@
 <div x-data="${name}ListPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
-    <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${name}')"></span>
+    <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}', '${name}')"></span>
     <div x-h-toolbar-spacer></div>
     <div x-h-input-group data-size="sm">
       <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"

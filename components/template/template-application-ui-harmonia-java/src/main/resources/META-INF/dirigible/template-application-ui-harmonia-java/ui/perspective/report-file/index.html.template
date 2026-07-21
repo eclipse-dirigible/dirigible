@@ -24,7 +24,7 @@
     <div class="vbox size-full">
       <!-- Hidden in preview mode (the dashboard tile): no title/badge/toolbar, just the data. -->
       <div x-show="!preview" x-h-toolbar data-variant="transparent">
-        <span x-h-toolbar-title class="shrink-0" x-text="displayName"></span>
+        <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="displayName"></span>
         <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
         <div x-h-toolbar-spacer></div>
 #if($chart)
