@@ -86,6 +86,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
         List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
         List<Map<String, Object>> waits = buildWaits(model, settings);
+        List<Map<String, Object>> aborts = buildAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
@@ -101,9 +102,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
-                && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()
-                && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty()
-                && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
+                && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
+                && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
+                && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -114,6 +115,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("fieldLoaders", fieldLoaders);
         glue.put("timerLoaders", timerLoaders);
         glue.put("waits", waits);
+        glue.put("aborts", aborts);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -677,6 +679,40 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * One abort listener per process declaring {@code abortOn}: a {@code MessageHandler} on the trigger
+     * entity's {@code -transitioned} topic that matches the abort statuses and correlates the
+     * {@code <Process>Abort} message on the record's stamped {@code ProcessId} (fail-soft: no parked
+     * instance is a no-op). The interrupting event subprocess the message fires is emitted by the BPMN
+     * generator.
+     */
+    private static List<Map<String, Object>> buildAborts(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> aborts = new ArrayList<>();
+        for (ProcessAbortSupport.Abort abort : ProcessAbortSupport.aborts(model)) {
+            if (!settings.shouldGenerate("aborts", abort.process())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for abort [{}] (not generated)", abort.process());
+                continue;
+            }
+            List<String> terms = new ArrayList<>();
+            for (Integer status : abort.statuses()) {
+                terms.add("entity." + abort.statusProperty() + " != null && entity." + abort.statusProperty() + " == " + status);
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", abort.process());
+            entry.put("entity", abort.entity());
+            entry.put("perspective", abort.perspective());
+            entry.put("messageName", abort.messageName());
+            entry.put("statusMatchExpression", String.join(" || ", terms));
+            aborts.add(entry);
+        }
+        return aborts;
+    }
+
+    /** Test hook: build the {@code aborts} glue collection without a repository. */
+    static List<Map<String, Object>> buildAbortsForTest(IntentModel model) {
+        return buildAborts(model, IntentSettings.parse("{}"));
     }
 
     /** Test hook: build the {@code waits} glue collection without a repository. */

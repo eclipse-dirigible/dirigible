@@ -704,6 +704,35 @@ steps:
 - Use `timeout` for "remind/escalate if not handled in N days" and `expire` for "this offer/request
   is only valid until a date on the record".
 
+**Aborting the flow when the document is voided/cancelled: `abortOn`.** A process-level attribute:
+when the trigger entity transitions into one of the listed statuses, the whole in-flight instance is
+cancelled - its pending user tasks, parked waits and armed timers all stop. This closes the
+orphaned-Inbox-task hole: without it, voiding a document whose create-time flow is still running
+leaves its confirm task sitting in the Inbox forever.
+
+```yaml
+processes:
+  - name: OrderApproval
+    trigger: { onCreate: SalesOrder }
+    abortOn: { status: [4, 5], then: markVoid }   # a -transitioned into CANCELLED/REJECTED kills the flow
+    steps:
+      - { name: confirm, kind: userTask, args: { assignee: manager, form: ConfirmOrder, next: done } }
+      - { name: markVoid, kind: serviceTask, args: { setRelationField: Status, value: 8 } }   # abort-only cleanup
+      - { name: done, kind: end }
+```
+
+- `status:` - an EntityStatus seed id, or a list of ids, of the **trigger entity** (which must
+  declare a `function: EntityStatus` relation). Any `-transitioned` into one of them aborts.
+- `then:` - optional. Omitted or `end` = terminate the instance immediately. A declared
+  `serviceTask` (a `setField`/`setRelationField` cleanup) runs on the abort path before terminating;
+  that step is **abort-only** - route the main flow around it (`next:`) so nothing else reaches it.
+- Correlation rides the stamped `ProcessId`, like `wait` - fail-soft (nothing parked = no-op).
+
+Use `abortOn` whenever a document has a manual `transitions:` void/cancel AND a create-time process:
+the transition and the abort together retire the record cleanly. A cancelling `expire:` timer that
+needs a guard ("only expire if still SENT") is the same shape - prefer `abortOn` over a hand-written
+guard once the status set is known.
+
 ### forms - data-entry UI
 
 **Use when:** the user needs a screen to enter or act on a record (often paired with a process
@@ -1253,6 +1282,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 | step `kind` | `userTask`, `serviceTask`, `decision`, `script`, `wait`, `end` |
 | wait event | `onCreate`, `onUpdate` (never `onDelete`) |
 | userTask timers | `timeout: { after: <ISO-8601 duration>, then: <step> }`, `expire: { until: <date/timestamp field>, then: <step> }` |
+| process `abortOn` | `{ status: <id> \| [ids], then: <serviceTask> \| end }` (trigger entity needs a `function: EntityStatus` relation) |
 | trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
 | notification `channel` | `email` |
@@ -1277,6 +1307,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "the flow waits for a reply / a payment / a goods receipt (a data event resumes it)" -> **processes** (a `wait` step)
 - "remind / escalate if a task is not handled in N days (SLA)" -> **processes** (userTask `timeout:`)
 - "auto-expire the offer/request when its validity date passes" -> **processes** (userTask `expire:`)
+- "cancel the in-flight approval when the document is voided/cancelled (no orphaned Inbox task)" -> **processes** (`abortOn:`)
 - "a screen to enter / edit X" -> **forms**
 - "a button on X's view that opens a custom page / action" -> **actions**
 - "void / cancel / close / reopen a finished document (a guarded manual status change, per record)" -> **transitions**

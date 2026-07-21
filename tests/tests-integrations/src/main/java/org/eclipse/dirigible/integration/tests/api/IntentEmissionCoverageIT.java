@@ -235,6 +235,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
 
+              # BPM events wave 2 (abortOn): an approval whose confirm task is cancelled the moment
+              # the record is voided via the CancelApproval transition (reusing the EntryStatus seeds:
+              # DRAFT 1 / CANCELLED 3). Closes the orphaned-Inbox-task hole.
+              - name: Approval
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: note, type: string, length: 200 }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
             schedules:
@@ -280,6 +290,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
                   - { name: end, kind: end }
 
+              # abortOn: voiding the approval (CancelApproval -> status 3) cancels the confirm task.
+              - name: ApprovalFlow
+                trigger: { onCreate: Approval }
+                abortOn: { status: [3] }
+                steps:
+                  - { name: confirm, kind: userTask, args: { assignee: approver } }
+                  - { name: end, kind: end }
+
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
             # entry passes).
@@ -302,6 +320,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 from: [2]
                 setStatus: 3
                 label: Void
+                icon: ban
+              - name: CancelApproval
+                forEntity: Approval
+                from: [1]
+                setStatus: 3
+                label: Cancel
                 icon: ban
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
@@ -481,6 +505,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String timerLoader = contentOf("gen/events/LoadRfqFlowReviewExpire.java");
         assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
                 "the expire date loader must publish the variable the boundary timer arms from");
+
+        // abortOn (wave 2): the interrupting event subprocess + the correlating listener.
+        String approvalBpmn = contentOf("ApprovalFlow.bpmn");
+        assertTrue(
+                approvalBpmn.contains("<subProcess id=\"ApprovalFlowAbortHandler\"") && approvalBpmn.contains("triggeredByEvent=\"true\"")
+                        && approvalBpmn.contains("isInterrupting=\"true\"") && approvalBpmn.contains("<terminateEventDefinition>"),
+                "abortOn must emit an interrupting, terminating event subprocess");
+        String abortHandler = contentOf("gen/events/ApprovalFlowAbort.java");
+        assertTrue(
+                abortHandler.contains("-transitioned") && abortHandler.contains("entity.Status == 3")
+                        && abortHandler.contains("Process.correlateMessageEvent(entity.ProcessId, \"ApprovalFlowAbort\""),
+                "the abort listener must match the status on -transitioned and correlate on the ProcessId");
 
         // personal UI (phase B): the my pages exist, the form never mentions the sensitive field,
         // and the SPA routes + sidebar carry the personal surface.
@@ -935,6 +971,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
      * Flowable timer jobs and message correlation.
      */
     private void assertBpmEventsRuntime() {
+        // Wave 2 abortOn first - fast, timer-free, so it is verified independently of the slow
+        // timer-driven wave-1 scenarios below.
+        assertAbortOnRuntime();
+
         String rfqApi = API + "/rfq/RfqController";
         String replyApi = API + "/rfq/RfqReplyController";
 
@@ -949,13 +989,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                           .extract()
                                                           .path("Id")));
 
-        // The PT2S timeout escalates the stale review (the async executor's timer job fired)...
+        // The PT2S timeout escalates the stale review (the async executor's timer job fired). The
+        // poll is generous (Flowable's single async executor acquires timer jobs on a cycle, and a
+        // fresh-DB cold first-timer plus the other processes sharing the executor push first-fire
+        // latency well past a naive PT2S on a loaded CI box - a broken timer never fires at all, so
+        // the wide window cannot mask a logic bug)...
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(rfqApi + "/" + rfqA.get())
                                                  .then()
                                                  .statusCode(200)
                                                  .body("State", equalTo("ESCALATED")),
-                60);
+                180);
 
         // ...while the review task STAYS claimable (non-cancelling) - find and complete it.
         AtomicReference<String> reviewTaskId = new AtomicReference<>();
@@ -1007,7 +1051,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("State", equalTo("REPLIED")),
-                60);
+                180);
 
         // Scenario B: the validity date already passed - the cancelling expire withdraws the review
         // task (the date the loader re-read at task entry) and the flow continues at markExpired.
@@ -1025,7 +1069,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("State", equalTo("EXPIRED")),
-                60);
+                180);
         // The cancelled review task is gone - no Review task remains in the inbox.
         restAssuredExecutor.execute(() -> {
             List<Map<String, Object>> tasks = given().when()
@@ -1039,6 +1083,61 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                       .anyMatch(task -> "Review".equals(task.get("name")));
             assertTrue(!reviewLeft, "the cancelling expire must withdraw the review task, got: " + tasks);
         }, 30);
+    }
+
+    /**
+     * BPM events wave 2 ({@code abortOn}), at the outermost layer: create an Approval -> its confirm
+     * task appears -> void it via the CancelApproval transition -> the interrupting event subprocess
+     * cancels the confirm task (the orphaned-Inbox-task hole closed) and the record carries the
+     * CANCELLED status. Uses no async timer (a trigger + a JMS-correlated abort), so it is fast and
+     * deterministic - run it BEFORE the timer-driven wave-1 scenarios so it verifies independently.
+     */
+    private void assertAbortOnRuntime() {
+        String approvalApi = API + "/approval/ApprovalController";
+        AtomicInteger approval = new AtomicInteger();
+        restAssuredExecutor.execute(() -> approval.set(given().contentType("application/json")
+                                                              .body("{\"Note\":\"abort me\"}")
+                                                              .when()
+                                                              .post(approvalApi)
+                                                              .then()
+                                                              .statusCode(200)
+                                                              .extract()
+                                                              .path("Id")));
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> tasks = given().when()
+                                                     .get("/services/inbox/tasks?type=groups")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .extract()
+                                                     .jsonPath()
+                                                     .getList("$");
+            assertTrue(tasks.stream()
+                            .anyMatch(task -> "Confirm".equals(task.get("name"))),
+                    "the approval confirm task must appear, got: " + tasks);
+        }, 90);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + approval.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/CancelApprovalTransition/run")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(approvalApi + "/" + approval.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(3)));
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> tasks = given().when()
+                                                     .get("/services/inbox/tasks?type=groups")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .extract()
+                                                     .jsonPath()
+                                                     .getList("$");
+            boolean confirmLeft = tasks.stream()
+                                       .anyMatch(task -> "Confirm".equals(task.get("name")));
+            assertTrue(!confirmLeft, "abortOn must cancel the confirm task when the approval is voided, got: " + tasks);
+        }, 90);
     }
 
     private static void sleep(long millis) {

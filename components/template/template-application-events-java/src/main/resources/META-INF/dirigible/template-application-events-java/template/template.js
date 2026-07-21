@@ -66,6 +66,13 @@ export function getTemplate(parameters) {
                 collection: "waits"
             },
             {
+                location: "/template-application-events-java/events/Abort.java.template",
+                action: "generate",
+                rename: "gen/events/{{process}}Abort.java",
+                engine: "velocity",
+                collection: "aborts"
+            },
+            {
                 location: "/template-application-events-java/events/Writer.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}.java",

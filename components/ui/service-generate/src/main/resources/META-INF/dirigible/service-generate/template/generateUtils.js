@@ -584,6 +584,31 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "aborts":
+                    // Abort listeners (intent layer): one MessageHandler per process declaring abortOn,
+                    // on the trigger entity's -transitioned topic; a matching status fires the abort
+                    // message that cancels the instance. Not entity-shaped; the Java package segment is
+                    // the lowercased perspective, the topic keeps the raw perspective (like triggers).
+                    if (model.aborts) {
+                        for (let a = 0; a < model.aborts.length; a++) {
+                            const abortParameters = {
+                                ...parameters,
+                                process: model.aborts[a].process,
+                                entity: model.aborts[a].entity,
+                                perspective: model.aborts[a].perspective,
+                                javaPerspective: sanitizeJavaIdentifier(model.aborts[a].perspective),
+                                messageName: model.aborts[a].messageName,
+                                statusMatchExpression: model.aborts[a].statusMatchExpression
+                            };
+                            const cleanAbortParameters = cleanData(abortParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanAbortParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanAbortParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "setters":
                     // Field setters (intent layer): one JavaDelegate per step that declares a setField
                     // (set a string/text field to a literal) or a setRelationField (set a to-one relation's

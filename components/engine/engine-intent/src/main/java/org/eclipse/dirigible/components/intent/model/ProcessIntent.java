@@ -25,6 +25,7 @@ public class ProcessIntent {
     private String description;
     private Map<String, Object> trigger = new LinkedHashMap<>();
     private List<StepIntent> steps = new ArrayList<>();
+    private Map<String, Object> abortOn = new LinkedHashMap<>();
 
     public String getName() {
         return name;
@@ -56,5 +57,19 @@ public class ProcessIntent {
 
     public void setSteps(List<StepIntent> steps) {
         this.steps = steps == null ? new ArrayList<>() : steps;
+    }
+
+    /**
+     * Optional {@code abortOn: { status: [ids] | id, then: <step> }} - a {@code -transitioned} of the
+     * trigger entity into any listed EntityStatus seed id cancels the in-flight process (its pending
+     * user tasks, parked waits and armed timers), optionally running the {@code then} step chain first.
+     * Free-form map, interpreted by the process generator and validator.
+     */
+    public Map<String, Object> getAbortOn() {
+        return abortOn;
+    }
+
+    public void setAbortOn(Map<String, Object> abortOn) {
+        this.abortOn = abortOn == null ? new LinkedHashMap<>() : abortOn;
     }
 }

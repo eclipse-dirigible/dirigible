@@ -1890,6 +1890,7 @@ public final class IntentParser {
             validateSetFieldSteps(process, triggerEntity, byName, issues);
             validateWaitSteps(process, triggerEntity, byName, issues);
             validateUserTaskTimers(process, triggerEntity, byName, issues);
+            validateAbortOn(process, triggerEntity, byName, issues);
             validateTaskFormActions(process, model, issues);
         }
     }
@@ -2242,6 +2243,102 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * A process {@code abortOn: { status: [ids] | id, then: <step> }} cancels the in-flight instance
+     * when the trigger entity transitions into a listed EntityStatus seed id. Requires a trigger entity
+     * carrying a {@code function: EntityStatus} relation; {@code status} is a non-empty list of integer
+     * ids (a bare integer is accepted); the optional {@code then} names the literal {@code end}
+     * (terminate, the default) or a declared {@code serviceTask} cleanup carrying a {@code setField} /
+     * {@code setRelationField} (a non-interactive abort-only step - it must not be routed to from the
+     * main flow).
+     */
+    private static void validateAbortOn(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
+            List<String> issues) {
+        Map<String, Object> abortOn = process.getAbortOn();
+        if (abortOn == null || abortOn.isEmpty()) {
+            return;
+        }
+        Object statusRaw = abortOn.get("status");
+        if (statusRaw == null) {
+            issues.add("process [" + process.getName() + "] abortOn must declare `status` (an EntityStatus seed id or a list of ids)");
+            return;
+        }
+        List<Object> statusItems = statusRaw instanceof List<?> list ? new ArrayList<>(list) : List.of(statusRaw);
+        if (statusItems.isEmpty()) {
+            issues.add("process [" + process.getName() + "] abortOn `status` must not be empty");
+        }
+        for (Object item : statusItems) {
+            if (item == null || !item.toString()
+                                     .trim()
+                                     .matches("-?\\d+")) {
+                issues.add("process [" + process.getName() + "] abortOn `status` [" + item + "] must be an integer EntityStatus seed id");
+            }
+        }
+        EntityIntent trigger = triggerEntity == null ? null : byName.get(triggerEntity);
+        if (trigger == null) {
+            issues.add("process [" + process.getName()
+                    + "] abortOn needs a process trigger entity - its transition and ProcessId identify the instance to abort");
+        } else if (!hasEntityStatusRelation(trigger)) {
+            issues.add("process [" + process.getName() + "] abortOn requires the trigger entity [" + triggerEntity
+                    + "] to declare a function: EntityStatus relation to match the abort statuses against");
+        }
+        Object thenRaw = abortOn.get("then");
+        if (thenRaw != null) {
+            String then = thenRaw.toString()
+                                 .trim();
+            if (!then.isEmpty() && !"end".equalsIgnoreCase(then)) {
+                StepIntent thenStep = null;
+                for (StepIntent step : process.getSteps()) {
+                    if (then.equals(step.getName())) {
+                        thenStep = step;
+                    }
+                }
+                if (thenStep == null) {
+                    issues.add("process [" + process.getName() + "] abortOn `then` references unknown step [" + then + "]");
+                } else if (!"serviceTask".equals(thenStep.getKind())) {
+                    issues.add("process [" + process.getName() + "] abortOn `then` [" + then
+                            + "] must be a serviceTask cleanup (setField/setRelationField) or the literal `end` - an abort handler cannot wait on a user task");
+                } else if (stepArg(thenStep, "setField") == null && stepArg(thenStep, "setRelationField") == null) {
+                    issues.add("process [" + process.getName() + "] abortOn `then` [" + then
+                            + "] must set a field/relation (setField/setRelationField) - it runs unattended on the abort path");
+                } else if (isRoutedToFromMainFlow(process, then)) {
+                    issues.add("process [" + process.getName() + "] abortOn `then` step [" + then
+                            + "] is abort-only and must not be reachable from the main flow (remove it from the step chain / any next/then/else)");
+                }
+            }
+        }
+    }
+
+    /** Whether the entity declares a {@code function: EntityStatus} to-one relation. */
+    private static boolean hasEntityStatusRelation(EntityIntent entity) {
+        if (entity == null || entity.getRelations() == null) {
+            return false;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Whether a step is EXPLICITLY routed to from the process's main flow - the target of some
+     * {@code next} / {@code then} / {@code else}. An {@code abortOn.then} cleanup must be abort-only,
+     * so it must fail this (the BPMN generator pulls it out of the linear chain, so mere positional
+     * adjacency is harmless - only an explicit reference would leave a dangling edge to a removed
+     * node).
+     */
+    private static boolean isRoutedToFromMainFlow(ProcessIntent process, String stepName) {
+        for (StepIntent step : process.getSteps()) {
+            if (stepName.equals(stepArg(step, "next")) || stepName.equals(stepArg(step, "then"))
+                    || stepName.equals(stepArg(step, "else"))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** Whether the value parses as an ISO-8601 duration ({@code PT4H}) or period ({@code P3D}). */

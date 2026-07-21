@@ -813,6 +813,90 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void abort_on_emits_an_interrupting_event_subprocess_and_correlating_glue() {
+        // BPM events wave 2 (#6340): abortOn cancels the in-flight instance when the trigger entity
+        // transitions into a listed status - an interrupting message event subprocess (terminate end)
+        // fired by a MessageHandler on the -transitioned topic. The `then` cleanup is abort-only:
+        // pulled out of the main chain and re-emitted inside the event subprocess.
+        String yaml = """
+                name: orders2
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: OrderApproval
+                    trigger: { onCreate: SalesOrder }
+                    abortOn: { status: [4, 5], then: markVoid }
+                    steps:
+                      - { name: confirm, kind: userTask, args: { assignee: manager, form: ConfirmOrder, next: done } }
+                      - { name: markVoid, kind: serviceTask, args: { setRelationField: Status, value: 8 } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ConfirmOrder, forEntity: SalesOrder, fields: [Status], actions: [confirm] }
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 4, name: CANCELLED }
+                      - { id: 5, name: REJECTED }
+                      - { id: 8, name: VOID }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String bpmn = contentOf("OrderApproval.bpmn");
+        assertTrue(bpmn.contains("<message id=\"OrderApprovalAbort\" name=\"OrderApprovalAbort\">"),
+                "abortOn should declare the abort message at the definitions level");
+        assertTrue(bpmn.contains("<subProcess id=\"OrderApprovalAbortHandler\"") && bpmn.contains("triggeredByEvent=\"true\""),
+                "abortOn should emit a triggeredByEvent subprocess");
+        assertTrue(
+                bpmn.contains("<startEvent id=\"OrderApprovalAbortStart\" isInterrupting=\"true\">")
+                        && bpmn.contains("<messageEventDefinition messageRef=\"OrderApprovalAbort\">"),
+                "the abort handler should start on the interrupting abort message");
+        assertTrue(bpmn.contains("<terminateEventDefinition>"), "the abort handler should terminate the whole instance");
+        // The abort-only cleanup is inside the handler, NOT in the main flow: its only incoming flow
+        // is from the abort start event, and the main flow routes confirm straight to the end (`next:
+        // done`) - never through markVoid.
+        assertTrue(bpmn.contains("<serviceTask id=\"markVoid\"") && bpmn.contains("gen.events.OrderApprovalMarkVoid"),
+                "the abort-only cleanup serviceTask should be emitted (inside the handler) bound to its setter delegate");
+        assertTrue(bpmn.contains("sourceRef=\"OrderApprovalAbortStart\" targetRef=\"markVoid\""),
+                "the abort handler's start event should flow into the cleanup");
+        assertFalse(
+                bpmn.contains("sourceRef=\"confirm\" targetRef=\"markVoid\"")
+                        || bpmn.contains("sourceRef=\"start\" targetRef=\"markVoid\""),
+                "the abort-only cleanup must not be reached from the main flow");
+        assertTrue(bpmn.contains("BPMNShape_OrderApprovalAbortHandler"), "the event subprocess needs a DI shape");
+
+        String glue = contentOf("orders2.glue");
+        assertTrue(glue.contains("\"aborts\"") && glue.contains("\"messageName\": \"OrderApprovalAbort\""),
+                "the glue should carry the aborts collection with the abort message name");
+
+        generateFromModel("template-application-events-java/template/template.js", "orders2.glue");
+        String abort = contentOf("gen/events/OrderApprovalAbort.java");
+        assertTrue(abort.contains("class OrderApprovalAbort implements MessageHandler"),
+                "the abort listener should be a self-describing MessageHandler");
+        assertTrue(abort.contains("return \"" + PROJECT + "-SalesOrder-SalesOrder-transitioned\";"),
+                "the abort listener should bind the trigger entity's -transitioned topic");
+        assertTrue(abort.contains("entity.Status == 4") && abort.contains("entity.Status == 5"),
+                "the abort listener should match the declared abort statuses");
+        assertTrue(abort.contains("Process.correlateMessageEvent(entity.ProcessId, \"OrderApprovalAbort\""),
+                "the abort listener should correlate the abort message on the stamped ProcessId");
+        assertTrue(abort.contains("catch (RuntimeException"), "correlation must be fail-soft");
+    }
+
+    @Test
     void field_major_false_is_kept_off_the_list_via_widget_is_major() {
         // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
         // omits that column (the field is still shown in forms + the details pane). Default is true.
