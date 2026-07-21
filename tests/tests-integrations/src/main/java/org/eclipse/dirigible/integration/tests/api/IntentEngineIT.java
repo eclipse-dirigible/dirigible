@@ -1825,6 +1825,16 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("isReadOnlyProperty=\"true\""),
                 "system fields (ProcessId, audit columns) should be flagged read-only so forms render them in the read-only details block");
 
+        assertTrue(edmXml.contains("generateDefaultRoles=\"true\""),
+                "entities should carry generateDefaultRoles=\"true\" so the REST template enforces access control");
+        assertTrue(edmXml.contains("roleRead=\"") && edmXml.contains("OrderReadOnly\""),
+                "a secured entity must carry a roleRead (<project>.<perspective>.<Entity>ReadOnly)");
+        assertTrue(edmXml.contains("roleWrite=\"") && edmXml.contains("OrderFullAccess\""),
+                "a secured entity must carry a roleWrite (<project>.<perspective>.<Entity>FullAccess)");
+        assertTrue(edmXml.contains(".Country.CountryReadOnly\""),
+                "a setting entity's role must use its own domain perspective (Country), like the codbex convention");
+        assertFalse(edmXml.contains(".Settings.CountryReadOnly\""), "a setting entity's role must NOT use the Settings shell perspective");
+
         // The EDM editor renders the canvas ONLY from mxGraphModel - without it the editor opens
         // empty. Assert the diagram block, an entity vertex, and a relation edge are present.
         assertTrue(edmXml.contains("<mxGraphModel>"), "EDM must carry an mxGraphModel diagram or the editor renders an empty canvas");
@@ -1836,6 +1846,8 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resource("orders.model").exists(), "orders.model should be generated");
         String modelBody = contentOf("orders.model");
         assertTrue(modelBody.contains("\"entities\""), "model JSON should have an entities array");
+        assertTrue(modelBody.contains("\"generateDefaultRoles\": \"true\"") && modelBody.contains("OrderFullAccess"),
+                "the .model JSON (which drives generation) must carry generateDefaultRoles + the role names");
         assertTrue(modelBody.contains("\"perspectives\""), "model JSON should carry the perspectives array like editor-written files");
         assertTrue(modelBody.contains("\"navigations\""), "model JSON should carry the navigations array like editor-written files");
         // Process glue (triggers, resolvers) is NOT in the EDM model - it lives in the .glue file.
