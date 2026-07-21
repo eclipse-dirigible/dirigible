@@ -524,6 +524,66 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "timerLoaders":
+                    // Expire date loaders (intent layer): one JavaDelegate per user task with an
+                    // `expire: { until: <date field> }` boundary timer. Loads the trigger entity by id
+                    // right before the task and publishes the java.util.Date variable the timer's
+                    // timeDate binds to (re-read at task entry). Like fieldLoaders, not entity-shaped.
+                    if (model.timerLoaders) {
+                        for (let f = 0; f < model.timerLoaders.length; f++) {
+                            const timerLoaderParameters = {
+                                ...parameters,
+                                process: model.timerLoaders[f].process,
+                                handler: model.timerLoaders[f].handler,
+                                ownerEntity: model.timerLoaders[f].ownerEntity,
+                                ownerPerspective: model.timerLoaders[f].ownerPerspective,
+                                javaOwnerPerspective: sanitizeJavaIdentifier(model.timerLoaders[f].ownerPerspective),
+                                ownerKeyProperty: model.timerLoaders[f].ownerKeyProperty,
+                                ownerKeyAccessor: model.timerLoaders[f].ownerKeyAccessor,
+                                variable: model.timerLoaders[f].variable,
+                                dueExpression: model.timerLoaders[f].dueExpression
+                            };
+                            const cleanTimerLoaderParameters = cleanData(timerLoaderParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanTimerLoaderParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanTimerLoaderParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "waits":
+                    // Wait listeners (intent layer): one MessageHandler per `wait` step, correlating the
+                    // parked catch event's message on the resuming entity event. The Java package segment
+                    // is the lowercased perspective; the topic keeps the raw perspective (same split as
+                    // triggers).
+                    if (model.waits) {
+                        for (let w = 0; w < model.waits.length; w++) {
+                            const waitParameters = {
+                                ...parameters,
+                                process: model.waits[w].process,
+                                className: model.waits[w].className,
+                                messageName: model.waits[w].messageName,
+                                eventEntity: model.waits[w].eventEntity,
+                                eventPerspective: model.waits[w].eventPerspective,
+                                javaEventPerspective: sanitizeJavaIdentifier(model.waits[w].eventPerspective),
+                                eventKeyProperty: model.waits[w].eventKeyProperty,
+                                topicSuffix: model.waits[w].topicSuffix,
+                                guardExpression: model.waits[w].guardExpression,
+                                viaFkProperty: model.waits[w].viaFkProperty,
+                                parentEntity: model.waits[w].parentEntity,
+                                parentPerspective: model.waits[w].parentPerspective,
+                                javaParentPerspective: sanitizeJavaIdentifier(model.waits[w].parentPerspective)
+                            };
+                            const cleanWaitParameters = cleanData(waitParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanWaitParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanWaitParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "setters":
                     // Field setters (intent layer): one JavaDelegate per step that declares a setField
                     // (set a string/text field to a literal) or a setRelationField (set a to-one relation's

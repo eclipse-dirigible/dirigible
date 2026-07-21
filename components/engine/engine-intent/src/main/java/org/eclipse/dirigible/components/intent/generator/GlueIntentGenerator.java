@@ -84,6 +84,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> triggers = buildTriggers(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> resolvers = buildResolvers(model, settings);
         List<Map<String, Object>> fieldLoaders = buildFieldLoaders(model, settings);
+        List<Map<String, Object>> timerLoaders = buildTimerLoaders(model, settings);
+        List<Map<String, Object>> waits = buildWaits(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
         List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
@@ -98,10 +100,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
 
-        if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && writers.isEmpty() && setters.isEmpty()
-                && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty()
-                && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty()
-                && postings.isEmpty()) {
+        if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
+                && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty() && integrations.isEmpty()
+                && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty() && generates.isEmpty()
+                && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -110,6 +112,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("triggers", triggers);
         glue.put("resolvers", resolvers);
         glue.put("fieldLoaders", fieldLoaders);
+        glue.put("timerLoaders", timerLoaders);
+        glue.put("waits", waits);
         glue.put("writers", writers);
         glue.put("setters", setters);
         glue.put("notifications", notifications);
@@ -673,6 +677,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             out.add(e);
         }
         return out;
+    }
+
+    /** Test hook: build the {@code waits} glue collection without a repository. */
+    static List<Map<String, Object>> buildWaitsForTest(IntentModel model) {
+        return buildWaits(model, IntentSettings.parse("{}"));
+    }
+
+    /** Test hook: build the {@code timerLoaders} glue collection without a repository. */
+    static List<Map<String, Object>> buildTimerLoadersForTest(IntentModel model) {
+        return buildTimerLoaders(model, IntentSettings.parse("{}"));
     }
 
     /** Test hook: build the {@code transitions} glue collection without a repository. */
@@ -1471,6 +1485,65 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             loaders.add(entry);
         }
         return loaders;
+    }
+
+    /**
+     * One expire date loader per user task with an {@code expire: { until: <date field> }} timer: a
+     * {@code JavaDelegate} inserted before the task (by the BPMN generator) that re-reads the trigger
+     * entity's date field at task entry and publishes the {@code java.util.Date} process variable the
+     * boundary timer's {@code timeDate} binds to (see {@link ProcessTimerSupport}).
+     */
+    private static List<Map<String, Object>> buildTimerLoaders(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> loaders = new ArrayList<>();
+        for (ProcessTimerSupport.TimerLoad load : ProcessTimerSupport.timerLoads(model)) {
+            if (!settings.shouldGenerate("timerLoaders", load.handler())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for timer loader [{}] (not generated)", load.handler());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", load.process());
+            entry.put("handler", load.handler());
+            entry.put("ownerEntity", load.ownerEntity());
+            entry.put("ownerPerspective", load.ownerPerspective());
+            entry.put("ownerKeyProperty", load.ownerKeyProperty());
+            entry.put("ownerKeyAccessor", load.ownerKeyAccessor());
+            entry.put("variable", load.variable());
+            entry.put("dueExpression", load.dueExpression());
+            loaders.add(entry);
+        }
+        return loaders;
+    }
+
+    /**
+     * One wait listener per {@code wait} step: a {@code MessageHandler} on the event entity's topic
+     * that resolves the process-carrying record (through the {@code via:} back-reference, or the event
+     * record itself), reads its stamped {@code ProcessId} and correlates the parked catch event's
+     * message (see {@link ProcessWaitSupport}). Fail-soft: no parked instance is a no-op.
+     */
+    private static List<Map<String, Object>> buildWaits(IntentModel model, IntentSettings settings) {
+        List<Map<String, Object>> waits = new ArrayList<>();
+        for (ProcessWaitSupport.Wait wait : ProcessWaitSupport.waits(model)) {
+            if (!settings.shouldGenerate("waits", wait.className())) {
+                LOGGER.info("Settings opt-out: keeping existing handler for wait [{}] (not generated)", wait.className());
+                continue;
+            }
+            Map<String, Object> entry = new LinkedHashMap<>();
+            entry.put("process", wait.process());
+            entry.put("className", wait.className());
+            entry.put("messageName", wait.messageName());
+            entry.put("eventEntity", wait.eventEntity());
+            entry.put("eventPerspective", wait.eventPerspective());
+            entry.put("eventKeyProperty", wait.eventKeyProperty());
+            entry.put("topicSuffix", EventBinding.topicSuffix(wait.eventKind()));
+            entry.put("guardExpression", NotificationSupport.guard(wait.when()));
+            // Blank in the direct case (the event entity is the trigger entity itself, carrying its
+            // own ProcessId); the template branches on it.
+            entry.put("viaFkProperty", wait.viaFkProperty() == null ? "" : wait.viaFkProperty());
+            entry.put("parentEntity", wait.parentEntity());
+            entry.put("parentPerspective", wait.parentPerspective());
+            waits.add(entry);
+        }
+        return waits;
     }
 
     private static List<Map<String, Object>> buildResolvers(IntentModel model, IntentSettings settings) {

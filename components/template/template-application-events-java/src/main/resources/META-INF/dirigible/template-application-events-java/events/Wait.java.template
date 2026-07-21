@@ -1,0 +1,74 @@
+package gen.events;
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${javaEventPerspective}.${eventEntity}Entity;
+#if(${viaFkProperty} != "")
+import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
+#else
+import gen.${javaGenFolderName}.data.${javaEventPerspective}.${eventEntity}Repository;
+#end
+
+/**
+ * Resumes the ${process} process parked on its "${messageName}" wait when a ${eventEntity}
+ * lifecycle event fires.
+ *
+ * Generated from the intent wait step - do not edit; it is re-generated with the application.
+ * The listener resolves the record carrying the parked instance's ProcessId#if(${viaFkProperty} != "") (through the
+ * ${viaFkProperty} back-reference to the ${parentEntity})#end and correlates the message on it.
+ * Fail-soft by design: no ProcessId, no matching parked instance, or an instance already past the
+ * wait is a no-op, never an error - the event is simply not for this wait.
+ *
+ * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
+ * interface, not an annotation; @Component makes it a managed bean.
+ */
+@Component
+public class ${className}Wait implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${eventPerspective}-${eventEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${eventEntity}Entity entity = Json.parse(message, ${eventEntity}Entity.class);
+        if (entity == null) {
+            return;
+        }
+#if(${guardExpression} != "true")
+        if (!(${guardExpression})) {
+            return;
+        }
+#end
+#if(${viaFkProperty} != "")
+        if (entity.${viaFkProperty} == null) {
+            return;
+        }
+        ${parentEntity}Entity carrier = new ${parentEntity}Repository().findById(entity.${viaFkProperty});
+#else
+        // The event entity is the trigger entity itself - re-load it so the freshest ProcessId is
+        // read (the payload snapshot may predate the trigger listener's write-back).
+        ${eventEntity}Entity carrier = new ${eventEntity}Repository().findById(entity.${eventKeyProperty});
+#end
+        if (carrier == null || carrier.ProcessId == null || carrier.ProcessId.isBlank()) {
+            return;
+        }
+        try {
+            Process.correlateMessageEvent(carrier.ProcessId, "${messageName}", java.util.Map.of());
+        } catch (RuntimeException notParked) {
+            // The instance is not waiting on this message (already resumed, on another step, or
+            // ended) - a no-op by the fail-soft glue convention, never an error.
+        }
+    }
+}

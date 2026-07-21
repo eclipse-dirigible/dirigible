@@ -466,6 +466,9 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 if (String(step.kind).toLowerCase() === 'end') { byName[step.name] = end; continue; }
                 if (step.kind === 'decision') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 120, 70, shapeStyle('rhombus', COLOR.decision));
                 else if (step.kind === 'serviceTask' || step.kind === 'script') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.service));
+                // A wait parks the process on an entity event (a message catch event in the BPMN) - an
+                // ellipse like the terminals, but glue-rust so the event-driven resume stands out.
+                else if (step.kind === 'wait') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 130, 44, shapeStyle('ellipse', COLOR.glue));
                 else byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.entity));
             }
             const vertexFor = (name) => {
@@ -499,6 +502,21 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                     const nextArg = step && step.args && step.args['next'];
                     if (nextArg) target = vertexFor(nextArg);
                     graph.insertEdge(parent, null, '', source, target, edgeStyle(false));
+                }
+            }
+
+            // Boundary timers on a user task (timeout: non-cancelling reminder, expire: cancelling
+            // date-driven expiry) draw as dashed labelled edges from the task to their `then` branch -
+            // mirrors the boundaryEvent + timerEventDefinition BpmnIntentGenerator emits.
+            for (const step of steps) {
+                if (step.kind !== 'userTask' || !step.args || !byName[step.name]) continue;
+                const timeout = step.args['timeout'];
+                if (timeout && typeof timeout === 'object' && timeout.then) {
+                    graph.insertEdge(parent, null, 'timeout ' + String(timeout.after || ''), byName[step.name], vertexFor(timeout.then), edgeStyle(true));
+                }
+                const expire = step.args['expire'];
+                if (expire && typeof expire === 'object' && expire.then) {
+                    graph.insertEdge(parent, null, 'expires ' + String(expire.until || ''), byName[step.name], vertexFor(expire.then), edgeStyle(true));
                 }
             }
 

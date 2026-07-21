@@ -699,6 +699,120 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void wait_step_and_boundary_timers_emit_catch_event_timers_and_correlating_glue() {
+        // BPM events wave 1 (#6327/#6328): a `wait` step parks the process on a message intermediate
+        // catch event resumed by a generated correlating listener (by the stamped ProcessId through the
+        // `via:` back-reference), and a user task carries a non-cancelling `timeout:` (reminder/SLA)
+        // and a cancelling `expire:` (date-field-driven) boundary timer whose date is re-read at task
+        // entry by an auto-inserted loader delegate.
+        String yaml = """
+                name: services
+                entities:
+                  - name: Case
+                    fields:
+                      - { name: id,         type: integer, primaryKey: true, generated: true }
+                      - { name: subject,    type: string, length: 200 }
+                      - { name: validUntil, type: date }
+                    relations:
+                      - { name: messages, kind: oneToMany, to: CaseMessage }
+                  - name: CaseMessage
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: text,     type: string, length: 200 }
+                      - { name: internal, type: integer }
+                    relations:
+                      - { name: case, kind: manyToOne, to: Case, composition: true }
+                processes:
+                  - name: CaseHandling
+                    trigger: { onCreate: Case }
+                    steps:
+                      - name: work
+                        kind: userTask
+                        args:
+                          assignee: agent
+                          timeout: { after: P3D, then: remind }
+                          expire: { until: validUntil, then: markExpired }
+                          next: done
+                      - { name: remind,      kind: serviceTask, args: { setField: subject, value: REMINDED, next: end } }
+                      - { name: markExpired, kind: serviceTask, args: { setField: subject, value: EXPIRED, next: end } }
+                      - { name: awaitReply,  kind: wait, args: { onCreate: CaseMessage, via: case, when: "internal == 0", next: done } }
+                      - { name: done, kind: end }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        // BPMN: the wait emits a definitions-level <message> + an intermediateCatchEvent referencing
+        // it; the process id + step name compound keeps the message unique and readable.
+        String bpmn = contentOf("CaseHandling.bpmn");
+        assertTrue(bpmn.contains("<message id=\"CaseHandlingAwaitReply\" name=\"CaseHandlingAwaitReply\"></message>"),
+                "a wait step should declare its message at the definitions level");
+        assertTrue(
+                bpmn.contains("<intermediateCatchEvent id=\"awaitReply\" name=\"Await Reply\">")
+                        && bpmn.contains("<messageEventDefinition messageRef=\"CaseHandlingAwaitReply\"></messageEventDefinition>"),
+                "a wait step should park on a message intermediate catch event");
+
+        // Boundary timers: timeout = non-cancelling timeDuration, expire = cancelling timeDate bound
+        // to the variable the loader publishes; each routes its own flow to the `then` branch.
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"workTimeout\" attachedToRef=\"work\" cancelActivity=\"false\">")
+                        && bpmn.contains("<timeDuration>P3D</timeDuration>"),
+                "timeout should emit a non-cancelling boundary timer with the literal ISO duration");
+        assertTrue(
+                bpmn.contains("<boundaryEvent id=\"workExpire\" attachedToRef=\"work\" cancelActivity=\"true\">")
+                        && bpmn.contains("<timeDate>${__workExpireDate}</timeDate>"),
+                "expire should emit a cancelling boundary timer armed from the loader's process variable");
+        assertTrue(
+                bpmn.contains("sourceRef=\"workTimeout\" targetRef=\"remind\"")
+                        && bpmn.contains("sourceRef=\"workExpire\" targetRef=\"markExpired\""),
+                "each boundary timer should flow to its `then` branch");
+        assertTrue(bpmn.contains("BPMNShape_workTimeout") && bpmn.contains("BPMNShape_workExpire"),
+                "the boundary events need DI shapes or the modeler opens them detached");
+
+        // The expire date loader is inserted BEFORE the user task (re-read at task entry).
+        assertTrue(
+                bpmn.contains("<serviceTask id=\"loadCaseHandlingWorkExpire\"") && bpmn.contains("gen.events.LoadCaseHandlingWorkExpire"),
+                "an expire timer should insert the generated date-loader delegate");
+        assertTrue(bpmn.indexOf("id=\"loadCaseHandlingWorkExpire\"") < bpmn.indexOf("<userTask id=\"work\""),
+                "the expire date loader must run before the user task it arms");
+
+        // Glue: the waits + timerLoaders collections drive the events template.
+        String glue = contentOf("services.glue");
+        assertTrue(glue.contains("\"waits\"") && glue.contains("\"messageName\": \"CaseHandlingAwaitReply\""),
+                "the glue should carry the waits collection with the catch event's message name");
+        assertTrue(glue.contains("\"timerLoaders\"") && glue.contains("\"variable\": \"__workExpireDate\""),
+                "the glue should carry the timerLoaders collection with the timer variable");
+
+        // Generated handlers: the wait listener binds the CHILD entity's create topic, resolves the
+        // parent through the via FK, and correlates fail-soft on its stamped ProcessId; the loader
+        // publishes the java.util.Date due value with the end-of-day semantics for a `date` field.
+        generateFromModel("template-application-events-java/template/template.js", "services.glue");
+        String wait = contentOf("gen/events/CaseHandlingAwaitReplyWait.java");
+        assertTrue(wait.contains("class CaseHandlingAwaitReplyWait implements MessageHandler"),
+                "the wait listener should be a self-describing MessageHandler");
+        assertTrue(wait.contains("return \"" + PROJECT + "-Case-CaseMessage\";"),
+                "the wait listener should bind the event entity's create topic (raw perspective)");
+        assertTrue(wait.contains("java.util.Objects.equals(entity.Internal, 0)"),
+                "the when guard should gate the correlation on the event record");
+        assertTrue(wait.contains("new CaseRepository().findById(entity.Case)"),
+                "the listener should resolve the ProcessId-carrying record through the via FK");
+        assertTrue(wait.contains("Process.correlateMessageEvent(carrier.ProcessId, \"CaseHandlingAwaitReply\""),
+                "the listener should correlate the catch event's message on the stamped ProcessId");
+        assertTrue(wait.contains("catch (RuntimeException"),
+                "correlation must be fail-soft - an instance not parked on the message is a no-op");
+        String loader = contentOf("gen/events/LoadCaseHandlingWorkExpire.java");
+        assertTrue(loader.contains("class LoadCaseHandlingWorkExpire implements JavaDelegate"),
+                "the expire date loader should be a Flowable JavaDelegate");
+        assertTrue(loader.contains("execution.setVariable(\"__workExpireDate\", due)"),
+                "the loader should publish the variable the boundary timer's timeDate binds to");
+        assertTrue(loader.contains("plusDays(1).atStartOfDay"),
+                "a `date` expire field names the LAST valid day - the timer arms at the start of the day after it");
+        assertTrue(loader.contains("9999-12-31"), "a null date must arm a far-future due so the timer never fires");
+    }
+
+    @Test
     void field_major_false_is_kept_off_the_list_via_widget_is_major() {
         // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
         // omits that column (the field is still shown in forms + the details pane). Default is true.

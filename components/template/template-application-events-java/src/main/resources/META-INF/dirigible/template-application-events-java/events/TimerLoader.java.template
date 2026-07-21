@@ -1,0 +1,35 @@
+package gen.events;
+
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Entity;
+import gen.${javaGenFolderName}.data.${javaOwnerPerspective}.${ownerEntity}Repository;
+
+/**
+ * Loads the ${ownerEntity} (the ${process} trigger entity) by its id and publishes the expire due
+ * date the next user task's cancelling boundary timer arms from. Generated from the intent .glue
+ * file - do not edit; it is re-generated with the application. Runs as a BPMN service task
+ * (flowable:delegateExpression="\${JavaTask}") right before the user task, so the date field is
+ * re-read at task entry (an edited validity date mid-flow is honored). The due value is a
+ * java.util.Date (Flowable arms the timer from it directly); a date field expires at the start of
+ * the day AFTER it (the field names the last valid day), and a missing record or null field arms a
+ * far-future date so the timer never effectively fires.
+ */
+public class ${handler} implements JavaDelegate {
+
+    private final ${ownerEntity}Repository repository = new ${ownerEntity}Repository();
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        java.util.Date due = java.util.Date.from(java.time.Instant.parse("9999-12-31T00:00:00Z"));
+        Object key = execution.getVariable("${ownerKeyProperty}");
+        if (key instanceof Number) {
+            ${ownerEntity}Entity entity = repository.findById(((Number) key).${ownerKeyAccessor}());
+            if (entity != null) {
+                due = ${dueExpression};
+            }
+        }
+        execution.setVariable("${variable}", due);
+    }
+}

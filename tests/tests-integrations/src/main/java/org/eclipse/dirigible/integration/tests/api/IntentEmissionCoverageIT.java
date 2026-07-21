@@ -216,6 +216,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, partner: true }
 
+              # BPM events wave 1 (wait + boundary timers): an RFQ whose flow escalates a stale
+              # review (timeout), expires past its validity date (expire), and after review parks
+              # until a NON-internal reply arrives (wait via the child's back-reference).
+              - name: Rfq
+                fields:
+                  - { name: id,         type: integer, primaryKey: true, generated: true }
+                  - { name: title,      type: string, length: 200 }
+                  - { name: state,      type: string, length: 20 }
+                  - { name: validUntil, type: date }
+                relations:
+                  - { name: replies, kind: oneToMany, to: RfqReply }
+              - name: RfqReply
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: text,     type: string, length: 200 }
+                  - { name: internal, type: boolean }
+                relations:
+                  - { name: Rfq, kind: manyToOne, to: Rfq, composition: true, required: true }
+
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
             schedules:
@@ -240,6 +259,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 trigger: { onCreate: Claim }
                 steps:
                   - { name: confirm, kind: userTask, args: { assignee: personal } }
+                  - { name: end, kind: end }
+
+              # wait + boundary timers: review escalates after 2s (non-cancelling - the task stays),
+              # expires when validUntil passes (cancelling - the task is withdrawn), and once
+              # reviewed the flow parks until a non-internal reply resumes it.
+              - name: RfqFlow
+                trigger: { onCreate: Rfq }
+                steps:
+                  - name: review
+                    kind: userTask
+                    args:
+                      assignee: reviewer
+                      timeout: { after: PT2S, then: escalate }
+                      expire: { until: validUntil, then: markExpired }
+                      next: awaitReply
+                  - { name: escalate,    kind: serviceTask, args: { setField: state, value: ESCALATED, next: end } }
+                  - { name: markExpired, kind: serviceTask, args: { setField: state, value: EXPIRED, next: end } }
+                  - { name: awaitReply,  kind: wait, args: { onCreate: RfqReply, via: Rfq, when: "internal == false", next: markReplied } }
+                  - { name: markReplied, kind: serviceTask, args: { setField: state, value: REPLIED, next: end } }
                   - { name: end, kind: end }
 
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
@@ -422,6 +460,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String claimTrigger = contentOf("gen/events/ClaimConfirmTrigger.java");
         assertTrue(claimTrigger.contains("__personalUser"),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
+
+        // wait + boundary timers (BPM events wave 1): the catch event, the two boundary timers and
+        // the loader/correlating glue must all be present - a missing piece degrades silently into a
+        // process that parks forever or never times out.
+        String rfqBpmn = contentOf("RfqFlow.bpmn");
+        assertTrue(rfqBpmn.contains("<intermediateCatchEvent id=\"awaitReply\"") && rfqBpmn.contains("messageRef=\"RfqFlowAwaitReply\""),
+                "the wait step must emit a message intermediate catch event");
+        assertTrue(rfqBpmn.contains("<boundaryEvent id=\"reviewTimeout\" attachedToRef=\"review\" cancelActivity=\"false\">")
+                && rfqBpmn.contains("<timeDuration>PT2S</timeDuration>"), "timeout must emit a non-cancelling boundary timer");
+        assertTrue(
+                rfqBpmn.contains("<boundaryEvent id=\"reviewExpire\" attachedToRef=\"review\" cancelActivity=\"true\">")
+                        && rfqBpmn.contains("<timeDate>${__reviewExpireDate}</timeDate>"),
+                "expire must emit a cancelling boundary timer armed from the loader variable");
+        String waitHandler = contentOf("gen/events/RfqFlowAwaitReplyWait.java");
+        assertTrue(waitHandler.contains("Process.correlateMessageEvent(carrier.ProcessId, \"RfqFlowAwaitReply\""),
+                "the wait listener must correlate the message on the stamped ProcessId");
+        assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
+                "the wait listener must resolve the parked record through the via back-reference");
+        String timerLoader = contentOf("gen/events/LoadRfqFlowReviewExpire.java");
+        assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
+                "the expire date loader must publish the variable the boundary timer arms from");
 
         // personal UI (phase B): the my pages exist, the form never mentions the sensitive field,
         // and the SPA routes + sidebar carry the personal surface.
@@ -864,6 +923,132 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body(org.hamcrest.Matchers.containsString("emission-test-partner-PartnerTicket")),
                 30);
+
+        assertBpmEventsRuntime();
+    }
+
+    /**
+     * BPM events wave 1, at the outermost layer: the PT2S timeout fires while the review task stays
+     * claimable (non-cancelling); the parked wait ignores a guarded-out (internal) reply and resumes on
+     * a matching one; and a past validity date withdraws the review task (cancelling expire). Every
+     * assertion reads the state the boundary/wait BRANCH wrote - reachable only through the real
+     * Flowable timer jobs and message correlation.
+     */
+    private void assertBpmEventsRuntime() {
+        String rfqApi = API + "/rfq/RfqController";
+        String replyApi = API + "/rfq/RfqReplyController";
+
+        // Scenario A: far-future validity - only the timeout can fire.
+        AtomicInteger rfqA = new AtomicInteger();
+        restAssuredExecutor.execute(() -> rfqA.set(given().contentType("application/json")
+                                                          .body("{\"Title\":\"quote A\",\"ValidUntil\":\"9999-12-01\"}")
+                                                          .when()
+                                                          .post(rfqApi)
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+
+        // The PT2S timeout escalates the stale review (the async executor's timer job fired)...
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(rfqApi + "/" + rfqA.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("ESCALATED")),
+                60);
+
+        // ...while the review task STAYS claimable (non-cancelling) - find and complete it.
+        AtomicReference<String> reviewTaskId = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> tasks = given().when()
+                                                     .get("/services/inbox/tasks?type=groups")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .extract()
+                                                     .jsonPath()
+                                                     .getList("$");
+            Map<String, Object> review = tasks.stream()
+                                              .filter(task -> "Review".equals(task.get("name")))
+                                              .findFirst()
+                                              .orElseThrow(() -> new AssertionError(
+                                                      "the non-cancelling timeout must leave the review task claimable, got: " + tasks));
+            reviewTaskId.set(String.valueOf(review.get("id")));
+        }, 30);
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"action\":\"COMPLETE\"}")
+                                                 .when()
+                                                 .post("/services/inbox/tasks/" + reviewTaskId.get())
+                                                 .then()
+                                                 .statusCode(200));
+
+        // Parked at the wait now. A guarded-out (internal) reply must NOT resume it...
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Text\":\"internal note\",\"Internal\":true,\"Rfq\":" + rfqA.get() + "}")
+                                                 .when()
+                                                 .post(replyApi)
+                                                 .then()
+                                                 .statusCode(200));
+        sleep(2000);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(rfqApi + "/" + rfqA.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("ESCALATED")));
+
+        // ...and a matching (non-internal) reply resumes the flow into the markReplied branch.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Text\":\"customer answer\",\"Internal\":false,\"Rfq\":" + rfqA.get() + "}")
+                                                 .when()
+                                                 .post(replyApi)
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(rfqApi + "/" + rfqA.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("REPLIED")),
+                60);
+
+        // Scenario B: the validity date already passed - the cancelling expire withdraws the review
+        // task (the date the loader re-read at task entry) and the flow continues at markExpired.
+        AtomicInteger rfqB = new AtomicInteger();
+        restAssuredExecutor.execute(() -> rfqB.set(given().contentType("application/json")
+                                                          .body("{\"Title\":\"quote B\",\"ValidUntil\":\"2020-01-01\"}")
+                                                          .when()
+                                                          .post(rfqApi)
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(rfqApi + "/" + rfqB.get())
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("State", equalTo("EXPIRED")),
+                60);
+        // The cancelled review task is gone - no Review task remains in the inbox.
+        restAssuredExecutor.execute(() -> {
+            List<Map<String, Object>> tasks = given().when()
+                                                     .get("/services/inbox/tasks?type=groups")
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .extract()
+                                                     .jsonPath()
+                                                     .getList("$");
+            boolean reviewLeft = tasks.stream()
+                                      .anyMatch(task -> "Review".equals(task.get("name")));
+            assertTrue(!reviewLeft, "the cancelling expire must withdraw the review task, got: " + tasks);
+        }, 30);
+    }
+
+    private static void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ex) {
+            Thread.currentThread()
+                  .interrupt();
+            throw new IllegalStateException("interrupted while waiting for the guarded-out reply window", ex);
+        }
     }
 
     private void publishProject() {

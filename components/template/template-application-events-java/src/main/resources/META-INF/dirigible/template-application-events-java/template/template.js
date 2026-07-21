@@ -52,6 +52,20 @@ export function getTemplate(parameters) {
                 collection: "fieldLoaders"
             },
             {
+                location: "/template-application-events-java/events/TimerLoader.java.template",
+                action: "generate",
+                rename: "gen/events/{{handler}}.java",
+                engine: "velocity",
+                collection: "timerLoaders"
+            },
+            {
+                location: "/template-application-events-java/events/Wait.java.template",
+                action: "generate",
+                rename: "gen/events/{{className}}Wait.java",
+                engine: "velocity",
+                collection: "waits"
+            },
+            {
                 location: "/template-application-events-java/events/Writer.java.template",
                 action: "generate",
                 rename: "gen/events/{{className}}.java",
