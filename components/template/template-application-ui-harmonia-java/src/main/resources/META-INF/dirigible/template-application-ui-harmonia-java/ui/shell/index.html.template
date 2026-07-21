@@ -415,7 +415,10 @@
     <!-- PERSONAL (my) surface: the user's own records - a list per root, a form per personal
          entity (children are reached from their parent's panels). -->
 #foreach($entity in $models)
-#if($entity.personalProperty)
+#if($entity.personalProperty && $entity.layoutType == "MANAGE_CALENDAR")
+    <!-- a view: calendar/range personal root lands on its calendar, exactly like the power surface -->
+    <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-calendar.html"></template>
+#elseif($entity.personalProperty)
     <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-list.html"></template>
 #end
 #if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")
@@ -524,7 +527,9 @@
 #if($entity.type == "REPORT")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ReportPage.js" defer></script>
 #end
-#if($entity.personalProperty)
+#if($entity.personalProperty && $entity.layoutType == "MANAGE_CALENDAR")
+    <script src="./js/components/pages/my/${entity.name}MyCalendarPage.js" defer></script>
+#elseif($entity.personalProperty)
     <script src="./js/components/pages/my/${entity.name}MyListPage.js" defer></script>
 #end
 #if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")

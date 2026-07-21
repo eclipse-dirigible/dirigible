@@ -18,14 +18,31 @@ export const getSources = () => [
         action: "generate",
         engine: "velocity",
         rename: "gen/{{genFolderName}}/js/components/pages/my/{{name}}MyListPage.js",
-        collection: "personalRootModels"
+        collection: "personalListModels"
     },
     {
         location: "/template-application-ui-harmonia-java/ui/my/my-list-view.html.template",
         action: "generate",
         engine: "velocity",
         rename: "gen/{{genFolderName}}/views/my/{{name}}-list.html",
-        collection: "personalRootModels"
+        collection: "personalListModels"
+    },
+    {
+        // Personal CALENDAR/RANGE layout: a view: calendar|range personal root renders its own
+        // records as calendar events (scoped to the MyController), replacing the list - exactly
+        // like the power surface. date-click / event-click route to the personal form.
+        location: "/template-application-ui-harmonia-java/ui/my/my-calendar-page.js.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/js/components/pages/my/{{name}}MyCalendarPage.js",
+        collection: "personalCalendarModels"
+    },
+    {
+        location: "/template-application-ui-harmonia-java/ui/my/my-calendar-view.html.template",
+        action: "generate",
+        engine: "velocity",
+        rename: "gen/{{genFolderName}}/views/my/{{name}}-calendar.html",
+        collection: "personalCalendarModels"
     },
     {
         location: "/template-application-ui-harmonia-java/ui/my/my-form-page.js.template",
