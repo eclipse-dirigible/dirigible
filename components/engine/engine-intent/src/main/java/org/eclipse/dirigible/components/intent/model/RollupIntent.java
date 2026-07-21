@@ -32,10 +32,19 @@ public class RollupIntent {
     private String entity;
     private String via;
     private String field;
-    /** The aggregation: {@code count} (default) or {@code sum}. */
+    /** The aggregation: {@code count} (default), {@code sum}, or {@code latest}. */
     private String op;
-    /** The child field summed onto {@link #field} when {@link #op} is {@code sum}. */
+    /**
+     * The child field aggregated onto {@link #field}: summed when {@link #op} is {@code sum}, or copied
+     * from the most-recent child row when {@link #op} is {@code latest}.
+     */
     private String of;
+    /**
+     * Required for {@code op: latest}: the child date/timestamp field that orders the rows; the
+     * {@link #of} value of the row with the greatest {@code by} is copied onto the parent
+     * {@link #field} (the "keep the parent's rate equal to the latest child rate" shape).
+     */
+    private String by;
     /**
      * Optional (sum roll-ups only): a numeric "capacity" field on the parent the sum is measured
      * against - e.g. an invoice's {@code total} against which the paid sum is compared. Enables
@@ -81,6 +90,14 @@ public class RollupIntent {
 
     public void setVia(String via) {
         this.via = via;
+    }
+
+    public String getBy() {
+        return by;
+    }
+
+    public void setBy(String by) {
+        this.by = by;
     }
 
     public String getField() {
