@@ -214,6 +214,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
 
+              # view: range + a personal owner - the PERSONAL surface must render the range
+              # calendar (never the plain form+list), scoped to the MyController (U3 parity).
+              - name: Leave
+                view: range
+                calendar: { start: fromDate, end: toDate }
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: fromDate, type: date, required: true }
+                  - { name: toDate, type: date, required: true }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, personal: true }
+
               # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
               # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
               - name: PartnerTicket
@@ -608,6 +620,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myTicketPage = contentOf("gen/emission/js/components/pages/my/TicketMyDocumentPage.js");
         assertTrue(myTicketPage.contains("sendMessage") && myTicketPage.contains("TicketMessageMyController"),
                 "the personal chat composer must append through the personal items controller");
+
+        // view: range/calendar + personal - the personal surface renders the calendar (never the
+        // plain form+list), reads through the scoped controller, and /my/<Entity> lands on it.
+        String myLeaveCalendar = contentOf("gen/emission/js/components/pages/my/LeaveMyCalendarPage.js");
+        assertTrue(myLeaveCalendar.contains("LeaveMyController"), "the personal calendar must read through the scoped controller");
+        String myLeaveView = contentOf("gen/emission/views/my/Leave-calendar.html");
+        assertTrue(myLeaveView.contains("x-h-calendar"),
+                "the personal surface of a range/calendar root must render the calendar, not a plain list");
+        String shellIndex = contentOf("gen/emission/index.html");
+        assertTrue(shellIndex.contains("x-template.target.app=\"./views/my/Leave-calendar.html\""),
+                "/my/<Entity> must land on the personal calendar for a calendar root");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client

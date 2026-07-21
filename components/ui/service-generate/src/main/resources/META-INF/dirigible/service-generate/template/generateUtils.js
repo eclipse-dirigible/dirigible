@@ -269,6 +269,11 @@ export function generateFiles(model, parameters, templateSources) {
     // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
     // reach their forms through the parent's panels, never through navigation.
     const personalRootModels = model.entities.filter(e => e.personalProperty);
+    // A personal CALENDAR/RANGE root (view: calendar|range) lands on a personal calendar page
+    // instead of the list - exactly like the power surface, where the calendar replaces the table.
+    const personalCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.personalProperty);
+    // The personal LIST pair renders for every root EXCEPT a calendar root (replaced above).
+    const personalListModels = model.entities.filter(e => e.personalProperty && e.layoutType !== "MANAGE_CALENDAR");
     // A personal document root (MANAGE_DOCUMENT + a direct personal owner) gets the personal DOCUMENT
     // layout (header form + inline items table + status pill + totals). It still gets a MyController
     // (personalModels, above) and a list + perspective (personalRootModels) - only its FORM is the
@@ -366,6 +371,12 @@ export function generateFiles(model, parameters, templateSources) {
                     break;
                 case "personalDocumentModels":
                     generatedFiles.push(...generateCollection(location, content, template, personalDocumentModels, parameters));
+                    break;
+                case "personalListModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalListModels, parameters));
+                    break;
+                case "personalCalendarModels":
+                    generatedFiles.push(...generateCollection(location, content, template, personalCalendarModels, parameters));
                     break;
                 case "personalFormModels":
                     generatedFiles.push(...generateCollection(location, content, template, personalFormModels, parameters));
