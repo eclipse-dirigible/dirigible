@@ -247,9 +247,22 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                 __notifications.show({ type: 'negative', title: 'Cannot submit', description: 'This form was not opened from a task (no taskId).' });
                                 return;
                             }
+                            // The clicked button's `action` MUST win. The form model can carry a STALE
+                            // `action` (a prior task in the flow set it as a process variable, preloaded
+                            // into the model on open) plus control-only vars (__*) that are not entity
+                            // data; strip both, then set `action` LAST so the gateway branches on the
+                            // button, not the stale value (fixes approve-completing-as-reject).
+                            const __data = {};
+                            const __model = $scope.model || {};
+                            Object.keys(__model).forEach((key) => {
+                                if (key !== 'action' && key.indexOf('__') !== 0) {
+                                    __data[key] = __model[key];
+                                }
+                            });
+                            __data.action = action;
                             $http.post('/services/inbox/tasks/' + __taskId, {
                                 action: 'COMPLETE',
-                                data: Object.assign({ action: action }, $scope.model || {})
+                                data: __data
                             }).then(() => {
                                 __notifications.show({ type: 'positive', title: 'Task submitted', description: 'The task was completed (' + action + ').' });
                                 __dialogs.closeWindow();

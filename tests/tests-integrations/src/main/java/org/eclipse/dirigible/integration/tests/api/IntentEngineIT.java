@@ -2174,6 +2174,15 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(body.contains("closeWindow(") && body.contains("window.close("),
                 "on completion the form should close its host (dialog via closeWindow, standalone via window.close)");
         assertFalse(body.contains("TODO: wire"), "the action handlers must no longer be TODO stubs");
+        // The clicked button's action MUST win over a stale `action` in the model (a prior task in a
+        // multi-step flow set it as a process variable, preloaded on open): the completion payload
+        // strips `action` + control vars (__*) from the model and sets `action` LAST. Without this,
+        // an Approve completes down the reject branch (the approve-as-reject bug). The .form code is
+        // Gson-escaped (' -> \\u0027), so match escape-free substrings.
+        assertTrue(body.contains("__data.action") && body.contains(".indexOf(") && body.contains("__data"),
+                "the completion payload must be rebuilt with the button action winning, not Object.assign with the model last");
+        assertFalse(body.contains("Object.assign({ action: action }, $scope.model"),
+                "the buggy merge (stale model action overwrites the button) must be gone");
     }
 
     private void assertReport() {
