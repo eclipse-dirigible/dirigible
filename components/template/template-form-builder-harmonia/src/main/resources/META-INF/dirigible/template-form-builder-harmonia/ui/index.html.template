@@ -1,20 +1,20 @@
 #macro(leaf $el)
 #if($metadata.taskForm && $el.readonly && $el.model)
-        <!-- BPM task form: a read-only field is a compact Label: Value row - a fixed-width muted
-             label column with the value LEFT-aligned beside it, so values line up vertically like a
-             classic detail card - one cell of the two-column grid.
+        <!-- BPM task form: a read-only field renders as a detail cell - a muted label above its value,
+             matching the entity detail/document view's headerless Details card (label text-xs muted,
+             value text-sm), one cell of the two-column grid.
              Editable opt-in fields (readonly=false) fall through to the input below.
              A relation.field control's model is the resolver-set name/value variable, so e.g. listing
              `customer.name` shows the customer's name here rather than the raw FK id. A number is
              formatted with its pattern (grouped, fixed decimals); other values render as-is. -->
-        <div class="hbox items-center gap-3">
-          <span x-h-text.muted class="text-sm shrink-0" style="width: 9rem;">$!el.label</span>
+        <div class="vbox gap-0">
+          <span x-h-text.muted class="text-xs">$!el.label</span>
 #if($el.controlId == "input-number")
-          <span x-h-text class="font-medium min-w-0 break-words" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
+          <span x-h-text class="text-sm break-words" x-text="fmtNumber(model.$el.model, '$!el.pattern')"></span>
 #elseif($el.controlId == "input-date" || $el.controlId == "input-datetime-local" || $el.controlId == "input-time" || $el.controlId == "input-month")
-          <span x-h-text class="font-medium min-w-0 break-words" x-text="fmtDate(model.$el.model, '$el.controlId')"></span>
+          <span x-h-text class="text-sm break-words" x-text="fmtDate(model.$el.model, '$el.controlId')"></span>
 #else
-          <span x-h-text class="font-medium min-w-0 break-words" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
+          <span x-h-text class="text-sm break-words" x-text="(model.$el.model === null || model.$el.model === undefined || model.$el.model === '') ? '—' : model.$el.model"></span>
 #end
         </div>
 #elseif($el.controlId == "header")
@@ -138,10 +138,13 @@
         <div x-h-alert-description x-text="message"></div>
       </div>
 #if($metadata.taskForm)
-      <!-- Task form: a responsive two-column detail grid (single column below the sm breakpoint) -
-           compact horizontal Label: Value rows; headers, separators, textareas and the action-button
-           row span both columns. -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+      <!-- Task form: read-only fields render inside a headerless Details card (framed), matching the
+           entity detail / document view. A responsive two-column detail grid (single column below the
+           sm breakpoint); headers, separators, textareas and the action-button row span both columns.
+           Editable opt-in inputs and the actions live in the same card. -->
+      <div x-h-card>
+        <div x-h-card-content>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
 #else
       <div x-h-field-group>
 #end
@@ -162,7 +165,13 @@
 #leaf($element)
 #end
 #end
+#if($metadata.taskForm)
+          </div>
+        </div>
       </div>
+#else
+      </div>
+#end
     </form>
 
     <!-- Date/time controls (model + control type + editable) so form.js can convert the backend's

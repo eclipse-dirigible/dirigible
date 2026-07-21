@@ -11,32 +11,14 @@
  */
 import { Registry } from "@aerokit/sdk/platform";
 import { TemplateEngines as templateEngines } from "@aerokit/sdk/template";
-import { sanitizeJavaIdentifier } from "service-generate/template/parameterUtils";
+import { sanitizeJavaIdentifier, humanizeName } from "service-generate/template/parameterUtils";
 
 function getTranslationId(str) {
     return `${str.replaceAll(' ', '').replaceAll('_', '').replaceAll('.', '').replaceAll(':', '')}`;
 }
 
-// Humanize a PascalCase/camelCase identifier for display ("SalesInvoice" -> "Sales Invoice").
-// Mirrors org.eclipse.dirigible.components.intent.generator.IntentNaming.humanize, including its
-// acronym overrides, so a hand-authored .edm (no entityLabel/menuLabel baked by the intent
-// generator) still yields the same labels the intent path would.
-const HUMANIZE_OVERRIDES = { 'uom': 'Unit of Measure' };
-
-function humanizeName(name) {
-    if (!name) return '';
-    const override = HUMANIZE_OVERRIDES[name.toLowerCase()];
-    if (override) return override;
-    let out = '';
-    for (let i = 0; i < name.length; i++) {
-        const c = name.charAt(i);
-        if (i > 0 && c >= 'A' && c <= 'Z' && !(name.charAt(i - 1) >= 'A' && name.charAt(i - 1) <= 'Z')) {
-            out += ' ';
-        }
-        out += i === 0 ? c.toUpperCase() : c;
-    }
-    return out;
-}
+// humanizeName lives in parameterUtils (the lower-level util module this file already imports from)
+// so the label default in parameterUtils and the label catalog built here share one implementation.
 
 // Pluralize a humanized label's last word ("Sales Invoice" -> "Sales Invoices", "Country" ->
 // "Countries"). Mirrors IntentNaming.pluralize, including its irregular overrides.
