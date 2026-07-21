@@ -19,6 +19,9 @@
 <div x-data="documentsPage" class="vbox size-full">
 
   <div x-h-toolbar data-variant="transparent">
+    <!-- Section caption, unified with the entity/inbox titles (text-2xl semibold); the breadcrumb
+         below it is the in-folder path navigator (root = Home). -->
+    <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('application-core:shell.nav.documents', 'Documents')"></span>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasBack()" @click="goBack()" aria-label="Back"><i role="img" x-h-lucide data-lucide="arrow-left"></i></button>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!hasForward()" @click="goForward()" aria-label="Forward"><i role="img" x-h-lucide data-lucide="arrow-right"></i></button>
     <button x-h-button data-variant="transparent" data-size="icon-sm" @click="refresh()" aria-label="Refresh"><i role="img" x-h-lucide data-lucide="refresh-cw"></i></button>
