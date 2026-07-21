@@ -172,6 +172,7 @@ public final class IntentParser {
      */
     private static void validate(IntentModel model) {
         List<String> issues = new ArrayList<>();
+        propagateSensitiveDerivations(model);
         Set<String> usesAliases = validateUses(model, issues);
         Set<String> entityNames = validateEntities(model, usesAliases, issues);
         validateFunctions(model, issues);
@@ -888,6 +889,83 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * A derived field that sums or copies a {@code sensitive:} child field re-exposes on its target
+     * exactly what the child hides whenever the target entity has a personal (my) surface - the leak
+     * class where the leaf value is scrubbed from the personal wire but its total still travels it.
+     * Close it by construction: before validation, every rollup target field ({@code op: sum} /
+     * {@code latest}) and every {@code aggregate: true} master field fed by a sensitive source becomes
+     * {@code sensitive} automatically when the target entity is personal-surfaced (an own personal
+     * owner relation, or the scope inherited through a composition parent chain). A target without a
+     * personal surface keeps the authored visibility - there is nothing to leak there.
+     */
+    private static void propagateSensitiveDerivations(IntentModel model) {
+        java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null) {
+                byName.put(entity.getName(), entity);
+            }
+        }
+        // rollups: the child's `of` field feeds the parent's `field`
+        for (RollupIntent rollup : model.getRollups()) {
+            EntityIntent child = byName.get(rollup.getEntity());
+            if (child == null) {
+                continue;
+            }
+            RelationIntent via = toOneRelationByName(child, rollup.getVia());
+            EntityIntent parent = via == null ? null : byName.get(via.getTo());
+            FieldIntent of = rollup.getOf() == null || parent == null ? null : fieldByName(child, rollup.getOf());
+            FieldIntent target = parent == null ? null : fieldByName(parent, rollup.getField());
+            if (of != null && target != null && of.isSensitive() && !target.isSensitive()
+                    && hasPersonalSurface(byName, parent, new HashSet<>())) {
+                target.setSensitive(true);
+            }
+        }
+        // aggregate: true master fields recomputed from the same-named field of a composition child
+        for (EntityIntent parent : model.getEntities()) {
+            if (!hasPersonalSurface(byName, parent, new HashSet<>())) {
+                continue;
+            }
+            for (FieldIntent target : parent.getFields()) {
+                if (!target.isAggregate() || target.isSensitive()) {
+                    continue;
+                }
+                for (EntityIntent child : model.getEntities()) {
+                    for (RelationIntent relation : child.getRelations()) {
+                        if (relation.isComposition() && parent.getName() != null && parent.getName()
+                                                                                          .equals(relation.getTo())) {
+                            FieldIntent source = fieldByName(child, target.getName());
+                            if (source != null && source.isSensitive()) {
+                                target.setSensitive(true);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Whether the entity gets a personal (my) surface: it declares a personal owner relation of its
+     * own, or inherits the scope through a composition parent chain (cycle-guarded).
+     */
+    private static boolean hasPersonalSurface(java.util.Map<String, EntityIntent> byName, EntityIntent entity, Set<String> seen) {
+        if (entity == null || entity.getName() == null || !seen.add(entity.getName())) {
+            return false;
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isPersonal()) {
+                return true;
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isComposition() && hasPersonalSurface(byName, byName.get(relation.getTo()), seen)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**

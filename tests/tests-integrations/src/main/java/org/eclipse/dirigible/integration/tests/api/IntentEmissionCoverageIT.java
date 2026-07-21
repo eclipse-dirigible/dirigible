@@ -176,6 +176,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
                   - { name: rate, type: decimal, sensitive: true }
+                  - { name: totalCost, type: decimal }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   # a plain dropdown relation: the personal LIST must resolve it to a label (the
@@ -186,6 +187,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: amount, type: decimal }
+                  - { name: cost,   type: decimal, sensitive: true }
                   - { name: day,    type: date }
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
@@ -264,6 +266,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: note, type: string, length: 200 }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
+            # auto-sensitive derivation: totalCost sums the SENSITIVE ClaimLine.cost into the
+            # personal-rooted Claim - the parser must mark the target sensitive automatically
+            # (the leak class where the leaf is scrubbed but its total travels the my wire).
+            # totalCost is NOT authored sensitive on purpose.
+            rollups:
+              - { name: claimCost, entity: ClaimLine, via: Claim, field: totalCost, op: sum, of: cost }
 
             # collection-driven generation: the monthly job creates one Claim per Person and,
             # under each, one ClaimLine per working day of the month (amount defaulted).
@@ -507,9 +516,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimMy.contains("eq(\"Email\", username)"), "personal must emit the identity match against the logged-in username");
         assertTrue(claimMy.contains("entity.Rate = null"), "sensitive must emit the response scrub in the personal controller");
         assertTrue(claimMy.contains("entity.Person = me"), "personal must force the owner FK server-side on create");
+        // Auto-sensitive derivation (U5 class): totalCost is NOT authored sensitive, but it sums the
+        // sensitive ClaimLine.cost into the personal-rooted Claim - the parser must propagate the
+        // flag so the total is scrubbed from the personal wire exactly like the leaf value.
+        assertTrue(claimMy.contains("entity.TotalCost = null"),
+                "a rollup target summing a sensitive child field into a personal-rooted entity must be auto-scrubbed");
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");
+        assertTrue(lineMy.contains("entity.Cost = null"),
+                "a sensitive field on a scope-inheriting child must be scrubbed from its personal controller");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.

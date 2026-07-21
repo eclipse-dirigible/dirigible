@@ -291,7 +291,12 @@ scoped to the logged-in user: reads filtered to the mapped identity record, the 
 server-side on writes, foreign records 404. A field marked `sensitive: true` (not the PK, the
 identity field, or the owner FK) is stripped from personal responses and ignored on personal
 writes - use it for billing rates and amounts the person must not see. The regular controller is
-unaffected.
+unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
+`latest`) whose `of:` child field is sensitive, and an `aggregate: true` master field fed by a
+same-named sensitive item field, are treated as sensitive whenever their entity has a personal
+surface (own `personal:` relation, or scope inherited through a composition parent chain) - the
+total of a hidden value never travels the personal wire, without the author having to remember to
+mark it.
 
 **Partner surfaces (`partner: true`):** the exact mirror of `personal:` for EXTERNAL parties
 (customers, suppliers) on the Partner shell (`/services/web/partner/`). A record-owning to-one
