@@ -27,6 +27,14 @@
  * table: the same master-filtered rows become events; event-click edits the child, date-click
  * creates one with the master FK AND the clicked date preset. An empty month is meaningful, so a
  * calendar panel shows the calendar even with zero rows.
+ *
+ * A def carrying `files: { readOnly }` (a composition child declared `function: Attachment` or
+ * `function: Snapshot`) renders as a Files panel instead of the table: the master-filtered rows are
+ * uploaded files, each downloadable via the controller's `/{id}/download` route. Editable (Attachment):
+ * an Upload control adds files (multipart POST to `/upload`) and each row can be removed. Read-only
+ * (Snapshot): download only — no upload, no delete (copies are generated server-side, e.g. on issue).
+ * Like a calendar, a files panel always renders (its empty state is meaningful), never the shared
+ * "no records" line.
  */
 function detailPanel(def, masterId) {
   return {
@@ -39,6 +47,8 @@ function detailPanel(def, masterId) {
     deleteOpen: false,
     deleteTarget: null,
     deleteBusy: false,
+    uploading: false,     // files defs only
+    fileError: null,
     // Reactive config for the embedded x-h-calendar (calendar defs only); rebuilt on every load.
     calCfg: { view: (def.calendar && def.calendar.view) || 'month', events: [] },
 
@@ -111,6 +121,10 @@ function detailPanel(def, masterId) {
         this.rows = await App.services.api.getAll(this.def.apiPath + q);
         if (this.def.calendar) {
           this.calCfg = { view: this.def.calendar.view || 'month', events: this.buildEvents() };
+          this.state = 'default';
+        } else if (this.def.files) {
+          // A files panel always renders (its empty state carries the upload prompt / "generated on
+          // issue" note), so it never falls back to the shared "no records" line.
           this.state = 'default';
         } else {
           this.state = this.rows.length === 0 ? 'empty' : 'default';
@@ -223,6 +237,51 @@ function detailPanel(def, masterId) {
         q += '&' + encodeURIComponent(cal.start) + '=' + encodeURIComponent(val);
       }
       window.PineconeRouter.navigate('/' + this.def.entity + '/create' + q);
+    },
+
+    // --- files panel (files defs only) ----------------------------------------------------------
+    // Read-only (Snapshot): download only. Editable (Attachment): upload + remove.
+    get filesReadOnly() { return !!(this.def.files && this.def.files.readOnly); },
+
+    // Absolute URL of the controller's download route (a plain browser GET, not the fetch client):
+    // apiPath is relative to restBase, so prepend it once. The row's own id keys the file.
+    downloadHref(row) {
+      const base = (App.config && App.config.restBase) || '';
+      return base + this.def.apiPath + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/download';
+    },
+
+    // Human-readable size from the injected FileSize column (bytes).
+    fileSizeText(row) {
+      const n = Number(row.FileSize);
+      if (!isFinite(n) || n <= 0) return '';
+      const units = ['B', 'KB', 'MB', 'GB'];
+      let v = n, i = 0;
+      while (v >= 1024 && i < units.length - 1) { v /= 1024; i++; }
+      return (i === 0 ? v : v.toFixed(1)) + ' ' + units[i];
+    },
+
+    // Multipart upload of the picked files to the controller's /upload route (master FK query),
+    // then reload. FormData bodies are sent as-is by the api client (browser sets the boundary).
+    async uploadFiles(fileList) {
+      const files = Array.from(fileList || []);
+      if (!files.length || this.masterId == null) return;
+      this.uploading = true;
+      this.fileError = null;
+      try {
+        const fd = new FormData();
+        files.forEach(f => fd.append('file', f, f.name));
+        const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId);
+        await App.services.api.post(this.def.apiPath + '/upload' + q, fd);
+        await this.load();
+      } catch (e) {
+        this.fileError = App.services.apiErrors.messageFor(e, 'Upload failed.');
+      } finally {
+        this.uploading = false;
+      }
+    },
+    onFilePick(e) {
+      this.uploadFiles(e.target.files);
+      e.target.value = ''; // allow re-picking the same file
     },
 
     askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },

@@ -186,7 +186,36 @@
                   <div x-h-calendar="calCfg" style="height: 420px" @event-click="onEventClick" @date-click="onDateClick"></div>
                 </div>
               </template>
-              <template x-if="!def.calendar">
+              <!-- A files detail (function: Attachment / Snapshot) on the read-only browse pane: the
+                   files are downloadable here; upload/remove happen on the record's Edit form. -->
+              <template x-if="def.files">
+                <div x-show="state === 'default'" class="vbox gap-3">
+                  <template x-if="rows.length === 0">
+                    <div x-h-info-page>
+                      <div x-h-info-page-header>
+                        <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="paperclip"></i></div>
+                        <div x-h-info-page-title x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopies', 'No copies yet') : T('$projectName:${tprefix}.messages.noFiles', 'No attachments')"></div>
+                        <div x-h-info-page-description x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopiesHint', 'A copy is stored automatically when the document is issued.') : T('$projectName:${tprefix}.messages.noFilesHint', 'Files are managed from the record’s Edit form.')"></div>
+                      </div>
+                    </div>
+                  </template>
+                  <template x-if="rows.length > 0">
+                    <div class="vbox gap-2">
+                      <template x-for="row in rows" :key="row[def.primaryKey]">
+                        <div x-h-card class="hbox items-center gap-3 p-3">
+                          <i role="img" x-h-lucide data-lucide="file-text" class="shrink-0"></i>
+                          <div class="vbox gap-0 grow min-w-0">
+                            <span class="text-sm truncate" x-text="row.FileName"></span>
+                            <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
+                          </div>
+                          <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
+                        </div>
+                      </template>
+                    </div>
+                  </template>
+                </div>
+              </template>
+              <template x-if="!def.calendar &amp;&amp; !def.files">
               <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
                 <table x-h-table data-borders="rows">
                   <thead x-h-table-header>

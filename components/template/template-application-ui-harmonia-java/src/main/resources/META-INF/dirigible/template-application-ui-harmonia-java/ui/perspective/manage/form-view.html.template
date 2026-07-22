@@ -218,7 +218,7 @@
         <div x-data="detailPanel({...d, returnTo: '/${name}/' + id + (isPreview ? '/preview' : '/edit')}, id)" x-h-card>
           <div x-h-card-header>
             <h3 x-h-card-title x-text="d.label"></h3>
-            <div x-h-card-action x-show="!isPreview">
+            <div x-h-card-action x-show="!isPreview && !def.files">
               <button type="button" x-h-button data-variant="primary" data-size="sm" @click="addRow()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
             </div>
           </div>
@@ -234,7 +234,52 @@
                 <div x-h-calendar="calCfg" style="height: 420px" @event-click="onEventClick" @date-click="onDateClick"></div>
               </div>
             </template>
-            <template x-if="!def.calendar">
+#set($dollar = '$')
+            <!-- A files detail (function: Attachment / Snapshot): download always; upload + remove
+                 only when editable (not preview) and not a read-only Snapshot (copies are generated
+                 server-side). $refs is escaped (${dollar}refs) so Velocity leaves the Alpine ref alone. -->
+            <template x-if="def.files">
+              <div x-show="state === 'default'" class="vbox gap-3">
+                <div x-show="fileError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="fileError"></div></div>
+                <template x-if="!isPreview &amp;&amp; !filesReadOnly">
+                  <div class="hbox items-center gap-2">
+                    <input type="file" multiple class="hidden" x-ref="fileInput" @change="onFilePick(${dollar}event)" :disabled="uploading" />
+                    <button type="button" x-h-button data-variant="outline" data-size="sm" :disabled="uploading" @click="${dollar}refs.fileInput.click()">
+                      <span x-show="uploading" x-h-spinner></span>
+                      <i x-show="!uploading" role="img" x-h-lucide data-lucide="upload"></i>
+                      <span x-text="uploading ? T('$projectName:${tprefix}.defaults.uploading', 'Uploading…') : T('$projectName:${tprefix}.defaults.upload', 'Upload')"></span>
+                    </button>
+                  </div>
+                </template>
+                <template x-if="rows.length === 0">
+                  <div x-h-info-page>
+                    <div x-h-info-page-header>
+                      <div x-h-info-page-media.icon><i role="img" x-h-lucide data-lucide="paperclip"></i></div>
+                      <div x-h-info-page-title x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopies', 'No copies yet') : T('$projectName:${tprefix}.messages.noFiles', 'No attachments')"></div>
+                      <div x-h-info-page-description x-text="filesReadOnly ? T('$projectName:${tprefix}.messages.noCopiesHint', 'A copy is stored automatically when the document is issued.') : T('$projectName:${tprefix}.messages.noFilesHint', 'Upload files to attach them to this record.')"></div>
+                    </div>
+                  </div>
+                </template>
+                <template x-if="rows.length > 0">
+                  <div class="vbox gap-2">
+                    <template x-for="row in rows" :key="row[def.primaryKey]">
+                      <div x-h-card class="hbox items-center gap-3 p-3">
+                        <i role="img" x-h-lucide data-lucide="file-text" class="shrink-0"></i>
+                        <div class="vbox gap-0 grow min-w-0">
+                          <span class="text-sm truncate" x-text="row.FileName"></span>
+                          <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
+                        </div>
+                        <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
+                        <template x-if="!isPreview &amp;&amp; !filesReadOnly">
+                          <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+                        </template>
+                      </div>
+                    </template>
+                  </div>
+                </template>
+              </div>
+            </template>
+            <template x-if="!def.calendar &amp;&amp; !def.files">
             <div x-show="state === 'default'" x-h-table-container.scroll style="max-height: 320px">
               <table x-h-table data-borders="rows">
                 <thead x-h-table-header>
