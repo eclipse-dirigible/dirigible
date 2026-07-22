@@ -125,7 +125,64 @@ function getModel(workspaceName, projectName, path) {
     if (!model.exists()) {
         throw new BadRequestError(`Model file '${path}' does not exist in Project '${projectName}' in Workspace '${workspaceName}'.`);
     }
-    return model.getText();
+    return augmentWithExtensions(model.getText(), projectWorkspace, projectName);
+}
+
+// Cross-model entity extension (the compose pre-pass). Another project may contribute an EXTENSION
+// entity that adds fields to one of THIS project's entities (e.g. a localisation module adds an EGN
+// field to the Employee entity owned here). Such an extension cannot rewrite this project's model at
+// authoring time, so we fold it in at generation time: scan every sibling project's <name>.model for
+// EXTENSION entities whose `extensionReferencedModel` names THIS project, and append them to this
+// model's entity list. `generateUtils.generateFiles` then merges each EXTENSION's properties into its
+// base entity (matched by `extensionReferencedEntity`) and drops the EXTENSION itself - so the added
+// fields become real columns on the base table, natively filterable/sortable/formable, with no join.
+function augmentWithExtensions(modelText, projectWorkspace, projectName) {
+    let root;
+    try {
+        root = JSON.parse(modelText);
+    } catch (e) {
+        return modelText; // not JSON (e.g. a non-model artifact) - leave untouched
+    }
+    if (!root.model || !Array.isArray(root.model.entities)) {
+        return modelText;
+    }
+    let extensions = [];
+    let projects = projectWorkspace.getProjects();
+    for (let i = 0; i < projects.size(); i++) {
+        let sibling = projects.get(i);
+        let siblingName = sibling.getName();
+        if (siblingName === projectName) {
+            continue; // an entity is not extended from within its own project
+        }
+        let modelFile = sibling.getFile(siblingName + ".model");
+        if (!modelFile.exists()) {
+            continue;
+        }
+        let siblingRoot;
+        try {
+            siblingRoot = JSON.parse(modelFile.getText());
+        } catch (e) {
+            continue;
+        }
+        let entities = siblingRoot && siblingRoot.model && siblingRoot.model.entities;
+        if (!Array.isArray(entities)) {
+            continue;
+        }
+        for (const entity of entities) {
+            if (entity.type === "EXTENSION" && entity.extensionReferencedModel === projectName) {
+                extensions.push(entity);
+            }
+        }
+    }
+    if (extensions.length === 0) {
+        return modelText;
+    }
+    // Deterministic order so the merged column order is reproducible across regenerations.
+    extensions.sort((a, b) => `${a.extensionReferencedEntity}.${a.name}`.localeCompare(`${b.extensionReferencedEntity}.${b.name}`));
+    for (const ext of extensions) {
+        root.model.entities.push(ext);
+    }
+    return JSON.stringify(root);
 }
 
 function cleanGenFolder(workspaceName, projectName, genFolderName) {

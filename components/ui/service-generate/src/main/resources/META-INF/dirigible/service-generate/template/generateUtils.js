@@ -184,8 +184,53 @@ export function generateGeneric(model, parameters, templateSources) {
     return generatedFiles;
 }
 
+// Fold every EXTENSION entity's properties into the base entity it references, then remove the
+// EXTENSION entities from the model. A property is merged unless it is the primary key, an audit
+// column, or a name the base already defines (the base wins - an extension cannot override a core
+// field, only add). Multilingual extension fields carry their flag, so the base's _LANG generation
+// picks them up unchanged. Deterministic: extensions were pre-sorted by (baseEntity, name).
+function mergeExtensionEntities(model) {
+    const extensions = model.entities.filter(e => e.type === "EXTENSION");
+    if (extensions.length === 0) {
+        return;
+    }
+    for (const ext of extensions) {
+        const base = model.entities.find(e => e.name === ext.extensionReferencedEntity && e.type !== "EXTENSION");
+        if (!base) {
+            continue; // base not in this model (generating the extension's own project) - just drop it
+        }
+        if (!Array.isArray(base.properties)) {
+            base.properties = [];
+        }
+        const existing = new Set(base.properties.map(p => p.name));
+        for (const prop of (ext.properties || [])) {
+            if (prop.dataPrimaryKey === "true") {
+                continue; // the base already has its own key
+            }
+            if (prop.auditType && prop.auditType !== "NONE") {
+                continue; // audit columns belong to the base
+            }
+            if (existing.has(prop.name)) {
+                continue; // base defines it - core wins, extension only adds
+            }
+            base.properties.push(JSON.parse(JSON.stringify(prop)));
+            existing.add(prop.name);
+        }
+    }
+    model.entities = model.entities.filter(e => e.type !== "EXTENSION");
+}
+
 export function generateFiles(model, parameters, templateSources) {
     const generatedFiles = [];
+
+    // Entity extension merge (cross-model contributed fields). An EXTENSION entity does NOT get its
+    // own table/controller/UI - its properties are folded into the base entity it references
+    // (extensionReferencedEntity), so the added fields become real columns on the base table and the
+    // whole downstream pipeline (DAO, REST, list filter/sort, form, _LANG) treats them natively. The
+    // cross-project collection happens earlier (generate.mjs augmentWithExtensions); here we apply the
+    // fold and remove the EXTENSION entities. An EXTENSION whose base is not in this model (e.g. when
+    // generating the extension's OWN project) is simply dropped - it owns no table.
+    mergeExtensionEntities(model);
 
     const models = model.entities.filter(e => e.type !== "REPORT" && e.type !== "FILTER");
     const apiModels = model.entities.filter(e => e.type !== "PROJECTION");
