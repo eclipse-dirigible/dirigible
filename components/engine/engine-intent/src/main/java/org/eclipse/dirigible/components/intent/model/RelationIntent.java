@@ -110,6 +110,15 @@ public class RelationIntent {
     private boolean personal;
 
     /**
+     * When set together with {@link #personal}, the personal (my) surface is READ-ONLY for the owner:
+     * the generated {@code <Entity>MyController} exposes only the scoped reads (getAll / get / count)
+     * and its create/update/delete return 405, and the personal pages render without New / Edit /
+     * Delete. Use for records the owner may SEE but never author (a leave-balance account, a payslip);
+     * the regular (power) controller is unaffected. Ignored unless {@link #personal} is also true.
+     */
+    private boolean personalReadOnly;
+
+    /**
      * Marks this to-one relation as the OWNER of the record for the PARTNER surface: the generated
      * partner REST controller scopes reads to the logged-in external partner's mapped identity record
      * and forces this FK server-side on writes, and the partner perspective registers on the Partner
@@ -260,6 +269,14 @@ public class RelationIntent {
 
     public void setPersonal(boolean personal) {
         this.personal = personal;
+    }
+
+    public boolean isPersonalReadOnly() {
+        return personalReadOnly;
+    }
+
+    public void setPersonalReadOnly(boolean personalReadOnly) {
+        this.personalReadOnly = personalReadOnly;
     }
 
     public boolean isPartner() {

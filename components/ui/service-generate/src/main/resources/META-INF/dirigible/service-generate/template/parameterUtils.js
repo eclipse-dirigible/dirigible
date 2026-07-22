@@ -220,6 +220,9 @@ export function process(model, parameters) {
                         e.personalIdentityLabel = p.relationshipIdentityLabel || p.relationshipIdentityProperty;
                         e.personalIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
                         e.personalIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
+                        // See-only personal surface (intent personalReadOnly): the my controller's
+                        // writes 405 and the my pages drop New/Edit/Delete.
+                        e.personalReadOnly = !!p.relationshipPersonalReadOnly;
                     }
                     // partner (intent `partner: true`): the external-partner mirror of the personal
                     // owner - resolves the current external user through the TARGET's repository.
@@ -265,6 +268,7 @@ export function process(model, parameters) {
                 personalProperty: parent.personalProperty,
                 personalFkJavaClass: parent.personalFkJavaClass
             };
+            e.personalReadOnly = !!parent.personalReadOnly; // children inherit the see-only mode
             e.personalIdentityProperty = parent.personalIdentityProperty;
             e.personalIdentityLabel = parent.personalIdentityLabel;
             e.personalIdentityEntityClass = parent.personalIdentityEntityClass;
