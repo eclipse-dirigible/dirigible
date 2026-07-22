@@ -143,6 +143,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 #end
+## A uuid field (intent type: uuid) is platform-generated: assign a random UUID on create when empty.
+#foreach ($property in $properties)
+#if($property.generatedUuid)
+        if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
+            entity.${property.name} = java.util.UUID.randomUUID().toString();
+        }
+#end
+#end
 #if($documentMaster)
         recalculate(entity);
 #end

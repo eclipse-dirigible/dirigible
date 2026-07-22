@@ -918,6 +918,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.isReadOnly() || "uuid".equalsIgnoreCase(field.getType())) {
             p.put("isReadOnlyProperty", "true");
         }
+        // A uuid field is platform-generated: the generated repository assigns a random UUID on create
+        // when the value is empty (no hand-written calculatedActionOnCreate needed). The author can
+        // still seed/import an explicit value - it is only filled when blank.
+        if ("uuid".equalsIgnoreCase(field.getType())) {
+            p.put("generatedUuid", "true");
+        }
         if (field.isSensitive()) {
             // Hidden from the personal (my) surface: absent from its pages and stripped from the
             // personal REST controller's responses. The power surface ignores this attribute.

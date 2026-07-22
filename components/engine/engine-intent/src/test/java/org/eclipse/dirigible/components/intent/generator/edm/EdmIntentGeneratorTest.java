@@ -66,8 +66,10 @@ class EdmIntentGeneratorTest {
                                .noneMatch(p -> "Country".equals(p.get("name"))),
                 "projection targets must not create perspectives");
 
-        // uuid carries the unique constraint; the four audit columns are present.
+        // uuid carries the unique constraint and is platform-generated on create (no custom action);
+        // the four audit columns are present.
         assertEquals("true", propertyByName(customer, "Uuid").get("dataUnique"));
+        assertEquals("true", propertyByName(customer, "Uuid").get("generatedUuid"));
         assertEquals("CREATED_AT", propertyByName(customer, "CreatedAt").get("auditType"));
         assertEquals("UPDATED_BY", propertyByName(customer, "UpdatedBy").get("auditType"));
 
