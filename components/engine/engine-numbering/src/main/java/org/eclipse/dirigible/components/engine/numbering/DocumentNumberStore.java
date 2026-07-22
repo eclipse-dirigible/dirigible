@@ -146,10 +146,17 @@ class DocumentNumberStore {
     }
 
     private int increment(Connection connection, String series, String scope) throws SQLException {
+        // The table is created with QUOTED (case-sensitive) identifiers, and the builder encapsulates
+        // the SET-target column and the WHERE-condition identifiers the same way. But the SET VALUE is a
+        // free expression appended verbatim (NOT encapsulated) - so its column reference must be quoted
+        // explicitly, otherwise a case-folding dialect (PostgreSQL lower-cases unquoted identifiers)
+        // fails to resolve it against the quoted-uppercase column (H2 upper-cases unquoted, so it
+        // happened to match). The WHERE columns stay unquoted: the builder quotes those for us (quoting
+        // them here would double-encapsulate into a zero-length delimited identifier).
         String sql = SqlFactory.getNative(connection)
                                .update()
                                .table(TABLE_NAME)
-                               .set(COLUMN_COUNTER, COLUMN_COUNTER + " + 1")
+                               .set(COLUMN_COUNTER, QUOTED_COUNTER + " + 1")
                                .where(COLUMN_SERIES + " = ? AND " + COLUMN_SCOPE + " = ?")
                                .build();
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
