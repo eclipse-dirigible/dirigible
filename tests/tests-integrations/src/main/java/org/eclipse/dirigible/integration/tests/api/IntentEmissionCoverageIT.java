@@ -554,8 +554,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // no repository.save on the personal surface (the power controller keeps writing).
         String balanceMy = contentOf("gen/emission/api/balance/BalanceMyController.java");
         assertTrue(balanceMy.contains("read-only on your personal surface"),
-                "personalReadOnly must emit the 405 refusal on the personal write methods");
-        assertTrue(balanceMy.contains("METHOD_NOT_ALLOWED"), "personalReadOnly write methods must return 405 METHOD_NOT_ALLOWED");
+                "personalReadOnly must emit the write refusal on the personal write methods");
+        assertTrue(balanceMy.contains("HttpStatus.FORBIDDEN"), "personalReadOnly write methods must refuse with 403 FORBIDDEN");
         assertTrue(!balanceMy.contains("repository.save(entity)"),
                 "personalReadOnly must NOT emit a persisting create/update on the personal controller");
         String balanceMyView = contentOf("gen/emission/views/my/Balance-list.html");
@@ -1122,11 +1122,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"days\":5}")
+                                                 .body("{\"Days\":5}")
                                                  .when()
                                                  .post(API + "/balance/BalanceMyController")
                                                  .then()
-                                                 .statusCode(405));
+                                                 .statusCode(403));
 
         assertBpmEventsRuntime();
     }

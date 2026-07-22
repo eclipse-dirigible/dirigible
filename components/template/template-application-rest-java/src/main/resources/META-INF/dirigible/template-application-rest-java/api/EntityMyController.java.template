@@ -96,20 +96,20 @@ public class ${name}MyController {
     // remains the sole write path). Fixes the self-grant risk on owner-owned reference records.
     @Post
     @Documentation("Not allowed - this ${name} is read-only on the personal surface")
-    public void create(@Body ${name}Entity entity) {
-        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+    public ${name}Entity create(@Body ${name}Entity entity) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This ${name} is read-only on your personal surface");
     }
 
     @Put("/{id}")
     @Documentation("Not allowed - this ${name} is read-only on the personal surface")
-    public void update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
-        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+    public ${name}Entity update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This ${name} is read-only on your personal surface");
     }
 
     @Delete("/{id}")
     @Documentation("Not allowed - this ${name} is read-only on the personal surface")
     public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
-        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+        throw new ResponseStatusException(HttpStatus.FORBIDDEN, "This ${name} is read-only on your personal surface");
     }
 #else
     @Post
