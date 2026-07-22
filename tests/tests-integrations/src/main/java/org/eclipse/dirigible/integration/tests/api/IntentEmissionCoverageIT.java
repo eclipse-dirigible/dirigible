@@ -220,7 +220,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # calendar (never the plain form+list), scoped to the MyController (U3 parity).
               - name: Leave
                 view: range
-                calendar: { start: fromDate, end: toDate }
+                calendar: { start: fromDate, end: toDate, title: Person }
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: fromDate, type: date, required: true }
@@ -672,6 +672,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String shellIndex = contentOf("gen/emission/index.html");
         assertTrue(shellIndex.contains("x-template.target.app=\"./views/my/Leave-calendar.html\""),
                 "/my/<Entity> must land on the personal calendar for a calendar root");
+        // A calendar title that names a RELATION must resolve to the referenced label like the
+        // list columns do - never render the raw FK id as the event title (power and my alike).
+        String leaveCalendar = contentOf("gen/emission/js/components/pages/Leave/LeaveCalendarPage.js");
+        assertTrue(leaveCalendar.contains("titleLookup"), "the power calendar must resolve a relation title through a label lookup");
+        assertTrue(myLeaveCalendar.contains("titleLookup"), "the personal calendar must resolve a relation title through a label lookup");
 
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
