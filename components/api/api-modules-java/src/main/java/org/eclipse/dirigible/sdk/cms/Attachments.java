@@ -11,8 +11,15 @@ package org.eclipse.dirigible.sdk.cms;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.eclipse.dirigible.components.api.cms.AttachmentsFacade;
+import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
+
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.Part;
 
 /**
  * Client SDK for record attachments: store an uploaded file against a master entity (into the
@@ -45,6 +52,36 @@ public final class Attachments {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to store attachment [" + fileName + "] for [" + masterEntity + "]", e);
         }
+    }
+
+    /**
+     * Parse the current multipart request and store every uploaded file as an attachment of the given
+     * master entity. Reads the servlet parts Spring's multipart resolver has already parsed (the
+     * generated controller is served by a Spring {@code @PostMapping}, which consumes the body before
+     * commons-fileupload could), so a generated controller only ever sees {@link Attachment}.
+     *
+     * @param masterEntity the owning entity type name
+     * @return the stored attachments, one per uploaded file (form fields ignored)
+     */
+    public static List<Attachment> storeUploads(String masterEntity) {
+        HttpServletRequest request = HttpRequestFacade.getRequest();
+        if (request == null) {
+            throw new IllegalStateException("No active request to read the upload for [" + masterEntity + "]");
+        }
+        List<Attachment> result = new ArrayList<>();
+        try {
+            for (Part part : request.getParts()) {
+                if (part.getSubmittedFileName() == null) {
+                    continue; // a plain form field, not a file
+                }
+                try (InputStream in = part.getInputStream()) {
+                    result.add(store(masterEntity, part.getSubmittedFileName(), part.getContentType(), in.readAllBytes()));
+                }
+            }
+        } catch (IOException | ServletException e) {
+            throw new IllegalStateException("Failed to read the upload for [" + masterEntity + "]", e);
+        }
+        return result;
     }
 
     /**

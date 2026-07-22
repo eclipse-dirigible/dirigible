@@ -123,6 +123,57 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void attachmentChildInjectsFileMetadataAndIsMarked() {
+        String yaml = """
+                name: docs
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: CompanyAttachment
+                    function: Attachment
+                    fields:
+                      - { name: category, type: string, length: 50 }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "docs");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> att = entityByName(entities, "CompanyAttachment");
+
+        // Marked for the generated controller (upload/download verbs) + the Harmonia Attachments panel;
+        // it stays a composition detail of its master (the master-detail wiring is unchanged).
+        assertEquals("true", att.get("attachmentEntity"));
+        assertEquals("MANAGE_DETAILS", att.get("layoutType"));
+
+        // The standard file-metadata columns are injected (upload-set -> read-only); FileName is the
+        // row's display title (shown on the list), StoragePath is the internal CMS reference.
+        assertEquals("VARCHAR", propertyByName(att, "FileName").get("dataType"));
+        assertEquals("true", propertyByName(att, "FileName").get("isReadOnlyProperty"));
+        assertEquals("true", propertyByName(att, "FileName").get("widgetIsMajor"));
+        assertEquals("BIGINT", propertyByName(att, "FileSize").get("dataType"));
+        assertEquals("false", propertyByName(att, "StoragePath").get("widgetIsMajor"));
+        assertNotNull(propertyByName(att, "ContentType"));
+        assertNotNull(propertyByName(att, "Uuid"));
+        // Implicitly audited - who uploaded when.
+        assertEquals("CREATED_AT", propertyByName(att, "CreatedAt").get("auditType"));
+        // Author-declared domain field preserved alongside the injected ones.
+        assertNotNull(propertyByName(att, "Category"));
+
+        // The author declares no primary key on an attachment child, so a generated integer Id is
+        // synthesized (auto-increment) - otherwise the generated entity/controller would have no PK.
+        Map<String, Object> id = propertyByName(att, "Id");
+        assertEquals("true", id.get("dataPrimaryKey"));
+        assertEquals("INTEGER", id.get("dataType"));
+        assertEquals("true", id.get("dataAutoIncrement"));
+
+        // A plain (non-attachment) entity carries no marker.
+        assertNull(entityByName(entities, "Company").get("attachmentEntity"));
+    }
+
+    @Test
     void dependsOnEmitsWidgetAttributesWithPrimaryKeyDefaults() {
         String yaml = """
                 name: shop

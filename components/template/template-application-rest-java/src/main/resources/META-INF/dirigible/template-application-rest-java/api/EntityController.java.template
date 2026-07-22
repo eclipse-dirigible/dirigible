@@ -132,6 +132,52 @@ public class ${name}Controller {
 #end
         return repository.save(entity);
     }
+#if($attachmentEntity)
+
+    @Post("/upload")
+    @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
+    public List<${name}Entity> upload(@QueryParam("${masterEntityId}") Integer ${masterEntityId}) {
+#if($needsRoles)
+        checkPermissions("write");
+#end
+        if (!org.eclipse.dirigible.sdk.http.Upload.isMultipartContent()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The request must be multipart/form-data");
+        }
+        List<${name}Entity> uploaded = new java.util.ArrayList<>();
+        // The SDK parses the multipart request and stores each file in the tenant CMS at
+        // /Attachments/${name}/<yyyy>/<MM>/<uuid>/<file> (the multipart/FileItem handling stays inside
+        // the SDK); we persist one row per file with the returned reference + metadata. Auth above.
+        for (org.eclipse.dirigible.sdk.cms.Attachments.Attachment stored : org.eclipse.dirigible.sdk.cms.Attachments.storeUploads("${name}")) {
+            ${name}Entity entity = new ${name}Entity();
+            entity.FileName = stored.fileName();
+            entity.ContentType = stored.contentType();
+            entity.FileSize = stored.size();
+            entity.StoragePath = stored.path();
+            entity.Uuid = stored.uuid();
+            entity.${masterEntityId} = ${masterEntityId};
+            uploaded.add(repository.save(entity));
+        }
+        return uploaded;
+    }
+
+    @Get("/{id}/download")
+    @Documentation("Download the ${name} attachment file")
+    public void download(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+#if($needsRoles)
+        checkPermissions("read");
+#end
+        ${name}Entity entity = repository.findOne(id)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
+        org.eclipse.dirigible.sdk.http.Response.setContentType(entity.ContentType != null ? entity.ContentType : "application/octet-stream");
+        org.eclipse.dirigible.sdk.http.Response.setHeader("Content-Disposition", "attachment; filename=\"" + entity.FileName + "\"");
+        try (java.io.InputStream in = org.eclipse.dirigible.sdk.cms.Attachments.open(entity.StoragePath);
+                java.io.OutputStream out = org.eclipse.dirigible.sdk.http.Response.getOutputStream()) {
+            in.transferTo(out);
+        } catch (java.io.IOException e) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to stream the attachment", e);
+        }
+    }
+#end
 
     @Put("/{id}")
     @Documentation("Update ${name} by id")
@@ -173,8 +219,18 @@ public class ${name}Controller {
 #if($immutableStatusProperty || $immutableAlways)
         requireMutable(id);
 #end
+#if($attachmentEntity)
+        String storagePath = repository.findOne(id)
+                                       .map(a -> a.StoragePath)
+                                       .orElse(null);
+#end
         try {
             repository.deleteById(id);
+#if($attachmentEntity)
+            if (storagePath != null) {
+                org.eclipse.dirigible.sdk.cms.Attachments.delete(storagePath);
+            }
+#end
         } catch (RuntimeException e) {
             // A foreign-key violation means other records still reference this one - a data-integrity
             // conflict the user can act on, not a server error.

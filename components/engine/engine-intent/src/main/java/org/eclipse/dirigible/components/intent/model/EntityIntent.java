@@ -290,6 +290,16 @@ public class EntityIntent {
         return functionIs("DocumentItem");
     }
 
+    /**
+     * Whether this entity is a file-attachment child ({@code function: Attachment}) - a composition
+     * detail of its master holding one uploaded file's metadata (the bytes live in the CMS). The EDM
+     * generator injects the standard attachment columns; the generated controller and Harmonia view
+     * render it as an "Attachments" section.
+     */
+    public boolean isAttachment() {
+        return functionIs("Attachment");
+    }
+
     public String getDescription() {
         return description;
     }

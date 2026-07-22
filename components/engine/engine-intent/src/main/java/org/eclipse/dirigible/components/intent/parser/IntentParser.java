@@ -86,7 +86,7 @@ public final class IntentParser {
     private static final Set<String> RELATION_KINDS = Set.of("oneToMany", "manyToOne", "oneToOne", "manyToMany");
     /** Implemented entity {@code function} values (lower-cased), selecting the entity's UI template. */
     private static final Set<String> ENTITY_FUNCTIONS =
-            Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar");
+            Set.of("document", "documentitem", "master", "detail", "list", "setting", "calendar", "attachment");
     /**
      * Entity {@code function} values whose template is reserved but not yet shipped (gated with a
      * message).
