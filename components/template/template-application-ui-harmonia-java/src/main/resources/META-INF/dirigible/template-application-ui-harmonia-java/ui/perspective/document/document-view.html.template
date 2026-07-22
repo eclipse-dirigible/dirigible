@@ -24,7 +24,7 @@
          (heavier than the caption so it stands out), e.g. "Sales Invoice SI-0000001". -->
     <div class="hbox items-baseline gap-2 shrink-0">
       <span class="text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}')"></span>
-      <span class="text-2xl font-bold tracking-tight" x-show="(isEdit || isPreview) && form.${docNumberProp}" x-text="form.${docNumberProp}"></span>
+      <span class="text-2xl font-bold tracking-tight" x-show="(isEdit || isPreview) && window.HarmoniaFormat.documentNumber(form.${docNumberProp})" x-text="window.HarmoniaFormat.documentNumber(form.${docNumberProp})"></span>
     </div>
 #else
     <span x-h-toolbar-title class="shrink-0" x-text="isPreview ? T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') : (isEdit ? T('$projectName:${tprefix}.defaults.formHeadUpdate', 'Edit ${documentLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') }) : T('$projectName:${tprefix}.defaults.formHeadCreate', 'New ${documentLabel}', { name: T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}') }))"></span>
