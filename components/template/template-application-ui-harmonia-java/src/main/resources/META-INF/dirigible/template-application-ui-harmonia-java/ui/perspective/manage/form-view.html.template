@@ -318,7 +318,7 @@
             <div x-h-dialog>
               <div x-h-dialog-header>
                 <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
-                <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+                <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
               </div>
               <div x-h-dialog-content><p>Are you sure? This cannot be undone.</p></div>
               <div x-h-dialog-footer>
@@ -407,7 +407,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title>Print</h2>
         <p x-h-dialog-description>Choose the template language.</p>
-        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"></button>
+        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div class="vbox gap-2">

@@ -155,7 +155,7 @@
     <div x-h-dialog style="width: 92vw; max-width: 640px;">
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></h2>
-        <button type="button" x-h-dialog-close @click="itemDialog = false" aria-label="Close"></button>
+        <button type="button" x-h-dialog-close @click="itemDialog = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div class="grid grid-cols-2 gap-4">
@@ -198,7 +198,7 @@
     <div x-h-dialog data-size="sm">
       <div x-h-dialog-header>
         <span x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + '?'"></span>
-        <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+        <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content><p x-h-text.muted x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure? This cannot be undone.')"></p></div>
       <div x-h-dialog-footer>

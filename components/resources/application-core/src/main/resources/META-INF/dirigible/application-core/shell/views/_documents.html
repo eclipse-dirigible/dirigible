@@ -155,7 +155,7 @@
   <!-- New folder dialog -->
   <div x-h-dialog-overlay :data-open="newFolderOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.newFolder', 'New folder')"></h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.newFolder', 'New folder')"></h2><button x-h-dialog-close @click="newFolderOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
           <label x-h-label for="nf" x-text="T('application-core:shell.documents.folderName', 'Folder name')"></label>
@@ -173,7 +173,7 @@
   <!-- Rename dialog -->
   <div x-h-dialog-overlay :data-open="renameOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.rename', 'Rename')"></h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.rename', 'Rename')"></h2><button x-h-dialog-close @click="renameOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
       <div x-h-dialog-content>
         <div x-h-field>
           <label x-h-label for="rn" x-text="T('application-core:shell.documents.newName', 'New name')"></label>
@@ -191,7 +191,7 @@
   <!-- Delete dialog -->
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
-      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.delete', 'Delete')"></h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button></div>
+      <div x-h-dialog-header><h2 x-h-dialog-title x-text="T('application-core:shell.documents.delete', 'Delete')"></h2><button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button></div>
       <div x-h-dialog-content>
         <p x-show="deleteTargets.length === 1">Delete <strong x-text="deleteTargets[0] && deleteTargets[0].name"></strong>? This cannot be undone.</p>
         <p x-show="deleteTargets.length > 1">Delete <strong x-text="deleteTargets.length"></strong> items? This cannot be undone.</p>

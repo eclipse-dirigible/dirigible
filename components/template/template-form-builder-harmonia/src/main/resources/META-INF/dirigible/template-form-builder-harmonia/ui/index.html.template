@@ -128,26 +128,74 @@
          applied by harmonia.min.js (below), which reads the shared `codbex.harmonia.colorMode` the
          shell set — so this iframe'd form matches the shell (light/dark) automatically. */
       html { background-color: var(--background); color: var(--foreground); }
-      body { min-height: 100vh; }
+      /* Fill the host dialog/viewport: the body is a flex column so the form (and, on a task form,
+         its card) grow to the full height instead of floating at content height in the top-left. */
+      body { min-height: 100vh; display: flex; flex-direction: column; }
       [x-cloak] { display: none !important; }
     </style>
   </head>
   <body class="p-4" x-data="harmoniaForm" x-cloak>
-    <form class="vbox gap-4" style="max-width: 720px;" @submit.prevent="submit()">
+    <form class="vbox gap-4" style="flex: 1 1 auto;" @submit.prevent="submit()">
       <div x-show="message" x-h-alert data-variant="information" role="status">
         <div x-h-alert-description x-text="message"></div>
       </div>
 #if($metadata.taskForm)
-      <!-- Task form: read-only fields render inside a headerless Details card (framed), matching the
-           entity detail / document view. A responsive two-column detail grid (single column below the
-           sm breakpoint); headers, separators, textareas and the action-button row span both columns.
-           Editable opt-in inputs and the actions live in the same card. -->
-      <div x-h-card>
-        <div x-h-card-content>
+      <!-- Task form: read-only fields render inside a headerless Details card (framed) that fills the
+           dialog height. A responsive two-column detail grid (single column below the sm breakpoint);
+           the action buttons are pulled into a bottom-pinned footer. When the bound document has a
+           status flow, a read-only horizontal step indicator (the non-terminal statuses in seed order,
+           active = the current status) is shown at the top, bracketed by separators. -->
+      <div x-h-card style="flex: 1 1 auto; display: flex; flex-direction: column;">
+        <div x-h-card-content style="flex: 1 1 auto; display: flex; flex-direction: column;">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-10 gap-y-3">
+#if($metadata.steps && $metadata.steps.size() > 0)
+        <hr class="col-span-full mb-4" style="border: none; border-top: 1px solid var(--border);" />
+        <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
+             relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
+             active step = the current status name (model.$metadata.statusVar). -->
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
+          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label', description: '$!s.description' }#if($foreach.hasNext), #end#end]" :key="step.label">
+            <div x-h-step-indicator-item="i + 1">
+              <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
+                <span x-h-step-indicator-marker x-text="i + 1"></span>
+                <span x-h-step-indicator-content>
+                  <span x-h-step-indicator-title x-text="step.label"></span>
+                  <span x-h-step-indicator-description x-show="step.description" x-text="step.description"></span>
+                </span>
+              </button>
+              <span x-h-step-indicator-separator x-show="i < ($metadata.steps.size() - 1)"></span>
+            </div>
+          </template>
+        </nav>
+        <hr class="col-span-full mb-4" style="border: none; border-top: 1px solid var(--border);" />
+#end
+#foreach($element in $form)
+#if($element.controlId == "container-hbox")
+## action row: rendered as the bottom-pinned footer below (outside the detail grid)
+#elseif($element.controlId == "container-vbox")
+        <div class="vbox gap-3 col-span-full">
+#foreach($child in $element.children)
+#leaf($child)
+#end
+        </div>
+#else
+#leaf($element)
+#end
+#end
+          </div>
+#foreach($element in $form)
+#if($element.controlId == "container-hbox")
+        <div class="hbox gap-3 items-end pt-4" style="margin-top: auto; border-top: 1px solid var(--border);">
+#foreach($child in $element.children)
+#leaf($child)
+#end
+        </div>
+#end
+#end
+        </div>
+      </div>
 #else
       <div x-h-field-group>
-#end
 #foreach($element in $form)
 #if($element.controlId == "container-hbox")
         <div class="hbox gap-3 items-end col-span-full mt-2">
@@ -165,11 +213,6 @@
 #leaf($element)
 #end
 #end
-#if($metadata.taskForm)
-          </div>
-        </div>
-      </div>
-#else
       </div>
 #end
     </form>

@@ -262,7 +262,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title>Delete ${name}</h2>
-        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content><p>Are you sure you want to delete this ${name}? This cannot be undone.</p></div>
       <div x-h-dialog-footer>

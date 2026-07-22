@@ -276,7 +276,7 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.processTasks.formTitle"></h2>
-          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"></button>
+          <button x-h-dialog-close @click="$store.processTasks.closeForm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.processTasks.formOpen" :src="$store.processTasks.formUrl"
@@ -292,7 +292,7 @@
       <div x-h-dialog style="width: 92vw; max-width: 1100px;">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.customActions.dialogTitle"></h2>
-          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"></button>
+          <button x-h-dialog-close @click="$store.customActions.closeDialog()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
         </div>
         <div x-h-dialog-content>
           <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
@@ -569,7 +569,7 @@
       <div x-h-dialog data-size="lg">
         <div x-h-dialog-header>
           <h2 x-h-dialog-title x-text="$store.related.title"></h2>
-          <button x-h-dialog-close @click="$store.related.open = false" aria-label="Close"></button>
+          <button x-h-dialog-close @click="$store.related.open = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
         </div>
         <div x-h-dialog-content class="p-0">
           <iframe x-show="$store.related.open" :src="$store.related.src" title="Add new" style="width:100%; height:70vh; border:0;"></iframe>
