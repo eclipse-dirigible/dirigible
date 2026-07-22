@@ -41,8 +41,8 @@ public class ${className}Generate {
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
 #if($hasItems)
-        for (gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromItemEntity}Entity srcItem :
-                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromItemEntity}Repository()
+        for (gen.${javaGenFolderName}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
+                new gen.${javaGenFolderName}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                         .findAll(Criteria.create()
                                          .eq("${srcFkProperty}", req.id))) {
             gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =

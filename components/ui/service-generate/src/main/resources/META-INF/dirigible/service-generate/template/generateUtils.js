@@ -959,6 +959,10 @@ export function generateFiles(model, parameters, templateSources) {
                                 hasItems: g.hasItems,
                                 fromItemEntity: g.fromItemEntity,
                                 toItemEntity: g.toItemEntity,
+                                // The source item's own package (a non-composition primary source item
+                                // lives outside the source document's perspective); the glue resolves
+                                // it (== fromJavaPerspective for the common composition-child case).
+                                fromItemJavaPerspective: sanitizeJavaIdentifier(g.fromItemPerspective || g.fromPerspective),
                                 srcFkProperty: g.srcFkProperty,
                                 toFkProperty: g.toFkProperty,
                                 itemFieldAssignments: g.itemFieldAssignments,

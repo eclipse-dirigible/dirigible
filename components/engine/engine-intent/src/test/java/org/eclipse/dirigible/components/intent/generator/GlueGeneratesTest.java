@@ -212,4 +212,67 @@ class GlueGeneratesTest {
         assertTrue(fields.contains(Map.of("targetProp", "Active", "expr", "true")));
         assertFalse(fields.isEmpty());
     }
+
+    /**
+     * The source item may be a SEPARATE primary entity that references the source document by FK (an
+     * aggregate document whose per-line detail is its own entity), not a composition child. Its package
+     * must resolve from its OWN perspective (not the source document's), and a numeric item default
+     * must render as {@code BigDecimal} for the decimal line column.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void nonCompositionSourceItemResolvesItsOwnPackageAndDecimalDefaults() {
+        IntentModel model = IntentParser.parse("""
+                name: work
+                uses:
+                  - { model: kf-mod-sales-invoices }
+                entities:
+                  - name: Sheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer, model: kf-mod-sales-invoices }
+                  - name: Line
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Sheet, kind: manyToOne, to: Sheet, required: true }
+                generates:
+                  - name: invoice-from-sheet
+                    from: Sheet
+                    to: SalesInvoice
+                    uses: kf-mod-sales-invoices
+                    forEntity: Sheet
+                    map:
+                      Customer: Customer
+                    items:
+                      from: Line
+                      to: SalesInvoiceItem
+                      map:
+                        name: number
+                        price: amount
+                      defaults:
+                        quantity: 1
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(true, g.get("hasItems"));
+        assertEquals("Line", g.get("fromItemEntity"));
+        // The source document's perspective is `Sheet`; the item's OWN perspective is `Line` - the
+        // template must qualify srcItem with the latter (sanitized to the `line` package), or it
+        // references a non-existent class. (For a composition-child item these two coincide.)
+        assertEquals("Sheet", g.get("fromPerspective"));
+        assertEquals("Line", g.get("fromItemPerspective"));
+        // The FK the item loop queries by is the source document entity name.
+        assertEquals("Sheet", g.get("srcFkProperty"));
+
+        List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
+        assertTrue(itemFields.contains(Map.of("targetProp", "Name", "expr", "srcItem.Number")));
+        assertTrue(itemFields.contains(Map.of("targetProp", "Price", "expr", "srcItem.Amount")));
+        // The decimal `quantity` default renders as BigDecimal (a bare `1` would not compile).
+        assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+    }
 }
