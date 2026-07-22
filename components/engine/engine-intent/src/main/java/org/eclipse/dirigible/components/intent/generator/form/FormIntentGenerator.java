@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
@@ -28,6 +29,7 @@ import org.eclipse.dirigible.components.intent.model.FormIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
+import org.eclipse.dirigible.components.intent.model.SeedIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,6 +103,13 @@ public class FormIntentGenerator implements IntentTargetGenerator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(FormIntentGenerator.class);
 
+    /**
+     * Terminal / negative status names excluded from the step indicator - a cancel/reject/void is an
+     * off-path outcome (it stays the status pill), not a forward step. Same heuristic the badge
+     * colouring uses so the two stay consistent.
+     */
+    private static final Pattern TERMINAL_STATUS = Pattern.compile("(cancel|reject|declin|void|fail|overdue|insufficient|exhaust)");
+
     @Override
     public String name() {
         return "form";
@@ -137,7 +146,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
-            Map<String, Object> document = buildForm(form, boundEntity, entitiesByName, taskFormNames.contains(form.getName()));
+            Map<String, Object> document = buildForm(form, boundEntity, entitiesByName, taskFormNames.contains(form.getName()), model);
             context.writeModelFile(fileName, JsonHelper.toJson(document));
         }
     }
@@ -169,10 +178,29 @@ public class FormIntentGenerator implements IntentTargetGenerator {
         return index;
     }
 
+    /**
+     * Test seam: build the form documents ({@code form name -> document}) for a parsed model without
+     * writing any files - so emission (e.g. the status-flow step-indicator metadata) can be asserted.
+     */
+    static Map<String, Map<String, Object>> buildFormsForTest(IntentModel model) {
+        Map<String, EntityIntent> entitiesByName = indexEntities(model);
+        Set<String> taskFormNames = taskFormNames(model);
+        Map<String, Map<String, Object>> documents = new LinkedHashMap<>();
+        for (FormIntent form : model.getForms()) {
+            if (form.getName() == null || form.getName()
+                                              .isBlank()) {
+                continue;
+            }
+            EntityIntent boundEntity = form.getForEntity() == null ? null : entitiesByName.get(form.getForEntity());
+            documents.put(form.getName(), buildForm(form, boundEntity, entitiesByName, taskFormNames.contains(form.getName()), model));
+        }
+        return documents;
+    }
+
     private static Map<String, Object> buildForm(FormIntent form, EntityIntent entity, Map<String, EntityIntent> entitiesByName,
-            boolean isTaskForm) {
+            boolean isTaskForm, IntentModel model) {
         Map<String, Object> document = new LinkedHashMap<>();
-        document.put("metadata", buildMetadata(form, isTaskForm));
+        document.put("metadata", buildMetadata(form, isTaskForm, entity, model));
         document.put("feeds", new ArrayList<>());
         document.put("scripts", new ArrayList<>());
         document.put("code", buildCode(form, isTaskForm));
@@ -186,7 +214,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
      * bound entity's logical name and the editable-field set. Only logical model names are emitted -
      * never a template-engine output path, which the intent layer must stay agnostic about.
      */
-    private static Map<String, Object> buildMetadata(FormIntent form, boolean isTaskForm) {
+    private static Map<String, Object> buildMetadata(FormIntent form, boolean isTaskForm, EntityIntent entity, IntentModel model) {
         Map<String, Object> metadata = new LinkedHashMap<>();
         if (isTaskForm) {
             metadata.put("taskForm", true);
@@ -194,8 +222,62 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                 metadata.put("entity", form.getForEntity());
             }
             metadata.put("editable", new ArrayList<>(form.getEditable()));
+            putStatusSteps(metadata, entity, model);
         }
         return metadata;
+    }
+
+    /**
+     * The document status flow for the read-only step indicator. When the bound entity has a
+     * {@code function: EntityStatus} relation to a LOCAL status entity, emit that entity's non-terminal
+     * status names (its base seed rows, in seed order, dropping cancel/reject/void-style terminal
+     * statuses via {@link #TERMINAL_STATUS}) as {@code steps}, plus {@code statusVar} - the model
+     * variable holding the current status name (the relation name). The runtime renders these as a
+     * horizontal step indicator with the current status active. Skipped when the status entity is
+     * cross-model (its seeds are not on this model) or the flow has fewer than two steps.
+     */
+    private static void putStatusSteps(Map<String, Object> metadata, EntityIntent entity, IntentModel model) {
+        if (entity == null || entity.getRelations() == null || model == null) {
+            return;
+        }
+        RelationIntent statusRel = null;
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isEntityStatus()) {
+                statusRel = relation;
+                break;
+            }
+        }
+        if (statusRel == null || statusRel.getTo() == null) {
+            return;
+        }
+        if (statusRel.getModel() != null && !statusRel.getModel()
+                                                      .isBlank()) {
+            return; // cross-model status entity: its seeds live in the owner module, not resolvable here
+        }
+        List<String> steps = new ArrayList<>();
+        for (SeedIntent seed : model.getSeeds()) {
+            if (seed.getLanguage() != null || !statusRel.getTo()
+                                                        .equals(seed.getEntity())
+                    || seed.getRows() == null) {
+                continue; // base rows of the status entity only (skip translation seeds)
+            }
+            for (Map<String, Object> row : seed.getRows()) {
+                Object name = row.get("name");
+                if (name == null) {
+                    continue;
+                }
+                String label = name.toString();
+                if (TERMINAL_STATUS.matcher(label.toLowerCase(Locale.ROOT))
+                                   .find()) {
+                    continue; // terminal / off-path status - stays the pill, not a step
+                }
+                steps.add(label);
+            }
+        }
+        if (steps.size() >= 2) {
+            metadata.put("steps", steps);
+            metadata.put("statusVar", statusRel.getName());
+        }
     }
 
     /**

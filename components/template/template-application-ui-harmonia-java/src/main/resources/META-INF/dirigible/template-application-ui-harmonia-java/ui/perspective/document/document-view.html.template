@@ -384,7 +384,7 @@
           <div x-h-dialog>
             <div x-h-dialog-header>
               <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
-              <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+              <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
             </div>
             <div x-h-dialog-content><p>Are you sure? This cannot be undone. The document totals will be recalculated.</p></div>
             <div x-h-dialog-footer>
@@ -478,7 +478,7 @@
     <div x-h-dialog>
       <div x-h-dialog-header>
         <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : T('$projectName:${tprefix}.defaults.add', 'Add line')"></h2>
-        <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"></button>
+        <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="draftError"></div></div>
@@ -553,7 +553,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title>Delete line</h2>
         <p x-h-dialog-description>Delete this line item? This cannot be undone.</p>
-        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"></button>
+        <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="transparent" @click="deleteOpen = false">Cancel</button>
@@ -569,7 +569,7 @@
       <div x-h-dialog-header>
         <h2 x-h-dialog-title>Print</h2>
         <p x-h-dialog-description>Choose the template language.</p>
-        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"></button>
+        <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div class="vbox gap-2">
