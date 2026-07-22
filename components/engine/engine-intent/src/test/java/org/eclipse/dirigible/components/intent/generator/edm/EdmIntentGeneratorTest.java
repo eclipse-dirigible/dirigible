@@ -78,6 +78,39 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void numberFieldEmitsStampMarkers() {
+        String yaml =
+                """
+                        name: billing
+                        entities:
+                          - name: SalesInvoice
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: number, type: string, number: { series: SalesInvoice, format: "SI-{seq:07}", scope: [year], stampOn: issue } }
+                          - name: Proforma
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: number, type: string, number: { series: Proforma, format: "PF-{seq:05}", stampOn: create } }
+                        """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
+        List<Map<String, Object>> entities = entities(model);
+
+        // stampOn: issue -> a UUID placeholder on create (reusing the uuid auto-fill) + the series markers.
+        Map<String, Object> siNumber = propertyByName(entityByName(entities, "SalesInvoice"), "Number");
+        assertEquals("issue", siNumber.get("numberStampOn"));
+        assertEquals("SalesInvoice", siNumber.get("numberSeries"));
+        assertEquals("true", siNumber.get("generatedUuid"));
+        assertNull(siNumber.get("numberStampOnCreate"));
+
+        // stampOn: create -> the real number is stamped on insert (numberStampOnCreate), no placeholder.
+        Map<String, Object> pfNumber = propertyByName(entityByName(entities, "Proforma"), "Number");
+        assertEquals("create", pfNumber.get("numberStampOn"));
+        assertEquals("true", pfNumber.get("numberStampOnCreate"));
+        assertEquals("PF-{seq:05}", pfNumber.get("numberFormat"));
+        assertNull(pfNumber.get("generatedUuid"));
+    }
+
+    @Test
     void crossModelProjectionCellIsMarkedProjectionInTheEdmDiagram() {
         IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
         String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "customers");
