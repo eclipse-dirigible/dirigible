@@ -129,6 +129,13 @@ export function getTemplate(parameters) {
                 collection: "printFeeders"
             },
             {
+                location: "/template-application-events-java/events/Snapshot.java.template",
+                action: "generate",
+                rename: "gen/events/{{master}}SnapshotGenerator.java",
+                engine: "velocity",
+                collection: "snapshots"
+            },
+            {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
                 rename: "gen/events/{{name}}OnPayment.java",

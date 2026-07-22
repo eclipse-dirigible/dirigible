@@ -1106,6 +1106,34 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "snapshots":
+                    // Snapshot generators (intent layer): one JavaDelegate per function: Snapshot child of
+                    // a document master, wired as a delegate: service task. It reuses the master's
+                    // PrintFeeder (same gen.events package) to assemble the payload, renders via
+                    // sdk.print.Print and stores via sdk.cms.Attachments. Not entity-shaped, so its own
+                    // loop; the snapshot repo lives in this project (javaGenFolderName), its Java package
+                    // segment is the sanitized perspective.
+                    if (model.snapshots) {
+                        for (let s = 0; s < model.snapshots.length; s++) {
+                            const snapshot = model.snapshots[s];
+                            const snapshotParameters = {
+                                ...parameters,
+                                master: snapshot.master,
+                                masterPk: snapshot.masterPk,
+                                language: snapshot.language,
+                                snapshotEntity: snapshot.snapshotEntity,
+                                snapshotJavaPerspective: sanitizeJavaIdentifier(snapshot.snapshotPerspective),
+                                snapshotMasterFk: snapshot.snapshotMasterFk
+                            };
+                            const cleanSnapshotParameters = cleanData(snapshotParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSnapshotParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSnapshotParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
