@@ -133,6 +133,7 @@ public class ${name}Controller {
         return repository.save(entity);
     }
 #if($attachmentEntity)
+#if(!$attachmentReadOnly)
 
     @Post("/upload")
     @Documentation("Upload one or more files as ${name} attachments (multipart/form-data)")
@@ -159,6 +160,7 @@ public class ${name}Controller {
         }
         return uploaded;
     }
+#end
 
     @Get("/{id}/download")
     @Documentation("Download the ${name} attachment file")

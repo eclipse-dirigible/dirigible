@@ -171,6 +171,49 @@ class EdmIntentGeneratorTest {
 
         // A plain (non-attachment) entity carries no marker.
         assertNull(entityByName(entities, "Company").get("attachmentEntity"));
+        // An attachment is editable (not read-only).
+        assertNull(att.get("attachmentReadOnly"));
+    }
+
+    @Test
+    void snapshotChildIsReadOnlyWithVersionAndFileMetadata() {
+        String yaml = """
+                name: docs
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: SalesInvoiceCopy
+                    function: Snapshot
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "docs");
+        List<Map<String, Object>> entities = entities(model);
+        Map<String, Object> snap = entityByName(entities, "SalesInvoiceCopy");
+
+        // Marked as a file child AND read-only (copies are generated server-side, never uploaded/deleted).
+        assertEquals("true", snap.get("attachmentEntity"));
+        assertEquals("true", snap.get("attachmentReadOnly"));
+        assertEquals("MANAGE_DETAILS", snap.get("layoutType"));
+
+        // Same injected file metadata as an attachment...
+        assertEquals("VARCHAR", propertyByName(snap, "FileName").get("dataType"));
+        assertEquals("true", propertyByName(snap, "FileName").get("isReadOnlyProperty"));
+        assertNotNull(propertyByName(snap, "StoragePath"));
+        assertNotNull(propertyByName(snap, "Uuid"));
+        // ...plus the synthesized generated Id...
+        assertEquals("true", propertyByName(snap, "Id").get("dataPrimaryKey"));
+        // ...plus a read-only, major Version carrying the DOCUMENT_VERSION widget.
+        Map<String, Object> version = propertyByName(snap, "Version");
+        assertEquals("INTEGER", version.get("dataType"));
+        assertEquals("DOCUMENT_VERSION", version.get("widgetType"));
+        assertEquals("true", version.get("isReadOnlyProperty"));
+        assertEquals("true", version.get("widgetIsMajor"));
+        // Implicitly audited.
+        assertEquals("CREATED_AT", propertyByName(snap, "CreatedAt").get("auditType"));
     }
 
     @Test

@@ -300,6 +300,24 @@ public class EntityIntent {
         return functionIs("Attachment");
     }
 
+    /**
+     * Whether this entity is a generated-copy child ({@code function: Snapshot}) - a composition detail
+     * holding one system-generated, immutable, versioned file (e.g. the printed invoice stored on
+     * issue). Like an attachment it carries the standard file-metadata columns and renders in the Files
+     * panel, but read-only (download + list only; created server-side, never uploaded or deleted by the
+     * user) and with an added {@code Version} column.
+     */
+    public boolean isSnapshot() {
+        return functionIs("Snapshot");
+    }
+
+    /**
+     * Whether this entity is any file-child kind (attachment or snapshot) - shares metadata injection.
+     */
+    public boolean isFileChild() {
+        return isAttachment() || isSnapshot();
+    }
+
     public String getDescription() {
         return description;
     }
