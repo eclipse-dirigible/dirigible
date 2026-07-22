@@ -390,6 +390,41 @@ entities:
 owned across models). Generate leaf models (the owners) before their consumers so the dropdown
 resolves. Each project is its own `.intent`; all must be published to the same runtime.
 
+### extends - add fields to an entity another model owns (extension entity)
+
+**Use when:** a module must **add fields to an entity it does not own** - a localisation adds a
+national id to a shared `Employee`, an integration adds an external key - without editing (forking)
+the owner's model. Declare an entity that `extends:` the base; its fields are folded into the base
+entity's **own table** at generation, so they become real columns (filterable, sortable, on the
+form, in `_LANG`) - not a separate 1:1 side table joined at runtime.
+
+```yaml
+name: employees-bg
+uses:
+  - { model: employees }                       # the base model must be in uses: (cross-model)
+entities:
+  - name: EmployeeBg                            # the extension entity - owns NO table of its own
+    extends: { model: employees, entity: Employee }   # omit `model` to extend an entity in THIS model
+    fields:
+      - { name: egn, type: string, length: 10 }       # contributed to Employee's table
+```
+
+The base `Employee` table gains an `egn` column (its physical name is prefixed by the extension
+entity, e.g. `EMPLOYEE_BG_EGN`, so contributions from different modules never collide). The
+extension entity produces no perspective, page or table of its own.
+
+**Rules:**
+- `entity:` (the base entity) is required; `model:` is the base model's `uses:` alias (omit for a
+  base in the same model). The base model must be listed in `uses:`.
+- The merge is **additive only**: the base's primary key and audit columns are never touched, and a
+  field whose name the base already defines is ignored (**the base wins** - an extension adds, it
+  cannot override a core field).
+- The merge happens at **generation time by scanning the workspace**: the base project and the
+  extension project must both be present in the same workspace when you generate, and the base is
+  (re)generated *after* the extension exists so its table picks up the added fields. This is the
+  normal in-workspace dev/build flow - regenerate the base with the extension present. (How
+  generated output is later packaged and deployed is outside the model's concern.)
+
 ### Many-to-many (n:m) - an explicit intermediate entity
 
 There is no `manyToMany` materialization; model n:m as an **intermediate entity** that holds a
