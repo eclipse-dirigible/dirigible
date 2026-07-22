@@ -213,8 +213,28 @@ function mergeExtensionEntities(model) {
             if (existing.has(prop.name)) {
                 continue; // base defines it - core wins, extension only adds
             }
-            base.properties.push(JSON.parse(JSON.stringify(prop)));
-            existing.add(prop.name);
+            const copy = JSON.parse(JSON.stringify(prop));
+            // Placement: insert after / before a named base property (extensionAfter wins if both are
+            // set) so the contributed field lands where the author wants it in the form/list, not at
+            // the end. Unknown target -> append. The hint attributes are internal; strip them.
+            const afterName = copy.extensionAfter;
+            const beforeName = copy.extensionBefore;
+            delete copy.extensionAfter;
+            delete copy.extensionBefore;
+            let index = base.properties.length; // default: append at the end
+            if (afterName) {
+                const i = base.properties.findIndex(p => p.name === afterName);
+                if (i >= 0) {
+                    index = i + 1;
+                }
+            } else if (beforeName) {
+                const i = base.properties.findIndex(p => p.name === beforeName);
+                if (i >= 0) {
+                    index = i;
+                }
+            }
+            base.properties.splice(index, 0, copy);
+            existing.add(copy.name);
         }
     }
     model.entities = model.entities.filter(e => e.type !== "EXTENSION");

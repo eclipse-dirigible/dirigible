@@ -990,6 +990,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Whether the field is a column in the entity list table; `major: false` keeps it off the list
         // (still shown in forms + the details pane). Defaults to true when unset.
         p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
+        // Placement hint for an EXTENSION entity's contributed field: the base property (PascalCased to
+        // match the base's .model property name) this field should merge after / before. Consumed by
+        // the model-to-code merge (generateUtils.mergeExtensionEntities); ignored elsewhere.
+        if (notBlank(field.getAfter())) {
+            p.put("extensionAfter", IntentNaming.pascalCase(field.getAfter()));
+        }
+        if (notBlank(field.getBefore())) {
+            p.put("extensionBefore", IntentNaming.pascalCase(field.getBefore()));
+        }
         return p;
     }
 

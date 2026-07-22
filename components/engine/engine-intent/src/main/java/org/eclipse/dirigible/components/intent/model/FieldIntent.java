@@ -123,12 +123,43 @@ public class FieldIntent {
      */
     private DependsOnIntent dependsOn;
 
+    /**
+     * Optional placement hint for an EXTENSION entity's contributed field: the name of a base-entity
+     * field this one should be inserted <b>after</b> ({@code after: lastName}). Controls where the
+     * merged column lands in the base's property order (and therefore the form/list). Ignored outside
+     * an extension merge, and falls back to append when the named field is not found. Mutually
+     * exclusive with {@link #before} ({@code after} wins if both are set).
+     */
+    private String after;
+
+    /**
+     * Optional placement hint for an EXTENSION entity's contributed field: insert this field
+     * <b>before</b> the named base-entity field ({@code before: birthDate}). See {@link #after}.
+     */
+    private String before;
+
     public String getName() {
         return name;
     }
 
     public void setName(String name) {
         this.name = name;
+    }
+
+    public String getAfter() {
+        return after;
+    }
+
+    public void setAfter(String after) {
+        this.after = after;
+    }
+
+    public String getBefore() {
+        return before;
+    }
+
+    public void setBefore(String before) {
+        this.before = before;
     }
 
     public String getType() {

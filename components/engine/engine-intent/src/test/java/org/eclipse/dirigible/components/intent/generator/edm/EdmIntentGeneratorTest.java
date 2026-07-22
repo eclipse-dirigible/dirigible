@@ -922,4 +922,25 @@ class EdmIntentGeneratorTest {
         // Its contributed field is emitted as a normal property (folded into the base table later).
         assertEquals("VARCHAR", propertyByName(ext, "Egn").get("dataType"));
     }
+
+    @Test
+    void extensionFieldCarriesPlacementHint() {
+        String yaml = """
+                name: employees-bg
+                uses:
+                  - { model: employees }
+                entities:
+                  - name: EmployeeBg
+                    extends: { model: employees, entity: Employee }
+                    fields:
+                      - { name: egn,  type: string, length: 10, after: lastName }
+                      - { name: tin,  type: string, length: 15, before: birthDate }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "employees-bg");
+        Map<String, Object> ext = entityByName(entities(model), "EmployeeBg");
+        // The placement hint is PascalCased to match the base's .model property name; the merge
+        // (generateUtils) splices the column at that position in the base's property order.
+        assertEquals("LastName", propertyByName(ext, "Egn").get("extensionAfter"));
+        assertEquals("BirthDate", propertyByName(ext, "Tin").get("extensionBefore"));
+    }
 }
