@@ -68,6 +68,11 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-document</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-api-component</artifactId>
             <version>${project.version}</version>
         </dependency>
