@@ -60,10 +60,11 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         // equivalent of the AngularJS "Create" button).
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "New");
 
-        // The form caption is the entity's (uppercased) human label - assert it resolved to a real
-        // value and not the literal "${ENTITYLABEL}" (the depends-on entities are hand-authored, so
-        // they carry no baked entityLabel; the generator must derive it).
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "ORDERS");
+        // The form caption is the entity's human label - assert it resolved to a real value and not
+        // the literal "${ENTITYLABEL}" (the depends-on entities are hand-authored, so they carry no
+        // baked entityLabel; the generator must derive it). The caption no longer force-uppercases
+        // (title styling unified with the document layout in #6361), so the resolved label is "Orders".
+        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Orders");
 
         // Pick Country = Bulgaria. The Harmonia x-h-select hides the bound <input id="f_Country">
         // and renders a visible <span role="combobox"> trigger whose text is the placeholder; click
