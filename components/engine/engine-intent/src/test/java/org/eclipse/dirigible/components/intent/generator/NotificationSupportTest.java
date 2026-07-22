@@ -110,6 +110,57 @@ class NotificationSupportTest {
         assertNull(NotificationSupport.plan(notification("nope.email", "s"), byName.get("Order"), byName, Map.of()));
     }
 
+    /** Order --partner (cross-model)--> Partner owned by another model, referenced as partner.email. */
+    private static Map<String, EntityIntent> crossModelEventModel() {
+        RelationIntent partner = toOne("partner", "Partner");
+        partner.setModel("acme-partners"); // cross-model: Partner is NOT a local entity
+        EntityIntent order = new EntityIntent();
+        order.setName("Order");
+        order.setFields(List.of(field("id"), field("total")));
+        order.setRelations(List.of(partner));
+        Map<String, EntityIntent> byName = new LinkedHashMap<>();
+        byName.put("Order", order); // Partner is intentionally absent from the local byName map
+        return byName;
+    }
+
+    @Test
+    void crossModelRecipientResolvesThroughTheLookupAndLoadsFromTheOwner() {
+        Map<String, EntityIntent> byName = crossModelEventModel();
+        NotificationSupport.CrossModelLookup lookup = relation -> new NotificationSupport.CrossModelTarget("Partner", "acme-partners",
+                "acme-partners", java.util.Set.of("Id", "Name", "Email"));
+        NotificationSupport.Plan plan = NotificationSupport.plan(notification("partner.email", "Order for {partner.name}"),
+                byName.get("Order"), byName, Map.of(), lookup);
+
+        assertEquals(1, plan.loads()
+                            .size());
+        NotificationSupport.RelationLoad load = plan.loads()
+                                                    .get(0);
+        assertTrue(load.crossModel(), "a cross-model relation load must be flagged so the owner package is imported");
+        assertEquals("Partner", load.targetEntity());
+        assertEquals("Partner", load.targetPerspective());
+        assertEquals("acme-partners", load.targetModel());
+        assertEquals("acme-partners", load.targetProject());
+        assertEquals("Partner", load.fkProperty());
+        assertEquals("(partner == null ? null : partner.Email)", plan.toExpression());
+    }
+
+    @Test
+    void crossModelRecipientFieldValidatedAgainstOwnerProperties() {
+        Map<String, EntityIntent> byName = crossModelEventModel();
+        // The owner model has no 'ceo' property -> the field is rejected -> no plan (recipient
+        // unresolvable).
+        NotificationSupport.CrossModelLookup lookup = relation -> new NotificationSupport.CrossModelTarget("Partner", "acme-partners",
+                "acme-partners", java.util.Set.of("Id", "Name", "Email"));
+        assertNull(NotificationSupport.plan(notification("partner.ceo", "s"), byName.get("Order"), byName, Map.of(), lookup));
+    }
+
+    @Test
+    void crossModelRecipientWithoutLookupYieldsNoPlan() {
+        Map<String, EntityIntent> byName = crossModelEventModel();
+        // No lookup (e.g. a unit path with no repository) -> a cross-model recipient cannot resolve.
+        assertNull(NotificationSupport.plan(notification("partner.email", "s"), byName.get("Order"), byName, Map.of()));
+    }
+
     @Test
     void guardTranslatesSingleComparisonElseFiresAlways() {
         assertEquals("true", NotificationSupport.guard(null));

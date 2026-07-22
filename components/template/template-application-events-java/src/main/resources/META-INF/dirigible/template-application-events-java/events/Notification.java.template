@@ -13,8 +13,8 @@ import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 #foreach($load in $relationLoads)
-import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
-import gen.${javaGenFolderName}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
 #end
 
 /**

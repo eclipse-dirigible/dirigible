@@ -108,8 +108,11 @@ public class IntentEndpoint {
         try {
             IntentGenerationService.GenerationResult result =
                     generationService.generate(yaml, projectObject.getPath(), project, workspace, baseName(path));
+            // "warnings" carries non-fatal dropped glue (e.g. an unresolvable notify recipient): the
+            // generation succeeded, but the caller must be able to see what was NOT emitted rather than
+            // it living only in a server log line (dirigible #6360).
             return ResponseEntity.ok(Map.of("workspace", workspace, "project", project, "written", result.written(), "scrubbed",
-                    result.scrubbed(), "codeGenerations", result.codeGenerations()));
+                    result.scrubbed(), "codeGenerations", result.codeGenerations(), "warnings", result.issues()));
         } catch (IntentValidationException e) {
             return ResponseEntity.unprocessableEntity()
                                  .body(Map.of("issues", e.getIssues()));

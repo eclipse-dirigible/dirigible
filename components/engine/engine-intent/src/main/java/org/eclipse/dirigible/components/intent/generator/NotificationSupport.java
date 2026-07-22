@@ -41,8 +41,36 @@ public final class NotificationSupport {
 
     private NotificationSupport() {}
 
-    /** A one-hop to-one relation the listener must load before building the message. */
-    public record RelationLoad(String local, String targetEntity, String targetPerspective, String fkProperty) {
+    /**
+     * A one-hop to-one relation the listener must load before building the message. A cross-model
+     * relation ({@code crossModel} true) points at an entity owned by another model, so the generated
+     * listener imports the OWNER's {@code targetModel}/{@code targetProject} generated
+     * Entity/Repository (the same registry-wide-compile mechanism the relation links / personal
+     * assignee use), not this project's.
+     */
+    public record RelationLoad(String local, String targetEntity, String targetPerspective, String fkProperty, boolean crossModel,
+            String targetModel, String targetProject) {
+    }
+
+    /**
+     * Resolves a cross-model to-one relation's target facts so a {@code relation.field} recipient or
+     * placeholder can reference an entity owned by another model. The lookup performs the IO (reads the
+     * owner's {@code .model} via {@code CrossModelSupport}); {@code NotificationSupport} stays free of
+     * Spring/IO so its path logic remains directly unit-testable. Returns {@code null} when the
+     * relation is not a resolvable cross-model target.
+     */
+    @FunctionalInterface
+    public interface CrossModelLookup {
+        CrossModelTarget resolve(RelationIntent relation);
+    }
+
+    /**
+     * The facts about a cross-model relation target a notification needs: the owner perspective and
+     * project/alias (to import the owner's generated Entity/Repository) plus its property names
+     * (PascalCase) to validate the referenced field. A {@code null} {@code propertyNames} means "not
+     * validated" (a naming-convention fallback) - the caller then trusts the authored field.
+     */
+    public record CrossModelTarget(String perspectiveName, String project, String modelAlias, java.util.Set<String> propertyNames) {
     }
 
     /** The translated, ready-to-render shape of a notification. */
@@ -89,7 +117,24 @@ public final class NotificationSupport {
      */
     public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
-        Resolver resolver = new Resolver(eventEntity, byName, compositionParents);
+        return plan(notification, eventEntity, byName, compositionParents, null);
+    }
+
+    /**
+     * Build the full translation plan, resolving cross-model {@code relation.field} paths through the
+     * given {@code crossModel} lookup (pass {@code null} to keep the local-only behavior, e.g. in unit
+     * tests).
+     *
+     * @param notification the notification
+     * @param eventEntity the entity whose event fires it
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the {@code to} recipient cannot be resolved
+     */
+    public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        Resolver resolver = new Resolver(eventEntity, byName, compositionParents, crossModel);
         String to = resolver.value(notification.getTo());
         if (to == null) {
             return null; // an unresolvable recipient relation.field - skip rather than email garbage
@@ -148,12 +193,15 @@ public final class NotificationSupport {
         private final EntityIntent entity;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
+        private final CrossModelLookup crossModel;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
 
-        Resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents) {
+        Resolver(EntityIntent entity, Map<String, EntityIntent> byName, Map<String, String> compositionParents,
+                CrossModelLookup crossModel) {
             this.entity = entity;
             this.byName = byName;
             this.compositionParents = compositionParents;
+            this.crossModel = crossModel;
         }
 
         List<RelationLoad> loads() {
@@ -220,14 +268,34 @@ public final class NotificationSupport {
             if (relation == null) {
                 return null;
             }
+            String pascalField = IntentNaming.pascalCase(fieldName);
+            // Cross-model relation.field (e.g. Customer.email where Customer is owned by another model):
+            // resolve the owner's facts through the injected lookup and load from the OWNER's package.
+            // A same-model relation resolves against the local byName map as before.
+            if (relation.getModel() != null && !relation.getModel()
+                                                        .isBlank()) {
+                CrossModelTarget xm = crossModel == null ? null : crossModel.resolve(relation);
+                if (xm == null) {
+                    return null;
+                }
+                // Validate the field against the owner model when its properties are known; a naming-
+                // convention fallback carries null propertyNames - then trust the authored field.
+                if (xm.propertyNames() != null && !xm.propertyNames()
+                                                     .contains(pascalField)) {
+                    return null;
+                }
+                loads.computeIfAbsent(relationName, name -> new RelationLoad(name, relation.getTo(), xm.perspectiveName(),
+                        IntentNaming.pascalCase(name), true, xm.modelAlias(), xm.project()));
+                return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
+            }
             EntityIntent target = byName.get(relation.getTo());
             if (target == null || fieldOf(target, fieldName) == null) {
                 return null;
             }
             loads.computeIfAbsent(relationName, name -> new RelationLoad(name, relation.getTo(),
-                    IntentEntities.resolvePerspective(relation.getTo(), compositionParents), IntentNaming.pascalCase(name)));
+                    IntentEntities.resolvePerspective(relation.getTo(), compositionParents), IntentNaming.pascalCase(name), false, "", ""));
             // The listener loads the related entity into a local named after the relation.
-            return "(" + relationName + " == null ? null : " + relationName + "." + IntentNaming.pascalCase(fieldName) + ")";
+            return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
         }
 
         private RelationIntent toOneRelation(String name) {
