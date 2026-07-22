@@ -343,6 +343,36 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void relationMajorFalseEmitsWidgetIsMajorFalseAndDefaultsTrue() {
+        String yaml = """
+                name: shop
+                uses:
+                  - { model: products }
+                entities:
+                  - name: Category
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Category, kind: manyToOne, to: Category }                             # default -> list column
+                      - { name: Note, kind: manyToOne, to: Category, major: false }                   # local, off the list
+                      - { name: Product, kind: manyToOne, to: Product, model: products, major: false } # cross-model, off the list
+                """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "shop");
+        Map<String, Object> item = entityByName(entities(model), "OrderItem");
+
+        assertEquals("true", propertyByName(item, "Category").get("widgetIsMajor"), "a relation is a list column by default");
+        assertEquals("false", propertyByName(item, "Note").get("widgetIsMajor"), "major:false keeps a local relation off the list table");
+        assertEquals("false", propertyByName(item, "Product").get("widgetIsMajor"),
+                "major:false keeps a cross-model relation off the list table");
+    }
+
+    @Test
     void documentMasterWithACalendarViewStillCarriesThePrintFlag() {
         // A document (header-items) master whose UI is overridden to a range calendar: the layout
         // becomes MANAGE_CALENDAR (the document page is replaced by the calendar + the shared manage

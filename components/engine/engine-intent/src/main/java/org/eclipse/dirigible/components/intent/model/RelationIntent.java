@@ -66,6 +66,13 @@ public class RelationIntent {
      */
     private Integer size;
     /**
+     * Whether this to-one relation shows as a column in the entity's list / document-items table
+     * ({@code widgetIsMajor}). Defaults to {@code true} (relations are list columns). Set
+     * {@code major: false} to keep the dropdown in the create/edit form and detail pane but off the
+     * list table - the relation counterpart of a field's {@code major: false}.
+     */
+    private boolean major = true;
+    /**
      * Optional list of the target entity's field names to surface as extra <b>read-only</b> columns
      * wherever this to-one relation shows as a lookup column (the master-detail / document allocation
      * tables). The FK lookup already fetches the referenced rows to resolve the display label, so these
@@ -229,6 +236,14 @@ public class RelationIntent {
 
     public void setSize(Integer size) {
         this.size = size;
+    }
+
+    public boolean isMajor() {
+        return major;
+    }
+
+    public void setMajor(boolean major) {
+        this.major = major;
     }
 
     public List<String> getShow() {
