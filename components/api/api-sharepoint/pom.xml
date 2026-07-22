@@ -18,7 +18,7 @@
         <license.header.location>../../../licensing-header.txt</license.header.location>
         <parent.pom.folder>../../../</parent.pom.folder>
 
-        <microsoft-graph.version>6.66.1</microsoft-graph.version>
+        <microsoft-graph.version>6.67.0</microsoft-graph.version>
         <azure-identity.version>1.18.4</azure-identity.version>
     </properties>
 
