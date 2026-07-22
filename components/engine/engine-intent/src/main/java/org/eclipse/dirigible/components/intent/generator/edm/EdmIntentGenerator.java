@@ -322,11 +322,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (entity.isMultilingual()) {
                 entityMap.put("multilingual", "true");
             }
-            // A file-attachment child: mark it so the generated controller emits the upload/download/
-            // delete verbs and the Harmonia master/document view renders it as an "Attachments" panel
-            // (a composition detail already, so the master-detail wiring is unchanged).
-            if (entity.isAttachment()) {
+            // A file-child: mark it so the generated controller emits the download (and, when editable,
+            // upload/delete) verbs and the Harmonia master/document view renders it as a Files panel
+            // (a composition detail already, so the master-detail wiring is unchanged). A Snapshot is
+            // read-only - copies are generated server-side, never uploaded or deleted by the user - so
+            // it also carries attachmentReadOnly, which suppresses the upload verb and the panel's
+            // upload/remove controls (download + list only).
+            if (entity.isFileChild()) {
                 entityMap.put("attachmentEntity", "true");
+                if (entity.isSnapshot()) {
+                    entityMap.put("attachmentReadOnly", "true");
+                }
             }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
@@ -342,12 +348,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
 
             List<Map<String, Object>> properties = new ArrayList<>();
-            // A file-attachment child (function: Attachment) is a first-class entity, but the author
+            // A file-child (function: Attachment or Snapshot) is a first-class entity, but the author
             // declares no fields at all (the file-metadata columns are injected below), so synthesize
             // the generated integer primary key it still needs.
-            if (entity.isAttachment() && entity.getFields()
-                                               .stream()
-                                               .noneMatch(FieldIntent::isPrimaryKey)) {
+            if (entity.isFileChild() && entity.getFields()
+                                              .stream()
+                                              .noneMatch(FieldIntent::isPrimaryKey)) {
                 FieldIntent id = new FieldIntent();
                 id.setName("id");
                 id.setType("integer");
@@ -378,13 +384,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
             }
-            // A file-attachment child (function: Attachment) gets the standard file-metadata columns
-            // injected (like audit:) - the author never hand-writes plumbing; the upload sets them
-            // server-side. FileName is the row's display title; StoragePath is the CMS reference. The
-            // attachment is implicitly audited (who uploaded when).
+            // A file-child (function: Attachment or Snapshot) gets the standard file-metadata columns
+            // injected (like audit:) - the author never hand-writes plumbing; the upload (attachment) or
+            // the generator (snapshot) sets them server-side. FileName is the row's display title;
+            // StoragePath is the CMS reference. Implicitly audited (who created it when). A Snapshot also
+            // carries a Version - the copy's sequence within its master (DOCUMENT_VERSION widget).
             boolean audited = entity.isAudited();
-            if (entity.isAttachment()) {
+            if (entity.isFileChild()) {
                 properties.addAll(attachmentProperties(name));
+                if (entity.isSnapshot()) {
+                    properties.add(versionProperty(name));
+                }
                 audited = true;
             }
             // The four standard audit columns, populated by the platform's audit annotations downstream.
@@ -1498,6 +1508,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetSize", "");
         p.put("widgetLength", length > 0 ? Integer.toString(length) : "20");
         p.put("widgetIsMajor", major ? "true" : "false");
+        return p;
+    }
+
+    /**
+     * The {@code Version} column injected into a {@code function: Snapshot} child - the copy's sequence
+     * within its master (1, 2, 3 as a document is re-issued after amendment). Read-only (the generator
+     * sets it), shown on the list/panel (major), and carries the {@code DOCUMENT_VERSION} widget so
+     * forms and print templates can treat it specifically (e.g. a version badge).
+     */
+    private static Map<String, Object> versionProperty(String entityName) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", "Version");
+        p.put("description", "");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_VERSION");
+        p.put("dataType", "INTEGER");
+        p.put("dataNullable", "true");
+        p.put("auditType", "NONE");
+        p.put("isReadOnlyProperty", "true");
+        p.put("widgetType", "DOCUMENT_VERSION");
+        p.put("widgetSize", "");
+        p.put("widgetLength", "20");
+        p.put("widgetIsMajor", "true");
         return p;
     }
 
