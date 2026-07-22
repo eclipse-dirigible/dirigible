@@ -82,6 +82,7 @@
         <module>engine/engine-listeners</module>
         <module>engine/engine-intent</module>
         <module>engine/engine-document</module>
+        <module>engine/engine-numbering</module>
         <module>engine/engine-odata</module>
         <module>engine/engine-open-telemetry</module>
         <module>engine/engine-camel</module>

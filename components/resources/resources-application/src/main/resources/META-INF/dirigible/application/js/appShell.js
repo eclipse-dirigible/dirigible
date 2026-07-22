@@ -126,6 +126,68 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
+    // Document Numbering: the current tenant's per-series counters (engine-numbering), read from and
+    // written to /services/core/numbering (ADMINISTRATOR/OPERATOR - a 403 is surfaced read-only). Each
+    // row is { series, scope, counter }; the editable field is the NEXT value (counter + 1) so an admin
+    // can reset/seed a sequence (e.g. start invoices at 1000).
+    numbering: [],
+    numberingLoading: false,
+    numberingError: null,
+
+    /** A readable label for a counter row: the series, plus the scope in brackets when scoped. */
+    numberingLabel(row) {
+      return row.scope ? row.series + ' [' + row.scope + ']' : row.series;
+    },
+
+    /** Load the current tenant's document-number counters. */
+    async loadNumbering() {
+      this.numberingLoading = true;
+      this.numberingError = null;
+      try {
+        const res = await fetch('/services/core/numbering', {
+          credentials: 'same-origin',
+          headers: { 'Accept': 'application/json' }
+        });
+        if (res.status === 403) {
+          this.numbering = [];
+          this.numberingError = 'forbidden';
+          return;
+        }
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        this.numbering = data.map((c) => ({ series: c.series, scope: c.scope || '', counter: c.counter, next: (c.counter || 0) + 1 }));
+      } catch (e) {
+        console.error('document-numbering: failed to load', e);
+        this.numbering = [];
+        this.numberingError = 'load';
+      } finally {
+        this.numberingLoading = false;
+        this.refreshIcons();
+      }
+    },
+
+    /** Persist each row's edited NEXT value (PUT setNext). */
+    async saveNumbering() {
+      this.numberingError = null;
+      try {
+        for (const row of this.numbering) {
+          const next = parseInt(row.next, 10);
+          if (!isFinite(next) || next < 1) continue;
+          const res = await fetch('/services/core/numbering', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series: row.series, scope: row.scope, next: next })
+          });
+          if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+        }
+        await this.loadNumbering();
+      } catch (e) {
+        console.error('document-numbering: failed to save', e);
+        this.numberingError = 'save';
+      }
+    },
+
     // Language coverage of the embedded apps: which languages each generated app PROVIDES
     // translations for (its js/config.js carries `languages: [...]` from the intent; the config is
     // a JS file, so the array is read with a targeted match rather than executed). One entry per
@@ -287,6 +349,7 @@ document.addEventListener('alpine:init', () => {
               this.settingsSelected = item.id;
               this.settingsUrl = item.path || '';
               if (item.id === 'tenant-configuration') this.loadTenantConfig();
+              if (item.id === 'document-numbering') this.loadNumbering();
             }
           }
         } else {
@@ -439,6 +502,7 @@ document.addEventListener('alpine:init', () => {
           window.history.replaceState(window.history.state, '', url);
         }
         if (item.id === 'tenant-configuration') this.loadTenantConfig();
+        if (item.id === 'document-numbering') this.loadNumbering();
         this.refreshIcons();
       }
     },
@@ -450,6 +514,7 @@ document.addEventListener('alpine:init', () => {
     findSettingItem(id) {
       if (id === 'region-language') return { id: 'region-language' };
       if (id === 'tenant-configuration') return { id: 'tenant-configuration' };
+      if (id === 'document-numbering') return { id: 'document-numbering' };
       return (this.settingsItems || []).find(i => i.id === id) || null;
     },
 

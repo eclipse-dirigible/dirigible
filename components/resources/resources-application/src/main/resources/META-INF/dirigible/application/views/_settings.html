@@ -26,6 +26,14 @@
         <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
         <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
       </button>
+      <!-- Document Numbering: a built-in settings entry - the per-tenant document-number counters
+           (engine-numbering). Selecting it renders the local detail on the right. -->
+      <button x-h-button data-variant="outline" class="justify-start"
+              :data-state="isSettingActive({ id: 'document-numbering' }) ? 'selected' : ''"
+              @click="selectSetting({ id: 'document-numbering' })">
+        <i role="img" x-h-lucide data-lucide="hash"></i>
+        <span x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
+      </button>
       <template x-for="item in visibleSettingsItems()" :key="item.id">
         <button x-h-button data-variant="outline" class="justify-start"
                 :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
@@ -36,7 +44,7 @@
     </div>
   </div>
   <div x-h-split-panel data-size="75%" style="position: relative;">
-    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration'" x-h-info-page class="p-4">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration' && settingsSelected !== 'document-numbering'" x-h-info-page class="p-4">
       <div x-h-info-page-header>
         <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
         <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
@@ -132,6 +140,43 @@
             <div class="hbox gap-2">
               <button x-h-button data-variant="emphasized" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
               <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+    <!-- Document Numbering detail: rendered locally - the per-tenant counters from
+         /services/core/numbering. Edit a series' Next value to reset/seed the sequence (e.g. start
+         invoices at 1000); the format (prefix, padding) is authored in the model, not here. -->
+    <div x-show="settingsSelected === 'document-numbering'" class="size-full overflow-auto">
+      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+        <div class="vbox gap-1">
+          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingHint', 'The next number each document series will issue. Change a value to reset or seed a sequence; the format (prefix, padding) is set in the model.')"></span>
+        </div>
+        <template x-if="numberingError">
+          <div x-h-alert data-variant="warning" role="alert">
+            <div x-h-alert-description
+                 x-text="numberingError === 'forbidden' ? T('application-core:shell.settings.numberingForbidden', 'You do not have permission to view or change document numbering.') : T('application-core:shell.settings.numberingFailed', 'Something went wrong. Please try again.')"></div>
+          </div>
+        </template>
+        <template x-if="numberingLoading">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
+        </template>
+        <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length === 0">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingEmpty', 'No document numbers issued yet. A series appears here once its first document is numbered.')"></span>
+        </template>
+        <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length > 0">
+          <div class="vbox gap-4">
+            <template x-for="row in numbering" :key="row.series + '|' + row.scope">
+              <div class="vbox gap-1">
+                <span x-h-text.muted class="text-sm" x-text="numberingLabel(row)"></span>
+                <input x-h-input type="number" min="1" x-model="row.next" />
+              </div>
+            </template>
+            <div class="hbox gap-2">
+              <button x-h-button data-variant="emphasized" @click="saveNumbering()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+              <button x-h-button data-variant="outline" @click="loadNumbering()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
             </div>
           </div>
         </template>
