@@ -16,6 +16,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
@@ -66,15 +67,18 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
     private final ComponentContainer componentContainer;
     private final JobsManager jobsManager;
     private final JobService jobService;
+    private final TenantContext tenantContext;
 
-    /** fqn -> the job names it registered (a class may declare several @Scheduled methods). */
+    /** fqn -> the base job names it registered (a class may declare several @Scheduled methods). */
     private final ConcurrentMap<String, List<String>> registered = new ConcurrentHashMap<>();
 
     @Autowired
-    public ScheduledClassConsumer(ComponentContainer componentContainer, JobsManager jobsManager, JobService jobService) {
+    public ScheduledClassConsumer(ComponentContainer componentContainer, JobsManager jobsManager, JobService jobService,
+            TenantContext tenantContext) {
         this.componentContainer = componentContainer;
         this.jobsManager = jobsManager;
         this.jobService = jobService;
+        this.tenantContext = tenantContext;
     }
 
     @Override
@@ -148,25 +152,37 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
      */
     private void register(List<String> sink, String fqn, String handler, String expression) {
         String name = handler.replace('#', '.');
+        // Register the job PER TENANT (like the JS .job/scheduled.ts synchronizer does): each tenant
+        // gets its own scheduled row + tenant-prefixed Quartz job. The job body runs in that tenant's
+        // context at fire time (the jobs engine restores it from the job data), so a global client
+        // bean's repository access is correctly tenant-scoped. Class loading happens off any tenant
+        // thread, hence the explicit executeForEachTenant.
         try {
-            Job job = jobService.findByName(name);
-            if (job == null) {
-                job = new Job();
-            }
-            job.setName(name);
-            job.setGroup(JOB_GROUP);
-            job.setClazz("");
-            job.setHandler(handler);
-            job.setEngine(JavaJobExecutor.ENGINE_JAVA);
-            job.setExpression(expression);
-            job.setSingleton(false);
-            job.setEnabled(true);
-            job.setDescription("Client-Java scheduled job [" + handler + "]");
-            job.setType(Job.ARTEFACT_TYPE);
-            job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
-            job.updateKey();
-            jobService.save(job);
-            jobsManager.scheduleJob(job);
+            tenantContext.executeForEachTenant(() -> {
+                // findByName THROWS when absent (it does not return null) - treat that as "new", and
+                // otherwise mutate the existing managed row so save() updates it rather than duplicating.
+                Job job;
+                try {
+                    job = jobService.findByName(name);
+                } catch (Exception notFound) {
+                    job = new Job();
+                }
+                job.setName(name);
+                job.setGroup(JOB_GROUP);
+                job.setClazz("");
+                job.setHandler(handler);
+                job.setEngine(JavaJobExecutor.ENGINE_JAVA);
+                job.setExpression(expression);
+                job.setSingleton(false);
+                job.setEnabled(true);
+                job.setDescription("Client-Java scheduled job [" + handler + "]");
+                job.setType(Job.ARTEFACT_TYPE);
+                job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
+                job.updateKey();
+                jobService.save(job);
+                jobsManager.scheduleJob(job);
+                return null;
+            });
             sink.add(name);
             LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' on the shared scheduler.", name, handler,
                     expression);
@@ -175,7 +191,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
     }
 
-    /** Unschedule + remove the Job rows a class previously registered. */
+    /** Unschedule + remove the Job rows a class previously registered (per tenant). */
     private void unregister(String fqn) {
         List<String> names = registered.remove(fqn);
         if (names == null) {
@@ -183,17 +199,22 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
         for (String name : names) {
             try {
-                jobsManager.unscheduleJob(name, JOB_GROUP);
+                tenantContext.executeForEachTenant(() -> {
+                    try {
+                        jobsManager.unscheduleJob(name, JOB_GROUP);
+                    } catch (Exception e) {
+                        LOGGER.warn("Failed to unschedule client-Java job [{}]: {}", name, e.getMessage());
+                    }
+                    try {
+                        jobService.delete(jobService.findByName(name));
+                    } catch (Exception e) {
+                        // findByName throws when the row is already gone - nothing to remove.
+                        LOGGER.debug("No client-Java job row [{}] to remove: {}", name, e.getMessage());
+                    }
+                    return null;
+                });
             } catch (Exception e) {
-                LOGGER.warn("Failed to unschedule client-Java job [{}]: {}", name, e.getMessage());
-            }
-            try {
-                Job job = jobService.findByName(name);
-                if (job != null) {
-                    jobService.delete(job);
-                }
-            } catch (Exception e) {
-                LOGGER.warn("Failed to remove client-Java job row [{}]: {}", name, e.getMessage());
+                LOGGER.warn("Failed to unregister client-Java job [{}]: {}", name, e.getMessage());
             }
         }
     }
