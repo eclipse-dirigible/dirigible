@@ -406,8 +406,12 @@ entities:
   - name: EmployeeBg                            # the extension entity - owns NO table of its own
     extends: { model: employees, entity: Employee }   # omit `model` to extend an entity in THIS model
     fields:
-      - { name: egn, type: string, length: 10 }       # contributed to Employee's table
+      - { name: egn, type: string, length: 10, after: lastName }   # placed after Employee.lastName
 ```
+
+Use `after: <baseField>` (or `before: <baseField>`) on a contributed field to place it at a
+specific spot in the base entity's form/list, instead of at the end (`after` wins if both are
+given; an unknown target falls back to the end).
 
 The base `Employee` table gains an `egn` column (its physical name is prefixed by the extension
 entity, e.g. `EMPLOYEE_BG_EGN`, so contributions from different modules never collide). The
