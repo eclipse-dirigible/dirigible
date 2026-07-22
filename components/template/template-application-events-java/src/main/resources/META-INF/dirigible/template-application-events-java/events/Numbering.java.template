@@ -1,0 +1,61 @@
+package gen.events;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+
+/**
+ * Document-number stamp for ${entity} (field ${field}, series ${series}, stampOn: issue). Wired as a
+ * `delegate:` service task at the issue step: it replaces the create-time UUID placeholder with the
+ * real formatted number, idempotently - a re-issue after an amend keeps the number.
+ *
+ * Generated from the intent numbering glue - do not edit; it is re-generated with the application. The
+ * number is allocated + formatted via sdk.numbering.DocumentNumbers (the shared per-tenant counter,
+ * also managed from the application shell's Document Numbering settings) and written with the targeted
+ * updateProperty - a workflow system write (no "-updated" event re-fire, no full-row merge).
+ */
+public class ${entity}NumberStamp implements JavaDelegate {
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${masterPk}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        int id = ((Number) key).intValue();
+        ${entity}Repository repository = new ${entity}Repository();
+        ${entity}Entity entity = repository.findById(id);
+        if (entity == null) {
+            return;
+        }
+        // Idempotent: only replace the create-time UUID placeholder; skip an already-stamped number.
+        if (entity.${field} != null && !isPlaceholder(entity.${field})) {
+            return;
+        }
+        Map<String, String> scope = new LinkedHashMap<>();
+#foreach ($scopeName in $scope)
+#if($scopeName == "year")
+        scope.put("year", String.valueOf(java.time.Year.now().getValue()));
+#else
+        scope.put("${scopeName}", entity.${scopeName} == null ? "" : String.valueOf(entity.${scopeName}));
+#end
+#end
+        String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}", "${format}", scope);
+        repository.updateProperty(id, "${field}", number);
+    }
+
+    /** Whether the value is still the create-time UUID placeholder (vs an already-stamped number). */
+    private static boolean isPlaceholder(String value) {
+        try {
+            java.util.UUID.fromString(value);
+            return true;
+        } catch (IllegalArgumentException notAUuid) {
+            return false;
+        }
+    }
+}

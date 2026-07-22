@@ -136,6 +136,13 @@ export function getTemplate(parameters) {
                 collection: "snapshots"
             },
             {
+                location: "/template-application-events-java/events/Numbering.java.template",
+                action: "generate",
+                rename: "gen/events/{{entity}}NumberStamp.java",
+                engine: "velocity",
+                collection: "numbering"
+            },
+            {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
                 rename: "gen/events/{{name}}OnPayment.java",
