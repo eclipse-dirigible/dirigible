@@ -92,6 +92,7 @@ document.addEventListener('alpine:init', () => {
 #end
           this.itemsEnabled = true;
           await this.loadItems();
+          if (this.loadChildren) this.loadChildren();
           this.state = 'default';
         } catch (e) {
           this.error = (e && e.message) || 'Could not load the document.';
@@ -334,5 +335,121 @@ document.addEventListener('alpine:init', () => {
     },
 
     goBack() { this.navigate('/my/${name}'); },
+#set($docChildren = [])
+#if($myChildren)
+#foreach($child in $myChildren)
+#if($child.name != "$!{documentItemsEntity}")
+#set($ignore = $docChildren.add($child))
+#end
+#end
+#end
+#if($docChildren.size() > 0)
+
+    // --- non-item children inheriting the personal scope (panels below the document) --------------
+    // The SAME panels the my-form renders: an embedded calendar for a view: calendar child (e.g. a
+    // day-allocation calendar on a timesheet document), a table otherwise.
+    children: [
+#foreach($child in $docChildren)
+      { name: '${child.name}', label: '${child.label}', fkProperty: '${child.fkProperty}',
+        apiPath: '${child.apiPath}', rows: [], state: 'loading',
+        calendar: #if($child.calendar){ start: '${child.calendar.start}', end: #if($child.calendar.end)'${child.calendar.end}'#{else}null#end, title: #if($child.calendar.title)'${child.calendar.title}'#{else}null#end, titleLookup: #if($child.calendar.titleLookup){ url: '${child.calendar.titleLookup.url}', key: '${child.calendar.titleLookup.key}', value: '${child.calendar.titleLookup.value}' }#{else}null#end, view: '${child.calendar.view}' }#{else}null#end,
+        calCfg: { view: '#if($child.calendar)${child.calendar.view}#{else}month#end', events: [] },
+        columns: [#foreach($col in $child.columns){ name: '${col.name}', label: '${col.label}'#if($col.number), number: true#end#if($col.date), date: true#end }#if($foreach.hasNext), #end#end] },
+#end
+    ],
+
+    async loadChildren() {
+      for (const child of this.children) {
+        try {
+          child.rows = await App.services.api.get(child.apiPath + '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)) || [];
+          if (child.calendar) {
+            // a title naming a RELATION resolves to its referenced label (fail-soft: raw value stays)
+            if (child.calendar.titleLookup && !child.titleMap) {
+              try {
+                const rows = await App.services.api.getAll(child.calendar.titleLookup.url, { baseUrl: '' });
+                const m = {};
+                (rows || []).forEach(r => { m[r[child.calendar.titleLookup.key]] = r[child.calendar.titleLookup.value]; });
+                child.titleMap = m;
+              } catch (e) { child.titleMap = {}; }
+            }
+            child.calCfg = { view: child.calendar.view, events: this.buildChildEvents(child) };
+          }
+          child.state = 'default';
+        } catch (e) {
+          child.state = 'error';
+        }
+      }
+      this.refreshIcons && this.refreshIcons();
+    },
+
+    // Row -> event mapping, the same conventions as the shared detailPanel (Jackson java.time
+    // arrays / epoch seconds / ISO strings normalize via childToISO).
+    buildChildEvents(child) {
+      return (child.rows || []).map(row => {
+        const start = this.childToISO(row[child.calendar.start]);
+        if (!start) return null;
+        const ev = { id: row.Id, title: this.childEventTitle(child, row), start: start, allDay: true };
+        if (child.calendar.end) {
+          const end = this.childToISO(row[child.calendar.end]);
+          if (end) ev.end = end;
+        }
+        return ev;
+      }).filter(Boolean);
+    },
+    childEventTitle(child, row) {
+      if (child.calendar.title) {
+        const v = row[child.calendar.title];
+        const m = child.titleMap;
+        const resolved = m ? m[v] : undefined;
+        if (resolved !== undefined && resolved !== null && String(resolved) !== '') return String(resolved);
+        if (v !== undefined && v !== null && String(v) !== '') return String(v);
+      }
+      return child.label + ' #' + row.Id;
+    },
+    childToISO(v) {
+      if (v === undefined || v === null || v === '') return '';
+      if (Array.isArray(v)) {
+        const p = n => String(n).padStart(2, '0');
+        const date = v[0] + '-' + p(v[1]) + '-' + p(v[2]);
+        if (v.length <= 3) return date;
+        return date + 'T' + p(v[3] || 0) + ':' + p(v[4] || 0) + ':' + p(v[5] || 0);
+      }
+      if (typeof v === 'number') {
+        const ms = v < 1e12 ? v * 1000 : v;
+        try { return new Date(ms).toISOString(); } catch (e) { return ''; }
+      }
+      return String(v);
+    },
+    displayChild(child, row, col) {
+      const v = row[col.name];
+      if (v == null || v === '') return '—';
+      if (col.date) return this.childToISO(v).split('T')[0];
+      return String(v);
+    },
+
+    addChild(child) {
+      this.navigate('/my/' + child.name + '/create?' + encodeURIComponent(child.fkProperty) + '='
+          + encodeURIComponent(this.id) + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit'));
+    },
+    editChild(child, id) {
+      this.navigate('/my/' + child.name + '/' + id + '/edit?returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit'));
+    },
+    onChildEventClick(child, e) {
+      const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
+      if (id) this.editChild(child, id);
+    },
+    onChildDateClick(child, e) {
+      let q = '?' + encodeURIComponent(child.fkProperty) + '=' + encodeURIComponent(this.id)
+            + '&returnTo=' + encodeURIComponent('/my/${name}/' + this.id + '/edit');
+      const d = e && e.detail ? e.detail.date : null;
+      if (d instanceof Date && !isNaN(d.getTime())) {
+        const p = n => String(n).padStart(2, '0');
+        let val = d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate());
+        if (e.detail.time) val += 'T' + e.detail.time;
+        q += '&' + encodeURIComponent(child.calendar.start) + '=' + encodeURIComponent(val);
+      }
+      this.navigate('/my/' + child.name + '/create' + q);
+    },
+#end
   }));
 });
