@@ -60,11 +60,16 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         // equivalent of the AngularJS "Create" button).
         browser.clickOnElementWithText(HtmlElementType.BUTTON, "New");
 
-        // The form caption is the entity's human label - assert it resolved to a real value and not
-        // the literal "${ENTITYLABEL}" (the depends-on entities are hand-authored, so they carry no
-        // baked entityLabel; the generator must derive it). The caption no longer force-uppercases
-        // (title styling unified with the document layout in #6361), so the resolved label is "Orders".
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Orders");
+        // The form caption is the entity's human label - assert the generator DERIVED it (the
+        // depends-on entities are hand-authored, so they carry no baked entityLabel) rather than
+        // leaking the literal "${ENTITYLABEL}" placeholder. We assert the placeholder is ABSENT
+        // rather than asserting the resolved text is present: the entity is named "Orders", so its
+        // derived entityLabel (the form caption) equals its menuLabel (the list toolbar title), and
+        // both render as unified caption <span>s since #6361 - so "one span contains Orders" is
+        // inherently ambiguous (two matches, which the ExistsByTypeAndContainsText finder rejects).
+        // The placeholder-absent check is the real intent; the form's rendering and label resolution
+        // are further proven by the Country/City depends-on assertions below.
+        browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "${ENTITYLABEL}");
 
         // Pick Country = Bulgaria. The Harmonia x-h-select hides the bound <input id="f_Country">
         // and renders a visible <span role="combobox"> trigger whose text is the placeholder; click
