@@ -144,10 +144,30 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
 #end
 ## A uuid field (intent type: uuid) is platform-generated: assign a random UUID on create when empty.
+## A number: {} field with stampOn:issue also carries generatedUuid, so its create-time placeholder is
+## a UUID (the real number is stamped at the issue step); stampOn:create fields are handled just below.
 #foreach ($property in $properties)
 #if($property.generatedUuid)
         if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
             entity.${property.name} = java.util.UUID.randomUUID().toString();
+        }
+#end
+#end
+## First-class numbering, stampOn:create: allocate + format the real document number on insert (when
+## empty), via the shared per-tenant counter. The scope both partitions the counter and feeds the
+## format's tokens; `year` is the current year, any other name reads the entity's own field.
+#foreach ($property in $properties)
+#if($property.numberStampOnCreate)
+        if (entity.${property.name} == null || entity.${property.name}.isBlank()) {
+            java.util.Map<String, String> ${property.name}Scope = new java.util.LinkedHashMap<>();
+#foreach ($scopeName in $property.numberScope)
+#if($scopeName == "year")
+            ${property.name}Scope.put("year", String.valueOf(java.time.Year.now().getValue()));
+#else
+            ${property.name}Scope.put("${scopeName}", entity.${scopeName} == null ? "" : String.valueOf(entity.${scopeName}));
+#end
+#end
+            entity.${property.name} = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${property.numberSeries}", "${property.numberFormat}", ${property.name}Scope);
         }
 #end
 #end

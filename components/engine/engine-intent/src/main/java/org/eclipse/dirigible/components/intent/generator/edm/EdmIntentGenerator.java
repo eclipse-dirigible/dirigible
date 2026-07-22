@@ -34,6 +34,7 @@ import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
+import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
@@ -923,6 +924,32 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // still seed/import an explicit value - it is only filled when blank.
         if ("uuid".equalsIgnoreCase(field.getType())) {
             p.put("generatedUuid", "true");
+        }
+        // First-class document numbering (intent `number: {}`): the platform maintains a per-series
+        // counter and stamps the formatted number. stampOn:create stamps the real number on insert
+        // (the generated repository calls sdk.numbering.DocumentNumbers); stampOn:issue holds a UUID
+        // placeholder on create (reusing the uuid auto-fill above) until the generated stamp step runs.
+        if (field.getNumber() != null) {
+            NumberIntent number = field.getNumber();
+            List<String> numberScope = new ArrayList<>();
+            if (number.getScope() != null) {
+                for (String scopeName : number.getScope()) {
+                    // Scope names index the counter AND read the entity's field on create; PascalCase them
+                    // to match the generated entity property (year stays the literal token).
+                    numberScope.add("year".equalsIgnoreCase(scopeName) ? "year" : IntentNaming.pascalCase(scopeName));
+                }
+            }
+            p.put("numberSeries", number.getSeries() == null ? entityName : number.getSeries());
+            p.put("numberFormat", number.getFormat() == null ? "" : number.getFormat());
+            p.put("numberScope", numberScope);
+            p.put("isReadOnlyProperty", "true");
+            if ("issue".equalsIgnoreCase(number.getStampOn())) {
+                p.put("numberStampOn", "issue");
+                p.put("generatedUuid", "true"); // UUID placeholder on create; stamped at the issue step
+            } else {
+                p.put("numberStampOn", "create");
+                p.put("numberStampOnCreate", "true"); // real number allocated + formatted on insert
+            }
         }
         if (field.isSensitive()) {
             // Hidden from the personal (my) surface: absent from its pages and stripped from the
