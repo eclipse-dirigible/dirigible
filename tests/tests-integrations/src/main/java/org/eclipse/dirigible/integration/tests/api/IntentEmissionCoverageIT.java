@@ -708,6 +708,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(leaveCalendar.contains("titleLookup"), "the power calendar must resolve a relation title through a label lookup");
         assertTrue(myLeaveCalendar.contains("titleLookup"), "the personal calendar must resolve a relation title through a label lookup");
 
+        // The app-test manifest carries the personal UI-parity metadata the runner's my flow
+        // drives (wave 2): the /my route, the layout family the personal page belongs to, and
+        // the relation columns that must resolve to labels on the personal list.
+        String testManifest = contentOf("emission.test");
+        assertTrue(testManifest.contains("\"route\": \"#/my/Claim\""),
+                "the manifest's personal block must carry the /my route for the UI-parity walk");
+        assertTrue(testManifest.contains("\"fkColumns\"") && testManifest.contains("\"Unit\""),
+                "the manifest must name the personal list's relation columns (label resolution targets)");
+        assertTrue(testManifest.contains("\"layout\": \"document-chat\""),
+                "a personal chat document must be flagged so the runner drives the composer round-trip");
+        assertTrue(testManifest.contains("\"route\": \"#/my/Leave\""), "the calendar root's personal block must carry its /my route");
+
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
         // half is a custom-action contribution carrying the endpoint.

@@ -188,6 +188,31 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
             if (!sensitive.isEmpty()) {
                 personal.put("sensitive", sensitive);
             }
+            // UI parity (wave 2): what the personal PAGE renders, so the runner can drive it live -
+            // the /my route, the layout family the page belongs to, and the relation columns the
+            // personal list shows (each must resolve to its referenced label, never a raw FK id).
+            personal.put("route", "#/my/" + name);
+            String layout = "list";
+            if (entity.isCalendar() || entity.isRange()) {
+                layout = "calendar";
+            } else if (entity.isSlots()) {
+                layout = "slots";
+            } else if (entity.isDocument()) {
+                layout = entity.isChatItems() ? "document-chat" : "document";
+            }
+            personal.put("layout", layout);
+            if ("list".equals(layout)) {
+                List<String> fkColumns = new ArrayList<>();
+                for (RelationIntent column : entity.getRelations()) {
+                    boolean toOne = "manyToOne".equals(column.getKind()) || "oneToOne".equals(column.getKind());
+                    if (toOne && !column.isPersonal()) {
+                        fkColumns.add(IntentNaming.pascalCase(column.getName()));
+                    }
+                }
+                if (!fkColumns.isEmpty()) {
+                    personal.put("fkColumns", fkColumns);
+                }
+            }
             out.put("personal", personal);
             break;
         }
