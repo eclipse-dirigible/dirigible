@@ -1179,6 +1179,34 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "numbering":
+                    // Document-number stamp delegates (intent layer): one JavaDelegate per number: field
+                    // with stampOn:issue, wired as a delegate: service task at the issue step. It stamps
+                    // the real number via sdk.numbering.DocumentNumbers. Own loop; the entity repo lives
+                    // in this project (javaGenFolderName), its Java package segment is the sanitized
+                    // perspective.
+                    if (model.numbering) {
+                        for (let n = 0; n < model.numbering.length; n++) {
+                            const num = model.numbering[n];
+                            const numberingParameters = {
+                                ...parameters,
+                                entity: num.entity,
+                                javaPerspective: sanitizeJavaIdentifier(num.perspective),
+                                masterPk: num.masterPk,
+                                field: num.field,
+                                series: num.series,
+                                format: num.format,
+                                scope: num.scope
+                            };
+                            const cleanNumberingParameters = cleanData(numberingParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanNumberingParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanNumberingParameters)
+                            });
+                        }
+                    }
+                    break;
                 default:
                     // No collection
                     parameters.models = model.entities;
