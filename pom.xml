@@ -139,7 +139,7 @@
         <!-- com.microsoft.java.debug plugin bundled alongside JDT.LS (EPL-1.0, on Maven Central) -->
         <java.debug.plugin.version>0.53.1</java.debug.plugin.version>
         <java.debug.plugin.download.skip>false</java.debug.plugin.download.skip>
-        <maven-license-plugin.version>5.0.0</maven-license-plugin.version>
+        <maven-license-plugin.version>5.1.1</maven-license-plugin.version>
 
         <!-- Spring -->
         <spring.boot.version>4.1.0</spring.boot.version>
