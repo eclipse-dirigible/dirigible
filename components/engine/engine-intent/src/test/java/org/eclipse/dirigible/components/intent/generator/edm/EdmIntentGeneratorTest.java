@@ -897,4 +897,29 @@ class EdmIntentGeneratorTest {
         assertEquals("Email", fk.get("relationshipPartnerIdentityProperty"));
         assertEquals("Name", fk.get("relationshipPartnerIdentityLabel"));
     }
+
+    @Test
+    void extendsMarksExtensionEntityWithBaseReferenceAndNoPerspective() {
+        String yaml = """
+                name: kf-mod-employees-bg
+                uses:
+                  - { model: kf-mod-employees }
+                entities:
+                  - name: EmployeeBg
+                    extends: { model: kf-mod-employees, entity: Employee }
+                    fields:
+                      - { name: egn, type: string, length: 10 }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "kf-mod-employees-bg");
+        Map<String, Object> ext = entityByName(entities(model), "EmployeeBg");
+
+        // Marked EXTENSION with the base reference the model-to-code merge keys on; owns no UI.
+        assertEquals("EXTENSION", ext.get("type"));
+        assertEquals("kf-mod-employees", ext.get("extensionReferencedModel"));
+        assertEquals("Employee", ext.get("extensionReferencedEntity"));
+        assertEquals("", ext.get("layoutType"));
+        assertEquals("", ext.get("perspectiveName"));
+        // Its contributed field is emitted as a normal property (folded into the base table later).
+        assertEquals("VARCHAR", propertyByName(ext, "Egn").get("dataType"));
+    }
 }
