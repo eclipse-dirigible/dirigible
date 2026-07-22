@@ -123,6 +123,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return buildDocument(null, model, intentName, new IntentSettings.Branding()).modelJson;
     }
 
+    /**
+     * Test seam: render the {@code .edm} XML (including the {@code mxGraphModel} diagram) without a
+     * repository - so a test can assert the XML twin, not just the {@code .model} JSON. Never use in
+     * production code.
+     */
+    static String buildEdmXmlForTest(IntentModel model, String intentName) {
+        return renderEdmXml(buildDocument(null, model, intentName, new IntentSettings.Branding()));
+    }
+
     /** The two views over one model tree: the {@code .model} JSON root and the XML extras. */
     private static final class EdmDocument {
         /** Root of the {@code .model} JSON: {@code {model: {entities, perspectives, navigations}}}. */
@@ -2076,20 +2085,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /**
      * The {@code <Entity>} cell value. {@code type="Entity"} is the constant cell-kind marker the
-     * editor keys on; the PRIMARY/DEPENDENT distinction is carried in {@code entityType} (omitted for
-     * PRIMARY), matching the editor's own serializer.
+     * editor keys on; the PRIMARY/DEPENDENT/SETTING/PROJECTION distinction is carried in
+     * {@code entityType} (omitted only for PRIMARY, the editor's default), matching the editor's own
+     * serializer.
      */
     private static void appendEntityValue(StringBuilder sb, Map<String, Object> entity) {
         sb.append("    <Entity");
         appendAttribute(sb, "name", entity.get("name"));
-        // PRIMARY is the editor's default (omitted); DEPENDENT and SETTING are carried explicitly so
-        // the EDM editor restyles the cell and the template engine routes the entity correctly.
+        // PRIMARY is the editor's default (omitted); DEPENDENT, SETTING and PROJECTION are carried
+        // explicitly so the EDM editor restyles the cell and the template engine routes the entity
+        // correctly. Without the PROJECTION marker a cross-model reference (e.g. PaymentMethod) rendered
+        // as a plain PRIMARY entity box - indistinguishable from an owned entity, and the editor would
+        // treat it as manageable local state.
         Object entityType = entity.get("type");
-        if ("DEPENDENT".equals(entityType) || "SETTING".equals(entityType)) {
+        if ("DEPENDENT".equals(entityType) || "SETTING".equals(entityType) || "PROJECTION".equals(entityType)) {
             appendAttribute(sb, "entityType", entityType);
         }
         for (String key : new String[] {"dataName", "dataCount", "dataQuery", "title", "caption", "description", "tooltip", "menuKey",
-                "menuLabel", "layoutType", "perspectiveName", "importsCode", "generateDefaultRoles", "roleRead", "roleWrite"}) {
+                "menuLabel", "layoutType", "perspectiveName", "importsCode", "generateDefaultRoles", "roleRead", "roleWrite",
+                "projectionReferencedModel", "projectionReferencedEntity"}) {
             if (entity.get(key) != null) {
                 appendAttribute(sb, key, entity.get(key));
             }

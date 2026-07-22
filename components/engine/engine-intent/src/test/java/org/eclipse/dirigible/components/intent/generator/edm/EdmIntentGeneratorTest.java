@@ -76,6 +76,28 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void crossModelProjectionCellIsMarkedProjectionInTheEdmDiagram() {
+        IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "customers");
+
+        // The mxGraph diagram <Entity> cell for a cross-model reference must carry
+        // entityType="PROJECTION" (+ the reference attrs) so the EDM editor renders it as a projection,
+        // not as a plain owned PRIMARY entity box.
+        int cell = edm.indexOf("<Entity name=\"Country\"");
+        assertTrue(cell >= 0, "the Country projection cell must be present in the mxGraph diagram");
+        int end = edm.indexOf("/>", cell);
+        String countryCell = edm.substring(cell, end);
+        assertTrue(countryCell.contains("entityType=\"PROJECTION\""),
+                "the cross-model Country cell must be entityType=PROJECTION, was: " + countryCell);
+        assertTrue(countryCell.contains("projectionReferencedEntity=\"Country\""), "the projection cell must carry its referenced entity");
+
+        // A locally-owned entity stays a plain cell (no entityType=PROJECTION).
+        int owned = edm.indexOf("<Entity name=\"Customer\"");
+        String customerCell = edm.substring(owned, edm.indexOf("/>", owned));
+        assertTrue(!customerCell.contains("entityType=\"PROJECTION\""), "an owned entity must not be a projection cell");
+    }
+
+    @Test
     void salesInvoiceModelsCrossModelNToMAndCalculatedNumber() {
         Map<String, Object> model = buildFromResource("/billing/sales-invoices.intent", "sales-invoices");
         List<Map<String, Object>> entities = entities(model);
