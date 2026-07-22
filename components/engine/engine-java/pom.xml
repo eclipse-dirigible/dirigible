@@ -103,6 +103,18 @@
         </dependency>
 
         <!--
+          The jobs engine: client-Java @Scheduled/JobHandler beans register as real Job definitions on
+          the shared clustered Quartz scheduler (ScheduledClassConsumer -> JobsManager), so they are
+          visible + monitored in the Jobs perspective and fire once cluster-wide - not on a private
+          in-JVM scheduler. The Java job body is invoked back through the JavaJobExecutor SPI.
+        -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <artifactId>dirigible-components-engine-jobs</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <!--
           Extension metadata persistence used by ExtensionClassConsumer to register @Extension
           contributions in the Dirigible extension registry.
         -->

@@ -15,8 +15,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ScheduledFuture;
 
+import org.eclipse.dirigible.components.jobs.domain.Job;
+import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
+import org.eclipse.dirigible.components.jobs.manager.JobsManager;
+import org.eclipse.dirigible.components.jobs.service.JobService;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
 import org.eclipse.dirigible.engine.java.spi.JavaClassConsumer;
 import org.eclipse.dirigible.engine.java.spi.LoadedClass;
@@ -27,27 +30,29 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.annotation.Order;
-import org.springframework.scheduling.TaskScheduler;
-import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
-import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Component;
 
 /**
- * {@link JavaClassConsumer} that schedules client jobs on a cron trigger. Two styles, never mixed
- * on one class:
+ * {@link JavaClassConsumer} that registers client-Java jobs on the platform's SHARED Quartz
+ * scheduler as first-class {@link Job} definitions - exactly like a JS {@code .job} /
+ * {@code scheduled.ts} artefact. Two styles, never mixed on one class:
  * <ul>
- * <li><b>self-describing interface</b> — a {@code @Component} bean implementing {@link JobHandler},
+ * <li><b>self-describing interface</b> - a {@code @Component} bean implementing {@link JobHandler},
  * which supplies its own {@code cron()} and {@code run()};</li>
- * <li><b>method level</b> — public no-arg methods annotated {@link Scheduled @Scheduled} on a
- * client bean, Spring's {@code @Scheduled}-on-a-method style.</li>
+ * <li><b>method level</b> - public no-arg methods annotated {@link Scheduled @Scheduled}.</li>
  * </ul>
- * The bean instance is built (with constructor + field injection) by the
- * {@link ComponentContainer}; this consumer only fetches it and wires the cron schedule. Hot-reload
- * cancels the old schedule(s) and re-registers from the updated class.
+ * Each becomes a {@code Job} row (engine {@value JavaJobExecutor#ENGINE_JAVA}, handler = the client
+ * FQN, optionally {@code #method}) persisted via {@link JobService} and scheduled through
+ * {@link JobsManager}. Consequences, matching the JS jobs: the job is <b>visible and monitored in
+ * the Jobs perspective</b> (a real row + a job-log entry per run), and it fires <b>once
+ * cluster-wide</b> (the shared clustered Quartz JDBC store), not once per JVM as the previous
+ * private {@code ThreadPoolTaskScheduler} did. At cron time the jobs engine dispatches back to
+ * {@link JavaJobExecutorImpl} through the {@link JavaJobExecutor} SPI to run the client bean.
  *
  * <p>
- * A dedicated {@link ThreadPoolTaskScheduler} is owned by this consumer so {@code @Scheduled}
- * support does not require {@code @EnableScheduling} in the host application.
+ * The {@code Job} row is registered under the {@link JavaJobExecutor#RUNTIME_LOCATION_PREFIX}
+ * synthetic location so the job synchronizer does not reap it as a registry orphan. Hot-reload
+ * re-registers the schedule; a genuinely unloaded class unschedules and removes its rows.
  */
 @Component
 @Order(400)
@@ -55,21 +60,21 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ScheduledClassConsumer.class);
 
+    /** The user-defined job group (the only group routed through the handler/engine dispatch). */
+    private static final String JOB_GROUP = "defined";
+
     private final ComponentContainer componentContainer;
+    private final JobsManager jobsManager;
+    private final JobService jobService;
 
-    private final TaskScheduler taskScheduler;
-
-    /** fqn → active ScheduledFutures (one class may register several method-level schedules). */
-    private final ConcurrentMap<String, List<ScheduledFuture<?>>> futures = new ConcurrentHashMap<>();
+    /** fqn -> the job names it registered (a class may declare several @Scheduled methods). */
+    private final ConcurrentMap<String, List<String>> registered = new ConcurrentHashMap<>();
 
     @Autowired
-    public ScheduledClassConsumer(ComponentContainer componentContainer) {
+    public ScheduledClassConsumer(ComponentContainer componentContainer, JobsManager jobsManager, JobService jobService) {
         this.componentContainer = componentContainer;
-        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
-        scheduler.setPoolSize(2);
-        scheduler.setThreadNamePrefix("java-scheduled-");
-        scheduler.initialize();
-        this.taskScheduler = scheduler;
+        this.jobsManager = jobsManager;
+        this.jobService = jobService;
     }
 
     @Override
@@ -83,7 +88,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         Object instance = componentContainer.instanceOf(type)
                                             .orElse(null);
         if (instance == null) {
-            LOGGER.error("Scheduled job [{}] was not instantiated as a bean — a JobHandler and a @Scheduled method both require "
+            LOGGER.error("Scheduled job [{}] was not instantiated as a bean - a JobHandler and a @Scheduled method both require "
                     + "the class to be a @Component; skipped.", info.fqn());
             return;
         }
@@ -91,17 +96,17 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         boolean jobHandler = instance instanceof JobHandler;
         boolean methodLevel = hasScheduledMethod(type);
         if (jobHandler && methodLevel) {
-            LOGGER.error("[{}] mixes scheduling styles — it implements JobHandler and also declares @Scheduled methods. "
+            LOGGER.error("[{}] mixes scheduling styles - it implements JobHandler and also declares @Scheduled methods. "
                     + "Use one style or the other; skipped.", info.fqn());
             return;
         }
 
-        cancelExisting(info.fqn());
-        List<ScheduledFuture<?>> scheduled = new ArrayList<>();
+        unregister(info.fqn());
+        List<String> names = new ArrayList<>();
 
         if (jobHandler) {
             JobHandler job = (JobHandler) instance;
-            schedule(scheduled, () -> runJob(job, info.fqn()), job.cron(), info.fqn());
+            register(names, info.fqn(), info.fqn(), job.cron());
         } else {
             for (Method method : type.getDeclaredMethods()) {
                 Scheduled annotation = method.getAnnotation(Scheduled.class);
@@ -112,59 +117,84 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                     LOGGER.error("@Scheduled method [{}#{}] must be public and take no parameters; skipped.", info.fqn(), method.getName());
                     continue;
                 }
-                method.setAccessible(true);
-                String label = info.fqn() + "#" + method.getName();
-                schedule(scheduled, () -> invoke(method, instance, label), annotation.expression(), label);
+                register(names, info.fqn(), info.fqn() + "#" + method.getName(), annotation.expression());
             }
         }
 
-        if (scheduled.isEmpty()) {
+        if (names.isEmpty()) {
             LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
             return;
         }
-        futures.put(info.fqn(), scheduled);
+        registered.put(info.fqn(), names);
     }
 
     @Override
     public void onClassUnloaded(LoadedClass info) {
-        cancelExisting(info.fqn());
+        unregister(info.fqn());
         LOGGER.info("Unscheduled Java class [{}].", info.fqn());
     }
 
     @Override
     public void destroy() {
-        futures.values()
-               .forEach(list -> list.forEach(f -> f.cancel(false)));
-        futures.clear();
-        if (taskScheduler instanceof ThreadPoolTaskScheduler tpts) {
-            tpts.shutdown();
+        // The Job rows + Quartz triggers are the persistent, cluster-shared definition - leave them on
+        // shutdown (other nodes keep running them; a restart re-registers idempotently). Just drop the
+        // local tracking.
+        registered.clear();
+    }
+
+    /**
+     * Register one job (a JobHandler class or a single @Scheduled method) as a Job on the shared
+     * scheduler.
+     */
+    private void register(List<String> sink, String fqn, String handler, String expression) {
+        String name = handler.replace('#', '.');
+        try {
+            Job job = jobService.findByName(name);
+            if (job == null) {
+                job = new Job();
+            }
+            job.setName(name);
+            job.setGroup(JOB_GROUP);
+            job.setClazz("");
+            job.setHandler(handler);
+            job.setEngine(JavaJobExecutor.ENGINE_JAVA);
+            job.setExpression(expression);
+            job.setSingleton(false);
+            job.setEnabled(true);
+            job.setDescription("Client-Java scheduled job [" + handler + "]");
+            job.setType(Job.ARTEFACT_TYPE);
+            job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
+            job.updateKey();
+            jobService.save(job);
+            jobsManager.scheduleJob(job);
+            sink.add(name);
+            LOGGER.info("Registered client-Java job [{}] (handler [{}]) with cron '{}' on the shared scheduler.", name, handler,
+                    expression);
+        } catch (Exception e) {
+            LOGGER.error("Failed to register client-Java job [{}] with cron '{}': {}", handler, expression, e.getMessage(), e);
         }
     }
 
-    private static void runJob(JobHandler job, String fqn) {
-        try {
-            job.run();
-        } catch (RuntimeException ex) {
-            LOGGER.error("Job [{}] run() threw: {}", fqn, ex.getMessage(), ex);
-        }
-    }
-
-    private void schedule(List<ScheduledFuture<?>> sink, Runnable task, String expression, String label) {
-        CronTrigger trigger;
-        try {
-            trigger = new CronTrigger(expression);
-        } catch (IllegalArgumentException e) {
-            LOGGER.error("@Scheduled [{}] has invalid cron expression '{}': {}", label, expression, e.getMessage(), e);
+    /** Unschedule + remove the Job rows a class previously registered. */
+    private void unregister(String fqn) {
+        List<String> names = registered.remove(fqn);
+        if (names == null) {
             return;
         }
-        sink.add(taskScheduler.schedule(task, trigger));
-        LOGGER.info("Scheduled Java task [{}] with cron '{}'.", label, expression);
-    }
-
-    private void cancelExisting(String fqn) {
-        List<ScheduledFuture<?>> old = futures.remove(fqn);
-        if (old != null) {
-            old.forEach(f -> f.cancel(false));
+        for (String name : names) {
+            try {
+                jobsManager.unscheduleJob(name, JOB_GROUP);
+            } catch (Exception e) {
+                LOGGER.warn("Failed to unschedule client-Java job [{}]: {}", name, e.getMessage());
+            }
+            try {
+                Job job = jobService.findByName(name);
+                if (job != null) {
+                    jobService.delete(job);
+                }
+            } catch (Exception e) {
+                LOGGER.warn("Failed to remove client-Java job row [{}]: {}", name, e.getMessage());
+            }
         }
     }
 
@@ -179,16 +209,5 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
 
     private static boolean isEligibleMethod(Method method) {
         return Modifier.isPublic(method.getModifiers()) && method.getParameterCount() == 0 && !method.isSynthetic();
-    }
-
-    private static void invoke(Method method, Object instance, String label) {
-        try {
-            method.invoke(instance);
-        } catch (ReflectiveOperationException e) {
-            Throwable cause = e.getCause() != null ? e.getCause() : e;
-            LOGGER.error("@Scheduled [{}] threw: {}", label, cause.getMessage(), cause);
-        } catch (RuntimeException e) {
-            LOGGER.error("@Scheduled [{}] threw: {}", label, e.getMessage(), e);
-        }
     }
 }

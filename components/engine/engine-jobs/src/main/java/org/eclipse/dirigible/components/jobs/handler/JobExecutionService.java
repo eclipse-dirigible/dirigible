@@ -35,11 +35,14 @@ public class JobExecutionService {
     private final JobLogService jobLogService;
     private final JobNameCreator jobNameCreator;
     private final DataSourcesManager dataSourcesManager;
+    private final org.springframework.beans.factory.ObjectProvider<JavaJobExecutor> javaJobExecutor;
 
-    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, DataSourcesManager dataSourcesManager) {
+    JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, DataSourcesManager dataSourcesManager,
+            org.springframework.beans.factory.ObjectProvider<JavaJobExecutor> javaJobExecutor) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
         this.dataSourcesManager = dataSourcesManager;
+        this.javaJobExecutor = javaJobExecutor;
     }
 
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
@@ -55,6 +58,8 @@ public class JobExecutionService {
         JobDataMap params = context.getJobDetail()
                                    .getJobDataMap();
         String handler = params.getString(JOB_PARAMETER_HANDLER);
+        String engine = params.getString(JOB_PARAMETER_ENGINE);
+        boolean java = JavaJobExecutor.ENGINE_JAVA.equals(engine);
         Span.current()
             .setAttribute("handler", handler);
 
@@ -65,10 +70,20 @@ public class JobExecutionService {
 
             if (triggered != null) {
                 context.put("handler", handler);
-                Path handlerPath = Path.of(handler);
-
-                try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
-                    runner.run(handlerPath);
+                if (java) {
+                    // Client-Java scheduled job: dispatch to the Java engine's executor (the client
+                    // bean resolved + invoked there). Same JobLog wrapping as the JS path below, so
+                    // it is equally visible/monitored in the Jobs perspective.
+                    JavaJobExecutor executor = javaJobExecutor.getIfAvailable();
+                    if (executor == null) {
+                        throw new IllegalStateException("No JavaJobExecutor is available to run the Java job [" + handler + "]");
+                    }
+                    executor.execute(handler);
+                } else {
+                    Path handlerPath = Path.of(handler);
+                    try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
+                        runner.run(handlerPath);
+                    }
                 }
             }
 
@@ -76,7 +91,7 @@ public class JobExecutionService {
         } catch (Exception ex) {
             registeredFailed(name, handler, triggered, ex);
 
-            String msg = "Failed to execute JS. Job name [" + name + "], handler [" + handler + "]";
+            String msg = "Failed to execute " + (java ? "Java" : "JS") + " job. Job name [" + name + "], handler [" + handler + "]";
             throw new JobExecutionException(msg, ex);
         }
     }

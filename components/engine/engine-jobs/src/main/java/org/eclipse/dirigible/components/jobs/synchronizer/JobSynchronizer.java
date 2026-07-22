@@ -21,6 +21,7 @@ import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizersOrder;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
+import org.eclipse.dirigible.components.jobs.handler.JavaJobExecutor;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
 import org.eclipse.dirigible.components.jobs.parser.ScheduledMetadata;
 import org.eclipse.dirigible.components.jobs.parser.ScheduledParser;
@@ -309,6 +310,12 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
      */
     @Override
     public void cleanupImpl(Job job) {
+        // Runtime-registered client-Java jobs are not backed by a registry artefact, so they always
+        // look like orphans to the synchronizer - never reap them here; the Java engine owns their
+        // lifecycle (registers on class load, removes on class unload).
+        if (isRuntimeManaged(job)) {
+            return;
+        }
         try {
             jobsManager.unscheduleJob(job.getName(), job.getGroup());
             jobLogService.deleteAllByJobName(job.getName());
@@ -318,6 +325,16 @@ public class JobSynchronizer extends MultitenantBaseSynchronizer<Job, Long> {
             callback.addError(e.getMessage());
             callback.registerState(this, job, ArtefactLifecycle.DELETED, e);
         }
+    }
+
+    /**
+     * A job whose location is under {@link JavaJobExecutor#RUNTIME_LOCATION_PREFIX} is owned by the
+     * Java engine at runtime (no registry file backs it), so the registry synchronizer must leave it
+     * alone.
+     */
+    private static boolean isRuntimeManaged(Job job) {
+        String location = job.getLocation();
+        return location != null && location.startsWith(JavaJobExecutor.RUNTIME_LOCATION_PREFIX);
     }
 
     /**

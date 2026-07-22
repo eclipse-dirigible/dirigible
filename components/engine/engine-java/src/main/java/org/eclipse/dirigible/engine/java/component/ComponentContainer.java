@@ -318,6 +318,25 @@ public class ComponentContainer implements ClientBeanResolver {
         return Optional.ofNullable(instancesByType.get(type));
     }
 
+    /**
+     * Resolve the current singleton by its class's fully-qualified name - the runtime lookup a
+     * scheduled Java job needs, which only carries the handler FQN (not the {@link Class}, which may
+     * have been reloaded since registration).
+     *
+     * @param fqn the fully-qualified class name
+     * @return the current instance, or empty if no such bean is loaded
+     */
+    public Optional<Object> instanceOfClassName(String fqn) {
+        for (Map.Entry<Class<?>, Object> entry : instancesByType.entrySet()) {
+            if (entry.getKey()
+                     .getName()
+                     .equals(fqn)) {
+                return Optional.of(entry.getValue());
+            }
+        }
+        return Optional.empty();
+    }
+
     @Override
     public <T> Optional<T> get(Class<T> type) {
         List<T> all = getAll(type);
