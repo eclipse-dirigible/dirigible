@@ -613,13 +613,25 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (hasItems) {
                 e.put("fromItemEntity", items.getFrom());
                 e.put("toItemEntity", items.getTo());
+                // The SOURCE item's own perspective: a composition child resolves to its master's
+                // perspective (== fromPerspective, so this is a no-op for the common document-item
+                // case), but a source item that is a SEPARATE primary entity referencing the source
+                // by FK (e.g. an aggregate document whose per-line detail is its own entity) lives in
+                // its OWN package - the template must qualify srcItem with this, not the source
+                // document's perspective. (The TARGET item stays on toPerspective: a create-from
+                // always writes into the target document's own composition-item table.)
+                e.put("fromItemPerspective", IntentEntities.resolvePerspective(items.getFrom(), compositionParents));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
-                e.put("itemFieldAssignments", assignments(items.getMap(), items.getDefaults(), "srcItem"));
+                // childAssignments (not assignments) so a numeric item default renders as BigDecimal -
+                // line-item columns (quantity/price/amount) are decimal, and a bare int literal does
+                // not convert to the generated BigDecimal field.
+                e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem"));
             } else {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
+                e.put("fromItemPerspective", "");
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
