@@ -123,6 +123,14 @@ public class FieldIntent {
      */
     private DependsOnIntent dependsOn;
 
+    /**
+     * Optional first-class document numbering: the platform maintains a per-series counter and stamps
+     * the formatted number onto this string field (at create or at a modeled issue step). Replaces the
+     * hand-written placeholder action + {@code generateNumber} service-task delegate. See
+     * {@link NumberIntent}.
+     */
+    private NumberIntent number;
+
     public String getName() {
         return name;
     }
@@ -328,6 +336,14 @@ public class FieldIntent {
 
     public DependsOnIntent getDependsOn() {
         return dependsOn;
+    }
+
+    public NumberIntent getNumber() {
+        return number;
+    }
+
+    public void setNumber(NumberIntent number) {
+        this.number = number;
     }
 
     public void setDependsOn(DependsOnIntent dependsOn) {

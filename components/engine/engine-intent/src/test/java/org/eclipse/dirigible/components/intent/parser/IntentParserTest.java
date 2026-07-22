@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.junit.jupiter.api.Test;
 
 class IntentParserTest {
@@ -89,6 +90,57 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("unknown type")),
                 "an unknown field type should still be rejected, got: " + ex.getIssues());
+    }
+
+    @Test
+    void firstClassNumberingParsesAndValidates() {
+        String ok =
+                """
+                        name: billing
+                        entities:
+                          - name: SalesInvoice
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: date, type: date }
+                              - { name: number, type: string, number: { series: SalesInvoice, format: "SI-{seq:07}", scope: [year], resetOn: year, stampOn: issue } }
+                            relations:
+                              - { name: Company, kind: manyToOne, to: SalesInvoice }
+                        """;
+        NumberIntent number = IntentParser.parse(ok)
+                                          .getEntities()
+                                          .get(0)
+                                          .getFields()
+                                          .get(2)
+                                          .getNumber();
+        assertEquals("SalesInvoice", number.getSeries());
+        assertEquals("SI-{seq:07}", number.getFormat());
+        assertEquals("issue", number.getStampOn());
+        assertTrue(number.getScope()
+                         .contains("year"));
+        assertEquals("year", number.getResetOn());
+
+        // number on a non-string field is rejected.
+        String onDate = ok.replace("- { name: number, type: string, number:", "- { name: bad, type: date, number:");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(onDate)).getIssues()
+                                                                                                  .stream()
+                                                                                                  .anyMatch(i -> i.contains(
+                                                                                                          "only a string field")),
+                "number on a date field must be rejected");
+
+        // an unknown stampOn is rejected.
+        String badStamp = ok.replace("stampOn: issue", "stampOn: whenever");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(badStamp)).getIssues()
+                                                                                                    .stream()
+                                                                                                    .anyMatch(i -> i.contains("stampOn")),
+                "an unknown stampOn must be rejected");
+
+        // resetOn: year without year in scope is rejected.
+        String badReset = ok.replace("scope: [year], resetOn: year", "scope: [Company], resetOn: year");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(badReset)).getIssues()
+                                                                                                    .stream()
+                                                                                                    .anyMatch(i -> i.contains(
+                                                                                                            "resetOn: year` requires")),
+                "resetOn: year without year in scope must be rejected");
     }
 
     @Test

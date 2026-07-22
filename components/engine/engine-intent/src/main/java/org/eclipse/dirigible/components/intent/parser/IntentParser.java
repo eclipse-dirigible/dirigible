@@ -20,6 +20,7 @@ import java.util.Set;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
+import org.eclipse.dirigible.components.intent.model.NumberIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CheckIntent;
 import org.eclipse.dirigible.components.intent.model.PostingIntent;
@@ -1315,6 +1316,9 @@ public final class IntentParser {
                         validateDependsOn(entity, subject, field.getDependsOn(), null, byName, issues);
                     }
                 }
+                if (field.getNumber() != null) {
+                    validateNumber(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -1851,6 +1855,58 @@ public final class IntentParser {
      * the referenced {@code .model} at generation time, not here (same contract as the relation target
      * itself); a same-model target is checked immediately so a typo fails at parse time.
      */
+    /**
+     * A {@code number:} declaration must sit on a non-key <b>string</b> field, name a {@code series},
+     * use a known {@code stampOn} ({@code create}/{@code issue}), and its {@code scope} entries must be
+     * {@code year} or sibling field/relation names; {@code resetOn} supports only {@code year} and
+     * needs {@code year} in scope.
+     */
+    private static void validateNumber(EntityIntent entity, String subject, FieldIntent field, List<String> issues) {
+        NumberIntent number = field.getNumber();
+        if (field.isPrimaryKey()) {
+            issues.add(subject + " is a primary key so it cannot declare number");
+            return;
+        }
+        if (!"string".equalsIgnoreCase(field.getType())) {
+            issues.add(subject + " declares number but only a string field can carry a document number (got [" + field.getType() + "])");
+        }
+        if (isBlank(number.getSeries())) {
+            issues.add(subject + " number requires `series`: the counter identity (documents sharing a sequence name the same series)");
+        }
+        String stampOn = number.getStampOn();
+        if (!isBlank(stampOn) && !"create".equals(stampOn) && !"issue".equals(stampOn)) {
+            issues.add(subject + " number `stampOn` must be `create` or `issue`, got [" + stampOn + "]");
+        }
+        java.util.Set<String> siblings = new java.util.LinkedHashSet<>();
+        for (FieldIntent sibling : entity.getFields()) {
+            if (sibling.getName() != null) {
+                siblings.add(sibling.getName());
+            }
+        }
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.getName() != null) {
+                siblings.add(relation.getName());
+            }
+        }
+        boolean scopeHasYear = false;
+        List<String> scope = number.getScope() == null ? List.of() : number.getScope();
+        for (String entry : scope) {
+            if ("year".equalsIgnoreCase(entry)) {
+                scopeHasYear = true;
+            } else if (!siblings.contains(entry)) {
+                issues.add(subject + " number `scope` entry [" + entry + "] must be `year` or a sibling field/relation of ["
+                        + entity.getName() + "]");
+            }
+        }
+        if (!isBlank(number.getResetOn())) {
+            if (!"year".equalsIgnoreCase(number.getResetOn())) {
+                issues.add(subject + " number `resetOn` supports only `year`, got [" + number.getResetOn() + "]");
+            } else if (!scopeHasYear) {
+                issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
+            }
+        }
+    }
+
     private static void validateDependsOn(EntityIntent entity, String subject, DependsOnIntent dependsOn, RelationIntent ownRelation,
             java.util.Map<String, EntityIntent> byName, List<String> issues) {
         String triggerName = dependsOn.getRelation();
