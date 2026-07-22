@@ -36,6 +36,12 @@ App.registerDetail('${masterEntity}', {
   // composition child); the shared detailPanel maps the rows to events by these properties.
   calendar: { start: '${calendarStartProperty}'#if($calendarEndProperty), end: '${calendarEndProperty}'#end#if($calendarTitleProperty), title: '${calendarTitleProperty}'#end#if($calendarColorProperty), color: '${calendarColorProperty}'#end, view: '${calendarInitialView}', range: #if($calendarRange)true#{else}false#end },
 #end
+#if($attachmentEntity)
+  // Rendered as a Files panel (function: Attachment / Snapshot): the shared detailPanel lists the
+  // uploaded files with download, and — unless read-only — an upload control + per-file remove.
+  // Read-only (a generated Snapshot child) shows download only. See detailPanel `files`.
+  files: { readOnly: #if($attachmentReadOnly)true#{else}false#end },
+#end
   columns: [
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.widgetIsMajor && $property.name != $masterEntityId)

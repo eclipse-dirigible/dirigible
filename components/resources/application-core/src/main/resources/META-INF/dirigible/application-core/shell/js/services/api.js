@@ -89,10 +89,15 @@ App.services.api = {
   async request(method, url, body, opts = {}) {
     const baseUrl = this.resolveBaseUrl(opts);
 
+    // A FormData body is a multipart upload: send it as-is and let the browser set the
+    // Content-Type (with its boundary) — never JSON-encode it or override the header.
+    const isForm = (typeof FormData !== 'undefined') && (body instanceof FormData);
+
     // X-Requested-With marks the call as programmatic for browsers without Sec-Fetch-Mode: the
     // server then answers an expired session with a PLAIN 401 (no Basic challenge), so the
     // browser's native login dialog never pops over a background poll.
-    const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    const headers = { 'Accept': 'application/json', 'X-Requested-With': 'XMLHttpRequest' };
+    if (!isForm) headers['Content-Type'] = 'application/json';
     const language = this.language();
     if (language) headers['Accept-Language'] = language;
 
@@ -101,7 +106,7 @@ App.services.api = {
       r = await fetch(`${baseUrl}${url}`, {
         method,
         headers,
-        body: body ? JSON.stringify(body) : undefined,
+        body: body ? (isForm ? body : JSON.stringify(body)) : undefined,
         credentials: 'same-origin'
       });
     } catch (e) {
