@@ -7,10 +7,12 @@
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="shrink-0" x-text="'My ' + T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
+#if(!$personalReadOnly)
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
     </button>
+#end
     <!-- Export the own rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="items.length === 0" @click="exportCsv()">
       <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>

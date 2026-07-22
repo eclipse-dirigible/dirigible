@@ -192,6 +192,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
+              # personalReadOnly: a see-only personal surface - the owner reads their own Balance
+              # rows but the my controller's writes 405 (a record the back office grants, the
+              # person must never author - the self-grant guard).
+              - name: Balance
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: days, type: decimal }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true, personalReadOnly: true }
+
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
               # the body maps to the messageBody field, author/timestamp to the child's audit columns.
@@ -539,6 +549,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");
         assertTrue(lineMy.contains("entity.Cost = null"),
                 "a sensitive field on a scope-inheriting child must be scrubbed from its personal controller");
+
+        // personalReadOnly: the scoped controller still serves reads but its write methods 405 -
+        // no repository.save on the personal surface (the power controller keeps writing).
+        String balanceMy = contentOf("gen/emission/api/balance/BalanceMyController.java");
+        assertTrue(balanceMy.contains("read-only on your personal surface"),
+                "personalReadOnly must emit the 405 refusal on the personal write methods");
+        assertTrue(balanceMy.contains("METHOD_NOT_ALLOWED"), "personalReadOnly write methods must return 405 METHOD_NOT_ALLOWED");
+        assertTrue(!balanceMy.contains("repository.save(entity)"),
+                "personalReadOnly must NOT emit a persisting create/update on the personal controller");
+        String balanceMyView = contentOf("gen/emission/views/my/Balance-list.html");
+        assertTrue(!balanceMyView.contains("newEntity()"), "personalReadOnly my list must not render the New button");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
@@ -1093,6 +1114,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body(org.hamcrest.Matchers.containsString("emission-test-partner-PartnerTicket")),
                 30);
+
+        // personalReadOnly: the scoped read serves 200 (the owner sees their own rows), but a write
+        // to the personal surface is refused 405 - the see-only guarantee at the outermost layer.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/balance/BalanceMyController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"days\":5}")
+                                                 .when()
+                                                 .post(API + "/balance/BalanceMyController")
+                                                 .then()
+                                                 .statusCode(405));
 
         assertBpmEventsRuntime();
     }

@@ -90,6 +90,28 @@ public class ${name}MyController {
         return scrub(requireMine(id));
     }
 
+#if($personalReadOnly)
+    // See-only personal surface (intent personalReadOnly): the owner may read their own records but
+    // never author them - the write endpoints exist only to refuse with 405 (the power controller
+    // remains the sole write path). Fixes the self-grant risk on owner-owned reference records.
+    @Post
+    @Documentation("Not allowed - this ${name} is read-only on the personal surface")
+    public void create(@Body ${name}Entity entity) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+    }
+
+    @Put("/{id}")
+    @Documentation("Not allowed - this ${name} is read-only on the personal surface")
+    public void update(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id, @Body ${name}Entity entity) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+    }
+
+    @Delete("/{id}")
+    @Documentation("Not allowed - this ${name} is read-only on the personal surface")
+    public void deleteById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        throw new ResponseStatusException(HttpStatus.METHOD_NOT_ALLOWED, "This ${name} is read-only on your personal surface");
+    }
+#else
     @Post
     @Documentation("Create a ${name} of mine")
     public ${name}Entity create(@Body ${name}Entity entity) {
@@ -150,6 +172,7 @@ public class ${name}MyController {
             throw e;
         }
     }
+#end
 
     /**
      * The current user's identity record id: the ${personalIdentityProperty} of the identity entity

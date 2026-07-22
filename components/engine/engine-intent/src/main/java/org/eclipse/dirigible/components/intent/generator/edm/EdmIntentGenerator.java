@@ -1214,6 +1214,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             return;
         }
         p.put("relationshipPersonal", "true");
+        if (relation.isPersonalReadOnly()) {
+            // The personal surface is see-only for the owner: the my controller's write methods
+            // 405 and the my pages drop New/Edit/Delete (parameterUtils -> the rest/UI templates).
+            p.put("relationshipPersonalReadOnly", "true");
+        }
         p.put("relationshipIdentityProperty", targetIdentityProperty);
         // The identity entity's display/label field - the personal controller's /me returns it so the
         // personal pages can show "New/Edit <Doc> for <owner>". Falls back to the identity match field.

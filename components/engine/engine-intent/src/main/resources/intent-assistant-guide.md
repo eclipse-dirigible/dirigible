@@ -290,7 +290,11 @@ scope through their parent). The entity then gets an ADDITIONAL generated `<Enti
 scoped to the logged-in user: reads filtered to the mapped identity record, the owner FK forced
 server-side on writes, foreign records 404. A field marked `sensitive: true` (not the PK, the
 identity field, or the owner FK) is stripped from personal responses and ignored on personal
-writes - use it for billing rates and amounts the person must not see. The regular controller is
+writes - use it for billing rates and amounts the person must not see. Add `personalReadOnly: true`
+alongside `personal: true` to make the personal surface **see-only**: the generated `MyController`
+serves the scoped reads but its create/update/delete return **405**, and the my pages drop
+New/Edit/Delete - for records the owner may view but never author (a leave-balance account, a
+payslip); the regular (power) controller still writes them normally. The regular controller is
 unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
 `latest`) whose `of:` child field is sensitive, and an `aggregate: true` master field fed by a
 same-named sensitive item field, are treated as sensitive whenever their entity has a personal

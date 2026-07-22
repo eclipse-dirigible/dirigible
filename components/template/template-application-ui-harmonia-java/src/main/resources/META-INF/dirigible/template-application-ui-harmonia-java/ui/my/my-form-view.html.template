@@ -153,6 +153,11 @@
 #end
 
     <div class="hbox gap-2" style="max-width: 900px">
+#if($personalReadOnly)
+      <div class="grow"></div>
+      <button x-h-button data-variant="transparent" @click="goBack()"
+              x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
+#else
       <button x-h-button data-variant="negative" x-show="mode === 'edit'" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="grow"></div>
@@ -162,6 +167,7 @@
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
       </button>
+#end
     </div>
   </div>
 
