@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.intent.model;
 import java.util.ArrayList;
 import java.util.List;
 
+import com.google.gson.annotations.SerializedName;
+
 /**
  * Domain entity declaration in an {@code .intent}. Generates one EDM entity, one DSM table, one TS
  * or Java entity decorator, and a default repository / controller pair downstream.
@@ -20,6 +22,14 @@ public class EntityIntent {
 
     private String name;
     private String description;
+    /**
+     * Optional {@code extends:} declaration. When present, this entity is an EXTENSION: it owns no
+     * table of its own; its fields are contributed to the referenced base entity (folded into the base
+     * table at generation). Authored as {@code extends: { model: <base-model>, entity: <base> }}
+     * ({@code extends} is a Java keyword, so the field is {@code extend} bound to the YAML key).
+     */
+    @SerializedName("extends")
+    private ExtendsIntent extend;
     /**
      * Optional entity classification. {@code setting} marks the entity as nomenclature / configuration
      * data: the EDM generator emits it with {@code type="SETTING"} so the template engine routes it
@@ -254,6 +264,14 @@ public class EntityIntent {
 
     public void setKind(String kind) {
         this.kind = kind;
+    }
+
+    public ExtendsIntent getExtend() {
+        return extend;
+    }
+
+    public void setExtend(ExtendsIntent extend) {
+        this.extend = extend;
     }
 
     public String getFunction() {

@@ -182,12 +182,36 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             boolean setting = settingEntities.contains(name);
             boolean dependent = !setting && compositionParents.containsKey(name);
+            // An EXTENSION entity contributes its fields to a base entity owned by another model; it
+            // owns no table/UI of its own. It is marked type=EXTENSION with the base reference below;
+            // the model-to-code layer folds its fields into the base table (generateUtils merge). The
+            // base model must be listed in uses: for the reference to resolve (unless same-model).
+            boolean extension = entity.getExtend() != null && notBlank(entity.getExtend()
+                                                                             .getEntity());
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
             String rolePerspective = resolvePerspective(name, compositionParents);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder, projectName, rolePerspective);
+            if (extension) {
+                // No table, no perspective/nav: type EXTENSION + the base reference the merge keys on.
+                // extensionReferencedModel is the base model's plain name (its project) - what the
+                // model-to-code cross-project scan matches against; blank model = same-model base.
+                entityMap.put("type", "EXTENSION");
+                entityMap.put("layoutType", "");
+                entityMap.put("perspectiveName", "");
+                entityMap.put("perspectiveLabel", "");
+                entityMap.put("perspectiveNavId", "");
+                entityMap.put("generateReport", "false");
+                entityMap.put("generateDefaultRoles", "false");
+                entityMap.put("extensionReferencedModel", notBlank(entity.getExtend()
+                                                                         .getModel()) ? entity.getExtend()
+                                                                                              .getModel()
+                                                                                 : projectName);
+                entityMap.put("extensionReferencedEntity", entity.getExtend()
+                                                                 .getEntity());
+            }
             // A navigation-group id makes the generated perspective nest under that group in the shared
             // application shell (the standalone shell is unaffected). Defaults to empty (top-level).
             if (notBlank(entity.getGroup())) {
@@ -314,7 +338,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
             // humanized title) rather than the default MANAGE_MASTER, which is meant for entities that
             // actually own detail children (a value in compositionParents).
-            else if (!dependent && !setting && !compositionParents.containsValue(name)) {
+            else if (!extension && !dependent && !setting && !compositionParents.containsValue(name)) {
                 entityMap.put("layoutType", "MANAGE");
             }
             // A document master (owns a *Item / DocumentItem composition child) gets a generated .print
@@ -351,7 +375,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                                                    .encodeToString(entity.getImports()
                                                                          .getBytes(StandardCharsets.UTF_8)));
             }
-            if (!dependent && !setting) {
+            if (!extension && !dependent && !setting) {
                 perspectiveList.add(perspectiveEntry(name, perspectiveOrder, iconUrl(entity.getIcon())));
                 perspectiveOrder++;
             }
