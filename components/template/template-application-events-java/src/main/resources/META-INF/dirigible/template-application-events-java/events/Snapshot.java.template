@@ -1,0 +1,60 @@
+package gen.events;
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Entity;
+import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Repository;
+
+/**
+ * Snapshot generator for ${master}: on the service task it is wired to (e.g. right after Issue),
+ * renders the document to an immutable PDF copy and stores it as a ${snapshotEntity} row. The number
+ * stays across amendments - each generation only increments the copy's Version.
+ *
+ * Generated from the intent snapshots glue - do not edit; it is re-generated with the application.
+ * Wired as a `delegate:` service task (delegate: gen.events.${master}SnapshotGenerator). Data assembly
+ * reuses the generated ${master}PrintFeeder (same gen.events package); the PDF is rendered server-side
+ * via sdk.print.Print and stored in the tenant CMS via sdk.cms.Attachments; the ${snapshotEntity} row
+ * is written through its generated repository (validations / events / audit).
+ */
+public class ${master}SnapshotGenerator implements JavaDelegate {
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${masterPk}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        int id = ((Number) key).intValue();
+
+        // Assemble the { document, items } payload the print template binds, then render server-side.
+        String payload = new ${master}PrintFeeder().feed(id);
+        byte[] pdf = org.eclipse.dirigible.sdk.print.Print.render("${master}", "${language}", payload);
+
+        ${snapshotEntity}Repository repository = new ${snapshotEntity}Repository();
+        // Next version = max existing + 1. Snapshots are immutable (never deleted), so this is gap-free;
+        // an amend re-issue mints the next version while the document number is unchanged.
+        int version = 1;
+        for (${snapshotEntity}Entity existing : repository.findAll(Criteria.create()
+                                                                          .eq("${snapshotMasterFk}", id))) {
+            if (existing.Version != null && existing.Version >= version) {
+                version = existing.Version + 1;
+            }
+        }
+
+        String fileName = "${master} " + id + " v" + version + ".pdf";
+        org.eclipse.dirigible.sdk.cms.Attachments.Attachment stored =
+                org.eclipse.dirigible.sdk.cms.Attachments.store("${snapshotEntity}", fileName, "application/pdf", pdf);
+
+        ${snapshotEntity}Entity snapshot = new ${snapshotEntity}Entity();
+        snapshot.FileName = stored.fileName();
+        snapshot.ContentType = stored.contentType();
+        snapshot.FileSize = stored.size();
+        snapshot.StoragePath = stored.path();
+        snapshot.Uuid = stored.uuid();
+        snapshot.Version = version;
+        snapshot.${snapshotMasterFk} = id;
+        repository.save(snapshot);
+    }
+}
