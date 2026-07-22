@@ -89,7 +89,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> aborts = buildAborts(model, settings);
         List<Map<String, Object>> writers = buildWriters(model, settings);
         List<Map<String, Object>> setters = buildSetters(model, settings);
-        List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings);
+        List<Map<String, Object>> notifications = buildNotifications(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
@@ -353,8 +353,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildNotifications(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> notifications = new ArrayList<>();
+        NotificationSupport.CrossModelLookup lookup = crossModelLookup(model, context);
         for (NotificationIntent notification : model.getNotifications()) {
             if (notification.getName() == null || notification.getName()
                                                               .isBlank()) {
@@ -368,10 +369,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing listener for notification [{}] (not generated)", notification.getName());
                 continue;
             }
-            NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents);
+            NotificationSupport.Plan plan = NotificationSupport.plan(notification, byName.get(entity), byName, compositionParents, lookup);
             if (plan == null) {
-                LOGGER.warn("Notification [{}] recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
-                        notification.getName(), notification.getTo(), entity);
+                reportDroppedGlue(context, "Notification [" + notification.getName() + "] recipient [" + notification.getTo()
+                        + "] is not a resolvable field or relation.field of [" + entity + "] - the notification was NOT generated");
                 continue;
             }
             Map<String, Object> entry = new LinkedHashMap<>();
@@ -1502,13 +1503,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
             } else {
                 // The per-row action reuses the notification machinery against the queried row entity.
-                NotificationSupport.Plan plan =
-                        NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName, compositionParents);
+                NotificationSupport.Plan plan = NotificationSupport.plan(schedule.getNotify(), byName.get(entity), byName,
+                        compositionParents, crossModelLookup(model, context));
                 if (plan == null) {
-                    LOGGER.warn("Schedule [{}] notify recipient [{}] is not a resolvable field or relation.field of [{}] - skipping",
-                            schedule.getName(), schedule.getNotify()
-                                                        .getTo(),
-                            entity);
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] notify recipient [" + schedule.getNotify()
+                                                                                                                    .getTo()
+                            + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
                 entry.put("action", "notify");
@@ -1532,6 +1532,42 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 null);
     }
 
+    /**
+     * A cross-model relation resolver for the notify machinery: reads the owner model's facts
+     * (perspective / project / property names) through {@link CrossModelSupport} so a
+     * {@code relation.field} recipient or placeholder can point at an entity owned by another model.
+     * Returns {@code null} for a relation whose {@code uses} alias is not declared; a declared-but-
+     * unresolvable owner fails loudly through {@code CrossModelSupport.resolve} (the same "generate the
+     * leaf first" contract as generate targets and relation links). A {@code null} context (unit test)
+     * yields a no-op lookup so same-model resolution is unaffected.
+     */
+    private static NotificationSupport.CrossModelLookup crossModelLookup(IntentModel model, IntentGenerationContext context) {
+        if (context == null) {
+            return relation -> null;
+        }
+        return relation -> {
+            UsesIntent uses = findUses(model, relation.getModel());
+            if (uses == null) {
+                return null;
+            }
+            CrossModelSupport.TargetInfo target = CrossModelSupport.resolve(context, uses, relation.getTo());
+            return new NotificationSupport.CrossModelTarget(target.perspectiveName(), uses.resolveProject(), uses.getModel(),
+                    target.propertyNames());
+        };
+    }
+
+    /**
+     * Surface a piece of glue that could not be emitted (e.g. an unresolvable notify recipient) both in
+     * the log AND as a generate-response issue, so the drop is not silent at the API level (dirigible
+     * #6360). The generation itself still succeeds - the issue is a warning, not a 422.
+     */
+    private static void reportDroppedGlue(IntentGenerationContext context, String message) {
+        LOGGER.warn(message);
+        if (context != null) {
+            context.addIssue(message);
+        }
+    }
+
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {
         List<Map<String, Object>> loads = new ArrayList<>();
         for (NotificationSupport.RelationLoad load : plan.loads()) {
@@ -1540,6 +1576,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("targetEntity", load.targetEntity());
             entry.put("targetPerspective", load.targetPerspective());
             entry.put("fkProperty", load.fkProperty());
+            // Cross-model recipient/placeholder: the owner's model alias + project drive the OWNER-package
+            // import in the generated listener/job (generateUtils picks the gen folder from these).
+            entry.put("crossModel", load.crossModel());
+            entry.put("targetModel", load.targetModel());
+            entry.put("targetProject", load.targetProject());
             loads.add(entry);
         }
         return loads;

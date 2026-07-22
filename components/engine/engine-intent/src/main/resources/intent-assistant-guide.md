@@ -55,8 +55,13 @@ Treat it as the contract: anything you propose must parse and validate against i
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
 - **Recipients** (`to` on notifications and schedule notify): a literal email address, a direct field
-  of the entity, or a **one-hop** `relation.field` (e.g. `member.email`). Multi-hop paths are not
-  supported.
+  of the entity, or a **one-hop** `relation.field` (e.g. `member.email`). The relation may be
+  **cross-model** - `partner.email` where `partner` targets an entity owned by another `uses` model
+  resolves against the owner's model (the generated listener imports the owner's Entity/Repository),
+  exactly like a cross-model dropdown. Multi-hop paths are not supported.
+- **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
+  does not exist, that notification or schedule is dropped and reported in the generate response's
+  `warnings` (as well as the server log) - fix the reference so the glue is emitted.
 - **Names are identifiers** within their block and must be unique.
 
 ## Capabilities

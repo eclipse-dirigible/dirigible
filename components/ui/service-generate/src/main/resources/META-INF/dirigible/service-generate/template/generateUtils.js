@@ -721,9 +721,12 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaPerspective: sanitizeJavaIdentifier(model.notifications[n].perspective),
                                 topicSuffix: model.notifications[n].topicSuffix,
                                 // Each one-hop relation load needs the lowercased Java package of its target.
+                                // A cross-model load imports from the OWNER model's gen folder (its sanitized
+                                // alias); a same-model load uses this project's (dirigible #6360).
                                 relationLoads: (model.notifications[n].relationLoads || []).map(load => ({
                                     ...load,
-                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
+                                    javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
                                 })),
                                 guardExpression: model.notifications[n].guardExpression,
                                 toExpression: model.notifications[n].toExpression,
@@ -761,7 +764,8 @@ export function generateFiles(model, parameters, templateSources) {
                                 action: sc.action || "notify",
                                 relationLoads: (sc.relationLoads || []).map(load => ({
                                     ...load,
-                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective)
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
+                                    javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
                                 })),
                                 toExpression: sc.toExpression,
                                 subjectExpression: sc.subjectExpression,

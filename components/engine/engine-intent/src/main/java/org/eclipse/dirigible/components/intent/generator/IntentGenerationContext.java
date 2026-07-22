@@ -63,6 +63,13 @@ public final class IntentGenerationContext {
     /** Bare file names written under {@link #projectRoot} during this generation pass. */
     private final Set<String> writtenFileNames = new LinkedHashSet<>();
 
+    /**
+     * Non-fatal generation issues (e.g. a piece of glue that could not be emitted because a reference
+     * did not resolve) collected during the pass. Surfaced in the generate response so the drop is not
+     * silent at the API level (dirigible #6360) - the generation still succeeds.
+     */
+    private final java.util.List<String> issues = new java.util.ArrayList<>();
+
     IntentGenerationContext(IntentModel model, String projectRoot, String projectName, String workspaceName, String fallbackName,
             IRepository repository) {
         this.model = model;
@@ -122,6 +129,24 @@ public final class IntentGenerationContext {
      */
     public Set<String> getWrittenFileNames() {
         return Collections.unmodifiableSet(writtenFileNames);
+    }
+
+    /**
+     * Record a non-fatal generation issue (dropped glue). Surfaced in the generate response.
+     *
+     * @param issue a human-readable description of what was not generated and why
+     */
+    public void addIssue(String issue) {
+        issues.add(issue);
+    }
+
+    /**
+     * The non-fatal issues collected during this pass.
+     *
+     * @return an unmodifiable view of the issues
+     */
+    public java.util.List<String> getIssues() {
+        return Collections.unmodifiableList(issues);
     }
 
     public String getProjectName() {

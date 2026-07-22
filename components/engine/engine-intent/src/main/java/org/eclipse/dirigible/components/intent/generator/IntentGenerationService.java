@@ -75,8 +75,11 @@ public class IntentGenerationService {
      * @param scrubbed bare names of previously generated files removed because the intent no longer
      *        declares their slice
      * @param codeGenerations ordered plan entries, each {@code {path, templateId, parameters}}
+     * @param issues non-fatal generation issues (glue that could not be emitted) - the pass still
+     *        succeeded, but a caller should surface these so the drop is not silent (dirigible #6360)
      */
-    public record GenerationResult(List<String> written, List<String> scrubbed, List<Map<String, Object>> codeGenerations) {
+    public record GenerationResult(List<String> written, List<String> scrubbed, List<Map<String, Object>> codeGenerations,
+            List<String> issues) {
     }
 
     /**
@@ -114,7 +117,7 @@ public class IntentGenerationService {
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());
-        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan);
+        return new GenerationResult(new ArrayList<>(context.getWrittenFileNames()), scrubbed, plan, context.getIssues());
     }
 
     /**
