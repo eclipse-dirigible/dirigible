@@ -375,7 +375,7 @@ document.addEventListener('alpine:init', () => {
           parent: '${property.widgetHierarchyProperty}', leafOnly: true
         });
 #else
-        this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
+        this.options${property.name} = (rows${property.name} || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end }));
 #end
       } catch (e) {
         console.error('[${name}DocumentPage] failed to load options for ${property.name}', e);
@@ -415,7 +415,7 @@ document.addEventListener('alpine:init', () => {
           conditions: [{ propertyName: '${property.widgetDependsOnFilterBy}', operator: 'EQ', value: from }#if($property.widgetOptionsFilterBy),
             { propertyName: '${property.widgetOptionsFilterBy}', operator: 'EQ', value: ${property.widgetOptionsFilterValueJs} }#end]
         }, { baseUrl: '' });
-        this.options${property.name} = (rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue} }));
+        this.options${property.name} = (rows || []).map(e => ({ value: e.${property.widgetDropDownKey}, text: e.${property.widgetDropDownValue}#if($property.widgetType == "DOCUMENT_STATUS"), description: e.description#end }));
         if (adjust) {
           this.form.${property.name} = this.options${property.name}.length === 1 ? String(this.options${property.name}[0].value) : '';
         }
@@ -755,6 +755,19 @@ document.addEventListener('alpine:init', () => {
       if (/(approv|accept|activ|complet|paid|done|available)/.test(t)) return 'positive';
       if (/(issu|sent|ship|process|submit)/.test(t)) return 'information';
       return 'default';
+    },
+    // Forward status flow for the read-only step indicator: the loaded status options minus the
+    // terminal / off-path ones (cancel/void/... stay the pill). Each option carries {value, text} and,
+    // when the status entity has a `description` seed column, `description` (shown under the title).
+    statusSteps() {
+      return (this.options${docStatusProp} || []).filter(o => this.statusVariant(o.text) !== 'negative');
+    },
+    // 1-based index of the current status among the steps (0 when the status is terminal or unset,
+    // so no step is active).
+    activeStep() {
+      const current = this.statusText();
+      return this.statusSteps()
+                 .findIndex(o => String(o.text) === String(current)) + 1;
     },
 #end
 

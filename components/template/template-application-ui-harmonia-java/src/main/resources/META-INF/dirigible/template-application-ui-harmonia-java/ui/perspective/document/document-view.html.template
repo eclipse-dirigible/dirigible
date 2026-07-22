@@ -446,8 +446,9 @@
 #foreach($property in $properties)
 #if($property.isReadOnlyProperty == "true" || ($property.auditType && $property.auditType != "NONE"))#set($hasReadOnly = true)#end
 #end
-#if($hasReadOnly)
+#if($hasReadOnly || $docStatusProp != "")
     <div class="vbox gap-4 shrink-0" style="width: 18rem;" x-show="isEdit || isPreview">
+#if($hasReadOnly)
       <div x-h-card>
         <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.details', 'Details')"></h3></div>
         <div x-h-card-content>
@@ -468,6 +469,31 @@
           </div>
         </div>
       </div>
+#end
+#if($docStatusProp != "")
+      <!-- Read-only status step indicator: the document's forward status flow (the non-terminal
+           statuses in workflow order), current status active. The title-bar pill is kept. Step
+           descriptions come from the status entity's optional `description` seed column. -->
+      <div x-h-card x-show="statusText()">
+        <div x-h-card-header><h3 x-h-card-title x-text="T('$projectName:${tprefix}.defaults.status', 'Status')"></h3></div>
+        <div x-h-card-content>
+          <nav x-h-step-indicator="activeStep()" data-orientation="vertical">
+            <template x-for="(step, i) in statusSteps()" :key="step.value">
+              <div x-h-step-indicator-item="i + 1">
+                <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
+                  <span x-h-step-indicator-marker x-text="i + 1"></span>
+                  <span x-h-step-indicator-content>
+                    <span x-h-step-indicator-title x-text="step.text"></span>
+                    <span x-h-step-indicator-description x-show="step.description" x-text="step.description"></span>
+                  </span>
+                </button>
+                <span x-h-step-indicator-separator x-show="i < statusSteps().length - 1"></span>
+              </div>
+            </template>
+          </nav>
+        </div>
+      </div>
+#end
     </div>
 #end
 

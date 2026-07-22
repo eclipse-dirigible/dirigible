@@ -38,6 +38,7 @@ class FormStepIndicatorTest {
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
+                  - { name: description, type: string }
               - name: SalesOrder
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -56,10 +57,10 @@ class FormStepIndicatorTest {
               - name: order-statuses
                 entity: OrderStatus
                 rows:
-                  - { id: 1, name: DRAFT }
-                  - { id: 2, name: APPROVED }
+                  - { id: 1, name: DRAFT, description: Being prepared }
+                  - { id: 2, name: APPROVED, description: Ready to ship }
                   - { id: 3, name: SHIPPED }
-                  - { id: 4, name: CANCELLED }
+                  - { id: 4, name: CANCELLED, description: Called off }
               - name: order-statuses-bg
                 entity: OrderStatus
                 language: bg
@@ -77,7 +78,9 @@ class FormStepIndicatorTest {
                                                               .get("metadata");
         assertEquals(Boolean.TRUE, meta.get("taskForm"));
         // CANCELLED is terminal (excluded); the bg translation seed is ignored; order is seed order.
-        assertEquals(List.of("DRAFT", "APPROVED", "SHIPPED"), meta.get("steps"));
+        // Each step carries its label plus the optional `description` seed column (absent -> no key).
+        assertEquals(List.of(Map.of("label", "DRAFT", "description", "Being prepared"),
+                Map.of("label", "APPROVED", "description", "Ready to ship"), Map.of("label", "SHIPPED")), meta.get("steps"));
         // The current-status model variable is the EntityStatus relation name.
         assertEquals("Status", meta.get("statusVar"));
     }

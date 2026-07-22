@@ -153,12 +153,15 @@
         <!-- Document status flow, extracted from the intent (the bound entity's function: EntityStatus
              relation -> the status entity's non-terminal seeds, in order). Read-only (non-interactive);
              active step = the current status name (model.$metadata.statusVar). -->
-        <nav x-h-step-indicator="([#foreach($s in $metadata.steps)'$s'#if($foreach.hasNext), #end#end]).indexOf(model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
-          <template x-for="(label, i) in [#foreach($s in $metadata.steps)'$s'#if($foreach.hasNext), #end#end]" :key="label">
+        <nav x-h-step-indicator="([#foreach($s in $metadata.steps){ label: '$s.label' }#if($foreach.hasNext), #end#end]).findIndex(s => s.label === model.${metadata.statusVar}) + 1" data-orientation="horizontal" class="col-span-full mb-4">
+          <template x-for="(step, i) in [#foreach($s in $metadata.steps){ label: '$s.label', description: '$!s.description' }#if($foreach.hasNext), #end#end]" :key="step.label">
             <div x-h-step-indicator-item="i + 1">
               <button x-h-step-indicator-trigger data-non-interactive="true" type="button">
                 <span x-h-step-indicator-marker x-text="i + 1"></span>
-                <span x-h-step-indicator-content><span x-h-step-indicator-title x-text="label"></span></span>
+                <span x-h-step-indicator-content>
+                  <span x-h-step-indicator-title x-text="step.label"></span>
+                  <span x-h-step-indicator-description x-show="step.description" x-text="step.description"></span>
+                </span>
               </button>
               <span x-h-step-indicator-separator x-show="i < ($metadata.steps.size() - 1)"></span>
             </div>

@@ -254,7 +254,7 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                                       .isBlank()) {
             return; // cross-model status entity: its seeds live in the owner module, not resolvable here
         }
-        List<String> steps = new ArrayList<>();
+        List<Map<String, Object>> steps = new ArrayList<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getLanguage() != null || !statusRel.getTo()
                                                         .equals(seed.getEntity())
@@ -271,7 +271,16 @@ public class FormIntentGenerator implements IntentTargetGenerator {
                                    .find()) {
                     continue; // terminal / off-path status - stays the pill, not a step
                 }
-                steps.add(label);
+                Map<String, Object> step = new LinkedHashMap<>();
+                step.put("label", label);
+                Object description = row.get("description");
+                if (description != null && !description.toString()
+                                                       .isBlank()) {
+                    // Optional per-status help text, authored as a `description` seed column on the
+                    // status entity - shown under the step title. Absent -> title only.
+                    step.put("description", description.toString());
+                }
+                steps.add(step);
             }
         }
         if (steps.size() >= 2) {
