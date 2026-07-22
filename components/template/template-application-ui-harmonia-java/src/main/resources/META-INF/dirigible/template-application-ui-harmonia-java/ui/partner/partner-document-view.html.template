@@ -15,7 +15,7 @@
 
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="shrink-0"
-          x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}')#if($docNumProp != '') + (form.${docNumProp} ? ' ' + form.${docNumProp} : '')#end + (ownerName ? ' ' + T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + ownerName : '')"></span>
+          x-text="(mode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit') : T('$projectName:${tprefix}.defaults.new', 'New')) + ' ' + T('$projectName:${tprefix}.t.${dataName}', '${documentLabel}')#if($docNumProp != '') + (window.HarmoniaFormat.documentNumber(form.${docNumProp}) ? ' ' + window.HarmoniaFormat.documentNumber(form.${docNumProp}) : '')#end + (ownerName ? ' ' + T('$projectName:${tprefix}.defaults.for', 'for') + ' ' + ownerName : '')"></span>
 #if($statusProp != "")
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end

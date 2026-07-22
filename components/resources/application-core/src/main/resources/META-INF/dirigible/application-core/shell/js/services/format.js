@@ -180,6 +180,18 @@
     },
 
     /**
+     * A document number for display. A not-yet-issued document holds a create-time UUID placeholder in
+     * its number field (the platform's numbering places it there until the real number is stamped at
+     * issue); render that as empty so the title shows just the document label ("Sales Invoice", not the
+     * raw UUID). Once the real number is stamped it passes through unchanged, as does any non-UUID value.
+     */
+    documentNumber(v) {
+      if (v === null || v === undefined) return '';
+      const uuid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+      return uuid.test(String(v)) ? '' : v;
+    },
+
+    /**
      * Convert a date/datetime value to the FIXED shape an HTML <input> requires — NOT pattern-driven.
      * `widget` is one of DATE, DATETIME-LOCAL, TIME, MONTH, WEEK (case-insensitive). Empty -> ''.
      * MONTH (YYYY-MM) and WEEK (YYYY-Www) are stored as plain strings, so they slice through unchanged.
