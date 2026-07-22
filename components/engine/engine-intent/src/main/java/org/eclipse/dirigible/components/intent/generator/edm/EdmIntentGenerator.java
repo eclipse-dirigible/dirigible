@@ -322,6 +322,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (entity.isMultilingual()) {
                 entityMap.put("multilingual", "true");
             }
+            // A file-attachment child: mark it so the generated controller emits the upload/download/
+            // delete verbs and the Harmonia master/document view renders it as an "Attachments" panel
+            // (a composition detail already, so the master-detail wiring is unchanged).
+            if (entity.isAttachment()) {
+                entityMap.put("attachmentEntity", "true");
+            }
             // Custom Java imports for the generated entity Repository (e.g. a calculated-field action's
             // CalculatedField class). Base64-encoded to match the EDM editor's serialization, which the
             // DAO template's parameterUtils decodes before emitting them into the import block.
@@ -336,6 +342,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
 
             List<Map<String, Object>> properties = new ArrayList<>();
+            // A file-attachment child (function: Attachment) is a first-class entity, but the author
+            // declares no fields at all (the file-metadata columns are injected below), so synthesize
+            // the generated integer primary key it still needs.
+            if (entity.isAttachment() && entity.getFields()
+                                               .stream()
+                                               .noneMatch(FieldIntent::isPrimaryKey)) {
+                FieldIntent id = new FieldIntent();
+                id.setName("id");
+                id.setType("integer");
+                id.setPrimaryKey(true);
+                id.setGenerated(true);
+                properties.add(propertyMap(name, id));
+            }
             for (FieldIntent field : entity.getFields()) {
                 if (field.getName() == null || field.getName()
                                                     .isBlank()) {
@@ -359,8 +378,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (triggerTargets.contains(name)) {
                 properties.add(processIdProperty(name));
             }
+            // A file-attachment child (function: Attachment) gets the standard file-metadata columns
+            // injected (like audit:) - the author never hand-writes plumbing; the upload sets them
+            // server-side. FileName is the row's display title; StoragePath is the CMS reference. The
+            // attachment is implicitly audited (who uploaded when).
+            boolean audited = entity.isAudited();
+            if (entity.isAttachment()) {
+                properties.addAll(attachmentProperties(name));
+                audited = true;
+            }
             // The four standard audit columns, populated by the platform's audit annotations downstream.
-            if (entity.isAudited()) {
+            if (audited) {
                 properties.addAll(auditProperties(name));
             }
             List<Map<String, Object>> relations = new ArrayList<>();
@@ -1434,6 +1462,45 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * The four standard audit columns (populated downstream by the {@code @CreatedAt}/etc.
      * annotations).
      */
+    /**
+     * The standard file-metadata columns injected into a {@code function: Attachment} child. The upload
+     * sets them server-side (so all read-only); FileName is the row's display title, StoragePath is the
+     * CMS reference the download route reads, Uuid is the per-upload folder key.
+     */
+    private static List<Map<String, Object>> attachmentProperties(String entityName) {
+        List<Map<String, Object>> props = new ArrayList<>();
+        props.add(attachmentProperty(entityName, "FileName", "VARCHAR", 255, true));
+        props.add(attachmentProperty(entityName, "ContentType", "VARCHAR", 255, false));
+        props.add(attachmentProperty(entityName, "FileSize", "BIGINT", 0, false));
+        props.add(attachmentProperty(entityName, "StoragePath", "VARCHAR", 1000, false));
+        props.add(attachmentProperty(entityName, "Uuid", "VARCHAR", 36, false));
+        return props;
+    }
+
+    /**
+     * One injected attachment metadata column: read-only (upload-set), {@code auditType=NONE};
+     * {@code major} controls whether it shows on the entity list (FileName does, the rest don't).
+     */
+    private static Map<String, Object> attachmentProperty(String entityName, String fieldName, String dataType, int length, boolean major) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("name", fieldName);
+        p.put("description", "");
+        p.put("tooltip", "");
+        p.put("dataName", IntentNaming.upperSnake(entityName) + "_" + IntentNaming.upperSnake(fieldName));
+        p.put("dataType", dataType);
+        p.put("dataNullable", "true");
+        if (length > 0) {
+            p.put("dataLength", Integer.toString(length));
+        }
+        p.put("auditType", "NONE");
+        p.put("isReadOnlyProperty", "true");
+        p.put("widgetType", widgetForType(dataType));
+        p.put("widgetSize", "");
+        p.put("widgetLength", length > 0 ? Integer.toString(length) : "20");
+        p.put("widgetIsMajor", major ? "true" : "false");
+        return p;
+    }
+
     private static List<Map<String, Object>> auditProperties(String entityName) {
         List<Map<String, Object>> audit = new ArrayList<>();
         audit.add(auditProperty(entityName, "CreatedAt", "TIMESTAMP", "CREATED_AT", 0));
