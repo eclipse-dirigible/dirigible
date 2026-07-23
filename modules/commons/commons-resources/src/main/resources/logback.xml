@@ -84,6 +84,10 @@
 
     <logger name="net.snowflake.client" level="ERROR"/>
 
+    <!-- Silence Hibernate's legacy hbm.xml deprecation notice (HHH90000028). The hbm mapping comes
+         from a third-party dependency, not from Dirigible, so the WARN is noise we cannot act on. -->
+    <logger name="org.hibernate.orm.deprecation" level="ERROR"/>
+
     <!-- Configuration for the 'open-telemetry' Spring profile -->
     <springProfile name="open-telemetry">
         <appender name="OpenTelemetry"
