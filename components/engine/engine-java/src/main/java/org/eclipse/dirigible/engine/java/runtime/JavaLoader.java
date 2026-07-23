@@ -65,8 +65,18 @@ public class JavaLoader {
     private final JavaCompiledOutputDirectory outputDirectory;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** FQN → {@link LoadedClass} record for the currently-installed generation. */
+    /** FQN → {@link LoadedClass} record for the currently-installed generation (the union below). */
     private final Map<String, LoadedClass> currentGeneration = new HashMap<>();
+
+    /** Registry-compiled sub-generation (produced by {@link #rebuild}). */
+    private final Map<String, LoadedClass> registryGeneration = new HashMap<>();
+
+    /**
+     * Classpath-discovered sub-generation for AOT-packaged {@code compiled} modules (produced by
+     * {@link #installCompiledModules}). These classes are already loaded by the application classloader
+     * - never compiled at runtime. The installed generation is the union of the two.
+     */
+    private final Map<String, LoadedClass> compiledGeneration = new HashMap<>();
 
     /**
      * Binary class name (top-level + nested) → bytecode for the currently-installed generation.
@@ -160,11 +170,12 @@ public class JavaLoader {
             }
         }
 
-        // Install the new generation: diff vs the current one, notify consumers, swap the client
-        // loader, rebuild the client bean container, and record it. Extracted so a SECOND producer -
-        // classpath-discovered compiled modules (AOT packaging) - can drive the exact same install
-        // path with a pre-built generation; see applyGeneration.
-        Set<String> removed = applyGeneration(nextGeneration, nextLoader);
+        // Install the new generation as the union of the registry-compiled classes (this rebuild) and
+        // any classpath-discovered compiled modules. Extracted (applyGeneration) so both producers
+        // drive the identical consumer/container dispatch.
+        registryGeneration.clear();
+        registryGeneration.putAll(nextGeneration);
+        Set<String> removed = applyGeneration(mergedGeneration(), nextLoader);
 
         currentBytecode.clear();
         currentBytecode.putAll(effectiveBytecode);
@@ -231,6 +242,50 @@ public class JavaLoader {
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
         return removed;
+    }
+
+    /**
+     * Install the classes of AOT-packaged {@code compiled} modules discovered on the application
+     * classpath. Unlike {@link #rebuild}, these are <b>not compiled at runtime</b> - they are already
+     * loaded by the application classloader; this only records them as the compiled sub-generation and
+     * installs the union with the current registry-compiled generation through {@link #applyGeneration}
+     * (the same consumer/container dispatch). Idempotent: re-invoking replaces the compiled set.
+     *
+     * @param classes the compiled modules' top-level classes to surface to consumers
+     * @return the FQNs removed from the installed generation as a result (compiled classes dropped
+     *         since the previous compiled install; never registry-source classes)
+     */
+    public synchronized Set<String> installCompiledModules(List<LoadedClass> classes) {
+        compiledGeneration.clear();
+        for (LoadedClass info : classes) {
+            if (info != null) {
+                compiledGeneration.put(info.fqn(), info);
+            }
+        }
+        // No runtime-compiled client code yet → give the holder an empty ClientClassLoader whose parent
+        // (the platform / application classloader) already resolves the compiled-module classes.
+        ClientClassLoader loader = loaderHolder.current();
+        if (loader == null) {
+            loader = new ClientClassLoader(JavaHandler.class.getClassLoader(), Map.of());
+        }
+        return applyGeneration(mergedGeneration(), loader);
+    }
+
+    /**
+     * The installed generation: the union of the registry-compiled and classpath-compiled
+     * sub-generations. On an FQN clash (a capability provided by both a registry source and a compiled
+     * module - a mis-assembled image) the registry source wins and the clash is logged; a clean
+     * "exactly one provider" assembly check is expected to catch this earlier.
+     */
+    private Map<String, LoadedClass> mergedGeneration() {
+        Map<String, LoadedClass> union = new LinkedHashMap<>(compiledGeneration);
+        for (Map.Entry<String, LoadedClass> entry : registryGeneration.entrySet()) {
+            if (union.put(entry.getKey(), entry.getValue()) != null) {
+                LOGGER.warn("FQN [{}] is provided by BOTH a compiled module and a registry source; using the registry source",
+                        entry.getKey());
+            }
+        }
+        return union;
     }
 
     /**

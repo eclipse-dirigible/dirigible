@@ -341,6 +341,34 @@ class JavaLoaderTest {
         return tempDir.resolve(fqn.replace('.', '/') + ".class");
     }
 
+    @Test
+    void install_compiled_modules_registers_via_consumers_and_survives_a_registry_rebuild() {
+        // An AOT-packaged compiled-module class already loaded by the application classloader — no
+        // runtime compile. installCompiledModules must surface it through the same consumer path.
+        Class<?> type = CompiledSample.class;
+        LoadedClass compiled = new LoadedClass("acme-employee", type.getName(), type, type.getClassLoader());
+
+        loader.installCompiledModules(List.of(compiled));
+
+        assertTrue(recording.loaded.stream()
+                                   .anyMatch(c -> c.fqn()
+                                                   .equals(type.getName())),
+                "compiled-module class is registered through the consumer path");
+
+        // A registry rebuild that drops every authored source must NOT report the compiled module as
+        // removed — it survives via the union generation (registry + compiled).
+        JavaLoader.RebuildResult result = loader.rebuild(List.of());
+        assertFalse(result.unloadedFqns()
+                          .contains(type.getName()),
+                "compiled module survives a registry rebuild that removes all authored sources");
+    }
+
+    /**
+     * Stand-in for an AOT-packaged compiled-module class already present on the application classpath.
+     */
+    public static class CompiledSample {
+    }
+
     private static JavaLoader.ClientSource handlerSource(String fqn, String body) {
         int dot = fqn.lastIndexOf('.');
         String pkg = dot >= 0 ? fqn.substring(0, dot) : "";
