@@ -1108,7 +1108,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 : relation.getSize()
                           .toString());
         p.put("widgetLength", "20");
-        p.put("widgetIsMajor", "true");
+        p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
         putLookupColumns(p, relation);
@@ -1157,7 +1157,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 : relation.getSize()
                           .toString());
         p.put("widgetLength", "20");
-        p.put("widgetIsMajor", "true");
+        p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
         putLookupColumns(p, relation);
