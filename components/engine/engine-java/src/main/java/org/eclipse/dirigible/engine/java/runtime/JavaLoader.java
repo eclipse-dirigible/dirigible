@@ -160,6 +160,41 @@ public class JavaLoader {
             }
         }
 
+        // Install the new generation: diff vs the current one, notify consumers, swap the client
+        // loader, rebuild the client bean container, and record it. Extracted so a SECOND producer -
+        // classpath-discovered compiled modules (AOT packaging) - can drive the exact same install
+        // path with a pre-built generation; see applyGeneration.
+        Set<String> removed = applyGeneration(nextGeneration, nextLoader);
+
+        currentBytecode.clear();
+        currentBytecode.putAll(effectiveBytecode);
+
+        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
+
+        // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
+        // (failed-to-recompile) classes keep their existing .class files untouched.
+        writeClassFiles(batch, result.unloadedFqns());
+        eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
+
+        return result;
+    }
+
+    /**
+     * Install a freshly-built generation into the running state: diff it against the current
+     * generation, notify every {@link JavaClassConsumer} ({@code onClassUnloaded} for removed/replaced
+     * FQNs, then {@code onClassLoaded} for the new set), swap the client {@link ClassLoader}, and
+     * rebuild the client bean container so behaviour consumers wire over ready instances.
+     *
+     * <p>
+     * <b>Source-agnostic by design.</b> The generation is just a {@code FQN -> LoadedClass} map plus
+     * the loader to install; it may originate from compiled registry sources (the {@link #rebuild}
+     * path) or, for AOT-packaged {@code compiled} modules, from classes discovered on the application
+     * classpath. Both drive the identical consumer/container dispatch here.
+     *
+     * @return the FQNs removed from the generation (present before, absent now)
+     */
+    private Set<String> applyGeneration(Map<String, LoadedClass> nextGeneration, ClientClassLoader nextLoader) {
         // Diff against the previous generation: notify consumers of removals first, then additions.
         Set<String> previousFqns = new HashSet<>(currentGeneration.keySet());
         Set<String> nextFqns = new HashSet<>(nextGeneration.keySet());
@@ -195,18 +230,7 @@ public class JavaLoader {
 
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
-        currentBytecode.clear();
-        currentBytecode.putAll(effectiveBytecode);
-
-        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
-
-        // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
-        // (failed-to-recompile) classes keep their existing .class files untouched.
-        writeClassFiles(batch, result.unloadedFqns());
-        eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
-
-        return result;
+        return removed;
     }
 
     /**
