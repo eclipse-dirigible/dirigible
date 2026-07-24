@@ -29,10 +29,16 @@ class GluePostsTest {
     private static final String YAML = """
             name: inventory
             entities:
+              - name: StockMovementStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
               - name: StockMovement
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: quantity, type: decimal }
+                  - { name: direction, type: integer }
                 relations:
                   - { name: Product, kind: manyToOne, to: Product }
                   - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue }
@@ -44,6 +50,7 @@ class GluePostsTest {
                   - { name: id, type: integer, primaryKey: true, generated: true }
                 relations:
                   - { name: Store, kind: manyToOne, to: Product }
+                  - { name: Status, kind: manyToOne, to: StockMovementStatus, function: EntityStatus, init: 1 }
               - name: GoodsIssueItem
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -54,7 +61,7 @@ class GluePostsTest {
             posts:
               - name: goodsIssueLedger
                 forEntity: GoodsIssue
-                event: POSTED
+                event: 2
                 forEach: items
                 into: StockMovement
                 idempotentBy: GoodsIssue
@@ -62,12 +69,13 @@ class GluePostsTest {
                 set:
                   Product: item.Product
                   Quantity: "-item.Quantity"
-                  GoodsIssue: Issue.Id
+                  Direction: 2
+                  Store: source.Store
             """;
 
     @SuppressWarnings("unchecked")
     @Test
-    void emitsThePostGlueDescriptor() {
+    void emitsTheResolvedPostGlueDescriptor() {
         IntentModel model = IntentParser.parse(YAML);
         List<Map<String, Object>> posts = GlueIntentGenerator.buildPostsForTest(model);
         assertEquals(1, posts.size());
@@ -76,17 +84,25 @@ class GluePostsTest {
         assertEquals("goodsIssueLedger", p.get("name"));
         assertEquals("GoodsIssueLedger", p.get("className"));
         assertEquals("GoodsIssue", p.get("entity"));
-        assertEquals("POSTED", p.get("event"));
-        assertEquals("items", p.get("forEach"));
+        // status-triggered: not a create, guarded to status seed id 2 on the EntityStatus property.
+        assertEquals(Boolean.FALSE, p.get("isCreate"));
+        assertEquals("Status", p.get("statusProperty"));
+        assertEquals("2", p.get("statusValue"));
+        // per-item: the composition child of GoodsIssue is GoodsIssueItem (FK GoodsIssue).
+        assertEquals(Boolean.TRUE, p.get("perItem"));
+        assertEquals("GoodsIssueItem", p.get("itemsEntity"));
+        assertEquals("GoodsIssue", p.get("itemsFk"));
+        // target + idempotency back-reference.
         assertEquals("StockMovement", p.get("into"));
-        assertEquals("GoodsIssue", p.get("idempotentBy"));
-        assertEquals("negativeStock", p.get("guard"));
+        assertEquals("Id", p.get("targetPk"));
+        assertEquals("GoodsIssue", p.get("backRef"));
 
-        List<Map<String, String>> set = (List<Map<String, String>>) p.get("set");
-        assertEquals(3, set.size());
-        // field names are pascal-cased; values (incl. the sign-flip expression) pass through verbatim.
-        assertEquals(Map.of("field", "Product", "value", "item.Product"), set.get(0));
-        assertEquals(Map.of("field", "Quantity", "value", "-item.Quantity"), set.get(1));
-        assertEquals(Map.of("field", "GoodsIssue", "value", "Issue.Id"), set.get(2));
+        List<Map<String, String>> assigns = (List<Map<String, String>>) p.get("assigns");
+        assertEquals(4, assigns.size());
+        // item copy, null-safe negation, integer constant, source copy - rendered to Java expressions.
+        assertEquals(Map.of("field", "Product", "expr", "item.Product"), assigns.get(0));
+        assertEquals(Map.of("field", "Quantity", "expr", "item.Quantity == null ? null : item.Quantity.negate()"), assigns.get(1));
+        assertEquals(Map.of("field", "Direction", "expr", "2"), assigns.get(2));
+        assertEquals(Map.of("field", "Store", "expr", "source.Store"), assigns.get(3));
     }
 }
