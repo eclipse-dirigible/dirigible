@@ -65,8 +65,18 @@ public class JavaLoader {
     private final JavaCompiledOutputDirectory outputDirectory;
     private final ApplicationEventPublisher eventPublisher;
 
-    /** FQN → {@link LoadedClass} record for the currently-installed generation. */
+    /** FQN → {@link LoadedClass} record for the currently-installed generation (the union below). */
     private final Map<String, LoadedClass> currentGeneration = new HashMap<>();
+
+    /** Registry-compiled sub-generation (produced by {@link #rebuild}). */
+    private final Map<String, LoadedClass> registryGeneration = new HashMap<>();
+
+    /**
+     * Classpath-discovered sub-generation for AOT-packaged {@code compiled} modules (produced by
+     * {@link #installCompiledModules}). These classes are already loaded by the application classloader
+     * - never compiled at runtime. The installed generation is the union of the two.
+     */
+    private final Map<String, LoadedClass> compiledGeneration = new HashMap<>();
 
     /**
      * Binary class name (top-level + nested) → bytecode for the currently-installed generation.
@@ -160,6 +170,42 @@ public class JavaLoader {
             }
         }
 
+        // Install the new generation as the union of the registry-compiled classes (this rebuild) and
+        // any classpath-discovered compiled modules. Extracted (applyGeneration) so both producers
+        // drive the identical consumer/container dispatch.
+        registryGeneration.clear();
+        registryGeneration.putAll(nextGeneration);
+        Set<String> removed = applyGeneration(mergedGeneration(), nextLoader);
+
+        currentBytecode.clear();
+        currentBytecode.putAll(effectiveBytecode);
+
+        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
+                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
+
+        // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
+        // (failed-to-recompile) classes keep their existing .class files untouched.
+        writeClassFiles(batch, result.unloadedFqns());
+        eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
+
+        return result;
+    }
+
+    /**
+     * Install a freshly-built generation into the running state: diff it against the current
+     * generation, notify every {@link JavaClassConsumer} ({@code onClassUnloaded} for removed/replaced
+     * FQNs, then {@code onClassLoaded} for the new set), swap the client {@link ClassLoader}, and
+     * rebuild the client bean container so behaviour consumers wire over ready instances.
+     *
+     * <p>
+     * <b>Source-agnostic by design.</b> The generation is just a {@code FQN -> LoadedClass} map plus
+     * the loader to install; it may originate from compiled registry sources (the {@link #rebuild}
+     * path) or, for AOT-packaged {@code compiled} modules, from classes discovered on the application
+     * classpath. Both drive the identical consumer/container dispatch here.
+     *
+     * @return the FQNs removed from the generation (present before, absent now)
+     */
+    private Set<String> applyGeneration(Map<String, LoadedClass> nextGeneration, ClientClassLoader nextLoader) {
         // Diff against the previous generation: notify consumers of removals first, then additions.
         Set<String> previousFqns = new HashSet<>(currentGeneration.keySet());
         Set<String> nextFqns = new HashSet<>(nextGeneration.keySet());
@@ -195,18 +241,51 @@ public class JavaLoader {
 
         currentGeneration.clear();
         currentGeneration.putAll(nextGeneration);
-        currentBytecode.clear();
-        currentBytecode.putAll(effectiveBytecode);
+        return removed;
+    }
 
-        RebuildResult result = new RebuildResult(Collections.unmodifiableSet(succeeded), Collections.unmodifiableMap(failures),
-                Collections.unmodifiableSet(removed), Collections.unmodifiableMap(batch.diagnostics()), componentContainer.wiringErrors());
+    /**
+     * Install the classes of AOT-packaged {@code compiled} modules discovered on the application
+     * classpath. Unlike {@link #rebuild}, these are <b>not compiled at runtime</b> - they are already
+     * loaded by the application classloader; this only records them as the compiled sub-generation and
+     * installs the union with the current registry-compiled generation through {@link #applyGeneration}
+     * (the same consumer/container dispatch). Idempotent: re-invoking replaces the compiled set.
+     *
+     * @param classes the compiled modules' top-level classes to surface to consumers
+     * @return the FQNs removed from the installed generation as a result (compiled classes dropped
+     *         since the previous compiled install; never registry-source classes)
+     */
+    public synchronized Set<String> installCompiledModules(List<LoadedClass> classes) {
+        compiledGeneration.clear();
+        for (LoadedClass info : classes) {
+            if (info != null) {
+                compiledGeneration.put(info.fqn(), info);
+            }
+        }
+        // No runtime-compiled client code yet → give the holder an empty ClientClassLoader whose parent
+        // (the platform / application classloader) already resolves the compiled-module classes.
+        ClientClassLoader loader = loaderHolder.current();
+        if (loader == null) {
+            loader = new ClientClassLoader(JavaHandler.class.getClassLoader(), Map.of());
+        }
+        return applyGeneration(mergedGeneration(), loader);
+    }
 
-        // Writes this cycle's fresh bytecode and deletes only source-removed FQNs. Carried-over
-        // (failed-to-recompile) classes keep their existing .class files untouched.
-        writeClassFiles(batch, result.unloadedFqns());
-        eventPublisher.publishEvent(new JavaCompiledEvent(this, result.succeededFqns(), result.unloadedFqns()));
-
-        return result;
+    /**
+     * The installed generation: the union of the registry-compiled and classpath-compiled
+     * sub-generations. On an FQN clash (a capability provided by both a registry source and a compiled
+     * module - a mis-assembled image) the registry source wins and the clash is logged; a clean
+     * "exactly one provider" assembly check is expected to catch this earlier.
+     */
+    private Map<String, LoadedClass> mergedGeneration() {
+        Map<String, LoadedClass> union = new LinkedHashMap<>(compiledGeneration);
+        for (Map.Entry<String, LoadedClass> entry : registryGeneration.entrySet()) {
+            if (union.put(entry.getKey(), entry.getValue()) != null) {
+                LOGGER.warn("FQN [{}] is provided by BOTH a compiled module and a registry source; using the registry source",
+                        entry.getKey());
+            }
+        }
+        return union;
     }
 
     /**

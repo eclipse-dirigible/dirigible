@@ -1,0 +1,2 @@
+# AOT compiled-module marker (test fixture): top-level class binary names, one per line.
+org.eclipse.dirigible.engine.java.runtime.AotFixtureClass
