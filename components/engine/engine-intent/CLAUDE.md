@@ -155,6 +155,15 @@ generated code, extend this fixture + both assertion layers in the same PR** - a
 at the `.model` attributes proves parsing, not the promise (that is exactly how a template-side
 regression ships green).
 
+**Documentation sync (normative).** A DSL change is not done until its human documentation lands
+in BOTH sites, in the same effort: the vendor-neutral **specification** at `intentfile.org` (repo
+`IntentFile/intentfile.github.io`) and the platform-branded docs at `dirigible.io` (under
+`/help/intent/`). Author two wordings - neutral for the spec (NO vendor/platform names), branded
+for `dirigible.io`. Open a PR to each. **Merge the `dirigible.io` PR; leave the `intentfile.org`
+PR OPEN** for the maintainer to review/merge. `intentfile.org` is THE spec - it carries only
+precise, normative documentation and NEVER a `CLAUDE.md` / `MEMORY.md` or any AI/meta file; this
+module (`engine-intent`) is its reference implementation.
+
 `IntentEditorLoadsIT` **clones [`dirigiblelabs/sample-intent-model`](https://github.com/dirigiblelabs/sample-intent-model)** (the library intent sample - same clone-a-real-repo pattern as the `SampleProjectRepositoryIT` subclasses; it replaced the old local `IntentEditorIT` fixture so the published sample stays the single source of truth), opens its `app.intent`, then asserts the mxGraph diagram renders (`.intent-diagram svg` is visible) **and** that the parsed `Book` entity's label appears inside `.intent-diagram` - so it fails on an empty or broken diagram, unlike the old "any `<svg>` exists" check that a Mermaid error bomb satisfied. It does not separately exercise a theme switch because the fixed-colour palette renders identically in both themes. Editing the sample's entities/process means the sample repo must change too (the IT clones its HEAD). `IntentEngineIT` stays self-contained (inline YAML) for fast, network-free coverage.
 
 ### General build/serve gotcha (applies to all UI modules)
