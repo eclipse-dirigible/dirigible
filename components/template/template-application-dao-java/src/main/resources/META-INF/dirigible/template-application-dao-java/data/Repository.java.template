@@ -70,6 +70,7 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
 #end
 #end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -122,6 +123,7 @@ ${importsCode}
 #end
 
 @Repository
+@Component("${javaGenFolderName}_${name}Repository")
 public class ${name}Repository extends JavaRepository<${name}Entity> {
 
     public ${name}Repository() {

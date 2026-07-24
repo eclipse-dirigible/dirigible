@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import java.util.List;
 #if($action != "generate")
@@ -30,7 +30,7 @@ import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targe
  * Entity access goes ONLY through the generated repositories. The mail sender comes from the
  * DIRIGIBLE_MAIL_SENDER configuration.
  */
-@Component
+@Component("${javaGenFolderName}_${className}Job")
 public class ${className}Job implements JobHandler {
 
     @Override

@@ -11,9 +11,34 @@ package org.eclipse.dirigible.components.intent.generator;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.junit.jupiter.api.Test;
 
 class IntentNamingTest {
+
+    @Test
+    void javaModuleMirrorsTheTemplateEngineSanitizer() {
+        // Must produce exactly what parameterUtils.js sanitizeJavaIdentifier produces for the same
+        // name - the BPMN handler FQNs / endpoint URLs (producer) and the events template's package
+        // line (consumer) only match if both sides sanitize identically.
+        assertEquals("sales_invoices", IntentNaming.javaModule(named("sales-invoices")));
+        assertEquals("numbers", IntentNaming.javaModule(named("numbers")));
+        assertEquals("my_app_2", IntentNaming.javaModule(named("My App.2")));
+        assertEquals("_7wonders", IntentNaming.javaModule(named("7wonders")));
+    }
+
+    @Test
+    void eventsPackageIsModuleScoped() {
+        // gen.events.<module>, NOT gen.<module>.events: the module segment goes UNDER gen/events so
+        // the glue output stays a sibling of gen/<module> and survives a model-only regeneration.
+        assertEquals("gen.events.sales_invoices", IntentNaming.eventsPackage(named("sales-invoices")));
+    }
+
+    private static IntentGenerationContext named(String name) {
+        IntentModel model = new IntentModel();
+        model.setName(name);
+        return TestContexts.context(model);
+    }
 
     @Test
     void upperSnakeKeepsCamelCaseBoundaries() {

@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -21,7 +21,7 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Rep
  * recomputed from the store on each event (self-healing); the write + the "-updated" event fire only when
  * a value actually changes, which bounds the transitive cascade so it terminates at rest.
  */
-@Component
+@Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
 
     @Override

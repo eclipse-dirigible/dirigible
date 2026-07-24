@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.flowable.engine.delegate.DelegateExecution;
@@ -13,8 +13,8 @@ import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity
  * stays across amendments - each generation only increments the copy's Version.
  *
  * Generated from the intent snapshots glue - do not edit; it is re-generated with the application.
- * Wired as a `delegate:` service task (delegate: gen.events.${master}SnapshotGenerator). Data assembly
- * reuses the generated ${master}PrintFeeder (same gen.events package); the PDF is rendered server-side
+ * Wired as a `delegate:` service task (delegate: gen.events.${master}SnapshotGenerator, module-scoped by the BPMN generator). Data assembly
+ * reuses the generated ${master}PrintFeeder (same module-scoped events package); the PDF is rendered server-side
  * via sdk.print.Print and stored in the tenant CMS via sdk.cms.Attachments; the ${snapshotEntity} row
  * is written through its generated repository (validations / events / audit).
  */

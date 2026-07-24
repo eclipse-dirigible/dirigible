@@ -653,7 +653,7 @@ parameters with `fields: { <name>: <value>, ... }`:
 The delegate is bound via `flowable:class` (not the `${JavaTask}` dispatcher the `setField` /
 scaffolded-stub paths use), because only `flowable:class` lets Flowable inject the declared `fields`
 as delegate fields. Contrast the three "custom code" service-task shapes: `setField` /
-`setRelationField` bind a **generated** `gen.events` delegate; a **bare** serviceTask (no
+`setRelationField` bind a **generated** delegate in the module-scoped events package (`gen.events.<module>`; the shorthand `gen.events.<ClassName>` in a `delegate:` always means THIS module's generated class); a **bare** serviceTask (no
 `delegate` / `call`) binds `custom.<Step>` and scaffolds a one-time stub under `custom/`; a
 `delegate` binds **your** named class and scaffolds nothing (you write it). **A delegate that touches
 an entity must live in that entity's project** and manage it through the generated
@@ -838,7 +838,7 @@ Two halves are generated (the `generates` pattern): a client button (a
 `<name>-transition-action.extension` + `.js` contribution to the app's `<project>-custom-action`
 point, carrying an `endpoint`; always per-record) and a server-side Java `@Controller`
 (`<ClassName>Transition`, via the `.glue` file) served at
-`/services/java/<project>/gen/events/<ClassName>Transition/run`. The controller re-loads the record,
+`/services/java/<project>/gen/events/<module>/<ClassName>Transition/run` (the `<module>` segment is the sanitized intent name, e.g. `sales-invoices` -> `sales_invoices`). The controller re-loads the record,
 validates the status + `when` guards (a failure returns **409** with the reason and leaves the record
 untouched), then flips ONLY the status column through the targeted `updateProperty` primitive - a
 workflow-style system write: no `-updated` re-fire (no onUpdate reactions), but the `-transitioned`
@@ -893,7 +893,7 @@ observe it); it requires the `from` entity to declare a `function: EntityStatus`
 Two halves are generated: a client button (a `<name>-generate-action.extension` + `.js` contribution
 to the app's `<project>-custom-action` point, carrying an `endpoint`) and a server-side Java
 `@Controller` (`<ClassName>Generate`, via the `.glue` file) served at
-`/services/java/<project>/gen/events/<ClassName>Generate/run`. The shared `customActions` store POSTs
+`/services/java/<project>/gen/events/<module>/<ClassName>Generate/run`. The shared `customActions` store POSTs
 the selected id to that endpoint and toasts the created record (no page dialog).
 
 ### reports - read-only aggregations
@@ -1290,7 +1290,8 @@ Generates two client-Java glue classes (bind them with a `rollups` sum entry tha
   across the payer's open invoices (oldest first), creating junction rows until the pot is used up.
 - **`<Name>OnInvoice`** - a `JavaDelegate` that pulls the customer's unallocated payment balance onto an
   invoice; wire it as a **`delegate:` service task** on the process step where the invoice becomes
-  payable (e.g. right after Issue), e.g. `args: { delegate: gen.events.AutoAllocateOnInvoice, next: … }`.
+  payable (e.g. right after Issue), e.g. `args: { delegate: gen.events.AutoAllocateOnInvoice, next: … }`
+  (the bare `gen.events.<ClassName>` shorthand resolves to this module's generated events package).
 
 **Rules:** `junction` / `invoice` / `payment` are declared entities; the junction must have a to-one
 relation to both the invoice and the payment; `amount` is a junction field; `total` / `paid` / `order`

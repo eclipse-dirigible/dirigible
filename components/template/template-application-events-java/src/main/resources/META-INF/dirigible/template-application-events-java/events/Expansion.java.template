@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -22,7 +22,7 @@ import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repos
  * and skipped, which both makes re-delivery idempotent and bounds the event cascade (a roll-up's
  * write-back to the master re-triggers this handler once; the skip terminates it).
  */
-@Component
+@Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
 
     @Override

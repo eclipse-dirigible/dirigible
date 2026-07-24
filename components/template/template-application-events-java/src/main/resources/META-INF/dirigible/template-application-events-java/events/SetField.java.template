@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.messaging.Producer;

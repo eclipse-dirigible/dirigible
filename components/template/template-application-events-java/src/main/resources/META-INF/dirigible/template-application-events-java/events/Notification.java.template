@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import java.util.HashMap;
 import java.util.List;
@@ -24,7 +24,7 @@ import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targe
  * application. Binds to the topic the ${entity} repository publishes the event to. The sender
  * address comes from the DIRIGIBLE_MAIL_SENDER configuration.
  */
-@Component
+@Component("${javaGenFolderName}_${className}Notification")
 public class ${className}Notification implements MessageHandler {
 
     @Override

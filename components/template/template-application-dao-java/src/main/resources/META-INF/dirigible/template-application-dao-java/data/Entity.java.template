@@ -12,7 +12,7 @@ import org.eclipse.dirigible.sdk.db.Table;
 import org.eclipse.dirigible.sdk.db.UpdatedAt;
 import org.eclipse.dirigible.sdk.db.UpdatedBy;
 
-@Entity
+@Entity(name = "${javaGenFolderName}_${name}Entity")
 @Table(name = "${tablePrefix}${dataName}")
 @Documentation("${name} entity mapping")
 public class ${name}Entity {

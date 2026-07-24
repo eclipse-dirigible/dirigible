@@ -6,6 +6,7 @@ import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Delete;
 import org.eclipse.dirigible.sdk.http.Get;
@@ -31,6 +32,7 @@ import java.util.Map;
  * re-generated with the application.
  */
 @Controller
+@Component("${javaGenFolderName}_${name}MyController")
 @Documentation("${projectName} - ${name} personal (my) controller")
 public class ${name}MyController {
 
@@ -59,7 +61,7 @@ public class ${name}MyController {
         requireMyParent(${personalParent.fkProperty});
         Map<String, Object> params = new LinkedHashMap<>();
         params.put("parent", ${personalParent.fkProperty});
-        List<${name}Entity> result = repository.query("from ${name}Entity e where e.${personalParent.fkProperty} = :parent", params);
+        List<${name}Entity> result = repository.query("from ${javaGenFolderName}_${name}Entity e where e.${personalParent.fkProperty} = :parent", params);
         result.forEach(this::scrub);
         return result;
     }

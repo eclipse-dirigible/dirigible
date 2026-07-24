@@ -15,6 +15,7 @@ import gen.${javaGenFolderName}.data.${javaPerspectiveName}.${name}Repository;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Delete;
 import org.eclipse.dirigible.sdk.http.Get;
@@ -33,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 @Controller
+@Component("${javaGenFolderName}_${name}Controller")
 @Documentation("${projectName} - ${name} Controller")
 public class ${name}Controller {
 
@@ -59,7 +61,7 @@ public class ${name}Controller {
         if (${masterEntityId} != null) {
             Map<String, Object> params = new LinkedHashMap<>();
             params.put("${masterEntityId}", ${masterEntityId});
-            result = repository.query("from ${name}Entity e where e.${masterEntityId} = :${masterEntityId}", params);
+            result = repository.query("from ${javaGenFolderName}_${name}Entity e where e.${masterEntityId} = :${masterEntityId}", params);
         } else {
             result = repository.findAll(actualLimit, actualOffset);
         }
@@ -256,7 +258,7 @@ public class ${name}Controller {
     }
 
     private List<${name}Entity> runFilter(Map<String, Object> filter) {
-        StringBuilder hql = new StringBuilder("from ${name}Entity e");
+        StringBuilder hql = new StringBuilder("from ${javaGenFolderName}_${name}Entity e");
         Map<String, Object> params = new LinkedHashMap<>();
         boolean first = true;
         if (filter != null && filter.get("equals") instanceof Map<?, ?> equals) {

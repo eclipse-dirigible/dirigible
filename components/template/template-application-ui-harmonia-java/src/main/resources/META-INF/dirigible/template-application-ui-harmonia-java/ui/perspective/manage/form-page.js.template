@@ -542,12 +542,12 @@ document.addEventListener('alpine:init', () => {
       this.printError = null;
       this.printBusy = true;
       try {
-        // The generated print feeder (gen/events/${name}PrintFeeder) loads the document + its related
+        // The generated print feeder (gen/events/${javaGenFolderName}/${name}PrintFeeder) loads the document + its related
         // graph through the repositories and returns the { document, items } payload the template binds
         // - so {{document.<Relation>.<Field>}} resolves. It is called as the logged-in user (auth +
         // tenant + i18n are the caller's).
         const payload = await App.services.api.get(
-          '/services/java/${projectName}/gen/events/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
+          '/services/java/${projectName}/gen/events/${javaGenFolderName}/${name}PrintFeeder/' + encodeURIComponent(this.id), { baseUrl: '' });
         const response = await fetch('/services/print/${name}?lang=' + encodeURIComponent(lang), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

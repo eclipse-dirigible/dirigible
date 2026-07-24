@@ -416,7 +416,7 @@ class IntentEngineIT extends IntegrationTest {
         // this exercises the generateUtils.js "triggers" + "resolvers" collection cases end to end.
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String handler = contentOf("gen/events/OrderApprovalTrigger.java");
+        String handler = contentOf("gen/events/orders/OrderApprovalTrigger.java");
         assertTrue(handler.contains("class OrderApprovalTrigger"),
                 "the glue template should generate a handler class named after the process");
         assertTrue(handler.contains("implements MessageHandler"), "the trigger should be a self-describing MessageHandler");
@@ -432,7 +432,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The decision resolver (customer.creditLimit) is a JavaDelegate that loads Customer and sets
         // the variable the rewritten condition tests.
-        String resolver = contentOf("gen/events/ResolveCustomerCreditLimit.java");
+        String resolver = contentOf("gen/events/orders/ResolveCustomerCreditLimit.java");
         assertTrue(resolver.contains("class ResolveCustomerCreditLimit implements JavaDelegate"),
                 "the resolver should be a Flowable JavaDelegate");
         assertTrue(resolver.contains("import gen.orders.data.customer.CustomerRepository"),
@@ -449,7 +449,7 @@ class IntentEngineIT extends IntegrationTest {
         // The form-only relation.field (customer.name on the ApproveOrder form) produces its own resolver
         // even though no decision references it - the user-task form is a resolver trigger in its own
         // right.
-        String formResolver = contentOf("gen/events/ResolveCustomerName.java");
+        String formResolver = contentOf("gen/events/orders/ResolveCustomerName.java");
         assertTrue(formResolver.contains("class ResolveCustomerName implements JavaDelegate"),
                 "a relation.field referenced only by a user-task form should still generate a resolver");
         assertTrue(formResolver.contains("execution.setVariable(\"customer_name\"") && formResolver.contains("entity.Name"),
@@ -458,7 +458,7 @@ class IntentEngineIT extends IntegrationTest {
         // The notification (onUpdate: Order) is a self-describing @Component MessageHandler that sends mail
         // when an Order is updated -
         // exercises the generateUtils.js "notifications" collection case end to end.
-        String notification = contentOf("gen/events/OrderUpdatedNotification.java");
+        String notification = contentOf("gen/events/orders/OrderUpdatedNotification.java");
         assertTrue(notification.contains("class OrderUpdatedNotification implements MessageHandler"),
                 "the notification should be a message-handling listener (PascalCased class name)");
         assertTrue(notification.contains("@Component") && notification.contains("return \"intent-test-Order-Order-updated\""),
@@ -483,7 +483,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The schedule is a self-describing @Component JobHandler (cron()) that queries via a typed
         // Criteria and notifies per row.
-        String job = contentOf("gen/events/StaleOrdersJob.java");
+        String job = contentOf("gen/events/orders/StaleOrdersJob.java");
         assertTrue(
                 job.contains("@Component") && job.contains("class StaleOrdersJob implements JobHandler")
                         && job.contains("return \"0 0 9 * * ?\""),
@@ -499,7 +499,7 @@ class IntentEngineIT extends IntegrationTest {
 
         // The integration is a self-describing @Component MessageHandler that forwards the entity JSON to
         // an external endpoint.
-        String integration = contentOf("gen/events/PushOrderToWarehouseIntegration.java");
+        String integration = contentOf("gen/events/orders/PushOrderToWarehouseIntegration.java");
         assertTrue(integration.contains("class PushOrderToWarehouseIntegration implements MessageHandler"),
                 "the integration should be a message-handling listener");
         assertTrue(integration.contains("@Component") && integration.contains("return \"intent-test-Order-Order\""),
@@ -512,7 +512,7 @@ class IntentEngineIT extends IntegrationTest {
                 "a POST integration should forward the entity JSON as the request body");
 
         // The inbound webhook is a @Controller that ingests a posted JSON payload as the entity.
-        String webhook = contentOf("gen/events/IngestOrderWebhook.java");
+        String webhook = contentOf("gen/events/orders/IngestOrderWebhook.java");
         assertTrue(webhook.contains("@Controller") && webhook.contains("class IngestOrderWebhook"),
                 "the inbound webhook should be a @Controller");
         assertTrue(webhook.contains("@Post(\"/ingest\")"), "the webhook should expose the declared path");
@@ -526,13 +526,13 @@ class IntentEngineIT extends IntegrationTest {
         // Together with the assertions above, this proves the full declarative-glue catalog - triggers,
         // resolvers, notifications, schedules, integrations, inbound webhooks and rollups - is generated
         // from a single app.intent.
-        String rollupCreate = contentOf("gen/events/OrderCustomerRollupOnCreate.java");
+        String rollupCreate = contentOf("gen/events/orders/OrderCustomerRollupOnCreate.java");
         assertTrue(
                 rollupCreate.contains("@Component") && rollupCreate.contains("return \"intent-test-Order-Order\"")
                         && rollupCreate.contains("new OrderRepository().findAll(Criteria.create().eq(\"Customer\", entity.Customer))")
                         && rollupCreate.contains("int count = rows.size();") && rollupCreate.contains("parent.OrderCount = count"),
                 "the rollup create-listener should recompute the parent count via Criteria");
-        assertTrue(contentOf("gen/events/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
+        assertTrue(contentOf("gen/events/orders/OrderCustomerRollupOnDelete.java").contains("intent-test-Order-Order-deleted"),
                 "the rollup delete-listener should bind the child's -deleted topic");
 
         // The print feeder (Order is a document master via the OrderItem composition child): a @Controller
@@ -540,7 +540,7 @@ class IntentEngineIT extends IntegrationTest {
         // { document, items } payload the .print template binds - exercises the generateUtils.js
         // "printFeeders" collection case end to end. This class IS the audit of what a print receives.
         assertTrue(contentOf("orders.glue").contains("\"printFeeders\""), "the glue should carry a printFeeders collection");
-        String feeder = contentOf("gen/events/OrderPrintFeeder.java");
+        String feeder = contentOf("gen/events/orders/OrderPrintFeeder.java");
         assertTrue(feeder.contains("@Controller") && feeder.contains("class OrderPrintFeeder") && feeder.contains("@Get(\"/{id}\")"),
                 "the feeder should be a @Controller exposing GET /{id}");
         assertTrue(feeder.contains("new gen.orders.data.order.OrderRepository().findById(id)"),
@@ -597,9 +597,9 @@ class IntentEngineIT extends IntegrationTest {
         // BPMN: each setField serviceTask binds the generated JavaDelegate (NOT a custom/ stub), the
         // decision routes to both branches, and `next: done` makes activate skip past reject to the end.
         String bpmn = contentOf("MemberApproval.bpmn");
-        assertTrue(bpmn.contains("<serviceTask id=\"activate\"") && bpmn.contains("gen.events.MemberApprovalActivate"),
+        assertTrue(bpmn.contains("<serviceTask id=\"activate\"") && bpmn.contains("gen.events.members.MemberApprovalActivate"),
                 "the activate setField step should bind the generated JavaDelegate handler");
-        assertTrue(bpmn.contains("<serviceTask id=\"reject\"") && bpmn.contains("gen.events.MemberApprovalReject"),
+        assertTrue(bpmn.contains("<serviceTask id=\"reject\"") && bpmn.contains("gen.events.members.MemberApprovalReject"),
                 "the reject setField step should bind its own generated handler");
         assertFalse(bpmn.contains("custom.Activate") || bpmn.contains("custom.Reject"),
                 "a setField service task must not scaffold a custom/ stub");
@@ -625,7 +625,7 @@ class IntentEngineIT extends IntegrationTest {
         // the TARGETED single-column updateProperty (only that column is in the UPDATE statement, so a
         // concurrent write to another column cannot be reverted), WITHOUT re-publishing an update event.
         generateFromModel("template-application-events-java/template/template.js", "members.glue");
-        String activate = contentOf("gen/events/MemberApprovalActivate.java");
+        String activate = contentOf("gen/events/members/MemberApprovalActivate.java");
         assertTrue(activate.contains("class MemberApprovalActivate implements JavaDelegate"),
                 "the setter should be generated as a Flowable JavaDelegate");
         assertTrue(activate.contains("import gen.members.data.member.MemberEntity") && activate.contains("execution.getVariable(\"Id\")"),
@@ -634,7 +634,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the setter should persist the field via the targeted single-column updateProperty");
         assertFalse(activate.contains("updateWithoutEvent"),
                 "the setter must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
-        assertTrue(contentOf("gen/events/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
+        assertTrue(contentOf("gen/events/members/MemberApprovalReject.java").contains("\"Status\", \"REJECTED\""),
                 "the reject setter should persist the rejected status via the targeted write");
         // The transition IS observable: the setter publishes the dedicated -transitioned topic (the
         // status-reached channel for posting glue / integrations), which reactions never listen on -
@@ -773,7 +773,8 @@ class IntentEngineIT extends IntegrationTest {
 
         // The expire date loader is inserted BEFORE the user task (re-read at task entry).
         assertTrue(
-                bpmn.contains("<serviceTask id=\"loadCaseHandlingWorkExpire\"") && bpmn.contains("gen.events.LoadCaseHandlingWorkExpire"),
+                bpmn.contains("<serviceTask id=\"loadCaseHandlingWorkExpire\"")
+                        && bpmn.contains("gen.events.services.LoadCaseHandlingWorkExpire"),
                 "an expire timer should insert the generated date-loader delegate");
         assertTrue(bpmn.indexOf("id=\"loadCaseHandlingWorkExpire\"") < bpmn.indexOf("<userTask id=\"work\""),
                 "the expire date loader must run before the user task it arms");
@@ -789,7 +790,7 @@ class IntentEngineIT extends IntegrationTest {
         // parent through the via FK, and correlates fail-soft on its stamped ProcessId; the loader
         // publishes the java.util.Date due value with the end-of-day semantics for a `date` field.
         generateFromModel("template-application-events-java/template/template.js", "services.glue");
-        String wait = contentOf("gen/events/CaseHandlingAwaitReplyWait.java");
+        String wait = contentOf("gen/events/services/CaseHandlingAwaitReplyWait.java");
         assertTrue(wait.contains("class CaseHandlingAwaitReplyWait implements MessageHandler"),
                 "the wait listener should be a self-describing MessageHandler");
         assertTrue(wait.contains("return \"" + PROJECT + "-Case-CaseMessage\";"),
@@ -802,7 +803,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the listener should correlate the catch event's message on the stamped ProcessId");
         assertTrue(wait.contains("catch (RuntimeException"),
                 "correlation must be fail-soft - an instance not parked on the message is a no-op");
-        String loader = contentOf("gen/events/LoadCaseHandlingWorkExpire.java");
+        String loader = contentOf("gen/events/services/LoadCaseHandlingWorkExpire.java");
         assertTrue(loader.contains("class LoadCaseHandlingWorkExpire implements JavaDelegate"),
                 "the expire date loader should be a Flowable JavaDelegate");
         assertTrue(loader.contains("execution.setVariable(\"__workExpireDate\", due)"),
@@ -869,7 +870,7 @@ class IntentEngineIT extends IntegrationTest {
         // The abort-only cleanup is inside the handler, NOT in the main flow: its only incoming flow
         // is from the abort start event, and the main flow routes confirm straight to the end (`next:
         // done`) - never through markVoid.
-        assertTrue(bpmn.contains("<serviceTask id=\"markVoid\"") && bpmn.contains("gen.events.OrderApprovalMarkVoid"),
+        assertTrue(bpmn.contains("<serviceTask id=\"markVoid\"") && bpmn.contains("gen.events.orders2.OrderApprovalMarkVoid"),
                 "the abort-only cleanup serviceTask should be emitted (inside the handler) bound to its setter delegate");
         assertTrue(bpmn.contains("sourceRef=\"OrderApprovalAbortStart\" targetRef=\"markVoid\""),
                 "the abort handler's start event should flow into the cleanup");
@@ -884,7 +885,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the glue should carry the aborts collection with the abort message name");
 
         generateFromModel("template-application-events-java/template/template.js", "orders2.glue");
-        String abort = contentOf("gen/events/OrderApprovalAbort.java");
+        String abort = contentOf("gen/events/orders2/OrderApprovalAbort.java");
         assertTrue(abort.contains("class OrderApprovalAbort implements MessageHandler"),
                 "the abort listener should be a self-describing MessageHandler");
         assertTrue(abort.contains("return \"" + PROJECT + "-SalesOrder-SalesOrder-transitioned\";"),
@@ -960,7 +961,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "hr.glue");
 
-        String job = contentOf("gen/events/MonthlyTimesheetsJob.java");
+        String job = contentOf("gen/events/hr/MonthlyTimesheetsJob.java");
         assertTrue(job.contains("class MonthlyTimesheetsJob implements JobHandler"),
                 "a hyphenated schedule name should still yield a valid Java class (pascalIdentifier)");
         assertTrue(job.contains("new EmployeeRepository().findAll("), "the job should query the source rows");
@@ -997,7 +998,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "shipping.glue");
 
-        String trigger = contentOf("gen/events/DeliverTrigger.java");
+        String trigger = contentOf("gen/events/shipping/DeliverTrigger.java");
         assertTrue(trigger.contains("return \"intent-test-Shipment-Shipment-updated\""),
                 "an onUpdate trigger should bind to the entity's -updated topic via destination()");
         assertTrue(trigger.contains("if (!(java.util.Objects.equals(entity.Status, \"SHIPPED\")))"),
@@ -1032,7 +1033,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "library.glue");
 
-        String onCreate = contentOf("gen/events/LoanMemberRollupOnCreate.java");
+        String onCreate = contentOf("gen/events/library/LoanMemberRollupOnCreate.java");
         assertTrue(onCreate.contains("class LoanMemberRollupOnCreate implements MessageHandler"),
                 "the create-side rollup listener should be generated");
         assertTrue(onCreate.contains("@Component") && onCreate.contains("return \"intent-test-Loan-Loan\""),
@@ -1044,7 +1045,7 @@ class IntentEngineIT extends IntegrationTest {
                         && onCreate.contains("int count = rows.size();") && onCreate.contains("parent.LoanCount = count"),
                 "it should recompute the count via a typed Criteria and write it to the parent counter");
 
-        String onDelete = contentOf("gen/events/LoanMemberRollupOnDelete.java");
+        String onDelete = contentOf("gen/events/library/LoanMemberRollupOnDelete.java");
         assertTrue(onDelete.contains("@Component") && onDelete.contains("return \"intent-test-Loan-Loan-deleted\""),
                 "the delete listener binds the child's -deleted topic via destination()");
     }
@@ -1088,7 +1089,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "billing.glue");
 
-        String onCreate = contentOf("gen/events/BillPaymentBillRollupOnCreate.java");
+        String onCreate = contentOf("gen/events/billing/BillPaymentBillRollupOnCreate.java");
         assertTrue(onCreate.contains("parent.Paid = sum"), "the sum roll-up should write the summed field");
         assertTrue(onCreate.contains("parent.Balance = capacity.subtract(sum)"),
                 "with a capacity + balance, it should keep balance = capacity - sum");
@@ -1148,7 +1149,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "settle.glue");
 
-        String onPayment = contentOf("gen/events/AutoSettleOnPayment.java");
+        String onPayment = contentOf("gen/events/settle/AutoSettleOnPayment.java");
         assertTrue(onPayment.contains("class AutoSettleOnPayment implements MessageHandler"),
                 "the onPayment settlement listener should be generated");
         assertTrue(onPayment.contains("PaymentEntity payment = Json.parse(message, PaymentEntity.class)"),
@@ -1158,7 +1159,7 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(onPayment.contains("new InvoicePaymentRepository().save(row)"),
                 "it should create allocation rows through the junction repository (never the generic Store)");
 
-        String onInvoice = contentOf("gen/events/AutoSettleOnInvoice.java");
+        String onInvoice = contentOf("gen/events/settle/AutoSettleOnInvoice.java");
         assertTrue(onInvoice.contains("class AutoSettleOnInvoice implements JavaDelegate"),
                 "the onInvoice settlement delegate should be generated");
         assertTrue(onInvoice.contains("new PaymentRepository().findAll") && onInvoice.contains(".eq(\"Customer\", invoice.Customer)"),
@@ -1191,7 +1192,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String trigger = contentOf("gen/events/ApproveTrigger.java");
+        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(trigger.contains("String businessKey = String.valueOf(entity.OrderNumber);"),
                 "the BPM business key must be the flagged field (OrderNumber), not the primary key");
@@ -1224,7 +1225,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String trigger = contentOf("gen/events/ApproveTrigger.java");
+        String trigger = contentOf("gen/events/orders/ApproveTrigger.java");
         assertTrue(trigger.contains("repository.findById(created.Id)"), "the listener must still load the entity by its primary key");
         assertTrue(
                 trigger.contains("if (entity.Number == null || entity.Number.isBlank())")
@@ -1293,7 +1294,7 @@ class IntentEngineIT extends IntegrationTest {
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "generating the glue template must not delete the full-stack gen/orders output");
-        assertTrue(resource("gen/events/OrderApprovalTrigger.java").exists(), "the glue template should still produce gen/events");
+        assertTrue(resource("gen/events/orders/OrderApprovalTrigger.java").exists(), "the glue template should still produce gen/events");
     }
 
     @Test
@@ -1448,7 +1449,7 @@ class IntentEngineIT extends IntegrationTest {
         // count column is in the UPDATE statement, so the stale message copy of the master cannot
         // revert concurrent writes to other columns, and no event fires).
         generateFromModel("template-application-events-java/template/template.js", "loans.glue");
-        String onCreate = contentOf("gen/events/InstallmentsExpansionOnCreate.java");
+        String onCreate = contentOf("gen/events/loans/InstallmentsExpansionOnCreate.java");
         assertTrue(onCreate.contains("intent-test-Loan-Loan\""), "the OnCreate handler binds the master's create topic");
         assertTrue(onCreate.contains("d.plusMonths(1)"), "unit month steps by month");
         assertTrue(onCreate.contains("total.subtract(share.multiply("), "the last row absorbs the rounding remainder");
@@ -1456,7 +1457,7 @@ class IntentEngineIT extends IntegrationTest {
                 "the count write-back must be a targeted single-column updateProperty");
         assertFalse(onCreate.contains("updateWithoutEvent"),
                 "the count write-back must not full-row merge (updateWithoutEvent) - that reverts concurrent writes to other columns");
-        String onUpdate = contentOf("gen/events/InstallmentsExpansionOnUpdate.java");
+        String onUpdate = contentOf("gen/events/loans/InstallmentsExpansionOnUpdate.java");
         assertTrue(onUpdate.contains("intent-test-Loan-Loan-updated\""), "the OnUpdate handler binds the -updated topic");
 
         // Harmonia UI: the status renders as the title-bar badge (not an editable input) and the
@@ -1575,7 +1576,7 @@ class IntentEngineIT extends IntegrationTest {
         // Events template: the generated handler is idempotent + resumable (the cloud-native posting
         // semantics - no cross-step transaction): it skips a complete post and rebuilds a half-post.
         generateFromModel("template-application-events-java/template/template.js", "postingtest.glue");
-        String posting = contentOf("gen/events/OrderLedgerPosting.java");
+        String posting = contentOf("gen/events/postingtest/OrderLedgerPosting.java");
         assertTrue(posting.contains("implements MessageHandler"), "the posting is a self-describing message handler");
         assertTrue(posting.contains("-transitioned"), "it listens on the source's -transitioned channel");
         assertTrue(posting.contains("int expectedItems = 0"), "it computes the expected item count for the completeness check");
@@ -1621,7 +1622,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
 
         generateFromModel("template-application-events-java/template/template.js", "proforma.glue");
-        String generate = contentOf("gen/events/InvoiceFromProformaGenerate.java");
+        String generate = contentOf("gen/events/proforma/InvoiceFromProformaGenerate.java");
         // The completion hook flips the source status via the targeted single-column primitive...
         assertTrue(generate.contains("updateProperty(req.id, \"Status\", 3)"),
                 "the source status must be flipped with the targeted updateProperty write");
@@ -1822,7 +1823,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         generateFromModel("template-application-events-java/template/template.js", "orders.glue");
 
-        String writer = contentOf("gen/events/ApproveReviewWrite.java");
+        String writer = contentOf("gen/events/orders/ApproveReviewWrite.java");
         assertTrue(writer.contains("class ApproveReviewWrite implements JavaDelegate"),
                 "a user task with editable fields should generate a Writer JavaDelegate");
         assertTrue(writer.contains("values.put(\"ShippedOn\", java.time.LocalDate.parse(ShippedOnValue.toString().trim()));"),
@@ -2124,7 +2125,7 @@ class IntentEngineIT extends IntegrationTest {
                 body.contains("<serviceTask id=\"resolveCustomerCreditLimit\" name=\"Resolve Customer Credit Limit\"")
                         && body.contains("flowable:delegateExpression=\"${JavaTask}\""),
                 "a JavaTask resolver service task should be generated for the shared relation.field");
-        assertTrue(body.contains("gen.events.ResolveCustomerCreditLimit") && body.contains("gen.events.ResolveCustomerName"),
+        assertTrue(body.contains("gen.events.orders.ResolveCustomerCreditLimit") && body.contains("gen.events.orders.ResolveCustomerName"),
                 "both the shared and the form-only relation.field should produce a resolver task pointing at its handler FQN");
         assertTrue(
                 body.contains("sourceRef=\"start\" targetRef=\"resolveCustomerCreditLimit\"")
