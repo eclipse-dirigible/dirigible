@@ -774,6 +774,53 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
+     * Build the {@code posts} glue collection: one descriptor per {@code posts:} rule
+     * ({@link org.eclipse.dirigible.components.intent.model.PostIntent}). Each descriptor drives a
+     * generated event handler that, on the source document's {@code event:} event, emits mapped rows
+     * into the {@code into:} target (per {@code forEach:} line item), idempotently by
+     * {@code idempotentBy}. See kf-catalog PROPOSAL_EVENT_POSTING.md. This is the structural glue; the
+     * handler template + BPMN/listener wiring is the next stage.
+     */
+    private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.PostIntent p : model.getPosts()) {
+            if (p.getName() == null || p.getName()
+                                        .isBlank()
+                    || p.getForEntity() == null || p.getInto() == null || p.getEvent() == null) {
+                continue; // malformed: name/forEntity/into/on are required
+            }
+            if (byName.get(p.getForEntity()) == null) {
+                continue; // bad source reference
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", p.getName());
+            e.put("className", IntentNaming.pascalIdentifier(p.getName()));
+            e.put("entity", p.getForEntity());
+            e.put("event", p.getEvent());
+            e.put("forEach", p.getForEach() == null ? "" : p.getForEach());
+            e.put("into", p.getInto());
+            e.put("idempotentBy", p.getIdempotentBy() == null ? "" : p.getIdempotentBy());
+            e.put("guard", p.getGuard() == null ? "" : p.getGuard());
+            List<Map<String, String>> set = new ArrayList<>();
+            for (Map.Entry<String, String> f : p.getSet()
+                                                .entrySet()) {
+                Map<String, String> pair = new LinkedHashMap<>();
+                pair.put("field", IntentNaming.pascalCase(f.getKey()));
+                pair.put("value", f.getValue());
+                set.add(pair);
+            }
+            e.put("set", set);
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Test hook: build the {@code posts} glue collection without a repository. */
+    static List<Map<String, Object>> buildPostsForTest(IntentModel model) {
+        return buildPosts(model, IntentEntities.byName(model));
+    }
+
+    /**
      * Test hook: build the {@code generates} glue collection without a repository. With a null context
      * a cross-model target falls back to {@link CrossModelSupport}'s naming-convention defaults
      * (perspective = entity name, key = {@code Id}), which is deterministic and enough to assert the

@@ -67,9 +67,21 @@ public class IntentModel {
     private List<PostingIntent> postings = new ArrayList<>();
     /** Declarative on-demand status transitions - guarded per-record buttons (void/cancel/close). */
     private List<TransitionIntent> transitions = new ArrayList<>();
+    /**
+     * Declarative event-driven row posts - emit mapped rows into a target entity on a document event.
+     */
+    private List<PostIntent> posts = new ArrayList<>();
 
     public List<ActionIntent> getActions() {
         return actions;
+    }
+
+    public List<PostIntent> getPosts() {
+        return posts;
+    }
+
+    public void setPosts(List<PostIntent> posts) {
+        this.posts = posts == null ? new ArrayList<>() : posts;
     }
 
     public List<TransitionIntent> getTransitions() {
