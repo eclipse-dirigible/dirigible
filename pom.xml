@@ -239,7 +239,7 @@
         <es5-shim.version>4.6.7</es5-shim.version>
         <angular-file-upload.version>2.6.1</angular-file-upload.version>
         <angularjs.version>1.8.2</angularjs.version>
-        <ag-grid.version>27.1.0</ag-grid.version>
+        <ag-grid.version>27.3.0</ag-grid.version>
         <papaparse.version>5.5.3</papaparse.version>
         <bpmn-visualization.version>0.47.0</bpmn-visualization.version>
         <i18next.version>25.3.0</i18next.version>
