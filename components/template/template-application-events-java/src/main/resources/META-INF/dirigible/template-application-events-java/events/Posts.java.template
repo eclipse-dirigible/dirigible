@@ -1,0 +1,86 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Post ${name}: on a ${sourceEntity} event (${event}), emit ${into} rows (one per ${itemsEntity} line
+ * when forEach is set), idempotently by the ${backRef} back-reference. Generated from the intent
+ * posts: block - do not edit; re-generated with the application. See kf-catalog
+ * PROPOSAL_EVENT_POSTING.md.
+ *
+ * Contract (mirrors the postings skeleton, flattened - no header document):
+ * - binds the source's #if($isCreate)-created#{else}-transitioned#end topic and RE-LOADS the source by
+ *   id (the payload is as-of the event and may lack later-step data);
+ * - idempotent by ${backRef}: if ${into} rows already back-reference this source, it is a no-op;
+ * - all writes go through the generated ${into} repository (so its own create logic fires).
+ */
+@Component("${javaGenFolderName}_${className}Post")
+public class ${className}Post implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${sourcePerspective}-${sourceEntity}-#if($isCreate)created#{else}transitioned#end";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity payload =
+                Json.parse(message, gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity.class);
+        if (payload == null || payload.${sourceKeyField} == null) {
+            return;
+        }
+        gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
+                new gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
+        if (source == null) {
+            return;
+        }
+#if(!$isCreate)
+        if (source.${statusProperty} == null || source.${statusProperty} != ${statusValue}) {
+            return; // only fires on the transition into status ${statusValue}
+        }
+#end
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository targetRepository =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Repository();
+#if($backRef != "")
+        // Idempotency: a row already back-referencing this source means the post ran - no-op.
+        if (!targetRepository.findAll(Criteria.create().eq("${backRef}", source.${sourceKeyField})).isEmpty()) {
+            return;
+        }
+#end
+#if($perItem)
+        gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository itemsRepository =
+                new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository();
+        for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item :
+                itemsRepository.findAll(Criteria.create().eq("${itemsFk}", source.${sourceKeyField}))) {
+            gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row =
+                    new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity();
+#foreach($a in $assigns)
+            row.${a.field} = ${a.expr};
+#end
+#if($backRef != "")
+            row.${backRef} = source.${sourceKeyField};
+#end
+            targetRepository.save(row);
+        }
+#else
+        gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity row =
+                new gen.${javaGenFolderName}.data.${targetJavaPerspective}.${into}Entity();
+#foreach($a in $assigns)
+        row.${a.field} = ${a.expr};
+#end
+#if($backRef != "")
+        row.${backRef} = source.${sourceKeyField};
+#end
+        targetRepository.save(row);
+#end
+    }
+}
