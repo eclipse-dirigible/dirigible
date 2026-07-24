@@ -24,14 +24,15 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
 /**
  * Builds the {@code snapshots} glue collection: one descriptor per {@code function: Snapshot} child
  * whose master is a document (header-items) master, driving the generated
- * {@code gen/events/<Master>SnapshotGenerator.java} delegate. Wired into a process as a
- * {@code delegate:} service task ({@code delegate: gen.events.<Master>SnapshotGenerator}) so an
- * immutable printed copy of the document is rendered and stored on issue - the number stays across
- * amendments, only the snapshot {@code Version} increments.
+ * {@code gen/events/<module>/<Master>SnapshotGenerator.java} delegate. Wired into a process as a
+ * {@code delegate:} service task ({@code delegate: gen.events.<Master>SnapshotGenerator},
+ * module-scoped by the BPMN generator) so an immutable printed copy of the document is rendered and
+ * stored on issue - the number stays across amendments, only the snapshot {@code Version}
+ * increments.
  *
  * <p>
- * The delegate reuses the master's generated {@code PrintFeeder} (same {@code gen.events} package)
- * to assemble the {@code {document, items}} payload, renders it server-side via
+ * The delegate reuses the master's generated {@code PrintFeeder} (same module-scoped events
+ * package) to assemble the {@code {document, items}} payload, renders it server-side via
  * {@code sdk.print.Print}, and stores the PDF via {@code sdk.cms.Attachments} - so only a document
  * master (which has a feeder) can carry a snapshot child.
  */

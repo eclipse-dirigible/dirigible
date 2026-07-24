@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +17,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * application. The event payload (the entity JSON) is sent as the request body. The target URL comes
  * from the intent (a literal or a configuration value).
  */
-@Component
+@Component("${javaGenFolderName}_${className}Integration")
 public class ${className}Integration implements MessageHandler {
 
     @Override

@@ -566,7 +566,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String bpmn = contentOf("ClaimConfirm.bpmn");
         assertTrue(bpmn.contains("flowable:assignee=\"${__personalUser}\""),
                 "assignee: personal must emit a per-user flowable:assignee, not a candidate group");
-        String claimTrigger = contentOf("gen/events/ClaimConfirmTrigger.java");
+        String claimTrigger = contentOf("gen/events/emission/ClaimConfirmTrigger.java");
         assertTrue(claimTrigger.contains("__personalUser"),
                 "the trigger listener must seed the __personalUser variable from the identity mapping");
 
@@ -582,12 +582,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rfqBpmn.contains("<boundaryEvent id=\"reviewExpire\" attachedToRef=\"review\" cancelActivity=\"true\">")
                         && rfqBpmn.contains("<timeDate>${__reviewExpireDate}</timeDate>"),
                 "expire must emit a cancelling boundary timer armed from the loader variable");
-        String waitHandler = contentOf("gen/events/RfqFlowAwaitReplyWait.java");
+        String waitHandler = contentOf("gen/events/emission/RfqFlowAwaitReplyWait.java");
         assertTrue(waitHandler.contains("Process.correlateMessageEvent(carrier.ProcessId, \"RfqFlowAwaitReply\""),
                 "the wait listener must correlate the message on the stamped ProcessId");
         assertTrue(waitHandler.contains("new RfqRepository().findById(entity.Rfq)"),
                 "the wait listener must resolve the parked record through the via back-reference");
-        String timerLoader = contentOf("gen/events/LoadRfqFlowReviewExpire.java");
+        String timerLoader = contentOf("gen/events/emission/LoadRfqFlowReviewExpire.java");
         assertTrue(timerLoader.contains("execution.setVariable(\"__reviewExpireDate\", due)"),
                 "the expire date loader must publish the variable the boundary timer arms from");
 
@@ -597,7 +597,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 approvalBpmn.contains("<subProcess id=\"ApprovalFlowAbortHandler\"") && approvalBpmn.contains("triggeredByEvent=\"true\"")
                         && approvalBpmn.contains("isInterrupting=\"true\"") && approvalBpmn.contains("<terminateEventDefinition>"),
                 "abortOn must emit an interrupting, terminating event subprocess");
-        String abortHandler = contentOf("gen/events/ApprovalFlowAbort.java");
+        String abortHandler = contentOf("gen/events/emission/ApprovalFlowAbort.java");
         assertTrue(
                 abortHandler.contains("-transitioned") && abortHandler.contains("entity.Status == 3")
                         && abortHandler.contains("Process.correlateMessageEvent(entity.ProcessId, \"ApprovalFlowAbort\""),
@@ -662,7 +662,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the partner list toolbar must carry the Export and Print actions");
 
         // collection-driven generation: the job creates the parent AND its per-working-day children.
-        String job = contentOf("gen/events/MonthlyClaimsJob.java");
+        String job = contentOf("gen/events/emission/MonthlyClaimsJob.java");
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
@@ -744,7 +744,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // transitions: the server half is a controller that guards the source status + the when
         // guard (409) and flips ONLY the status column via the targeted updateProperty; the client
         // half is a custom-action contribution carrying the endpoint.
-        String transition = contentOf("gen/events/CancelEntryTransition.java");
+        String transition = contentOf("gen/events/emission/CancelEntryTransition.java");
         assertTrue(transition.contains("currentStatus == 1"), "transitions must emit the allowed-statuses guard");
         assertTrue(transition.contains("Calc.eval(\"Paid\", source, 6)"), "the when guard must emit a Calc comparison");
         assertTrue(transition.contains("Response.setStatus(409)"), "a failed guard must surface as 409");
@@ -757,12 +757,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // postings reverses: the reversal handler negates the sibling's amount expressions on the
         // SAME side, locates the original through the empty storno link (fail-soft skip when none)
         // and stamps the link; the sibling's idempotency guard symmetrically excludes linked rows.
-        String stornoPosting = contentOf("gen/events/DocStornoPosting.java");
+        String stornoPosting = contentOf("gen/events/emission/DocStornoPosting.java");
         assertTrue(stornoPosting.contains("Calc.eval(\"-(Amount)\", source, 2)"),
                 "the reversal must negate the sibling's amount expression on the same side");
         assertTrue(stornoPosting.contains("nothing to reverse"), "the reversal must skip fail-soft when the source was never posted");
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
-        String basePosting = contentOf("gen/events/DocPostingPosting.java");
+        String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
 
         // label: the repository recomputes the stored display Name on every write path.
@@ -894,7 +894,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(409));
 
         // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
-        String transitionRun = "/services/java/" + PROJECT + "/gen/events/CancelEntryTransition/run";
+        String transitionRun = "/services/java/" + PROJECT + "/gen/events/emission/CancelEntryTransition/run";
         AtomicInteger cancellable = new AtomicInteger();
         restAssuredExecutor.execute(() -> cancellable.set(given().contentType("application/json")
                                                                  .body("{\"Date\":\"2026-01-16\",\"Account\":2}")
@@ -953,7 +953,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + doc.get() + "}")
                                                  .when()
-                                                 .post("/services/java/" + PROJECT + "/gen/events/PostDocTransition/run")
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/PostDocTransition/run")
                                                  .then()
                                                  .statusCode(200));
         AtomicInteger originalEntry = new AtomicInteger();
@@ -971,7 +971,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + doc.get() + "}")
                                                  .when()
-                                                 .post("/services/java/" + PROJECT + "/gen/events/VoidDocTransition/run")
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/VoidDocTransition/run")
                                                  .then()
                                                  .statusCode(200));
         AtomicInteger reversalEntry = new AtomicInteger();
@@ -1286,7 +1286,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + approval.get() + "}")
                                                  .when()
-                                                 .post("/services/java/" + PROJECT + "/gen/events/CancelApprovalTransition/run")
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/CancelApprovalTransition/run")
                                                  .then()
                                                  .statusCode(200));
         restAssuredExecutor.execute(() -> given().when()

@@ -218,8 +218,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             Map<String, String> writerByTask = stripProcessPrefix(writerByProcessTask, taskPrefix);
             Map<String, String> setterByTask = stripProcessPrefix(setterByProcessTask, taskPrefix);
             context.writeModelFile(fileName,
-                    render(process, rolesByLowerName, context.getProjectName(), processResolvers, processFieldLoads, processTimerLoads,
-                            ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask, setterByTask));
+                    render(process, rolesByLowerName, context.getProjectName(), IntentNaming.eventsPackage(context), processResolvers,
+                            processFieldLoads, processTimerLoads, ownFieldPascalCase(process, byName), candidateGroupsExtra, writerByTask,
+                            setterByTask));
         }
     }
 
@@ -285,9 +286,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         return "/services/web/" + projectName + "/gen/" + form + "/forms/" + form + "/index.html";
     }
 
-    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, List<Resolver> resolvers,
-            List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase, String candidateGroupsExtra,
-            Map<String, String> writerByTask, Map<String, String> setterByTask) {
+    private static String render(ProcessIntent process, Map<String, String> rolesByLowerName, String projectName, String eventsPackage,
+            List<Resolver> resolvers, List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
+            String candidateGroupsExtra, Map<String, String> writerByTask, Map<String, String> setterByTask) {
         // Insert each resolver service task before its anchor step (the earliest decision or user-task
         // form that needs it) and rewrite the decision conditions - on a COPY of the step list, never
         // mutating the shared model (the glue generator runs after this one and must still see the
@@ -295,8 +296,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // own-field decision, an expire-date-loader service task before a user task with an `expire:`
         // timer, and writer/setter service tasks after a user task with editable fields or a
         // setRelationField.
-        List<StepIntent> steps =
-                augmentWithResolvers(process.getSteps(), resolvers, fieldLoads, timerLoads, ownFieldPascalCase, writerByTask, setterByTask);
+        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), eventsPackage, resolvers, fieldLoads, timerLoads,
+                ownFieldPascalCase, writerByTask, setterByTask);
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
         // serviceTask - pull it out of the main flow (it is emitted inside the event subprocess), and
@@ -370,7 +371,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                               .isBlank()) {
                 continue;
             }
-            appendStepElement(sb, step, rolesByLowerName, projectName, processId, candidateGroupsExtra);
+            appendStepElement(sb, step, rolesByLowerName, projectName, processId, eventsPackage, candidateGroupsExtra);
         }
         for (BoundaryTimer timer : boundaryTimers) {
             appendBoundaryTimer(sb, timer);
@@ -379,7 +380,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
           .append(END_ID)
           .append("\"></endEvent>\n");
         if (hasAbort) {
-            appendAbortHandler(sb, processId, abortThenStep, projectName);
+            appendAbortHandler(sb, processId, abortThenStep, projectName, eventsPackage);
         }
         writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
@@ -462,7 +463,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * user tasks, parked waits and armed timers) when the correlating glue fires the message. Placing
      * the interruption in an event subprocess avoids wrapping the main flow in a subprocess.
      */
-    private static void appendAbortHandler(StringBuilder sb, String processId, StepIntent cleanup, String projectName) {
+    private static void appendAbortHandler(StringBuilder sb, String processId, StepIntent cleanup, String projectName,
+            String eventsPackage) {
         String startId = abortStartId(processId);
         String endId = abortEndId(processId);
         sb.append("    <subProcess id=\"")
@@ -479,7 +481,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("      </startEvent>\n");
         String afterStart = endId;
         if (cleanup != null) {
-            appendServiceTask(sb, cleanup, projectName, processId);
+            appendServiceTask(sb, cleanup, projectName, processId, eventsPackage);
             afterStart = cleanup.getName();
         }
         sb.append("      <endEvent id=\"")
@@ -512,9 +514,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * sets persists, so a decision downstream of the inserting step still resolves correctly even
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
-    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, List<Resolver> resolvers, List<FieldLoad> fieldLoads,
-            List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase, Map<String, String> writerByTask,
-            Map<String, String> setterByTask) {
+    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, String eventsPackage, List<Resolver> resolvers,
+            List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
+            Map<String, String> writerByTask, Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
         for (StepIntent step : steps) {
             for (Resolver resolver : resolvers) {
@@ -522,21 +524,21 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                                                   .equals(resolver.beforeStep())) {
                     // The task id is the lower-camel form of the handler so it matches the casing of the
                     // authored step ids; the delegate still resolves the PascalCase handler class.
-                    result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), "gen.events." + resolver.handler()));
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(resolver.handler()), eventsPackage + "." + resolver.handler()));
                 }
             }
             for (FieldLoad load : fieldLoads) {
                 if (step.getName() != null && step.getName()
                                                   .equals(load.beforeStep())) {
                     // Load the trigger entity's own fields the decision tests, right before the gateway.
-                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), eventsPackage + "." + load.handler()));
                 }
             }
             for (TimerLoad load : timerLoads) {
                 if (step.getName() != null && step.getName()
                                                   .equals(load.beforeStep())) {
                     // Re-read the expire date field at task entry, so the boundary timer arms fresh.
-                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), "gen.events." + load.handler()));
+                    result.add(javaServiceTaskStep(IntentNaming.camelCase(load.handler()), eventsPackage + "." + load.handler()));
                 }
             }
             boolean userTask = "userTask".equals(step.getKind()) && step.getName() != null;
@@ -555,7 +557,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 result.add(next == null ? step : withoutNext(step));
                 for (int i = 0; i < afterTask.size(); i++) {
                     String handler = afterTask.get(i);
-                    StepIntent delegateStep = javaServiceTaskStep(IntentNaming.camelCase(handler), "gen.events." + handler);
+                    StepIntent delegateStep = javaServiceTaskStep(IntentNaming.camelCase(handler), eventsPackage + "." + handler);
                     if (i == afterTask.size() - 1 && next != null && !next.isBlank()) {
                         delegateStep.getArgs()
                                     .put("next", next);
@@ -674,7 +676,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
     }
 
     private static void appendStepElement(StringBuilder sb, StepIntent step, Map<String, String> rolesByLowerName, String projectName,
-            String processName, String candidateGroupsExtra) {
+            String processName, String eventsPackage, String candidateGroupsExtra) {
         String kind = step.getKind() == null ? "userTask" : step.getKind();
         switch (kind) {
             case "userTask":
@@ -682,7 +684,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "serviceTask":
             case "script":
-                appendServiceTask(sb, step, projectName, processName);
+                appendServiceTask(sb, step, projectName, processName, eventsPackage);
                 break;
             case "decision":
                 appendExclusiveGateway(sb, step);
@@ -729,13 +731,14 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("></userTask>\n");
     }
 
-    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName) {
+    private static void appendServiceTask(StringBuilder sb, StepIntent step, String projectName, String processName, String eventsPackage) {
         // Five service-task shapes:
         // - a generator-synthesized resolver carries a javaHandler (a client JavaDelegate FQN) -> JavaTask;
-        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the gen.events.<Handler>
+        // - an author-declared serviceTask with a `setField` -> JavaTask bound to the <events
+        // pkg>.<Handler>
         // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
         // - an author-declared serviceTask with a `setRelationField` -> JavaTask bound to the same
-        // gen.events.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
+        // <events pkg>.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
         // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
         // with the project name (the JSTask delegate resolves relative to the registry root);
         // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
@@ -745,7 +748,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // this is how a reusable, parameterized delegate (e.g. a document number generator) is invoked.
         String delegate = stringArg(step, "delegate");
         if (delegate != null && !delegate.isBlank()) {
-            appendDelegateServiceTask(sb, step, delegate.trim());
+            appendDelegateServiceTask(sb, step, moduleScopedDelegate(delegate.trim(), eventsPackage));
             return;
         }
         String javaHandler = stringArg(step, "javaHandler");
@@ -759,7 +762,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             handlerValue = javaHandler;
         } else if (setField != null && !setField.isBlank() || setRelationField != null && !setRelationField.isBlank()) {
             java = true;
-            handlerValue = "gen.events." + SetFieldSupport.className(processName, step.getName());
+            handlerValue = eventsPackage + "." + SetFieldSupport.className(processName, step.getName());
         } else if (call != null && !call.isBlank()) {
             java = false;
             handlerValue = qualifyHandlerPath(projectName, call);
@@ -784,6 +787,23 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             sb.append("      </extensionElements>\n");
         }
         sb.append("    </serviceTask>\n");
+    }
+
+    /**
+     * Resolve an authored {@code delegate:} FQN against the module-scoped events package. A bare
+     * {@code gen.events.<ClassName>} reference (no further package segment - class names cannot contain
+     * dots) means "the generated events class of THIS module" and is rewritten to
+     * {@code <events pkg>.<ClassName>}, so intents that bind a generated delegate (e.g.
+     * {@code delegate: gen.events.SalesInvoiceSnapshotGenerator}) keep working unchanged and stay
+     * portable across module renames. Any other FQN - including an explicit
+     * {@code gen.events.<module>.<ClassName>} - is the author's own class and passes through verbatim.
+     */
+    private static String moduleScopedDelegate(String delegateClass, String eventsPackage) {
+        String legacyPrefix = "gen.events.";
+        if (delegateClass.startsWith(legacyPrefix) && delegateClass.indexOf('.', legacyPrefix.length()) < 0) {
+            return eventsPackage + delegateClass.substring(legacyPrefix.length() - 1);
+        }
+        return delegateClass;
     }
 
     /**

@@ -1,6 +1,7 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -12,9 +13,10 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
  * Inbound webhook ${name}: ingest a posted JSON payload as a ${entity}.
  *
  * Generated from the intent inbound block - do not edit; it is re-generated with the application.
- * The endpoint is served under /services/java/<project>/gen/events/${className}Webhook${path}.
+ * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Webhook${path}.
  */
 @Controller
+@Component("${javaGenFolderName}_${className}Webhook")
 public class ${className}Webhook {
 
     @Post("${path}")

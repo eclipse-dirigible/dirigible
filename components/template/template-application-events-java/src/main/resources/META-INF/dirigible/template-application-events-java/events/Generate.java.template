@@ -1,7 +1,8 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.utils.Json;
@@ -14,9 +15,10 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *
  * Generated from the intent generates block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / numbering).
- * The endpoint is served under /services/java/<project>/gen/events/${className}Generate/run.
+ * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Generate/run.
  */
 @Controller
+@Component("${javaGenFolderName}_${className}Generate")
 public class ${className}Generate {
 
     public static class Request {

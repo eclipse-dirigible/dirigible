@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
@@ -21,9 +22,10 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * what a print receives). Entity access goes ONLY through the generated repositories, so validations,
  * events and the multilingual translation overlay (print in the caller's language) all apply, and the
  * browser calls it as the logged-in user so authorization and tenant are the caller's own.
- * Served at /services/java/<project>/gen/events/${className}PrintFeeder/{id}.
+ * Served at /services/java/<project>/gen/events/${javaGenFolderName}/${className}PrintFeeder/{id}.
  */
 @Controller
+@Component("${javaGenFolderName}_${className}PrintFeeder")
 public class ${className}PrintFeeder {
 
     @Get("/{id}")

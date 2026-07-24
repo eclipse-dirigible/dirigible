@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import java.math.BigDecimal;
 
@@ -22,7 +22,7 @@ import gen.${paymentGenFolder}.data.${paymentJavaPerspective}.${paymentEntity}En
  * Generated from the intent settlements block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories (validations / events / i18n).
  */
-@Component
+@Component("${javaGenFolderName}_${name}OnPayment")
 public class ${name}OnPayment implements MessageHandler {
 
     @Override

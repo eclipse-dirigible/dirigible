@@ -1,6 +1,7 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.http.Response;
@@ -17,9 +18,10 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *
  * Generated from the intent transitions block - do not edit; it is re-generated with the application.
  * Entity access goes ONLY through the generated repositories.
- * The endpoint is served under /services/java/<project>/gen/events/${className}Transition/run.
+ * The endpoint is served under /services/java/<project>/gen/events/${javaGenFolderName}/${className}Transition/run.
  */
 @Controller
+@Component("${javaGenFolderName}_${className}Transition")
 public class ${className}Transition {
 
     public static class Request {

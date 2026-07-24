@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.bpm.Process;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -27,7 +27,7 @@ import gen.${javaGenFolderName}.data.${javaEventPerspective}.${eventEntity}Repos
  * Self-describing MessageHandler (strong-interface style): the destination/kind come from the
  * interface, not an annotation; @Component makes it a managed bean.
  */
-@Component
+@Component("${javaGenFolderName}_${className}Wait")
 public class ${className}Wait implements MessageHandler {
 
     @Override

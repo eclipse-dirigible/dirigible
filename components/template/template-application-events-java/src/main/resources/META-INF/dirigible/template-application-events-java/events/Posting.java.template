@@ -1,4 +1,4 @@
-package gen.events;
+package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 import org.eclipse.dirigible.sdk.component.Component;
@@ -31,7 +31,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
  *   documents CARRYING the storno link, while the reversed sibling's guard counts only documents
  *   WITHOUT it.
  */
-@Component
+@Component("${javaGenFolderName}_${className}Posting")
 public class ${className}Posting implements MessageHandler {
 
     @Override

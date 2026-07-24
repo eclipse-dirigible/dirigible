@@ -35,8 +35,8 @@ import org.springframework.stereotype.Component;
  * <p>
  * The endpoint is the REST {@code @Controller} generated (server half) from the {@code .glue}
  * file's {@code transitions} collection by the {@code template-application-events-java} template,
- * served under {@code /services/java/<project>/gen/events/<ClassName>Transition/run}. A transition
- * is always per-record ({@code type: entity}) - a whole-view status flip has no meaning.
+ * served under {@code /services/java/<project>/gen/events/<module>/<ClassName>Transition/run}. A
+ * transition is always per-record ({@code type: entity}) - a whole-view status flip has no meaning.
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output. The {@code .extension} files
@@ -70,7 +70,7 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             String fileBase = name + "-transition-action";
             String modulePath = project + "/" + fileBase + ".js";
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, t));
-            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, t));
+            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), t));
         }
     }
 
@@ -82,14 +82,15 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, TransitionIntent t) {
+    private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + t.getForEntity() + "-" + t.getName());
         String label = t.getLabel() == null || t.getLabel()
                                                 .isBlank() ? IntentNaming.humanize(t.getName()) : t.getLabel();
         view.put("label", label);
         // The server controller (server half) is served under gen/events; NOT the entity api base.
-        view.put("endpoint", "/services/java/" + project + "/gen/events/" + IntentNaming.pascalIdentifier(t.getName()) + "Transition/run");
+        view.put("endpoint", "/services/java/" + project + "/gen/events/" + javaModule + "/" + IntentNaming.pascalIdentifier(t.getName())
+                + "Transition/run");
         view.put("view", t.getForEntity());
         view.put("type", "entity");
         if (t.getIcon() != null && !t.getIcon()

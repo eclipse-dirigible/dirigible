@@ -35,8 +35,8 @@ import org.springframework.stereotype.Component;
  * <p>
  * The endpoint is the REST {@code @Controller} generated (server half) from the {@code .glue}
  * file's {@code generates} collection by the {@code template-application-events-java} template,
- * served under {@code /services/java/<project>/gen/events/<ClassName>Generate/run} (mirroring the
- * inbound webhook URL layout).
+ * served under {@code /services/java/<project>/gen/events/<module>/<ClassName>Generate/run}
+ * (mirroring the inbound webhook URL layout).
  *
  * <p>
  * Idempotent: identical input always produces byte-identical output. The {@code .extension} files
@@ -72,7 +72,7 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
             String fileBase = name + "-generate-action";
             String modulePath = project + "/" + fileBase + ".js";
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, g));
-            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, g));
+            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), g));
         }
     }
 
@@ -84,14 +84,15 @@ public class GeneratesIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, GeneratesIntent g) {
+    private static String buildDescriptorModule(String project, String javaModule, GeneratesIntent g) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + g.getForEntity() + "-" + g.getName());
         String label = g.getLabel() == null || g.getLabel()
                                                 .isBlank() ? IntentNaming.humanize(g.getName()) : g.getLabel();
         view.put("label", label);
         // The server controller (server half) is served under gen/events; NOT the entity api base.
-        view.put("endpoint", "/services/java/" + project + "/gen/events/" + IntentNaming.pascalIdentifier(g.getName()) + "Generate/run");
+        view.put("endpoint", "/services/java/" + project + "/gen/events/" + javaModule + "/" + IntentNaming.pascalIdentifier(g.getName())
+                + "Generate/run");
         view.put("view", g.getForEntity());
         view.put("type", g.getScope());
         if (g.getIcon() != null && !g.getIcon()

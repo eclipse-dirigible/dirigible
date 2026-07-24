@@ -11,6 +11,7 @@ import org.eclipse.dirigible.components.api.security.UserFacade;
 #end
 import org.eclipse.dirigible.sdk.platform.Documentation;
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.Post;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 @Controller
+@Component("${javaGenFolderName}_${name}Controller")
 @Documentation("${projectName} - ${name} Report Controller")
 public class ${name}Controller {
 

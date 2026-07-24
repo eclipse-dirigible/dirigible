@@ -72,6 +72,50 @@ public final class IntentNaming {
     }
 
     /**
+     * The intent's sanitized Java module segment - the exact mirror of the template engine's
+     * {@code sanitizeJavaIdentifier} ({@code parameterUtils.js}): lower-cased, every character outside
+     * {@code [a-z0-9_]} replaced by an underscore, a leading digit prefixed with an underscore
+     * ({@code sales-invoices} -> {@code sales_invoices}). Producer (this engine, which writes handler
+     * FQNs into the {@code .bpmn} and endpoint URLs into extensions) and consumer (the events template,
+     * which emits the {@code package} line) must derive the same segment or the generated references
+     * never match.
+     *
+     * @param context the generation context
+     * @return the sanitized module segment, never blank
+     */
+    public static String javaModule(IntentGenerationContext context) {
+        String name = baseName(context).toLowerCase(Locale.ROOT);
+        StringBuilder out = new StringBuilder(name.length() + 1);
+        for (int i = 0; i < name.length(); i++) {
+            char c = name.charAt(i);
+            out.append((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_' ? c : '_');
+        }
+        if (out.length() == 0) {
+            return "_";
+        }
+        if (Character.isDigit(out.charAt(0))) {
+            out.insert(0, '_');
+        }
+        return out.toString();
+    }
+
+    /**
+     * The module-scoped Java package every generated event handler lands in:
+     * {@code gen.events.<module>} (e.g. {@code gen.events.sales_invoices}). Namespacing per module
+     * keeps two modules that author a same-named reaction (both built from the same recipe) from
+     * colliding by FQN in the registry-wide client-Java compilation. The module segment goes UNDER
+     * {@code gen/events} - not {@code gen/<module>/events} - so the glue output stays a sibling of the
+     * model-to-code template's {@code gen/<module>} folder and survives a model-only regeneration
+     * (which wipes {@code gen/<module>} wholesale).
+     *
+     * @param context the generation context
+     * @return the events package for this intent module
+     */
+    public static String eventsPackage(IntentGenerationContext context) {
+        return "gen.events." + javaModule(context);
+    }
+
+    /**
      * Capitalize the first letter to make an UpperCamelCase (PascalCase) name, preserving the rest -
      * the Dirigible EDM convention for property names ({@code id} -> {@code Id}, {@code loanedOn} ->
      * {@code LoanedOn}). Authoring stays lower camelCase; only the generated model property names are
