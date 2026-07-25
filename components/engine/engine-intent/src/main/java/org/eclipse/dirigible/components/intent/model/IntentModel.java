@@ -71,9 +71,21 @@ public class IntentModel {
      * Declarative event-driven row posts - emit mapped rows into a target entity on a document event.
      */
     private List<PostIntent> posts = new ArrayList<>();
+    /**
+     * Keyed cross-entity aggregates - a running sum/count grouped by FKs, materialised into a target.
+     */
+    private List<AggregateIntent> aggregates = new ArrayList<>();
 
     public List<ActionIntent> getActions() {
         return actions;
+    }
+
+    public List<AggregateIntent> getAggregates() {
+        return aggregates;
+    }
+
+    public void setAggregates(List<AggregateIntent> aggregates) {
+        this.aggregates = aggregates == null ? new ArrayList<>() : aggregates;
     }
 
     public List<PostIntent> getPosts() {
