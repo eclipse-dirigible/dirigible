@@ -1,0 +1,61 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+import gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Entity;
+import gen.${javaGenFolderName}.data.${sourceJavaPerspective}.${sourceEntity}Repository;
+import gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Entity;
+import gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Repository;
+
+/**
+ * Maintains the keyed aggregate ${targetEntity}.${targetField} = ${op}(${sourceEntity}) grouped by
+ * [${keyList}] - one ${targetEntity} row per distinct key-tuple.
+ *
+ * Generated from the intent aggregates block - do not edit; it is re-generated with the application. On
+ * each source ${sourceEntity} event the target row for the incoming row's key-tuple is upserted and the
+ * aggregate recomputed from the store over every source row sharing that tuple (self-healing +
+ * idempotent - re-delivery or replay converges to the same value). A source row with any grouping key
+ * null is ignored (it belongs to no tuple). v1: same-model source + target, sum/count into a decimal
+ * target field; a key change on update recomputes the NEW tuple (append-only ledgers - the primary use
+ * - never edit keys, so the old-tuple recompute is a documented follow-up).
+ */
+@Component("${javaGenFolderName}_${className}")
+public class ${className} implements MessageHandler {
+
+    @Override
+    public String destination() {
+        return "${projectName}-${sourcePerspective}-${sourceEntity}${topicSuffix}";
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.TOPIC;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        ${sourceEntity}Entity row = Json.parse(message, ${sourceEntity}Entity.class);
+        if (row == null${keyNullGuards}) {
+            return;
+        }
+        ${targetEntity}Repository targets = new ${targetEntity}Repository();
+        java.util.List<${targetEntity}Entity> matches = targets.findAll(${keyCriteria});
+        ${targetEntity}Entity target = matches.isEmpty() ? new ${targetEntity}Entity() : matches.get(0);
+        java.util.List<${sourceEntity}Entity> rows = new ${sourceEntity}Repository().findAll(${keyCriteria});
+        java.math.BigDecimal agg = java.math.BigDecimal.ZERO;
+        for (${sourceEntity}Entity r : rows) {
+            ${aggregateStep}
+        }
+${keyAssigns}
+        target.${targetField} = agg;
+        if (matches.isEmpty()) {
+            targets.save(target);
+        } else {
+            targets.update(target);
+        }
+    }
+}

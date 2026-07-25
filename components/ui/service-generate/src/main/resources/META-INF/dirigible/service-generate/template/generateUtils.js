@@ -1103,6 +1103,68 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "aggregates":
+                    // Keyed cross-entity aggregate (intent aggregates:): a MessageHandler that
+                    // maintains a materialised target row per key-tuple - target.<field> =
+                    // sum/count(source.<field>) grouped by the shared FKs. Each logical aggregate
+                    // expands here into THREE handlers (source create / -updated / -deleted); every
+                    // one upserts the incoming row's tuple and recomputes from the store (idempotent,
+                    // self-healing). All Java expressions are pre-rendered from the descriptor's keys
+                    // so the template stays shape-only. v1: same-model, uniform BigDecimal accumulation
+                    // into a decimal target field (sum adds the field, count adds ONE).
+                    if (model.aggregates) {
+                        const aggVariants = [
+                            { suffix: "", cls: "OnCreate" },
+                            { suffix: "-updated", cls: "OnUpdate" },
+                            { suffix: "-deleted", cls: "OnDelete" }
+                        ];
+                        for (let i = 0; i < model.aggregates.length; i++) {
+                            const ag = model.aggregates[i];
+                            const keys = ag.keys || [];
+                            let keyNullGuards = "";
+                            let keyCriteria = "Criteria.create()";
+                            let keyAssigns = "";
+                            for (let k = 0; k < keys.length; k++) {
+                                const key = keys[k].key;
+                                keyNullGuards += " || row." + key + " == null";
+                                keyCriteria += ".eq(\"" + key + "\", row." + key + ")";
+                                keyAssigns += "        target." + key + " = row." + key + ";\n";
+                            }
+                            const aggregateStep = ag.op === "count"
+                                ? "agg = agg.add(java.math.BigDecimal.ONE);"
+                                : "if (r." + ag.sumField + " != null) { agg = agg.add(r." + ag.sumField + "); }";
+                            const keyList = keys.map(function (x) { return x.key; }).join(", ");
+                            for (let v = 0; v < aggVariants.length; v++) {
+                                const variant = aggVariants[v];
+                                const aggregateParameters = {
+                                    ...parameters,
+                                    className: ag.className + "Aggregate" + variant.cls,
+                                    topicSuffix: variant.suffix,
+                                    op: ag.op,
+                                    sourceEntity: ag.sourceEntity,
+                                    sourcePerspective: ag.sourcePerspective,
+                                    sourceJavaPerspective: sanitizeJavaIdentifier(ag.sourcePerspective),
+                                    targetEntity: ag.targetEntity,
+                                    targetPerspective: ag.targetPerspective,
+                                    targetJavaPerspective: sanitizeJavaIdentifier(ag.targetPerspective),
+                                    targetField: ag.targetField,
+                                    sumField: ag.sumField,
+                                    keyList: keyList,
+                                    keyNullGuards: keyNullGuards,
+                                    keyCriteria: keyCriteria,
+                                    keyAssigns: keyAssigns,
+                                    aggregateStep: aggregateStep
+                                };
+                                const cleanAggregateParameters = cleanData(aggregateParameters);
+                                generatedFiles.push({
+                                    location: location,
+                                    content: getGenerationEngine(template).generate(location, content, cleanAggregateParameters),
+                                    path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanAggregateParameters)
+                                });
+                            }
+                        }
+                    }
+                    break;
                 case "postings":
                     // Declarative postings (intent layer): a MessageHandler on the source's
                     // -transitioned topic creating a local document + computed items. Everything is

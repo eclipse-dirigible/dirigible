@@ -185,6 +185,13 @@ export function getTemplate(parameters) {
                 collection: "posts"
             },
             {
+                location: "/template-application-events-java/events/Aggregate.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "aggregates"
+            },
+            {
                 location: "/template-application-events-java/project.json.mjs",
                 action: "generate",
                 rename: "project.json",

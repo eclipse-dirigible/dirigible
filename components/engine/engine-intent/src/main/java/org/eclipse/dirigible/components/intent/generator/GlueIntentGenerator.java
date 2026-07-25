@@ -109,7 +109,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
                 && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
