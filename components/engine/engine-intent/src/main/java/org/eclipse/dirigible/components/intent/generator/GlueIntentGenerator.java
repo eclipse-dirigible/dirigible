@@ -100,6 +100,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
+        List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots = SnapshotSupport.buildSnapshots(model, byName, compositionParents);
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
@@ -108,7 +109,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
                 && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -133,6 +134,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("transitions", transitions);
         glue.put("postings", postings);
         glue.put("posts", posts);
+        glue.put("aggregates", aggregates);
         glue.put("printFeeders", printFeeders);
         glue.put("snapshots", snapshots);
         glue.put("numbering", numbering);
@@ -928,6 +930,81 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /** Test hook: build the {@code posts} glue collection without a repository. */
     static List<Map<String, Object>> buildPostsForTest(IntentModel model) {
         return buildPosts(model, IntentEntities.byName(model), IntentEntities.compositionParents(model));
+    }
+
+    /**
+     * Build the {@code aggregates} glue collection: one descriptor per {@code aggregates:} rule
+     * ({@link org.eclipse.dirigible.components.intent.model.AggregateIntent}). Each drives a generated
+     * handler that maintains a running sum/count of a source entity's field, grouped by its to-one
+     * relations, upserted into a separate target entity keyed by that group. Structural glue; the
+     * keyed-upsert handler template is the next stage. See kf-catalog PROPOSAL_AGGREGATE_CHECKS.md.
+     */
+    private static List<Map<String, Object>> buildAggregates(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (org.eclipse.dirigible.components.intent.model.AggregateIntent a : model.getAggregates()) {
+            if (a.getName() == null || a.getName()
+                                        .isBlank()
+                    || a.getOf() == null || a.getInto() == null || a.getField() == null || a.getBy()
+                                                                                            .isEmpty()) {
+                continue; // malformed: name/of/into/field/by are required
+            }
+            EntityIntent source = byName.get(a.getOf());
+            EntityIntent target = byName.get(a.getInto());
+            if (source == null || target == null) {
+                continue; // bad source/target reference (v1: same-model)
+            }
+            String op = a.getOp() == null || a.getOp()
+                                              .isBlank() ? "sum"
+                                                      : a.getOp()
+                                                         .trim()
+                                                         .toLowerCase(java.util.Locale.ROOT);
+            // The grouping keys must be to-one relations of BOTH the source and the target (the target
+            // is keyed by the same FKs). Emit the pascal FK names paired for the key match.
+            List<Map<String, String>> keys = new ArrayList<>();
+            boolean keysOk = true;
+            for (String key : a.getBy()) {
+                String fk = IntentNaming.pascalCase(key);
+                boolean onSource = source.getRelations()
+                                         .stream()
+                                         .anyMatch(r -> fk.equals(IntentNaming.pascalCase(r.getName())));
+                boolean onTarget = target.getRelations()
+                                         .stream()
+                                         .anyMatch(r -> fk.equals(IntentNaming.pascalCase(r.getName())));
+                if (!onSource || !onTarget) {
+                    LOGGER.warn("aggregate [{}]: key [{}] must be a to-one relation of both source [{}] and target [{}] - skipped",
+                            a.getName(), key, a.getOf(), a.getInto());
+                    keysOk = false;
+                    break;
+                }
+                Map<String, String> pair = new LinkedHashMap<>();
+                pair.put("key", fk);
+                keys.add(pair);
+            }
+            if (!keysOk) {
+                continue;
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("name", a.getName());
+            e.put("className", IntentNaming.pascalIdentifier(a.getName()));
+            e.put("op", op);
+            e.put("sourceEntity", a.getOf());
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(a.getOf(), compositionParents));
+            e.put("sourceKeyField", IntentEntities.keyFieldName(source));
+            e.put("sumField", a.getSum() == null ? "" : IntentNaming.pascalCase(a.getSum()));
+            e.put("keys", keys);
+            e.put("targetEntity", a.getInto());
+            e.put("targetPerspective", IntentEntities.resolvePerspective(a.getInto(), compositionParents));
+            e.put("targetPk", IntentEntities.keyFieldName(target));
+            e.put("targetField", IntentNaming.pascalCase(a.getField()));
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Test hook: build the {@code aggregates} glue collection without a repository. */
+    static List<Map<String, Object>> buildAggregatesForTest(IntentModel model) {
+        return buildAggregates(model, IntentEntities.byName(model), IntentEntities.compositionParents(model));
     }
 
     /**
