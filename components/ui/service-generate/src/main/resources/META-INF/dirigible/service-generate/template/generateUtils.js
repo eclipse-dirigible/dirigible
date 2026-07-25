@@ -1061,6 +1061,48 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "posts":
+                    // Event-driven row posting (intent posts:): per rule, a MessageHandler on the
+                    // source's -transitioned / -created topic that emits mapped rows into the target
+                    // (per line item), idempotently by the back-reference. All expressions are
+                    // pre-rendered by the glue generator; here only the Java package segments are
+                    // sanitized. Same-model source + target (cross-model target is a follow-up).
+                    if (model.posts) {
+                        for (let i = 0; i < model.posts.length; i++) {
+                            const po = model.posts[i];
+                            const postsParameters = {
+                                ...parameters,
+                                name: po.name,
+                                className: po.className,
+                                sourceEntity: po.entity,
+                                sourcePerspective: po.sourcePerspective,
+                                sourceJavaPerspective: sanitizeJavaIdentifier(po.sourcePerspective),
+                                sourceKeyField: po.sourceKeyField,
+                                isCreate: po.isCreate,
+                                event: po.event,
+                                statusProperty: po.statusProperty,
+                                statusValue: po.statusValue,
+                                perItem: po.perItem,
+                                itemsEntity: po.itemsEntity,
+                                itemsFk: po.itemsFk,
+                                itemsPerspective: po.itemsPerspective,
+                                itemsJavaPerspective: sanitizeJavaIdentifier(po.itemsPerspective),
+                                into: po.into,
+                                targetPerspective: po.targetPerspective,
+                                targetJavaPerspective: sanitizeJavaIdentifier(po.targetPerspective),
+                                targetPk: po.targetPk,
+                                backRef: po.backRef,
+                                assigns: po.assigns
+                            };
+                            const cleanPostsParameters = cleanData(postsParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanPostsParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanPostsParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "postings":
                     // Declarative postings (intent layer): a MessageHandler on the source's
                     // -transitioned topic creating a local document + computed items. Everything is

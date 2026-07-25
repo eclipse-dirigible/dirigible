@@ -99,6 +99,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots = SnapshotSupport.buildSnapshots(model, byName, compositionParents);
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
@@ -131,6 +132,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("generates", generates);
         glue.put("transitions", transitions);
         glue.put("postings", postings);
+        glue.put("posts", posts);
         glue.put("printFeeders", printFeeders);
         glue.put("snapshots", snapshots);
         glue.put("numbering", numbering);
@@ -781,43 +783,151 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code idempotentBy}. See kf-catalog PROPOSAL_EVENT_POSTING.md. This is the structural glue; the
      * handler template + BPMN/listener wiring is the next stage.
      */
-    private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName) {
+    private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.PostIntent p : model.getPosts()) {
             if (p.getName() == null || p.getName()
                                         .isBlank()
                     || p.getForEntity() == null || p.getInto() == null || p.getEvent() == null) {
-                continue; // malformed: name/forEntity/into/on are required
+                continue; // malformed: name/forEntity/into/event are required
             }
-            if (byName.get(p.getForEntity()) == null) {
-                continue; // bad source reference
+            EntityIntent source = byName.get(p.getForEntity());
+            EntityIntent target = byName.get(p.getInto());
+            if (source == null || target == null) {
+                continue; // bad source/target reference (v1: same-model target)
             }
+            // The trigger: `create` (fires on insert, no status guard) or a numeric status seed id
+            // (fires on the -transitioned topic, guarded to that status - matches transitions/postings).
+            boolean isCreate = "create".equalsIgnoreCase(p.getEvent()
+                                                          .trim());
+            Integer statusValue = null;
+            String statusProperty = "";
+            if (!isCreate) {
+                try {
+                    statusValue = Integer.valueOf(p.getEvent()
+                                                   .trim());
+                } catch (NumberFormatException nfe) {
+                    LOGGER.warn("posts [{}]: event must be `create` or a numeric status seed id, was [{}] - skipped", p.getName(),
+                            p.getEvent());
+                    continue;
+                }
+                for (RelationIntent relation : source.getRelations()) {
+                    if (relation.isEntityStatus()) {
+                        statusProperty = IntentNaming.pascalCase(relation.getName());
+                    }
+                }
+                if (statusProperty.isEmpty()) {
+                    LOGGER.warn("posts [{}]: source [{}] has no function: EntityStatus relation for a status-triggered post - skipped",
+                            p.getName(), p.getForEntity());
+                    continue;
+                }
+            }
+            // Per-item collection: forEach -> the composition child of the source (the entity whose
+            // composition relation targets it). Absent -> one row from the source itself.
+            String itemsEntity = "";
+            String itemsFk = "";
+            String itemsPerspective = "";
+            boolean perItem = p.getForEach() != null && !p.getForEach()
+                                                          .isBlank();
+            if (perItem) {
+                EntityIntent child = null;
+                String fk = null;
+                for (EntityIntent candidate : model.getEntities()) {
+                    if (p.getForEntity()
+                         .equals(compositionParents.get(candidate.getName()))) {
+                        for (RelationIntent relation : candidate.getRelations()) {
+                            if (relation.isComposition() && p.getForEntity()
+                                                             .equals(relation.getTo())) {
+                                child = candidate;
+                                fk = IntentNaming.pascalCase(relation.getName());
+                            }
+                        }
+                    }
+                }
+                if (child == null) {
+                    LOGGER.warn("posts [{}]: forEach set but [{}] has no composition child - skipped", p.getName(), p.getForEntity());
+                    continue;
+                }
+                itemsEntity = child.getName();
+                itemsFk = fk;
+                itemsPerspective = IntentEntities.resolvePerspective(child.getName(), compositionParents);
+            }
+
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", p.getName());
             e.put("className", IntentNaming.pascalIdentifier(p.getName()));
             e.put("entity", p.getForEntity());
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(p.getForEntity(), compositionParents));
+            e.put("sourceKeyField", IntentEntities.keyFieldName(source));
+            e.put("isCreate", isCreate);
             e.put("event", p.getEvent());
-            e.put("forEach", p.getForEach() == null ? "" : p.getForEach());
+            e.put("statusProperty", statusProperty);
+            e.put("statusValue", statusValue == null ? "" : String.valueOf(statusValue));
+            e.put("perItem", perItem);
+            e.put("itemsEntity", itemsEntity);
+            e.put("itemsFk", itemsFk);
+            e.put("itemsPerspective", itemsPerspective);
             e.put("into", p.getInto());
-            e.put("idempotentBy", p.getIdempotentBy() == null ? "" : p.getIdempotentBy());
+            e.put("targetPerspective", IntentEntities.resolvePerspective(p.getInto(), compositionParents));
+            e.put("targetPk", IntentEntities.keyFieldName(target));
+            e.put("backRef", p.getIdempotentBy() == null ? "" : IntentNaming.pascalCase(p.getIdempotentBy()));
             e.put("guard", p.getGuard() == null ? "" : p.getGuard());
-            List<Map<String, String>> set = new ArrayList<>();
+            // Rendered per-row assignments: target field -> a Java expression over `source` / `item`.
+            List<Map<String, String>> assigns = new ArrayList<>();
             for (Map.Entry<String, String> f : p.getSet()
                                                 .entrySet()) {
                 Map<String, String> pair = new LinkedHashMap<>();
                 pair.put("field", IntentNaming.pascalCase(f.getKey()));
-                pair.put("value", f.getValue());
-                set.add(pair);
+                pair.put("expr", postSetExpr(f.getValue()));
+                assigns.add(pair);
             }
-            e.put("set", set);
+            e.put("assigns", assigns);
             out.add(e);
         }
         return out;
     }
 
+    /**
+     * Render a {@code posts:} {@code set:} value to a Java expression over the {@code source} entity
+     * and the per-item {@code item} entity. Supported forms (the inventory ledger's needs):
+     * {@code item.<Field>} (item copy), {@code -item.<Field>} (negated item copy, null-safe),
+     * {@code source.<Field>} (source copy), an integer literal (a constant FK/int), a quoted string,
+     * else pass-through (best effort). Fuller {@code Calc} expressions are a follow-up.
+     */
+    private static String postSetExpr(String raw) {
+        if (raw == null) {
+            return "null";
+        }
+        String v = raw.trim();
+        java.util.regex.Matcher neg = java.util.regex.Pattern.compile("^-\\s*item\\.(\\w+)$")
+                                                             .matcher(v);
+        if (neg.matches()) {
+            String f = "item." + IntentNaming.pascalCase(neg.group(1));
+            return f + " == null ? null : " + f + ".negate()";
+        }
+        java.util.regex.Matcher item = java.util.regex.Pattern.compile("^item\\.(\\w+)$")
+                                                              .matcher(v);
+        if (item.matches()) {
+            return "item." + IntentNaming.pascalCase(item.group(1));
+        }
+        java.util.regex.Matcher src = java.util.regex.Pattern.compile("^source\\.(\\w+)$")
+                                                             .matcher(v);
+        if (src.matches()) {
+            return "source." + IntentNaming.pascalCase(src.group(1));
+        }
+        if (v.matches("-?\\d+")) {
+            return v; // integer constant (e.g. a Direction FK id)
+        }
+        if (v.matches("\"[^\"]*\"")) {
+            return v; // already-quoted string literal
+        }
+        return v; // pass-through (best effort); fuller Calc rendering is a follow-up
+    }
+
     /** Test hook: build the {@code posts} glue collection without a repository. */
     static List<Map<String, Object>> buildPostsForTest(IntentModel model) {
-        return buildPosts(model, IntentEntities.byName(model));
+        return buildPosts(model, IntentEntities.byName(model), IntentEntities.compositionParents(model));
     }
 
     /**
