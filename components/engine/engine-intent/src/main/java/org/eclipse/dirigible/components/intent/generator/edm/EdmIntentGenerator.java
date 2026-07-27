@@ -28,6 +28,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
+import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CalendarIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
@@ -534,7 +535,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("labelExpression", entity.getLabel());
                 entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
-            List<Map<String, Object>> checkMaps = buildChecks(entity, byName);
+            List<Map<String, Object>> checkMaps = buildChecks(entity, byName, model.getAggregates());
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
                 // .edm XML skips it via the Iterable guard), consumed by the DAO/REST templates.
@@ -1367,7 +1368,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * back-reference FK property, and the EntityStatus gate property - everything the DAO/REST
      * templates need without re-deriving model structure.
      */
-    private static List<Map<String, Object>> buildChecks(EntityIntent entity, Map<String, EntityIntent> byName) {
+    private static List<Map<String, Object>> buildChecks(EntityIntent entity, Map<String, EntityIntent> byName,
+            List<AggregateIntent> aggregates) {
         List<Map<String, Object>> checkMaps = new ArrayList<>();
         if (entity.getChecks() == null) {
             return checkMaps;
@@ -1376,6 +1378,44 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> checkMap = new LinkedHashMap<>();
             checkMap.put("kind", check.getKind());
             checkMap.put("message", check.getMessage() == null ? "Validation failed" : check.getMessage());
+            if ("guard".equals(check.getKind())) {
+                // Aggregate guard: recompute the named aggregate's keyed sum from THIS entity's store
+                // (the aggregate's `of` must be this entity - v1 self-referential) and block a write
+                // whose post-state would drop the sum below `minimum`. Race-free: recomputed from the
+                // source rows, not the async-maintained target.
+                AggregateIntent agg = null;
+                if (aggregates != null) {
+                    for (AggregateIntent a : aggregates) {
+                        if (a.getName() != null && a.getName()
+                                                    .equals(check.getAggregate())) {
+                            agg = a;
+                            break;
+                        }
+                    }
+                }
+                if (agg == null || agg.getOf() == null || !agg.getOf()
+                                                              .equals(entity.getName())
+                        || agg.getSum() == null || agg.getBy()
+                                                      .isEmpty()) {
+                    continue; // unresolved / not self-referential / no sum - skip (v1 scope)
+                }
+                List<Map<String, String>> keys = new ArrayList<>();
+                for (String key : agg.getBy()) {
+                    Map<String, String> pair = new LinkedHashMap<>();
+                    pair.put("key", IntentNaming.pascalCase(key));
+                    keys.add(pair);
+                }
+                checkMap.put("keys", keys);
+                checkMap.put("sumField", IntentNaming.pascalCase(agg.getSum()));
+                FieldIntent guardPk = primaryKeyOf(entity);
+                checkMap.put("pk", guardPk == null ? "Id" : IntentNaming.pascalCase(guardPk.getName()));
+                checkMap.put("minimum", check.getMinimum() == null ? "0"
+                        : check.getMinimum()
+                               .toPlainString());
+                checkMap.put("enabledBy", check.getEnabledBy() == null ? "" : check.getEnabledBy());
+                checkMaps.add(checkMap);
+                continue;
+            }
             if ("exactlyOne".equals(check.getKind())) {
                 checkMap.put("fields", check.getFields()
                                             .stream()
@@ -1980,9 +2020,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             int y = pos[1];
             int height = pos[2];
 
+            String cellStyle = entityCellStyle(entity.get("type"));
             sb.append("   <mxCell id=\"")
               .append(entityCellId.get(name))
-              .append("\" style=\"entity\" parent=\"1\" vertex=\"1\">\n");
+              .append("\" style=\"")
+              .append(cellStyle)
+              .append("\" parent=\"1\" vertex=\"1\">\n");
             appendEntityValue(sb, entity);
             sb.append("    <mxGeometry x=\"")
               .append(x)
@@ -1999,12 +2042,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
               .append("\" as=\"alternateBounds\"/></mxGeometry>\n");
             sb.append("   </mxCell>\n");
 
+            // A PROJECTION entity's property rows carry the dedicated projectionproperty style, exactly
+            // as the EDM editor serializes them; PRIMARY/DEPENDENT/SETTING children keep the default
+            // vertex style (the editor does not restyle their children either).
+            String propStyleAttr = "projection".equals(cellStyle) ? " style=\"projectionproperty\"" : "";
             int propIndex = 0;
             for (Map<String, Object> property : properties) {
                 sb.append("   <mxCell id=\"")
                   .append(propertyCellId.get(name)
                                         .get(property.get("name")))
-                  .append("\" parent=\"")
+                  .append("\"")
+                  .append(propStyleAttr)
+                  .append(" parent=\"")
                   .append(entityCellId.get(name))
                   .append("\" vertex=\"1\" connectable=\"0\">\n");
                 appendPropertyValue(sb, property);
@@ -2138,6 +2187,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> propertiesOf(Map<String, Object> entity) {
         return (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
+    }
+
+    /**
+     * The mxGraph cell style string the EDM editor colors an entity by. The editor keys the cell colour
+     * on the {@code style} attribute alone (blue {@code entity} / darker-blue {@code dependent} / grey
+     * {@code setting} / purple {@code projection}), reconciling it from {@code entityType} only when
+     * the entity dialog re-saves - never on load. So an intent-generated {@code .edm} must emit the
+     * same per-type style a hand-modeled one carries, or every entity loads as the default blue
+     * {@code entity}.
+     */
+    private static String entityCellStyle(Object entityType) {
+        if ("DEPENDENT".equals(entityType)) {
+            return "dependent";
+        }
+        if ("SETTING".equals(entityType)) {
+            return "setting";
+        }
+        if ("PROJECTION".equals(entityType)) {
+            return "projection";
+        }
+        return "entity";
     }
 
     /**

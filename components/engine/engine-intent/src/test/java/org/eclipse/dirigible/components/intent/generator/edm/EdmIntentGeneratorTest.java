@@ -126,10 +126,38 @@ class EdmIntentGeneratorTest {
                 "the cross-model Country cell must be entityType=PROJECTION, was: " + countryCell);
         assertTrue(countryCell.contains("projectionReferencedEntity=\"Country\""), "the projection cell must carry its referenced entity");
 
-        // A locally-owned entity stays a plain cell (no entityType=PROJECTION).
+        // The enclosing <mxCell> must carry style="projection" - the EDM editor colors an entity purely
+        // from the cell style on load, so without it the projection renders as the default blue (#6333).
+        assertTrue(mxCellTagFor(edm, "Country").contains("style=\"projection\""),
+                "the PROJECTION cell must carry style=projection so the modeler colors it purple");
+
+        // A locally-owned entity stays a plain cell (no entityType=PROJECTION) styled as the default blue.
         int owned = edm.indexOf("<Entity name=\"Customer\"");
         String customerCell = edm.substring(owned, edm.indexOf("/>", owned));
         assertTrue(!customerCell.contains("entityType=\"PROJECTION\""), "an owned entity must not be a projection cell");
+        assertTrue(mxCellTagFor(edm, "Customer").contains("style=\"entity\""), "an owned PRIMARY entity must keep style=entity");
+    }
+
+    @Test
+    void entityCellsCarryTheModelerStylePerType() {
+        // The EDM editor colors each entity solely from the mxCell style attribute (reconciled from
+        // entityType only when the entity dialog re-saves, never on load). So an intent-generated .edm must
+        // emit the same per-type style a hand-modeled one carries, or every entity loads as the default
+        // blue "entity" style regardless of type (#6333). sales-invoices exercises all four types.
+        IntentModel parsed = IntentParser.parse(readResource("/billing/sales-invoices.intent"));
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "sales-invoices");
+
+        assertTrue(mxCellTagFor(edm, "SalesInvoice").contains("style=\"entity\""), "a PRIMARY entity is styled entity (blue)");
+        assertTrue(mxCellTagFor(edm, "SalesInvoiceItem").contains("style=\"dependent\""),
+                "a composition-child DEPENDENT entity is styled dependent (darker blue)");
+        assertTrue(mxCellTagFor(edm, "PaymentMethod").contains("style=\"setting\""), "a SETTING entity is styled setting (grey)");
+        assertTrue(mxCellTagFor(edm, "CustomerPayment").contains("style=\"projection\""),
+                "a cross-model PROJECTION entity is styled projection (purple)");
+
+        // A PROJECTION entity's property rows carry the dedicated projectionproperty style, matching the
+        // editor's own serialization; the other three types keep the default (unstyled) child cells.
+        assertTrue(edm.contains("style=\"projectionproperty\""),
+                "a PROJECTION entity's property cells must carry style=projectionproperty");
     }
 
     @Test
@@ -469,6 +497,66 @@ class EdmIntentGeneratorTest {
         Map<String, Object> entry = entityByName(entities(model), "JournalEntry");
         assertEquals("Status", entry.get("immutableStatusProperty"));
         assertEquals("2,3", entry.get("immutableStatusValues"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void guardCheckEmitsKeyedAggregateGuard() {
+        String yaml = """
+                name: inventory
+                entities:
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Store
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: StockMovement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: Store, kind: manyToOne, to: Store }
+                    checks:
+                      - kind: guard
+                        aggregate: onHand
+                        minimum: 0
+                        message: Insufficient stock
+                        enabledBy: INVENTORY_BLOCK_NEGATIVE_STOCK
+                  - name: ProductAvailability
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: onHand, type: decimal }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: Store, kind: manyToOne, to: Store }
+                aggregates:
+                  - name: onHand
+                    of: StockMovement
+                    op: sum
+                    sum: quantity
+                    by: [Product, Store]
+                    into: ProductAvailability
+                    field: onHand
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "inventory");
+        Map<String, Object> movement = entityByName(entities(model), "StockMovement");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) movement.get("checks");
+        assertEquals(1, checks.size());
+        Map<String, Object> guard = checks.get(0);
+        assertEquals("guard", guard.get("kind"));
+        assertEquals("Quantity", guard.get("sumField"));
+        assertEquals("Id", guard.get("pk"));
+        assertEquals("0", guard.get("minimum"));
+        assertEquals("Insufficient stock", guard.get("message"));
+        assertEquals("INVENTORY_BLOCK_NEGATIVE_STOCK", guard.get("enabledBy"));
+        List<Map<String, String>> keys = (List<Map<String, String>>) guard.get("keys");
+        assertEquals(2, keys.size());
+        assertEquals("Product", keys.get(0)
+                                    .get("key"));
+        assertEquals("Store", keys.get(1)
+                                  .get("key"));
     }
 
     @Test
@@ -837,6 +925,18 @@ class EdmIntentGeneratorTest {
                        .filter(e -> name.equals(e.get("name")))
                        .findFirst()
                        .orElse(null);
+    }
+
+    /**
+     * The opening {@code <mxCell ...>} tag that wraps the {@code <Entity name="<name>">} value cell in
+     * the emitted EDM diagram - the tag carrying the {@code style} attribute the modeler colors the
+     * entity by.
+     */
+    private static String mxCellTagFor(String edm, String name) {
+        int entityIdx = edm.indexOf("<Entity name=\"" + name + "\"");
+        assertTrue(entityIdx >= 0, "the diagram cell for entity [" + name + "] must be present");
+        int cellStart = edm.lastIndexOf("<mxCell", entityIdx);
+        return edm.substring(cellStart, edm.indexOf('>', cellStart) + 1);
     }
 
     @SuppressWarnings("unchecked")

@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
+import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
 import org.eclipse.dirigible.components.intent.model.DependsOnIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
@@ -897,10 +898,11 @@ public final class IntentParser {
      * exactly what the child hides whenever the target entity has a personal (my) surface - the leak
      * class where the leaf value is scrubbed from the personal wire but its total still travels it.
      * Close it by construction: before validation, every rollup target field ({@code op: sum} /
-     * {@code latest}) and every {@code aggregate: true} master field fed by a sensitive source becomes
-     * {@code sensitive} automatically when the target entity is personal-surfaced (an own personal
-     * owner relation, or the scope inherited through a composition parent chain). A target without a
-     * personal surface keeps the authored visibility - there is nothing to leak there.
+     * {@code latest}), every {@code aggregate: true} master field, and every {@code aggregates:} target
+     * field fed by a sensitive source becomes {@code sensitive} automatically when the target entity is
+     * personal-surfaced (an own personal owner relation, or the scope inherited through a composition
+     * parent chain). A target without a personal surface keeps the authored visibility - there is
+     * nothing to leak there.
      */
     private static void propagateSensitiveDerivations(IntentModel model) {
         java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
@@ -944,6 +946,23 @@ public final class IntentParser {
                         }
                     }
                 }
+            }
+        }
+        // aggregates: the source entity's `sum` field feeds the target entity's `field`, keyed by the
+        // shared FKs. Same leak shape one entity further out - the keyed aggregate materialises the total
+        // of a hidden figure into a SEPARATE entity, which is exactly what a personal surface over that
+        // target would then serve.
+        for (AggregateIntent aggregate : model.getAggregates()) {
+            EntityIntent source = byName.get(aggregate.getOf());
+            EntityIntent target = byName.get(aggregate.getInto());
+            if (source == null || target == null || aggregate.getSum() == null) {
+                continue;
+            }
+            FieldIntent of = fieldByName(source, aggregate.getSum());
+            FieldIntent field = aggregate.getField() == null ? null : fieldByName(target, aggregate.getField());
+            if (of != null && field != null && of.isSensitive() && !field.isSensitive()
+                    && hasPersonalSurface(byName, target, new HashSet<>())) {
+                field.setSensitive(true);
             }
         }
     }
@@ -1448,7 +1467,7 @@ public final class IntentParser {
             }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
-                    validateCheck(entity, check, byName, issues);
+                    validateCheck(entity, check, byName, model.getAggregates(), issues);
                 }
             }
         }
@@ -1705,9 +1724,42 @@ public final class IntentParser {
      * mandatory - without it the check would forbid drafting the document item by item.
      */
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
-            List<String> issues) {
+            List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
+        if ("guard".equals(kind)) {
+            // An aggregate guard names an aggregates: entry whose `of` is THIS entity (v1: the guarded
+            // entity is the aggregate source, so the sum is recomputed race-free from the local store).
+            if (check.getAggregate() == null || check.getAggregate()
+                                                     .isBlank()) {
+                issues.add(subject + " requires `aggregate`: the name of an aggregates: entry over this entity");
+                return;
+            }
+            org.eclipse.dirigible.components.intent.model.AggregateIntent agg = null;
+            if (aggregates != null) {
+                for (org.eclipse.dirigible.components.intent.model.AggregateIntent a : aggregates) {
+                    if (check.getAggregate()
+                             .equals(a.getName())) {
+                        agg = a;
+                        break;
+                    }
+                }
+            }
+            if (agg == null) {
+                issues.add(subject + " references unknown aggregate [" + check.getAggregate() + "]");
+                return;
+            }
+            if (!entity.getName()
+                       .equals(agg.getOf())) {
+                issues.add(subject + " aggregate [" + check.getAggregate() + "] is over [" + agg.getOf()
+                        + "], not this entity - v1 supports only a guard on the aggregate's own source entity");
+            }
+            if (agg.getSum() == null || agg.getSum()
+                                           .isBlank()) {
+                issues.add(subject + " aggregate [" + check.getAggregate() + "] must be a `sum` aggregate to guard");
+            }
+            return;
+        }
         if ("exactlyOne".equals(kind)) {
             if (check.getFields() == null || check.getFields()
                                                   .size() < 2) {

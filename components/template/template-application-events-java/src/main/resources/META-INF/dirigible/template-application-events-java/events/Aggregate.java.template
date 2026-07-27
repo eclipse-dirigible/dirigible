@@ -55,7 +55,12 @@ ${keyAssigns}
         if (matches.isEmpty()) {
             targets.save(target);
         } else {
-            targets.update(target);
+            // The row already carries this key-tuple, so only the aggregate column is written - and it is
+            // written TARGETED: merging the whole row back would revert a concurrent user write to any
+            // other column of the materialised row (the lost-update family of #6226 / #6306).
+            java.util.Map<String, Object> derived = new java.util.LinkedHashMap<>();
+            derived.put("${targetField}", agg);
+            targets.updateDerived(target.${targetPk}, derived);
         }
     }
 }

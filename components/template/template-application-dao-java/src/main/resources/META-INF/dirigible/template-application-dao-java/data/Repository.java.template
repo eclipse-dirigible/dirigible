@@ -69,12 +69,43 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         }
 #end
 #end
+## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
+## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
+## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
+## excluding this row on update, then adding the incoming value. Optionally gated by a config key.
+#macro(aggregateGuardCheck)
+#if($guardChecks && $guardChecks.size() > 0)
+#foreach($guard in $guardChecks)
+#if($guard.enabledBy && $guard.enabledBy != "")
+        if ("true".equalsIgnoreCase(org.eclipse.dirigible.sdk.core.Configurations.get("${guard.enabledBy}", ""))) {
+#end
+        {
+            java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
+            for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
+                if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
+                    continue;
+                }
+                if (aggRow.${guard.sumField} != null) {
+                    guardSum = guardSum.add(aggRow.${guard.sumField});
+                }
+            }
+            java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
+            if (guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) < 0) {
+                throw new ValidationException("${guard.message}");
+            }
+        }
+#if($guard.enabledBy && $guard.enabledBy != "")
+        }
+#end
+#end
+#end
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard)
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0))
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -109,6 +140,10 @@ import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGu
 ## Document checks need Criteria to load the items; deduped against the other importers above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
+#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !($documentChecks && $documentChecks.size() > 0))
+## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
 #end
@@ -133,6 +168,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity save(${name}Entity entity) {
 #rollupGuardCheck()
+#aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
 #end
@@ -192,6 +228,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity update(${name}Entity entity) {
 #rollupGuardCheck()
+#aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
 #end
@@ -293,6 +330,33 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         return super.updateProperties(id, values);
     }
 #end
+
+    /**
+     * Targeted write of DERIVED columns - roll-up totals and keyed aggregates maintained by the generated
+     * handlers under {@code gen/events} - that keeps the {@code "-updated"} event contract.
+     *
+     * <p>
+     * Only the named columns are persisted, so a concurrent user write to any other column of the row
+     * cannot be reverted: a handler that read the row, recomputed one total and then merged the WHOLE row
+     * back silently reverted whatever the user changed in that window (the lost-update family of #6226 /
+     * #6306). The {@code "-updated"} event still fires so downstream reactions - notably a transitive
+     * roll-up whose own parent sits above this row - keep cascading exactly as they did when the handler
+     * persisted the full row. Routed through {@link #updateProperties} so an entity that declares
+     * {@code checks:} still runs its gate and a labelled entity still refreshes its stored display Name.
+     */
+    public int updateDerived(Object id, java.util.Map<String, Object> values) {
+        if (values == null || values.isEmpty()) {
+            return 0;
+        }
+        int count = updateProperties(id, values);
+        if (count > 0) {
+            ${name}Entity current = findById(id);
+            if (current != null) {
+                Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(current));
+            }
+        }
+        return count;
+    }
 
 #if($documentChecks && $documentChecks.size() > 0)
     /**
@@ -419,14 +483,30 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
 #end
     }
 
-    /** Reload the master, recompute its document totals from the current line items, and persist. */
+    /**
+     * Reload the master, recompute its document totals from the current line items, and persist ONLY the
+     * total columns in one atomic statement.
+     *
+     * <p>
+     * The recompute is triggered by a LINE change, so whatever the user changed on the master in the
+     * meantime has to survive it: persisting the whole row here reverts any concurrent write to an
+     * unrelated column (the lost-update family fixed for the trigger write-back in #6226 and for the
+     * workflow setters/writers in #6306). The targeted write also keeps this path free of the document
+     * gate checks, exactly as the previous {@code super.update} was: totals move while a document is
+     * still being assembled line by line, and a half-built document must not fail its posting gate.
+     */
     public ${name}Entity recalculate(Object id) {
         ${name}Entity entity = findById(id);
         if (entity == null) {
             return null;
         }
         recalculate(entity);
-        return super.update(entity);
+        java.util.Map<String, Object> totals = new java.util.LinkedHashMap<>();
+#foreach($f in $documentMaster.fields)
+        totals.put("${f.field}", entity.${f.field});
+#end
+        super.updateProperties(id, totals);
+        return entity;
     }
 #end
 
