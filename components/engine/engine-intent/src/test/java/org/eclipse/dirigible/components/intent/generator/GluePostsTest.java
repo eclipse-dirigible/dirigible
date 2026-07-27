@@ -22,7 +22,7 @@ import org.junit.jupiter.api.Test;
  * Verifies the {@code posts} glue the {@link GlueIntentGenerator} emits from a {@code posts:} rule:
  * the source entity + event + per-item collection + target + idempotency back-reference, and the
  * field map (including a sign-flip Calc expression). Structural glue - the handler template + BPMN
- * wiring is a later stage (kf-catalog PROPOSAL_EVENT_POSTING.md).
+ * wiring is a later stage (the driving suite's PROPOSAL_EVENT_POSTING.md).
  */
 class GluePostsTest {
 

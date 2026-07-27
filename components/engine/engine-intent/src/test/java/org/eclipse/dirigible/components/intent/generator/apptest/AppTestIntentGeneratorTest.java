@@ -33,10 +33,10 @@ import org.junit.jupiter.api.Test;
 class AppTestIntentGeneratorTest {
 
     private static final String INTENT = """
-            name: kf-mod-countries
+            name: countries
             languages: [en, bg]
             uses:
-              - { model: kf-mod-currencies }
+              - { model: currencies }
             entities:
               - name: Country
                 kind: setting
@@ -56,7 +56,7 @@ class AppTestIntentGeneratorTest {
                   - { name: total, type: decimal, aggregate: true }
                 relations:
                   - { name: Country, kind: manyToOne, to: Country, required: true }
-                  - { name: Currency, kind: manyToOne, to: Currency, model: kf-mod-currencies, required: true }
+                  - { name: Currency, kind: manyToOne, to: Currency, model: currencies, required: true }
                   - { name: Twin, kind: manyToOne, to: City, dependsOn: { relation: Country, filterBy: Country }, where: { name: Plovdiv } }
                 checks:
                   - { kind: exactlyOne, fields: [uuid, slug], message: "one of uuid/slug" }
@@ -85,12 +85,12 @@ class AppTestIntentGeneratorTest {
     @SuppressWarnings("unchecked")
     @Test
     void buildsTheModuleLevelCoordinates() {
-        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm());
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("countries", "countries", model, edm());
 
-        assertEquals("kf-mod-countries", manifest.get("module"));
-        assertEquals("/services/web/kf-mod-countries/gen/kf-mod-countries/index.html", manifest.get("standaloneShell"));
+        assertEquals("countries", manifest.get("module"));
+        assertEquals("/services/web/countries/gen/countries/index.html", manifest.get("standaloneShell"));
         // the REST base uses the sanitized (java-identifier) gen folder, not the raw hyphenated name
-        assertEquals("/services/java/kf-mod-countries/gen/kf_mod_countries/api", manifest.get("restBase"));
+        assertEquals("/services/java/countries/gen/countries/api", manifest.get("restBase"));
         assertEquals("Id", manifest.get("idProperty"));
         assertEquals(List.of("en", "bg"), manifest.get("languages"));
         assertEquals(3, ((List<Object>) manifest.get("entities")).size());
@@ -99,7 +99,7 @@ class AppTestIntentGeneratorTest {
     @SuppressWarnings("unchecked")
     @Test
     void marksAutoReadOnlyFieldsAndHierarchyEntities() {
-        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm());
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("countries", "countries", model, edm());
 
         // a uuid and a calculated field render without an editable input - the runner must not fill them
         Map<String, Object> city = entity(manifest, "City");
@@ -129,8 +129,7 @@ class AppTestIntentGeneratorTest {
     @SuppressWarnings("unchecked")
     @Test
     void mapsEntityMetadataAndFields() {
-        Map<String, Object> country =
-                entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "Country");
+        Map<String, Object> country = entity(AppTestIntentGenerator.buildManifest("countries", "countries", model, edm()), "Country");
 
         assertEquals("Country", country.get("label"));
         assertEquals("Countries", country.get("labelPlural"));
@@ -158,8 +157,7 @@ class AppTestIntentGeneratorTest {
     @SuppressWarnings("unchecked")
     @Test
     void derivesTheMultilingualSampleFromInlineSeeds() {
-        Map<String, Object> country =
-                entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "Country");
+        Map<String, Object> country = entity(AppTestIntentGenerator.buildManifest("countries", "countries", model, edm()), "Country");
         Map<String, Object> sample = (Map<String, Object>) country.get("multilingualSample");
         assertNotNull(sample, "an inline base + bg seed pair yields a multilingual sample");
         assertEquals("bg", sample.get("language"));
@@ -170,8 +168,7 @@ class AppTestIntentGeneratorTest {
     @SuppressWarnings("unchecked")
     @Test
     void emitsToOneRelationsAsDropdowns() {
-        Map<String, Object> city =
-                entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "City");
+        Map<String, Object> city = entity(AppTestIntentGenerator.buildManifest("countries", "countries", model, edm()), "City");
         List<Map<String, Object>> relations = (List<Map<String, Object>>) city.get("relations");
         assertNotNull(relations);
         assertEquals(3, relations.size());
@@ -195,8 +192,7 @@ class AppTestIntentGeneratorTest {
         assertEquals("Name", ((Map<String, Object>) twin.get("where")).get("by"));
         assertEquals("Plovdiv", ((Map<String, Object>) twin.get("where")).get("value"));
 
-        Map<String, Object> cityEntity =
-                entity(AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm()), "City");
+        Map<String, Object> cityEntity = entity(AppTestIntentGenerator.buildManifest("countries", "countries", model, edm()), "City");
         assertEquals(List.of(List.of("Uuid", "Slug")), cityEntity.get("exactlyOne"));
 
         // the cross-model relation resolves an absolute controller URL in the OWNER module (naming
@@ -204,7 +200,7 @@ class AppTestIntentGeneratorTest {
         Map<String, Object> currency = relations.get(1);
         assertEquals("Currency", currency.get("name"));
         assertEquals(Boolean.TRUE, currency.get("crossModel"));
-        assertEquals("/services/java/kf-mod-currencies/gen/kf_mod_currencies/api/currency/CurrencyController", currency.get("apiAbsolute"));
+        assertEquals("/services/java/currencies/gen/currencies/api/currency/CurrencyController", currency.get("apiAbsolute"));
         assertEquals("Name", currency.get("labelFrom"));
     }
 
@@ -213,7 +209,7 @@ class AppTestIntentGeneratorTest {
         Map<String, Map<String, Object>> edm = edm();
         edm.put("Extra", edmEntity("Extra", "Extra", "Extras", "MANAGE_DETAILS", "Extras", "master-data", "KF_MOD_COUNTRIES_EXTRA", false));
         // still only Country + City + Account — the detail child is excluded
-        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("kf-mod-countries", "kf-mod-countries", model, edm);
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("countries", "countries", model, edm);
         List<?> entities = (List<?>) manifest.get("entities");
         assertEquals(3, entities.size());
         assertNull(entityOrNull(manifest, "Extra"));
@@ -223,7 +219,7 @@ class AppTestIntentGeneratorTest {
     @Test
     void emitsThePersonalSurfaceContract() {
         String intent = """
-                name: kf-mod-claims
+                name: claims
                 entities:
                   - name: Person
                     identity: email
@@ -243,8 +239,7 @@ class AppTestIntentGeneratorTest {
         edm.put("Person", edmEntity("Person", "Person", "Persons", "MANAGE_LIST", "People", "hr", "KF_MOD_CLAIMS_PERSON", false));
         edm.put("Claim", edmEntity("Claim", "Claim", "Claims", "MANAGE_LIST", "Claims", "hr", "KF_MOD_CLAIMS_CLAIM", false));
 
-        Map<String, Object> manifest =
-                AppTestIntentGenerator.buildManifest("kf-mod-claims", "kf-mod-claims", IntentParser.parse(intent), edm);
+        Map<String, Object> manifest = AppTestIntentGenerator.buildManifest("claims", "claims", IntentParser.parse(intent), edm);
 
         Map<String, Object> claim = entity(manifest, "Claim");
         Map<String, Object> personal = (Map<String, Object>) claim.get("personal");

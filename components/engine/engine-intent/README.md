@@ -148,7 +148,7 @@ corrections are flow-generated reversals, never edits.
   relations:
     - { name: Parent, kind: manyToOne, to: Account }
 # elsewhere - only leaf accounts are referenceable (server-enforced):
-- { name: Account, kind: manyToOne, to: Account, model: kf-accounts, leafOnly: true }
+- { name: Account, kind: manyToOne, to: Account, model: accounts, leafOnly: true }
 ```
 
 The list renders as an expandable tree; the server rejects cycles and leaf-only references to a
@@ -179,7 +179,7 @@ entity already declares a `name` field or a token references a sensitive field.
   fields:
     - { name: dailyRate, type: decimal, sensitive: true }  # never on the personal surface
   relations:
-    - { name: Employee, kind: manyToOne, to: Employee, model: kf-employees, personal: true }
+    - { name: Employee, kind: manyToOne, to: Employee, model: employees, personal: true }
 ```
 
 A `personal` owner relation makes the entity get an ADDITIONAL generated REST controller
@@ -272,11 +272,11 @@ local table/DAO). Generate leaf-first so the owner's model exists.
 
 ```yaml
 uses:
-  - { model: kf-mod-countries }
+  - { model: countries }
 entities:
   - name: Supplier
     relations:
-      - { name: Country, kind: manyToOne, to: Country, model: kf-mod-countries }
+      - { name: Country, kind: manyToOne, to: Country, model: countries }
 ```
 
 Many-to-many is an explicit intermediate entity (composition to one side + `manyToOne` to the
@@ -352,7 +352,7 @@ unposted worklist), never throws.
 ```yaml
 postings:
   - name: salesInvoicePosting
-    event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+    event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
     creates: JournalEntry
     backReference: SalesInvoice
     map: { entryDate: date, reason: "Sales invoice {number}" }

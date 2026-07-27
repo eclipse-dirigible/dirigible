@@ -9,7 +9,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
 /**
  * Post ${name}: on a ${sourceEntity} event (${event}), emit ${into} rows (one per ${itemsEntity} line
  * when forEach is set), idempotently by the ${backRef} back-reference. Generated from the intent
- * posts: block - do not edit; re-generated with the application. See kf-catalog
+ * posts: block - do not edit; re-generated with the application. See the driving suite's
  * PROPOSAL_EVENT_POSTING.md.
  *
  * Contract (mirrors the postings skeleton, flattened - no header document):

@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * A declarative event-driven row post: on a document event, emit mapped rows into a target entity
  * (per line item), idempotently by a back-reference. Replaces the hand-written ledger-posting glue
- * (goods docs -> StockMovement, document -> journal line). See kf-catalog
+ * (goods docs -> StockMovement, document -> journal line). See the driving suite's
  * PROPOSAL_EVENT_POSTING.md.
  *
  * <p>

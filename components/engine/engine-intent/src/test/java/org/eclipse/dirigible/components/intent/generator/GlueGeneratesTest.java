@@ -225,14 +225,14 @@ class GlueGeneratesTest {
         IntentModel model = IntentParser.parse("""
                 name: work
                 uses:
-                  - { model: kf-mod-sales-invoices }
+                  - { model: sales-invoices }
                 entities:
                   - name: Sheet
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                       - { name: number, type: string, documentTitle: true }
                     relations:
-                      - { name: Customer, kind: manyToOne, to: Customer, model: kf-mod-sales-invoices }
+                      - { name: Customer, kind: manyToOne, to: Customer, model: sales-invoices }
                   - name: Line
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -244,7 +244,7 @@ class GlueGeneratesTest {
                   - name: invoice-from-sheet
                     from: Sheet
                     to: SalesInvoice
-                    uses: kf-mod-sales-invoices
+                    uses: sales-invoices
                     forEntity: Sheet
                     map:
                       Customer: Customer

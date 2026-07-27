@@ -37,7 +37,7 @@ auditable; revisit only if a third audience materializes), and per-manager task 
   identity: email            # field matched against the logged-in username
 
 # 2. On the to-one relation that means "whose record this is":
-- { name: Employee, kind: manyToOne, to: Employee, model: kf-mod-employees, personal: true }
+- { name: Employee, kind: manyToOne, to: Employee, model: employees, personal: true }
 
 # 3. On fields the person must never see:
 - { name: rate, type: decimal, sensitive: true }
