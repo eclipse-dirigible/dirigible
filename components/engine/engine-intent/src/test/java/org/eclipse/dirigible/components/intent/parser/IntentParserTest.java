@@ -1092,6 +1092,67 @@ class IntentParserTest {
                 personalYaml("    identity: email\n", "      - { name: dailyRate, type: decimal, sensitive: true }\n", OWNER_RELATION));
     }
 
+    /**
+     * A keyed aggregate over a sensitive source field materialises that hidden figure into ANOTHER
+     * entity, so the target field is auto-marked sensitive when the target itself is personal-surfaced
+     * - the same leak class the rollup / {@code aggregate: true} propagation closes, one entity further
+     * out (the {@code aggregates:} keyword arrived after that pass and was not covered by it).
+     */
+    private static String aggregateSensitiveYaml(String targetRelations) {
+        return "name: hr\n" //
+                + "entities:\n" //
+                + "  - name: Employee\n" //
+                + "    identity: email\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: email, type: string, required: true, unique: true, length: 320 }\n" //
+                + "  - name: Payout\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: amount, type: decimal, sensitive: true }\n" //
+                + "    relations:\n" //
+                + "      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }\n" //
+                + "  - name: PayoutTotal\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: total, type: decimal }\n" //
+                + targetRelations //
+                + "aggregates:\n" //
+                + "  - name: payoutTotal\n" //
+                + "    of: Payout\n" //
+                + "    op: sum\n" //
+                + "    sum: amount\n" //
+                + "    by: [Employee]\n" //
+                + "    into: PayoutTotal\n" //
+                + "    field: total\n";
+    }
+
+    private static boolean isSensitive(IntentModel model, String entity, String field) {
+        return model.getEntities()
+                    .stream()
+                    .filter(e -> entity.equals(e.getName()))
+                    .flatMap(e -> e.getFields()
+                                   .stream())
+                    .filter(f -> field.equals(f.getName()))
+                    .anyMatch(org.eclipse.dirigible.components.intent.model.FieldIntent::isSensitive);
+    }
+
+    @Test
+    void aggregateTargetOfASensitiveSourceIsScrubbedOnAPersonalTarget() {
+        IntentModel model = IntentParser.parse(aggregateSensitiveYaml(
+                "    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee, required: true, personal: true }\n"));
+        assertTrue(isSensitive(model, "PayoutTotal", "total"),
+                "an aggregates: target summing a sensitive source field must be auto-marked sensitive when the target is personal-surfaced");
+    }
+
+    @Test
+    void aggregateTargetWithoutAPersonalSurfaceKeepsTheAuthoredVisibility() {
+        IntentModel model = IntentParser.parse(
+                aggregateSensitiveYaml("    relations:\n" + "      - { name: Employee, kind: manyToOne, to: Employee }\n"));
+        assertTrue(!isSensitive(model, "PayoutTotal", "total"),
+                "a target with no personal surface has nothing to leak - the authored visibility stands");
+    }
+
     @Test
     void identityMustNameAnOwnStringField() {
         IntentValidationException ex = assertThrows(IntentValidationException.class,
