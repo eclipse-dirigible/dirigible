@@ -831,10 +831,34 @@ public final class IntentParser {
                 issues.add("rollup [" + name + "] via [" + rollup.getVia() + "] is not a to-one relation of [" + rollup.getEntity() + "]");
                 continue;
             }
-            EntityIntent parent = byName.get(via.getTo());
-            FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
             boolean sum = "sum".equals(rollup.getOp());
             boolean latest = "latest".equals(rollup.getOp());
+            if (via.getModel() != null && !via.getModel()
+                                              .isBlank()) {
+                // A CROSS-MODEL parent (the roll-up maintains a field on an entity another model owns).
+                // Its properties are not in this document, so they are validated at GENERATION time
+                // against the owner's model - the same split every cross-model reference uses. Only the
+                // capacity/balance/status variants stay local-only: they need the parent's own status
+                // seeds and stamp a capacity guard that reads the parent's table, which is a deeper
+                // change than resolving coordinates.
+                if (rollup.getCapacity() != null || rollup.getBalance() != null || rollup.getStatus() != null) {
+                    issues.add("rollup [" + name + "] maintains a cross-model parent [" + via.getModel() + ":" + via.getTo()
+                            + "], so capacity / balance / status are not supported - keep those in the model that owns the parent");
+                }
+                if (sum && (rollup.getOf() == null || rollup.getOf()
+                                                            .isBlank())) {
+                    issues.add("rollup [" + name + "] with op: sum requires `of`");
+                }
+                if (latest && (rollup.getOf() == null || rollup.getOf()
+                                                               .isBlank()
+                        || rollup.getBy() == null || rollup.getBy()
+                                                           .isBlank())) {
+                    issues.add("rollup [" + name + "] with op: latest requires both `of` and `by`");
+                }
+                continue;
+            }
+            EntityIntent parent = byName.get(via.getTo());
+            FieldIntent counter = parent == null ? null : fieldByName(parent, rollup.getField());
             if (counter == null) {
                 issues.add("rollup [" + name + "] field [" + rollup.getField() + "] is not a field of parent [" + via.getTo() + "]");
             } else if (sum && !NUMERIC_TYPES.contains(counter.getType())) {

@@ -8,11 +8,13 @@ import org.eclipse.dirigible.sdk.utils.Json;
 
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Entity;
 import gen.${javaGenFolderName}.data.${javaChildPerspective}.${childEntity}Repository;
-import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Entity;
-import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Repository;
+import gen.${parentGenFolder}.data.${javaParentPerspective}.${parentEntity}Entity;
+import gen.${parentGenFolder}.data.${javaParentPerspective}.${parentEntity}Repository;
 
 /**
- * Maintains the ${parentEntity} roll-up field(s) over ${childEntity} rows.
+ * Maintains the ${parentEntity} roll-up field(s) over ${childEntity} rows. The parent may be owned by
+ * ANOTHER model (a cross-model roll-up): the child owns the event, the parent's package and
+ * perspective come from the owner's model, and the write goes through the owner's repository.
  *
  * Generated from the intent rollups block - do not edit; it is re-generated with the application. Every
  * roll-up that shares this child entity + parent relation is COALESCED into this single handler, so one
