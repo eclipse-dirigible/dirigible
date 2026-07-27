@@ -41,9 +41,52 @@ public class CheckIntent {
     private Integer status;
     /** The user-facing message when the check fails. */
     private String message;
+    /**
+     * {@code guard}: the name of an {@code aggregates:} entry whose {@code of} is THIS entity. The
+     * guard recomputes that keyed sum from the store for the incoming record's key-tuple (race-free,
+     * unlike the async-maintained target) and blocks the write when the post-state would break
+     * {@link #minimum} - the negative-stock / credit-limit precondition. v1: the guarded entity is the
+     * aggregate source.
+     */
+    private String aggregate;
+    /**
+     * {@code guard}: the recomputed sum (prior rows + this row) must stay {@code >= minimum} (default
+     * 0).
+     */
+    private java.math.BigDecimal minimum;
+    /**
+     * {@code guard} (optional): a configuration key gating the guard - it is enforced only when
+     * {@code Configurations.get(enabledBy)} equals {@code "true"} (case-insensitive). Omitted = always
+     * on.
+     */
+    private String enabledBy;
 
     public String getKind() {
         return kind;
+    }
+
+    public String getAggregate() {
+        return aggregate;
+    }
+
+    public void setAggregate(String aggregate) {
+        this.aggregate = aggregate;
+    }
+
+    public java.math.BigDecimal getMinimum() {
+        return minimum;
+    }
+
+    public void setMinimum(java.math.BigDecimal minimum) {
+        this.minimum = minimum;
+    }
+
+    public String getEnabledBy() {
+        return enabledBy;
+    }
+
+    public void setEnabledBy(String enabledBy) {
+        this.enabledBy = enabledBy;
     }
 
     public void setKind(String kind) {
