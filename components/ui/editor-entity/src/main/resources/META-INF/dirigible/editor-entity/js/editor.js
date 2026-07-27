@@ -1277,6 +1277,20 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 			let parent = graph.getDefaultParent();
 			let childCount = graph.model.getChildCount(parent);
 
+			// Canonical mxCell style per entity type - the modeler colors an entity from its cell style,
+			// and this is the single source that maps the semantic entityType to that style.
+			const ENTITY_TYPE_STYLES = {
+				PRIMARY: { entity: 'entity' },
+				DEPENDENT: { entity: 'dependent' },
+				SETTING: { entity: 'setting' },
+				REPORT: { entity: 'report' },
+				FILTER: { entity: 'filter' },
+				COPIED: { entity: 'copied', property: 'copiedproperty' },
+				PROJECTION: { entity: 'projection', property: 'projectionproperty' },
+				EXTENSION: { entity: 'extension', property: 'extensionproperty' },
+			};
+			let restyled = false;
+
 			// Base64 deserialization of the encoded properties
 			for (let i = 0; i < childCount; i++) {
 				let child = graph.model.getChildAt(parent, i);
@@ -1306,7 +1320,36 @@ angular.module('ui.entity-data.modeler', ['blimpKit', 'platformView', 'Workspace
 						child.value.perspectiveName = "Reports";
 						child.value.perspectiveLabel = "Reports";
 					}
+
+					// Backward compatibility: color each entity from its type. Older / intent-generated
+					// models persisted style="entity" on every cell regardless of entityType, so the
+					// modeler rendered SETTING/DEPENDENT/PROJECTION entities as the default blue. The
+					// entityType is the source of truth - re-derive the cell style from it on load
+					// (mirrors the entity dialog's re-save styling in the edm.editor.entity handler).
+					// Only cells that declare a concrete entityType are touched, so cells without one
+					// (e.g. plain filters) keep their persisted style untouched.
+					if (child.value.entityType) {
+						let derived = ENTITY_TYPE_STYLES[child.value.entityType];
+						if (derived) {
+							if (child.style !== derived.entity) {
+								child.style = derived.entity;
+								restyled = true;
+							}
+							if (derived.property && child.children) {
+								child.children.forEach((prop) => {
+									if (prop.style !== derived.property) {
+										prop.style = derived.property;
+										restyled = true;
+									}
+								});
+							}
+						}
+					}
 				}
+			}
+
+			if (restyled) {
+				graph.refresh();
 			}
 		}
 
