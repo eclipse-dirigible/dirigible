@@ -93,7 +93,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> schedules = buildSchedules(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> integrations = buildIntegrations(model, byName, compositionParents, settings);
         List<Map<String, Object>> inbound = buildInbound(model, byName, compositionParents, settings);
-        List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings);
+        List<Map<String, Object>> rollups = buildRollups(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
@@ -396,7 +396,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     private static List<Map<String, Object>> buildRollups(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> rollups = new ArrayList<>();
         for (RollupIntent rollup : model.getRollups()) {
             if (rollup.getName() == null || rollup.getName()
@@ -406,7 +406,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             EntityIntent child = byName.get(rollup.getEntity());
             RelationIntent via = child == null ? null : toOneRelation(child, rollup.getVia());
             EntityIntent parent = via == null ? null : byName.get(via.getTo());
-            if (parent == null) {
+            // A CROSS-MODEL parent: the child is local (it owns the event this handler binds to), the
+            // parent is owned by another model and reached through `uses`. Its coordinates therefore come
+            // from the OWNER's .model, exactly as a cross-model relation target does - the local byName
+            // has no entry for it, which is why such a roll-up used to be impossible to express.
+            boolean crossModelParent = via != null && via.getModel() != null && !via.getModel()
+                                                                                    .isBlank();
+            CrossModelSupport.TargetInfo parentTarget = null;
+            if (crossModelParent) {
+                UsesIntent uses = findUses(model, via.getModel());
+                if (uses == null) {
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] reaches its parent through model [" + via.getModel()
+                            + "], which is not declared in uses - not generated");
+                    continue;
+                }
+                parentTarget = CrossModelSupport.resolve(context, uses, via.getTo());
+                String counter = IntentNaming.pascalCase(rollup.getField());
+                if (parentTarget.resolved() && parentTarget.propertyNames() != null && !parentTarget.propertyNames()
+                                                                                                    .contains(counter)) {
+                    // The owner model WAS read and carries no such property. The parser cannot catch this
+                    // (the entity is not local), so surface it here rather than emit a handler that would
+                    // fail the client-Java batch.
+                    reportDroppedGlue(context, "Roll-up [" + rollup.getName() + "] field [" + rollup.getField()
+                            + "] is not a property of cross-model parent [" + via.getModel() + ":" + via.getTo() + "] - not generated");
+                    continue;
+                }
+            } else if (parent == null) {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("rollups", rollup.getName())) {
@@ -441,8 +466,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             base.put("childPerspective",
                     child.isSetting() ? "Settings" : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
             base.put("parentEntity", via.getTo());
-            base.put("parentPerspective",
-                    parent.isSetting() ? "Settings" : IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+            // A cross-model parent's perspective comes from the owner's model (resolved above); a local
+            // one from this model's own composition/setting layout.
+            base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
+                    : parent.isSetting() ? "Settings" : IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+            // Empty for a local parent - generateUtils then falls back to this project's gen folder.
+            base.put("parentModel", crossModelParent ? via.getModel() : "");
+            base.put("parentCrossModel", crossModelParent);
             base.put("fkProperty", fkProperty);
             base.put("countField", IntentNaming.pascalCase(rollup.getField()));
             base.put("op", op);
@@ -759,7 +789,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code rollups} glue collection without a repository. */
     static List<Map<String, Object>> buildRollupsForTest(IntentModel model) {
-        return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildRollups(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /** Test hook: build the {@code waits} glue collection without a repository. */

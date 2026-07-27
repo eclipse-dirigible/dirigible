@@ -221,8 +221,10 @@ public final class IntentNaming {
     /**
      * Turn a camel-/Pascal-case identifier into a human-readable Title Case label by splitting on case
      * boundaries ({@code librarianReview} -> {@code Librarian Review}, {@code LoanApproval} ->
-     * {@code Loan Approval}). Used for BPMN display names (process and task {@code name}) while the
-     * machine ids stay the compact identifier.
+     * {@code Loan Approval}). Hyphens and underscores are word separators too, so kebab-case project
+     * names read naturally ({@code sales-invoices} -> {@code Sales Invoices}, not
+     * {@code Sales-invoices}). Used for BPMN display names (process and task {@code name}) and as the
+     * default app/brand title, while the machine ids stay the compact identifier.
      *
      * @param name the identifier to humanize (may be null)
      * @return the spaced Title Case label, empty for null/empty input
@@ -234,6 +236,19 @@ public final class IntentNaming {
         String override = HUMANIZE_OVERRIDES.get(name.toLowerCase(Locale.ROOT));
         if (override != null) {
             return override;
+        }
+        if (name.indexOf('-') >= 0 || name.indexOf('_') >= 0) {
+            StringBuilder joined = new StringBuilder(name.length() + 8);
+            for (String segment : name.split("[-_]+")) {
+                if (segment.isEmpty()) {
+                    continue;
+                }
+                if (joined.length() > 0) {
+                    joined.append(' ');
+                }
+                joined.append(humanize(segment));
+            }
+            return joined.toString();
         }
         StringBuilder out = new StringBuilder(name.length() + 8);
         for (int i = 0; i < name.length(); i++) {

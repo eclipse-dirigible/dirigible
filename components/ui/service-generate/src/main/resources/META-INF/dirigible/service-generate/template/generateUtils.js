@@ -887,6 +887,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 javaChildPerspective: sanitizeJavaIdentifier(first.childPerspective),
                                 parentEntity: first.parentEntity,
                                 javaParentPerspective: sanitizeJavaIdentifier(first.parentPerspective),
+                                // A cross-model roll-up writes into the OWNER model's generated package;
+                                // a local one stays in this project's gen folder.
+                                parentGenFolder: first.parentCrossModel
+                                    ? sanitizeJavaIdentifier(first.parentModel)
+                                    : parameters.javaGenFolderName,
                                 fkProperty: first.fkProperty,
                                 topicSuffix: first.topicSuffix || "",
                                 criteriaExpression: first.criteriaExpression,
