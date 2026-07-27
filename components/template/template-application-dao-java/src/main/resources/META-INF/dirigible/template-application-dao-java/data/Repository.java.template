@@ -90,9 +90,21 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
                 }
             }
             java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
-            if (guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) < 0) {
+            boolean guardWithin = guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) >= 0;
+#if($guard.outcome == "task")
+            // outcome: task - do NOT fail the write. Stamp the marker so this entity's process decision
+            // can route the record to a hold/review step (the order is accepted, then parked).
+            entity.${guard.marker} = guardWithin;
+#elseif($guard.outcome == "reject")
+            // outcome: reject - do NOT fail the write. File the record with the rejected status.
+            if (!guardWithin) {
+                entity.${guard.statusProperty} = ${guard.statusValue};
+            }
+#else
+            if (!guardWithin) {
                 throw new ValidationException("${guard.message}");
             }
+#end
         }
 #if($guard.enabledBy && $guard.enabledBy != "")
         }

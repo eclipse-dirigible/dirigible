@@ -60,9 +60,53 @@ public class CheckIntent {
      * on.
      */
     private String enabledBy;
+    /**
+     * {@code guard}: what a violation does. {@code block} (the default) throws, so the write fails with
+     * 4xx. {@code task} does NOT fail the write: it stamps {@link #marker} so the entity's process can
+     * branch to a hold/review step (the credit-limit shape - the order is accepted but parked). {@code
+     * reject} does not fail the write either: it forces the record's {@code function: EntityStatus} FK
+     * to {@link #setStatus} (the leave-request shape - the request is filed, already rejected).
+     */
+    private String outcome;
+    /**
+     * {@code guard} with {@code outcome: task}: a boolean field of the entity set to {@code false} when
+     * the guard is violated and {@code true} when it holds. It is the BRANCH INPUT a process
+     * {@code decision} reads to route to the hold step - this keyword stamps the flag, the process
+     * decides what to do with it.
+     */
+    private String marker;
+    /**
+     * {@code guard} with {@code outcome: reject}: the EntityStatus seed id forced onto the record when
+     * the guard is violated.
+     */
+    private Integer setStatus;
 
     public String getKind() {
         return kind;
+    }
+
+    public String getOutcome() {
+        return outcome;
+    }
+
+    public void setOutcome(String outcome) {
+        this.outcome = outcome;
+    }
+
+    public String getMarker() {
+        return marker;
+    }
+
+    public void setMarker(String marker) {
+        this.marker = marker;
+    }
+
+    public Integer getSetStatus() {
+        return setStatus;
+    }
+
+    public void setSetStatus(Integer setStatus) {
+        this.setStatus = setStatus;
     }
 
     public String getAggregate() {

@@ -557,6 +557,99 @@ class EdmIntentGeneratorTest {
                                     .get("key"));
         assertEquals("Store", keys.get(1)
                                   .get("key"));
+        // No authored outcome = block: the write fails. The two non-blocking outcomes are asserted below.
+        assertEquals("block", guard.get("outcome"));
+    }
+
+    /**
+     * The two non-blocking guard outcomes. Both PERSIST the row and mark it instead of failing the
+     * write: {@code task} stamps a boolean marker that the entity's process decision branches on (the
+     * credit-limit shape - the order is accepted, then parked on a hold step), {@code reject} forces
+     * the EntityStatus FK (the leave-request shape - the request is filed, already rejected).
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void guardOutcomeTaskAndRejectEmitTheirMarkerAndStatusWrite() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderStatus
+                    kind: setting
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 40 }
+                  - name: Order
+                    fields:
+                      - { name: id,           type: integer, primaryKey: true, generated: true }
+                      - { name: amount,       type: decimal }
+                      - { name: withinCredit, type: boolean }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - kind: guard
+                        aggregate: exposure
+                        minimum: 0
+                        outcome: task
+                        marker: withinCredit
+                        message: Over the credit limit
+                  - name: Reservation
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: days, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                    checks:
+                      - kind: guard
+                        aggregate: remaining
+                        minimum: 0
+                        outcome: reject
+                        setStatus: 3
+                        message: No allowance left
+                  - name: Exposure
+                    fields:
+                      - { name: id,    type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: Allowance
+                    fields:
+                      - { name: id,        type: integer, primaryKey: true, generated: true }
+                      - { name: remaining, type: decimal }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                aggregates:
+                  - name: exposure
+                    of: Order
+                    op: sum
+                    sum: amount
+                    by: [Customer]
+                    into: Exposure
+                    field: total
+                  - name: remaining
+                    of: Reservation
+                    op: sum
+                    sum: days
+                    by: [Customer]
+                    into: Allowance
+                    field: remaining
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "sales");
+
+        Map<String, Object> taskGuard = ((List<Map<String, Object>>) entityByName(entities(model), "Order").get("checks")).get(0);
+        assertEquals("task", taskGuard.get("outcome"));
+        assertEquals("WithinCredit", taskGuard.get("marker"));
+        assertNull(taskGuard.get("statusProperty"), "a task outcome must not carry a status write");
+
+        Map<String, Object> rejectGuard = ((List<Map<String, Object>>) entityByName(entities(model), "Reservation").get("checks")).get(0);
+        assertEquals("reject", rejectGuard.get("outcome"));
+        assertEquals("Status", rejectGuard.get("statusProperty"));
+        assertEquals("3", rejectGuard.get("statusValue"));
+        assertNull(rejectGuard.get("marker"), "a reject outcome must not carry a marker");
     }
 
     @Test
