@@ -1448,7 +1448,7 @@ public final class IntentParser {
             }
             if (entity.getChecks() != null) {
                 for (CheckIntent check : entity.getChecks()) {
-                    validateCheck(entity, check, byName, issues);
+                    validateCheck(entity, check, byName, model.getAggregates(), issues);
                 }
             }
         }
@@ -1705,9 +1705,42 @@ public final class IntentParser {
      * mandatory - without it the check would forbid drafting the document item by item.
      */
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
-            List<String> issues) {
+            List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
         String kind = check.getKind();
+        if ("guard".equals(kind)) {
+            // An aggregate guard names an aggregates: entry whose `of` is THIS entity (v1: the guarded
+            // entity is the aggregate source, so the sum is recomputed race-free from the local store).
+            if (check.getAggregate() == null || check.getAggregate()
+                                                     .isBlank()) {
+                issues.add(subject + " requires `aggregate`: the name of an aggregates: entry over this entity");
+                return;
+            }
+            org.eclipse.dirigible.components.intent.model.AggregateIntent agg = null;
+            if (aggregates != null) {
+                for (org.eclipse.dirigible.components.intent.model.AggregateIntent a : aggregates) {
+                    if (check.getAggregate()
+                             .equals(a.getName())) {
+                        agg = a;
+                        break;
+                    }
+                }
+            }
+            if (agg == null) {
+                issues.add(subject + " references unknown aggregate [" + check.getAggregate() + "]");
+                return;
+            }
+            if (!entity.getName()
+                       .equals(agg.getOf())) {
+                issues.add(subject + " aggregate [" + check.getAggregate() + "] is over [" + agg.getOf()
+                        + "], not this entity - v1 supports only a guard on the aggregate's own source entity");
+            }
+            if (agg.getSum() == null || agg.getSum()
+                                           .isBlank()) {
+                issues.add(subject + " aggregate [" + check.getAggregate() + "] must be a `sum` aggregate to guard");
+            }
+            return;
+        }
         if ("exactlyOne".equals(kind)) {
             if (check.getFields() == null || check.getFields()
                                                   .size() < 2) {

@@ -69,12 +69,43 @@ package gen.${javaGenFolderName}.data.${javaPerspectiveName};
         }
 #end
 #end
+## Aggregate guard (intent `checks: kind: guard`): reject a create/update whose post-state would drop
+## a keyed aggregate sum below its minimum (negative stock, credit limit). Recomputed synchronously from
+## THIS entity's store for the incoming row's key-tuple (race-free, not the async-maintained target),
+## excluding this row on update, then adding the incoming value. Optionally gated by a config key.
+#macro(aggregateGuardCheck)
+#if($guardChecks && $guardChecks.size() > 0)
+#foreach($guard in $guardChecks)
+#if($guard.enabledBy && $guard.enabledBy != "")
+        if ("true".equalsIgnoreCase(org.eclipse.dirigible.sdk.core.Configurations.get("${guard.enabledBy}", ""))) {
+#end
+        {
+            java.math.BigDecimal guardSum = java.math.BigDecimal.ZERO;
+            for (${name}Entity aggRow : findAll(Criteria.create()#foreach($k in $guard.keys).eq("${k.key}", entity.${k.key})#end)) {
+                if (entity.${guard.pk} != null && entity.${guard.pk}.equals(aggRow.${guard.pk})) {
+                    continue;
+                }
+                if (aggRow.${guard.sumField} != null) {
+                    guardSum = guardSum.add(aggRow.${guard.sumField});
+                }
+            }
+            java.math.BigDecimal guardIncoming = entity.${guard.sumField} == null ? java.math.BigDecimal.ZERO : entity.${guard.sumField};
+            if (guardSum.add(guardIncoming).compareTo(new java.math.BigDecimal("${guard.minimum}")) < 0) {
+                throw new ValidationException("${guard.message}");
+            }
+        }
+#if($guard.enabledBy && $guard.enabledBy != "")
+        }
+#end
+#end
+#end
+#end
 import org.eclipse.dirigible.components.data.store.java.repository.JavaRepository;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.component.Repository;
 import org.eclipse.dirigible.sdk.messaging.Producer;
 import org.eclipse.dirigible.sdk.utils.Json;
-#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard)
+#if(($documentChecks && $documentChecks.size() > 0) || $rollupGuard || ($guardChecks && $guardChecks.size() > 0))
 import org.eclipse.dirigible.sdk.db.ValidationException;
 #end
 #if($multilingual == "true")
@@ -109,6 +140,10 @@ import gen.${javaGenFolderName}.data.${rollupGuard.parentPerspective}.${rollupGu
 ## Document checks need Criteria to load the items; deduped against the other importers above.
 import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
 #end
+#if($guardChecks && $guardChecks.size() > 0 && $multilingual != "true" && !$documentMaster && !$rollupGuard && !($documentChecks && $documentChecks.size() > 0))
+## Aggregate guards recompute the keyed sum via Criteria; deduped against every importer above.
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 #if($documentItem)
 import gen.${javaGenFolderName}.data.${documentItem.javaParentPerspective}.${documentItem.parentEntity}Repository;
 #end
@@ -133,6 +168,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity save(${name}Entity entity) {
 #rollupGuardCheck()
+#aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
 #end
@@ -192,6 +228,7 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     @Override
     public ${name}Entity update(${name}Entity entity) {
 #rollupGuardCheck()
+#aggregateGuardCheck()
 #if($hasLabel)
         computeName(entity);
 #end

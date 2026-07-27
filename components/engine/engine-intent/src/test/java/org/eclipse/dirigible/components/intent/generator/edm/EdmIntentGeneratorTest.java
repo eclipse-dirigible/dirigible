@@ -472,6 +472,66 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    @SuppressWarnings("unchecked")
+    void guardCheckEmitsKeyedAggregateGuard() {
+        String yaml = """
+                name: inventory
+                entities:
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Store
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: StockMovement
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: Store, kind: manyToOne, to: Store }
+                    checks:
+                      - kind: guard
+                        aggregate: onHand
+                        minimum: 0
+                        message: Insufficient stock
+                        enabledBy: INVENTORY_BLOCK_NEGATIVE_STOCK
+                  - name: ProductAvailability
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: onHand, type: decimal }
+                    relations:
+                      - { name: Product, kind: manyToOne, to: Product }
+                      - { name: Store, kind: manyToOne, to: Store }
+                aggregates:
+                  - name: onHand
+                    of: StockMovement
+                    op: sum
+                    sum: quantity
+                    by: [Product, Store]
+                    into: ProductAvailability
+                    field: onHand
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "inventory");
+        Map<String, Object> movement = entityByName(entities(model), "StockMovement");
+        List<Map<String, Object>> checks = (List<Map<String, Object>>) movement.get("checks");
+        assertEquals(1, checks.size());
+        Map<String, Object> guard = checks.get(0);
+        assertEquals("guard", guard.get("kind"));
+        assertEquals("Quantity", guard.get("sumField"));
+        assertEquals("Id", guard.get("pk"));
+        assertEquals("0", guard.get("minimum"));
+        assertEquals("Insufficient stock", guard.get("message"));
+        assertEquals("INVENTORY_BLOCK_NEGATIVE_STOCK", guard.get("enabledBy"));
+        List<Map<String, String>> keys = (List<Map<String, String>>) guard.get("keys");
+        assertEquals(2, keys.size());
+        assertEquals("Product", keys.get(0)
+                                    .get("key"));
+        assertEquals("Store", keys.get(1)
+                                  .get("key"));
+    }
+
+    @Test
     void securedByDefaultEmitsGenerateDefaultRolesAndRoleNames() {
         String yaml = """
                 name: library

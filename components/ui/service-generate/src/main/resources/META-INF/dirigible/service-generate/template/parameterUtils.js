@@ -77,10 +77,12 @@ export function process(model, parameters) {
         e.referencedProjections = [];
 
         // Declarative checks (intent `checks:`): split by scope for the templates - row-level
-        // exactlyOne goes to the REST validate(), document-level (status-gated) to the repository.
+        // exactlyOne goes to the REST validate(), document-level (status-gated) to the repository,
+        // and guard (aggregate precondition) to the repository's create/update guard block.
         if (e.checks && e.checks.length) {
             e.rowChecks = e.checks.filter(c => c.kind === 'exactlyOne');
-            e.documentChecks = e.checks.filter(c => c.kind !== 'exactlyOne');
+            e.guardChecks = e.checks.filter(c => c.kind === 'guard');
+            e.documentChecks = e.checks.filter(c => c.kind !== 'exactlyOne' && c.kind !== 'guard');
         }
 
         const dataOrderByProperties = e.properties.filter(p => p.dataOrderBy !== undefined);
