@@ -1148,6 +1148,7 @@ export function generateFiles(model, parameters, templateSources) {
                                     targetPerspective: ag.targetPerspective,
                                     targetJavaPerspective: sanitizeJavaIdentifier(ag.targetPerspective),
                                     targetField: ag.targetField,
+                                    targetPk: ag.targetPk,
                                     sumField: ag.sumField,
                                     keyList: keyList,
                                     keyNullGuards: keyNullGuards,
@@ -1564,6 +1565,7 @@ function renderRollupAggregate(ru) {
         s += "            var latestValue = latestRow == null ? null : latestRow." + ru.ofField + ";\n";
         s += "            if (!java.util.Objects.equals(parent." + cf + ", latestValue)) {\n";
         s += "                parent." + cf + " = latestValue;\n";
+        s += "                derived.put(\"" + cf + "\", parent." + cf + ");\n";
         s += "                changed = true;\n";
         s += "            }\n";
         s += "        }\n";
@@ -1580,14 +1582,17 @@ function renderRollupAggregate(ru) {
         s += "            }\n";
         s += "            if (parent." + cf + " == null || parent." + cf + ".compareTo(sum) != 0) {\n";
         s += "                parent." + cf + " = sum;\n";
+        s += "                derived.put(\"" + cf + "\", parent." + cf + ");\n";
         if (ru.capacityField) {
             s += "                java.math.BigDecimal capacity = parent." + ru.capacityField + " == null ? java.math.BigDecimal.ZERO : parent." + ru.capacityField + ";\n";
             if (ru.balanceField) {
                 s += "                parent." + ru.balanceField + " = capacity.subtract(sum);\n";
+                s += "                derived.put(\"" + ru.balanceField + "\", parent." + ru.balanceField + ");\n";
             }
             if (ru.statusField) {
                 s += "                if (sum.signum() > 0) {\n";
                 s += "                    parent." + ru.statusField + " = sum.compareTo(capacity) >= 0 ? " + ru.statusWhenFull + " : " + ru.statusWhenPartial + ";\n";
+                s += "                    derived.put(\"" + ru.statusField + "\", parent." + ru.statusField + ");\n";
                 s += "                }\n";
             }
         }
@@ -1600,6 +1605,7 @@ function renderRollupAggregate(ru) {
     s += "            int count = rows.size();\n";
     s += "            if (parent." + cf + " == null || parent." + cf + ".intValue() != count) {\n";
     s += "                parent." + cf + " = count;\n";
+    s += "                derived.put(\"" + cf + "\", parent." + cf + ");\n";
     s += "                changed = true;\n";
     s += "            }\n";
     s += "        }\n";

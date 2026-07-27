@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
@@ -290,6 +291,52 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
 
+              # document totals: a MANAGE_DOCUMENT master whose aggregate field is also carried by its
+              # line-items child gets the SYNCHRONOUS recompute in the generated DAO (not an async
+              # roll-up). The recompute is triggered by a LINE change, so it must persist ONLY the total
+              # columns - a full-row merge reverts a concurrent edit to any other master column.
+              - name: Bill
+                function: Document
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string,  length: 200 }
+                  - { name: amount, type: decimal, aggregate: true }
+              - name: BillLine
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+
+              # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
+              # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
+              # LedgerTotal is personal-rooted, so the parser must also auto-scrub LedgerTotal.total
+              # (the rollup leak class, one entity further out - `total` is NOT authored sensitive).
+              - name: Ledger
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal, sensitive: true }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+                  - { name: Unit,   kind: manyToOne, to: Unit }
+              - name: LedgerTotal
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: total, type: decimal }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
+                  - { name: Unit,   kind: manyToOne, to: Unit }
+
+            aggregates:
+              - name: ledgerTotal
+                of: Ledger
+                op: sum
+                sum: amount
+                by: [Person, Unit]
+                into: LedgerTotal
+                field: total
+
             # auto-sensitive derivation: totalCost sums the SENSITIVE ClaimLine.cost into the
             # personal-rooted Claim - the parser must mark the target sensitive automatically
             # (the leak class where the leaf is scrubbed but its total travels the my wire).
@@ -508,6 +555,39 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(entryRepository.contains("EntryLineRepository"),
                 "aggregate: true must make the master repository recompute totals from its items child");
 
+        // A DERIVED recompute (document totals, roll-up, keyed aggregate) must persist ONLY the columns it
+        // computed. Merging the whole row back silently reverts a concurrent user write to any other column
+        // of that row - the lost-update family fixed for the trigger write-back in #6226 and the workflow
+        // setters/writers in #6306, of which the recompute path was the last member.
+        String billRepository = contentOf("gen/emission/data/bill/BillRepository.java");
+        assertTrue(billRepository.contains("totals.put(\"Amount\"") && billRepository.contains("super.updateProperties(id, totals)"),
+                "the document-totals recompute must persist only the total columns, not merge the whole master row");
+        assertFalse(billRepository.replaceAll("\\s+", " ")
+                                  .contains("recalculate(entity); return super.update(entity);"),
+                "the document-totals recompute must not fall back to the full-row write");
+        String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
+        assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
+                "a line change must trigger the master's document-totals recompute");
+
+        // The roll-up handler records every column it recomputes and persists them through the targeted
+        // derived write. The derived.put assertion is load-bearing in the other direction too: an EMPTY
+        // derived map would make updateDerived a no-op and silently stop maintaining the roll-up.
+        String claimRollup = contentOf("gen/events/emission/ClaimLineClaimRollupOnCreate.java");
+        assertTrue(claimRollup.contains("derived.put(\"TotalCost\""),
+                "a roll-up must record each recomputed column into the derived map it persists");
+        assertTrue(claimRollup.contains("parents.updateDerived("), "a roll-up must persist through the targeted derived write");
+        assertFalse(claimRollup.contains("parents.update(parent)"), "a roll-up must not merge the whole parent row back (lost update)");
+
+        // The keyed aggregate handler writes the aggregate column of an EXISTING target row targeted. The
+        // resolved primary key in the call also proves the descriptor's targetPk reached the template: an
+        // unforwarded parameter renders literally and compiles into nothing usable (the #6306 countProperty
+        // class of bug).
+        String ledgerAggregate = contentOf("gen/events/emission/LedgerTotalAggregateOnCreate.java");
+        assertTrue(ledgerAggregate.contains("targets.updateDerived(target.Id, derived)"),
+                "a keyed aggregate must persist through the targeted derived write with a RESOLVED target pk");
+        assertFalse(ledgerAggregate.contains("targets.update(target)"),
+                "a keyed aggregate must not merge the whole materialised row back (lost update)");
+
         // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
         // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id
         // regression class: the lookup loop skipped DOCUMENT_STATUS widgets).
@@ -544,6 +624,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // flag so the total is scrubbed from the personal wire exactly like the leaf value.
         assertTrue(claimMy.contains("entity.TotalCost = null"),
                 "a rollup target summing a sensitive child field into a personal-rooted entity must be auto-scrubbed");
+        // Same class one entity further out: the keyed aggregate materialises the sum of the sensitive
+        // Ledger.amount into LedgerTotal.total, which is personal-rooted too. The aggregates: keyword
+        // arrived after the rollup propagation and was not covered by it.
+        String ledgerTotalMy = contentOf("gen/emission/api/ledgertotal/LedgerTotalMyController.java");
+        assertTrue(ledgerTotalMy.contains("entity.Total = null"),
+                "an aggregates: target summing a sensitive source field into a personal-rooted entity must be auto-scrubbed");
         String lineMy = contentOf("gen/emission/api/claim/ClaimLineMyController.java");
         assertTrue(lineMy.contains("requireMyParent"),
                 "a composition child must inherit the personal scope as an ancestor-ownership guard");

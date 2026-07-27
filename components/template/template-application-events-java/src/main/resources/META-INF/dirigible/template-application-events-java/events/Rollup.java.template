@@ -20,6 +20,10 @@ import gen.${javaGenFolderName}.data.${javaParentPerspective}.${parentEntity}Rep
  * parent row would otherwise clobber each other's fields (lost update). The affected parent's totals are
  * recomputed from the store on each event (self-healing); the write + the "-updated" event fire only when
  * a value actually changes, which bounds the transitive cascade so it terminates at rest.
+ *
+ * The write itself is TARGETED (updateDerived persists only the recomputed columns), so a concurrent user
+ * write to any other column of the parent cannot be reverted by this recompute - the same lost-update
+ * shape fixed for the trigger write-back in #6226 and the workflow setters/writers in #6306.
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {
@@ -47,9 +51,10 @@ public class ${className} implements MessageHandler {
         }
         java.util.List<${childEntity}Entity> rows = new ${childEntity}Repository().findAll(${criteriaExpression});
         boolean changed = false;
+        java.util.Map<String, Object> derived = new java.util.LinkedHashMap<>();
 ${aggregateBlock}
         if (changed) {
-            parents.update(parent);
+            parents.updateDerived(entity.${fkProperty}, derived);
         }
     }
 }
