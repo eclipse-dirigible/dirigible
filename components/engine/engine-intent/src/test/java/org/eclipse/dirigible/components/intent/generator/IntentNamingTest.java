@@ -59,6 +59,25 @@ class IntentNamingTest {
     }
 
     @Test
+    void humanizeTreatsHyphensAndUnderscoresAsWordSeparators() {
+        // A kebab-case project name is the default app/brand title - it must read as a product
+        // name ("Sales Invoices"), not a half-capitalized identifier ("Sales-invoices").
+        assertEquals("Sales Invoices", IntentNaming.humanize("sales-invoices"));
+        assertEquals("Customer Payments", IntentNaming.humanize("customer-payments"));
+        assertEquals("Payment Methods", IntentNaming.humanize("payment_methods"));
+        assertEquals("Products", IntentNaming.humanize("products"));
+        assertEquals("A B", IntentNaming.humanize("a--b"));
+    }
+
+    @Test
+    void humanizeKeepsCamelCaseAndOverrideBehavior() {
+        assertEquals("Librarian Review", IntentNaming.humanize("librarianReview"));
+        assertEquals("Loan Approval", IntentNaming.humanize("LoanApproval"));
+        assertEquals("Unit of Measure", IntentNaming.humanize("UoM"));
+        assertEquals("", IntentNaming.humanize(null));
+    }
+
+    @Test
     void upperSnakeDoesNotLeaveDanglingOrDoubledUnderscores() {
         assertEquals("A_B", IntentNaming.upperSnake("a--b"));
         assertEquals("AB", IntentNaming.upperSnake("ab-"));
