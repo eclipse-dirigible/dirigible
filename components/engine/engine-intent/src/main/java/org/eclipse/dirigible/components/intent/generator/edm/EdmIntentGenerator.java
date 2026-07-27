@@ -1413,6 +1413,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         : check.getMinimum()
                                .toPlainString());
                 checkMap.put("enabledBy", check.getEnabledBy() == null ? "" : check.getEnabledBy());
+                // What a violation DOES. block (the default) throws; task stamps the boolean marker so
+                // the entity's process decision can route to a hold step; reject forces the
+                // EntityStatus FK. Both non-blocking outcomes still persist the row.
+                String outcome = check.getOutcome() == null || check.getOutcome()
+                                                                    .isBlank() ? "block"
+                                                                            : check.getOutcome()
+                                                                                   .trim()
+                                                                                   .toLowerCase(java.util.Locale.ROOT);
+                checkMap.put("outcome", outcome);
+                if ("task".equals(outcome)) {
+                    if (check.getMarker() == null) {
+                        continue; // parser-rejected: nothing to stamp, so emit no guard at all
+                    }
+                    checkMap.put("marker", IntentNaming.pascalCase(check.getMarker()));
+                }
+                if ("reject".equals(outcome)) {
+                    RelationIntent guardStatus = entityStatusRelation(entity);
+                    if (guardStatus == null || check.getSetStatus() == null) {
+                        continue; // parser-rejected: nowhere to write the status
+                    }
+                    checkMap.put("statusProperty", IntentNaming.pascalCase(guardStatus.getName()));
+                    checkMap.put("statusValue", String.valueOf(check.getSetStatus()));
+                }
                 checkMaps.add(checkMap);
                 continue;
             }

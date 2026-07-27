@@ -320,6 +320,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   - { name: Unit,   kind: manyToOne, to: Unit }
+                checks:
+                  # guard, outcome block (the default): the write FAILS when the recomputed keyed sum
+                  # would fall below the minimum, and only while the config key says "true".
+                  - kind: guard
+                    aggregate: ledgerTotal
+                    minimum: 0
+                    message: Insufficient balance
+                    enabledBy: EMISSION_BLOCK_NEGATIVE_LEDGER
               - name: LedgerTotal
                 fields:
                   - { name: id,    type: integer, primaryKey: true, generated: true }
@@ -327,6 +335,37 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true }
                   - { name: Unit,   kind: manyToOne, to: Unit }
+
+              # the two NON-BLOCKING guard outcomes on one source: the write is persisted either way,
+              # `task` stamps the boolean marker a process decision branches on (park it on a hold
+              # step), `reject` files the record with the rejected status (EntryStatus seed 3).
+              - name: Booking
+                fields:
+                  - { name: id,              type: integer, primaryKey: true, generated: true }
+                  - { name: days,            type: decimal }
+                  - { name: withinAllowance, type: boolean }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true }
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                checks:
+                  - kind: guard
+                    aggregate: bookingAllowance
+                    minimum: 0
+                    outcome: task
+                    marker: withinAllowance
+                    message: Over the allowance
+                  - kind: guard
+                    aggregate: bookingAllowance
+                    minimum: 0
+                    outcome: reject
+                    setStatus: 3
+                    message: No allowance left
+              - name: BookingAllowance
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: remaining, type: decimal }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true }
 
             aggregates:
               - name: ledgerTotal
@@ -336,6 +375,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 by: [Person, Unit]
                 into: LedgerTotal
                 field: total
+              - name: bookingAllowance
+                of: Booking
+                op: sum
+                sum: days
+                by: [Person]
+                into: BookingAllowance
+                field: remaining
 
             # auto-sensitive derivation: totalCost sums the SENSITIVE ClaimLine.cost into the
             # personal-rooted Claim - the parser must mark the target sensitive automatically
@@ -587,6 +633,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a keyed aggregate must persist through the targeted derived write with a RESOLVED target pk");
         assertFalse(ledgerAggregate.contains("targets.update(target)"),
                 "a keyed aggregate must not merge the whole materialised row back (lost update)");
+
+        // checks: kind: guard - the aggregate precondition, one assertion per outcome. The guard
+        // recomputes the keyed sum from the GUARDED entity's own store (race-free, not the async
+        // aggregate target), then acts. block fails the write behind its config gate; task and reject
+        // both PERSIST the row and mark it instead of throwing.
+        String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
+        assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
+                "a guard must recompute its aggregate over the incoming row's full key-tuple");
+        assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),
+                "outcome block must fail the write with the authored message");
+        assertTrue(ledgerRepository.contains("Configurations.get(\"EMISSION_BLOCK_NEGATIVE_LEDGER\""),
+                "enabledBy must wrap the guard in a config gate, so a tenant can turn it off");
+
+        String bookingRepository = contentOf("gen/emission/data/booking/BookingRepository.java");
+        assertTrue(bookingRepository.contains("entity.WithinAllowance = guardWithin"),
+                "outcome task must stamp the boolean marker the process decision branches on");
+        assertTrue(bookingRepository.contains("entity.Status = 3"), "outcome reject must force the authored EntityStatus seed id");
+        assertFalse(
+                bookingRepository.contains("throw new ValidationException(\"Over the allowance\")")
+                        || bookingRepository.contains("throw new ValidationException(\"No allowance left\")"),
+                "a non-blocking outcome must NOT fail the write - that is the whole point of task/reject");
 
         // The master (MANAGE_MASTER) layout must resolve an EntityStatus FK exactly like the list
         // layout: a label lookup loaded on the page and a badge cell in the table (the raw-id

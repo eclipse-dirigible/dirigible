@@ -1362,4 +1362,92 @@ class IntentParserTest {
                          .anyMatch(i -> i.contains("audit: true")),
                 "expected an audit issue, got: " + issues);
     }
+
+    /**
+     * A guard's non-blocking outcomes each need their own companion key, and a companion belonging to
+     * another outcome is an authoring mistake worth failing on: the write would look guarded and do
+     * nothing.
+     */
+    private static String guardYaml(String guardBody) {
+        return "name: sales\n" //
+                + "entities:\n" //
+                + "  - name: Customer\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "  - name: Order\n" //
+                + "    fields:\n" //
+                + "      - { name: id,           type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: amount,       type: decimal }\n" //
+                + "      - { name: withinCredit, type: boolean }\n" //
+                + "      - { name: note,         type: string, length: 40 }\n" //
+                + "    relations:\n" //
+                + "      - { name: Customer, kind: manyToOne, to: Customer }\n" //
+                + "    checks:\n" //
+                + "      - kind: guard\n" //
+                + "        aggregate: exposure\n" //
+                + "        minimum: 0\n" //
+                + "        message: Over the limit\n" //
+                + guardBody //
+                + "  - name: Exposure\n" //
+                + "    fields:\n" //
+                + "      - { name: id,    type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: total, type: decimal }\n" //
+                + "    relations:\n" //
+                + "      - { name: Customer, kind: manyToOne, to: Customer }\n" //
+                + "aggregates:\n" //
+                + "  - name: exposure\n" //
+                + "    of: Order\n" //
+                + "    op: sum\n" //
+                + "    sum: amount\n" //
+                + "    by: [Customer]\n" //
+                + "    into: Exposure\n" //
+                + "    field: total\n";
+    }
+
+    private static List<String> guardIssues(String guardBody) {
+        return assertThrows(IntentValidationException.class, () -> IntentParser.parse(guardYaml(guardBody))).getIssues();
+    }
+
+    @Test
+    void guardOutcomeTaskRequiresABooleanMarker() {
+        // A well-formed task guard parses.
+        IntentParser.parse(guardYaml("        outcome: task\n" + "        marker: withinCredit\n"));
+
+        assertTrue(guardIssues("        outcome: task\n").stream()
+                                                         .anyMatch(i -> i.contains("requires `marker`")),
+                "outcome: task without a marker must be rejected");
+        assertTrue(guardIssues("        outcome: task\n" + "        marker: nope\n").stream()
+                                                                                    .anyMatch(i -> i.contains("does not name a field")),
+                "an unknown marker field must be rejected");
+        assertTrue(guardIssues("        outcome: task\n" + "        marker: note\n").stream()
+                                                                                    .anyMatch(i -> i.contains("must be a boolean field")),
+                "a non-boolean marker must be rejected");
+    }
+
+    @Test
+    void guardOutcomeRejectRequiresAStatusIdAndAnEntityStatusRelation() {
+        // Order declares no EntityStatus relation, so reject has nowhere to write.
+        assertTrue(guardIssues("        outcome: reject\n" + "        setStatus: 3\n").stream()
+                                                                                      .anyMatch(i -> i.contains(
+                                                                                              "requires a `function: EntityStatus` relation")),
+                "reject without an EntityStatus relation must be rejected");
+        assertTrue(guardIssues("        outcome: reject\n").stream()
+                                                           .anyMatch(i -> i.contains("requires `setStatus`")),
+                "reject without setStatus must be rejected");
+    }
+
+    @Test
+    void guardRejectsAnUnknownOutcomeAndAMisplacedCompanionKey() {
+        assertTrue(guardIssues("        outcome: whenever\n").stream()
+                                                             .anyMatch(i -> i.contains("unknown `outcome`")),
+                "an unknown outcome must be rejected");
+        assertTrue(guardIssues("        marker: withinCredit\n").stream()
+                                                                .anyMatch(i -> i.contains("marker` but its outcome is [block]")),
+                "a marker on the default block outcome must be rejected");
+        assertTrue(guardIssues("        outcome: task\n" + "        marker: withinCredit\n" + "        setStatus: 3\n").stream()
+                                                                                                                       .anyMatch(
+                                                                                                                               i -> i.contains(
+                                                                                                                                       "setStatus` but its outcome is [task]")),
+                "a setStatus on a task outcome must be rejected");
+    }
 }

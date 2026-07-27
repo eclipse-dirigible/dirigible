@@ -1723,6 +1723,58 @@ public final class IntentParser {
      * be two numeric fields OF THE ITEMS entity, and a {@code status} gate (an EntityStatus seed id) is
      * mandatory - without it the check would forbid drafting the document item by item.
      */
+    /**
+     * A guard's {@code outcome} decides what a violation does, and each outcome needs its own companion
+     * key: {@code block} (the default) throws and takes neither; {@code task} needs a boolean
+     * {@code marker} field to stamp as the process's branch input; {@code reject} needs a
+     * {@code setStatus} seed id and an {@code function: EntityStatus} relation to write it to. A
+     * companion key belonging to another outcome is an authoring mistake, not something to ignore
+     * silently - the write would appear guarded and do nothing.
+     */
+    private static void validateGuardOutcome(EntityIntent entity, CheckIntent check, String subject, List<String> issues) {
+        String outcome = check.getOutcome() == null || check.getOutcome()
+                                                            .isBlank() ? "block"
+                                                                    : check.getOutcome()
+                                                                           .trim()
+                                                                           .toLowerCase(java.util.Locale.ROOT);
+        if (!"block".equals(outcome) && !"task".equals(outcome) && !"reject".equals(outcome)) {
+            issues.add(subject + " has unknown `outcome` [" + check.getOutcome() + "] - expected block, task or reject");
+            return;
+        }
+        if (!"task".equals(outcome) && check.getMarker() != null) {
+            issues.add(subject + " declares `marker` but its outcome is [" + outcome + "] - marker applies to outcome: task");
+        }
+        if (!"reject".equals(outcome) && check.getSetStatus() != null) {
+            issues.add(subject + " declares `setStatus` but its outcome is [" + outcome + "] - setStatus applies to outcome: reject");
+        }
+        if ("task".equals(outcome)) {
+            if (check.getMarker() == null || check.getMarker()
+                                                  .isBlank()) {
+                issues.add(subject + " with `outcome: task` requires `marker`: a boolean field of this entity to stamp");
+                return;
+            }
+            FieldIntent marker = fieldByName(entity, check.getMarker());
+            if (marker == null) {
+                issues.add(subject + " marker [" + check.getMarker() + "] does not name a field of [" + entity.getName() + "]");
+            } else if (!"boolean".equalsIgnoreCase(marker.getType())) {
+                issues.add(subject + " marker [" + check.getMarker() + "] must be a boolean field, not [" + marker.getType() + "]");
+            }
+        }
+        if ("reject".equals(outcome)) {
+            if (check.getSetStatus() == null) {
+                issues.add(subject + " with `outcome: reject` requires `setStatus`: the EntityStatus seed id to force");
+                return;
+            }
+            boolean hasStatus = entity.getRelations()
+                                      .stream()
+                                      .anyMatch(r -> "EntityStatus".equalsIgnoreCase(r.getFunction()));
+            if (!hasStatus) {
+                issues.add(subject + " with `outcome: reject` requires a `function: EntityStatus` relation on [" + entity.getName()
+                        + "] to write the status to");
+            }
+        }
+    }
+
     private static void validateCheck(EntityIntent entity, CheckIntent check, java.util.Map<String, EntityIntent> byName,
             List<org.eclipse.dirigible.components.intent.model.AggregateIntent> aggregates, List<String> issues) {
         String subject = "entity [" + entity.getName() + "] check [" + (check.getKind() == null ? "?" : check.getKind()) + "]";
@@ -1758,6 +1810,7 @@ public final class IntentParser {
                                            .isBlank()) {
                 issues.add(subject + " aggregate [" + check.getAggregate() + "] must be a `sum` aggregate to guard");
             }
+            validateGuardOutcome(entity, check, subject, issues);
             return;
         }
         if ("exactlyOne".equals(kind)) {
