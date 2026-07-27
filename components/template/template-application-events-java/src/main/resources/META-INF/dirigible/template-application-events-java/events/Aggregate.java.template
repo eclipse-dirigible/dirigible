@@ -19,9 +19,14 @@ import gen.${javaGenFolderName}.data.${targetJavaPerspective}.${targetEntity}Rep
  * each source ${sourceEntity} event the target row for the incoming row's key-tuple is upserted and the
  * aggregate recomputed from the store over every source row sharing that tuple (self-healing +
  * idempotent - re-delivery or replay converges to the same value). A source row with any grouping key
- * null is ignored (it belongs to no tuple). v1: same-model source + target, sum/count into a decimal
- * target field; a key change on update recomputes the NEW tuple (append-only ledgers - the primary use
- * - never edit keys, so the old-tuple recompute is a documented follow-up).
+ * null is ignored (it belongs to no tuple).
+ *
+ * A key change MOVES a row between tuples, and both sides are repaired: the tuple it moved into is
+ * recomputed off the "-updated" event like any other change, while the DAO publishes the PREVIOUS row
+ * on "-rekeyed" (only when a grouping key actually moved), which the OnRekey copy of this handler
+ * recomputes - the former tuple no longer contains the row, so its total drops instead of going stale.
+ * A tuple whose last contributing row leaves keeps its target row with a zero total; the row is not
+ * deleted. v1: same-model source + target, sum/count into a decimal target field.
  */
 @Component("${javaGenFolderName}_${className}")
 public class ${className} implements MessageHandler {

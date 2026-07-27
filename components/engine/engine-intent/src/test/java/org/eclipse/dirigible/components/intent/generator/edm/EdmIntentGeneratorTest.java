@@ -559,6 +559,18 @@ class EdmIntentGeneratorTest {
                                   .get("key"));
         // No authored outcome = block: the write fails. The two non-blocking outcomes are asserted below.
         assertEquals("block", guard.get("outcome"));
+
+        // The aggregate's SOURCE entity carries its grouping keys + pk, so the DAO can detect that a
+        // key moved and let the aggregate repair the tuple the row left (there is no event for it).
+        List<Map<String, String>> sourceKeys = (List<Map<String, String>>) movement.get("aggregateKeys");
+        assertEquals(2, sourceKeys.size(), "the aggregate source must carry every grouping key");
+        assertEquals("Product", sourceKeys.get(0)
+                                          .get("key"));
+        assertEquals("Store", sourceKeys.get(1)
+                                        .get("key"));
+        assertEquals("Id", movement.get("aggregateSourcePk"));
+        // The TARGET is not a source, so it carries no rekey metadata.
+        assertNull(entityByName(entities(model), "ProductAvailability").get("aggregateKeys"));
     }
 
     /**

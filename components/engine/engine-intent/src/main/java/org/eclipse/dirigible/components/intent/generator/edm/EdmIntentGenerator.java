@@ -535,6 +535,33 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 entityMap.put("labelExpression", entity.getLabel());
                 entityMap.put("labelParts", buildLabelParts(entity, byName));
             }
+            // An entity that is the SOURCE of an aggregate carries its grouping keys (the union across
+            // every aggregate over it) plus its pk, so the DAO can notice on update that a key MOVED and
+            // let the aggregate repair the tuple the row left behind. Recomputing the tuple it moved
+            // INTO is already event-driven; the tuple it left has no event of its own.
+            List<Map<String, String>> aggregateKeys = new ArrayList<>();
+            Set<String> seenAggregateKeys = new LinkedHashSet<>();
+            if (model.getAggregates() != null) {
+                for (AggregateIntent a : model.getAggregates()) {
+                    if (a.getOf() == null || !a.getOf()
+                                               .equals(entity.getName())) {
+                        continue;
+                    }
+                    for (String key : a.getBy()) {
+                        String fk = IntentNaming.pascalCase(key);
+                        if (seenAggregateKeys.add(fk)) {
+                            Map<String, String> pair = new LinkedHashMap<>();
+                            pair.put("key", fk);
+                            aggregateKeys.add(pair);
+                        }
+                    }
+                }
+            }
+            if (!aggregateKeys.isEmpty()) {
+                entityMap.put("aggregateKeys", aggregateKeys);
+                FieldIntent aggregatePk = primaryKeyOf(entity);
+                entityMap.put("aggregateSourcePk", aggregatePk == null ? "Id" : IntentNaming.pascalCase(aggregatePk.getName()));
+            }
             List<Map<String, Object>> checkMaps = buildChecks(entity, byName, model.getAggregates());
             if (!checkMaps.isEmpty()) {
                 // Declarative validations. A List, so it lives only in the .model twin (the scalar-only
