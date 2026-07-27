@@ -1980,9 +1980,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             int y = pos[1];
             int height = pos[2];
 
+            String cellStyle = entityCellStyle(entity.get("type"));
             sb.append("   <mxCell id=\"")
               .append(entityCellId.get(name))
-              .append("\" style=\"entity\" parent=\"1\" vertex=\"1\">\n");
+              .append("\" style=\"")
+              .append(cellStyle)
+              .append("\" parent=\"1\" vertex=\"1\">\n");
             appendEntityValue(sb, entity);
             sb.append("    <mxGeometry x=\"")
               .append(x)
@@ -1999,12 +2002,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
               .append("\" as=\"alternateBounds\"/></mxGeometry>\n");
             sb.append("   </mxCell>\n");
 
+            // A PROJECTION entity's property rows carry the dedicated projectionproperty style, exactly
+            // as the EDM editor serializes them; PRIMARY/DEPENDENT/SETTING children keep the default
+            // vertex style (the editor does not restyle their children either).
+            String propStyleAttr = "projection".equals(cellStyle) ? " style=\"projectionproperty\"" : "";
             int propIndex = 0;
             for (Map<String, Object> property : properties) {
                 sb.append("   <mxCell id=\"")
                   .append(propertyCellId.get(name)
                                         .get(property.get("name")))
-                  .append("\" parent=\"")
+                  .append("\"")
+                  .append(propStyleAttr)
+                  .append(" parent=\"")
                   .append(entityCellId.get(name))
                   .append("\" vertex=\"1\" connectable=\"0\">\n");
                 appendPropertyValue(sb, property);
@@ -2138,6 +2147,27 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     @SuppressWarnings("unchecked")
     private static List<Map<String, Object>> propertiesOf(Map<String, Object> entity) {
         return (List<Map<String, Object>>) entity.getOrDefault("properties", List.of());
+    }
+
+    /**
+     * The mxGraph cell style string the EDM editor colors an entity by. The editor keys the cell colour
+     * on the {@code style} attribute alone (blue {@code entity} / darker-blue {@code dependent} / grey
+     * {@code setting} / purple {@code projection}), reconciling it from {@code entityType} only when
+     * the entity dialog re-saves - never on load. So an intent-generated {@code .edm} must emit the
+     * same per-type style a hand-modeled one carries, or every entity loads as the default blue
+     * {@code entity}.
+     */
+    private static String entityCellStyle(Object entityType) {
+        if ("DEPENDENT".equals(entityType)) {
+            return "dependent";
+        }
+        if ("SETTING".equals(entityType)) {
+            return "setting";
+        }
+        if ("PROJECTION".equals(entityType)) {
+            return "projection";
+        }
+        return "entity";
     }
 
     /**
