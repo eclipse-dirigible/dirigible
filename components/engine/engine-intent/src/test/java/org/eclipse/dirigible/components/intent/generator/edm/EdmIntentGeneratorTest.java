@@ -1171,21 +1171,21 @@ class EdmIntentGeneratorTest {
     @Test
     void extendsMarksExtensionEntityWithBaseReferenceAndNoPerspective() {
         String yaml = """
-                name: kf-mod-employees-bg
+                name: employees-bg
                 uses:
-                  - { model: kf-mod-employees }
+                  - { model: employees }
                 entities:
                   - name: EmployeeBg
-                    extends: { model: kf-mod-employees, entity: Employee }
+                    extends: { model: employees, entity: Employee }
                     fields:
                       - { name: egn, type: string, length: 10 }
                 """;
-        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "kf-mod-employees-bg");
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "employees-bg");
         Map<String, Object> ext = entityByName(entities(model), "EmployeeBg");
 
         // Marked EXTENSION with the base reference the model-to-code merge keys on; owns no UI.
         assertEquals("EXTENSION", ext.get("type"));
-        assertEquals("kf-mod-employees", ext.get("extensionReferencedModel"));
+        assertEquals("employees", ext.get("extensionReferencedModel"));
         assertEquals("Employee", ext.get("extensionReferencedEntity"));
         assertEquals("", ext.get("layoutType"));
         assertEquals("", ext.get("perspectiveName"));

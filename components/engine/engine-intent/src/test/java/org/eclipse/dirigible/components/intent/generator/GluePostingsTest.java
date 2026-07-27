@@ -24,7 +24,7 @@ class GluePostingsTest {
     private static final String YAML = """
             name: ledger
             uses:
-              - { model: kf-mod-sales-invoices }
+              - { model: sales-invoices }
             entities:
               - name: Account
                 fields:
@@ -45,7 +45,7 @@ class GluePostingsTest {
                   - { name: entryDate, type: date }
                   - { name: reason, type: string, length: 400 }
                 relations:
-                  - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, model: kf-mod-sales-invoices }
+                  - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, model: sales-invoices }
               - name: JournalEntryItem
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
@@ -56,7 +56,7 @@ class GluePostingsTest {
                   - { name: Account, kind: manyToOne, to: Account, required: true }
             postings:
               - name: salesInvoicePosting
-                event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+                event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
                 creates: JournalEntry
                 backReference: SalesInvoice
                 map: { entryDate: date, reason: "Sales invoice {number}" }
@@ -74,7 +74,7 @@ class GluePostingsTest {
         Map<String, Object> p = postings.get(0);
         assertEquals("SalesInvoicePosting", p.get("className"));
         assertEquals(true, p.get("crossModel"));
-        assertEquals("kf-mod-sales-invoices", p.get("sourceProject"));
+        assertEquals("sales-invoices", p.get("sourceProject"));
         assertEquals("SalesInvoice", p.get("sourceEntity"));
         assertEquals("Status", p.get("guardProperty"));
         assertEquals("3", p.get("guardValue"));

@@ -23,7 +23,7 @@ import org.junit.jupiter.api.Test;
  * of the signed stock ledger materialised into a ProductAvailability target keyed by Product+Store.
  * The keys must be to-one relations of BOTH source and target; the descriptor carries source/target
  * coordinates + the summed field + the target field. Structural glue - the keyed-upsert handler
- * template is a later stage (kf-catalog PROPOSAL_AGGREGATE_CHECKS.md).
+ * template is a later stage (the driving suite's PROPOSAL_AGGREGATE_CHECKS.md).
  */
 class GlueAggregatesTest {
 

@@ -522,13 +522,13 @@ class IntentParserTest {
         String yaml = """
                 name: ledger
                 uses:
-                  - { model: kf-mod-sales-invoices }
+                  - { model: sales-invoices }
                 entities:
                   - name: JournalEntry
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
                     relations:
-                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, model: kf-mod-sales-invoices }
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, model: sales-invoices }
                   - name: JournalEntryItem
                     fields:
                       - { name: id, type: integer, primaryKey: true, generated: true }
@@ -537,7 +537,7 @@ class IntentParserTest {
                       - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
                 postings:
                   - name: broken
-                    event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "whenever" }
+                    event: { onTransition: SalesInvoice, model: sales-invoices, when: "whenever" }
                     creates: JournalEntry
                     backReference: SalesInvoice
                     items:

@@ -17,7 +17,7 @@ import java.util.List;
  * more of its to-one relations, materialised into a SEPARATE target entity keyed by that group (one
  * target row per key-tuple). The two-key balance-rollup the ledger on-hand needs (CLAUDE.md §13) -
  * a generalisation of {@link RollupIntent} (which is single-key, child -> composition parent). See
- * kf-catalog PROPOSAL_AGGREGATE_CHECKS.md.
+ * the driving suite's PROPOSAL_AGGREGATE_CHECKS.md.
  *
  * <p>
  * Example - live on-hand per product+store from the signed stock ledger:

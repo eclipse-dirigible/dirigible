@@ -24,7 +24,7 @@ import java.util.Map;
  * <pre>
  * postings:
  *   - name: salesInvoicePosting
- *     event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+ *     event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
  *     creates: JournalEntry
  *     backReference: SalesInvoice
  *     map: { EntryDate: date, Customer: Customer, Reason: "Sales invoice {number}" }
