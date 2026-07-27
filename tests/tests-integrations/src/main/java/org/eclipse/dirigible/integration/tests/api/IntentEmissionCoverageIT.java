@@ -634,11 +634,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(ledgerAggregate.contains("targets.update(target)"),
                 "a keyed aggregate must not merge the whole materialised row back (lost update)");
 
+        // A grouping-key change MOVES a row between tuples. The tuple it moved into is recomputed off
+        // the "-updated" event; the tuple it LEFT has no event of its own, so the DAO publishes the
+        // PREVIOUS row on "-rekeyed" (only when a key actually moved) and a fourth copy of the handler
+        // recomputes that former tuple - otherwise it keeps the moved row's contribution forever.
+        String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
+        assertTrue(
+                ledgerRepository.contains("aggregatePrevious = findById(entity.Id)")
+                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Person, entity.Person)")
+                        && ledgerRepository.contains("java.util.Objects.equals(aggregatePrevious.Unit, entity.Unit)"),
+                "an aggregate source must compare EVERY grouping key against the previous row on update");
+        assertTrue(
+                ledgerRepository.contains("if (aggregateRekeyed)")
+                        && ledgerRepository.contains("-rekeyed\", Json.stringify(aggregatePrevious)"),
+                "a moved grouping key must publish the PREVIOUS row on the -rekeyed topic");
+        String ledgerRekey = contentOf("gen/events/emission/LedgerTotalAggregateOnRekey.java");
+        assertTrue(ledgerRekey.contains("-Ledger-rekeyed"), "the rekey handler must bind the source's -rekeyed topic");
+        assertTrue(ledgerRekey.contains("targets.updateDerived("),
+                "the rekey handler must repair the former tuple through the targeted derived write");
+
         // checks: kind: guard - the aggregate precondition, one assertion per outcome. The guard
         // recomputes the keyed sum from the GUARDED entity's own store (race-free, not the async
         // aggregate target), then acts. block fails the write behind its config gate; task and reject
         // both PERSIST the row and mark it instead of throwing.
-        String ledgerRepository = contentOf("gen/emission/data/ledger/LedgerRepository.java");
         assertTrue(ledgerRepository.contains("Criteria.create().eq(\"Person\", entity.Person).eq(\"Unit\", entity.Unit)"),
                 "a guard must recompute its aggregate over the incoming row's full key-tuple");
         assertTrue(ledgerRepository.contains("throw new ValidationException(\"Insufficient balance\")"),

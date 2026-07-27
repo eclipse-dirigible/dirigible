@@ -241,6 +241,16 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
     public ${name}Entity update(${name}Entity entity) {
 #rollupGuardCheck()
 #aggregateGuardCheck()
+#if($aggregateKeys && $aggregateKeys.size() > 0)
+        // Aggregate rekey: this entity groups an aggregate, so a change to one of its grouping keys
+        // MOVES the row between tuples. The tuple it moves into is recomputed off the "-updated" event
+        // like any other change; the tuple it LEAVES has no event of its own, so capture the previous
+        // row here and publish it on the dedicated "-rekeyed" topic after the write (below). Only the
+        // aggregate handlers listen there, so no other reaction sees a second event.
+        ${name}Entity aggregatePrevious = findById(entity.${aggregateSourcePk});
+        boolean aggregateRekeyed = aggregatePrevious != null && (false#foreach($k in $aggregateKeys)
+                || !java.util.Objects.equals(aggregatePrevious.${k.key}, entity.${k.key})#end);
+#end
 #if($hasLabel)
         computeName(entity);
 #end
@@ -262,6 +272,14 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         ${name}Entity updated = super.update(entity);
         // Publish the update event (suffixed topic) so intent reactions under gen/events can react.
         Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-updated", Json.stringify(updated));
+#if($aggregateKeys && $aggregateKeys.size() > 0)
+        if (aggregateRekeyed) {
+            // Published AFTER the write, carrying the PREVIOUS row: the aggregate handler recomputes
+            // that row's old key-tuple from the store, which no longer contains this row, so the total
+            // it left behind drops instead of staying stale.
+            Producer.sendToTopic("${projectName}-${perspectiveName}-${name}-rekeyed", Json.stringify(aggregatePrevious));
+        }
+#end
 #if($documentItem)
         // Keep the document consistent: synchronously recompute the master's totals (no async roll-up).
         new ${documentItem.parentEntity}Repository().recalculate(updated.${documentItem.fkProperty});

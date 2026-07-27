@@ -1113,10 +1113,16 @@ export function generateFiles(model, parameters, templateSources) {
                     // so the template stays shape-only. v1: same-model, uniform BigDecimal accumulation
                     // into a decimal target field (sum adds the field, count adds ONE).
                     if (model.aggregates) {
+                        // The -rekeyed variant is this same handler fed the PREVIOUS row: the DAO
+                        // publishes that topic only when a grouping key actually moved, and
+                        // recomputing the former tuple from the store (which no longer contains the
+                        // row) drops the total it left behind. Without it, editing a grouping key
+                        // leaves a stale aggregate on the tuple the row moved out of.
                         const aggVariants = [
                             { suffix: "", cls: "OnCreate" },
                             { suffix: "-updated", cls: "OnUpdate" },
-                            { suffix: "-deleted", cls: "OnDelete" }
+                            { suffix: "-deleted", cls: "OnDelete" },
+                            { suffix: "-rekeyed", cls: "OnRekey" }
                         ];
                         for (let i = 0; i < model.aggregates.length; i++) {
                             const ag = model.aggregates[i];
