@@ -84,6 +84,39 @@ public class XslFoRendererTest {
     }
 
     @Test
+    public void wideTableScalesTheFontDownSoContentFits() {
+        // Three columns keep the body font size; every column beyond that drops it a point (floor 6),
+        // so a nine-column financial table renders at 6pt instead of overflowing its narrow columns.
+        String threeColumns = renderTemplate("""
+                <document>
+                    <table source="items">
+                        <column label="A">{{a}}</column>
+                        <column label="B">{{b}}</column>
+                        <column label="C">{{c}}</column>
+                    </table>
+                </document>
+                """, Map.of("items", List.of(Map.of("a", "1", "b", "2", "c", "3"))));
+        assertTrue(threeColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"10pt\""));
+
+        String nineColumns = renderTemplate("""
+                <document>
+                    <table source="items">
+                        <column label="C1">{{c1}}</column>
+                        <column label="C2">{{c2}}</column>
+                        <column label="C3">{{c3}}</column>
+                        <column label="C4">{{c4}}</column>
+                        <column label="C5">{{c5}}</column>
+                        <column label="C6">{{c6}}</column>
+                        <column label="C7">{{c7}}</column>
+                        <column label="C8">{{c8}}</column>
+                        <column label="C9">{{c9}}</column>
+                    </table>
+                </document>
+                """, Map.of("items", List.of(Map.of("c1", "1"))));
+        assertTrue(nineColumns.contains("width=\"100%\" space-after=\"8pt\" font-size=\"6pt\""));
+    }
+
+    @Test
     public void percentAndPixelColumnWidthsAreEmitted() {
         String fo = renderTemplate("""
                 <document>

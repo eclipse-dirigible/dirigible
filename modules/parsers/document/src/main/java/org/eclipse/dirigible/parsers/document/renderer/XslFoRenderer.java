@@ -248,7 +248,14 @@ public final class XslFoRenderer implements DocumentRenderer<String> {
         if (rows.isEmpty()) {
             return; // FOP rejects an empty fo:table-body
         }
-        fo.append("<fo:table table-layout=\"fixed\" width=\"100%\" space-after=\"8pt\">\n");
+        // Narrow columns can't fit long labels/values at the 10pt body size, and FOP bleeds an
+        // overflowing (right-aligned) line over its neighbour instead of clipping it. Scale the
+        // table font down as columns accumulate so the content fits; tables up to three columns
+        // keep the body size.
+        double fontSize = Math.max(6, 10 - Math.max(0, columns.size() - 3));
+        fo.append("<fo:table table-layout=\"fixed\" width=\"100%\" space-after=\"8pt\" font-size=\"")
+          .append(points(fontSize))
+          .append("\">\n");
         List<Measurement> widths = new ArrayList<>();
         for (LayoutNode column : columns) {
             widths.add(column.width()
