@@ -47,9 +47,9 @@ import org.springframework.beans.factory.annotation.Autowired;
  * ({@code gen.events.<module>}) and module-qualifies the generated bean/entity names.
  *
  * <p>
- * Per the emission contract (the driving suite's emission contract) the assertions target the OUTERMOST observable
- * layer: both entity controllers answer over REST and both generated transition endpoints flip the
- * status - not merely that the files were emitted.
+ * Per the emission contract (the driving suite's emission contract) the assertions target the
+ * OUTERMOST observable layer: both entity controllers answer over REST and both generated
+ * transition endpoints flip the status - not merely that the files were emitted.
  */
 class IntentCrossModuleCollisionIT extends IntegrationTest {
 
