@@ -224,7 +224,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #end
 
 #foreach ($property in $properties)
-#if($property.widgetDependsOnProperty)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnValueFrom)
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', function (newValue, oldValue) {
 			if (newValue !== undefined && newValue !== null) {
 				${dollar}http.get(${dollar}scope.service${property.widgetDependsOnProperty} + '/' + newValue).then((response) => {

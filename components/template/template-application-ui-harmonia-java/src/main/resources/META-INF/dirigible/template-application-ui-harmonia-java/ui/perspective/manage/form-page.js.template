@@ -387,11 +387,36 @@ document.addEventListener('alpine:init', () => {
       });
     },
 #end
+#set($hasConditionalDependsOn = false)
+#foreach($property in $properties)
+#if($property.widgetDependsOnValueBy)#set($hasConditionalDependsOn = true)#end
+#end
+#if($hasConditionalDependsOn)
+
+    // Conditional Depends-On source (#6358): resolve the classifier from the by-path - an own form
+    // value, or a one-hop related record fetched by url - then pick the trigger-target property
+    // from the cases map (fall back to deflt; null = skip the copy).
+    async resolveDependsOnSource${name}(vb) {
+      try {
+        const segs = vb.path.split('.');
+        let value = this.form[segs[0]];
+        if (segs.length === 2) {
+          if (value == null || value === '') return vb.deflt || null;
+          const rec = await App.services.api.get(vb.url + '/' + encodeURIComponent(value), { baseUrl: '' });
+          value = rec == null ? null : rec[segs[1]];
+        }
+        if (value == null || value === '') return vb.deflt || null;
+        return vb.cases[String(value)] || vb.deflt || null;
+      } catch (e) {
+        return vb.deflt || null;
+      }
+    },
+#end
 #foreach($property in $properties)
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl)
 
     // Depends-On: ${property.name} reacts to ${property.widgetDependsOnProperty} - load the selected
-    // ${property.widgetDependsOnEntity} record and read its ${property.widgetDependsOnValueFrom}.
+    // ${property.widgetDependsOnEntity} record and read its #if($property.widgetDependsOnValueBy)case-selected property#{else}${property.widgetDependsOnValueFrom}#end.
 #if($property.widgetType == "DROPDOWN")
     // Re-filters the option list by ${property.widgetDependsOnFilterBy}; on a user change (adjust)
     // a single remaining option is auto-selected, anything else clears the selection.
@@ -401,7 +426,12 @@ document.addEventListener('alpine:init', () => {
     async applyDependsOn${property.name}(value, adjust) {
       try {
         const rec = await App.services.api.get('${property.widgetDependsOnControllerUrl}/' + encodeURIComponent(value), { baseUrl: '' });
+#if($property.widgetDependsOnValueBy)
+        const prop${property.name} = await this.resolveDependsOnSource${name}({ path: '${property.widgetDependsOnValueBy}', #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end });
+        const from = rec == null || prop${property.name} == null ? null : rec[prop${property.name}];
+#else
         const from = rec == null ? null : rec.${property.widgetDependsOnValueFrom};
+#end
 #if($property.widgetType == "DROPDOWN")
         if (from == null || from === '') return;
         const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {

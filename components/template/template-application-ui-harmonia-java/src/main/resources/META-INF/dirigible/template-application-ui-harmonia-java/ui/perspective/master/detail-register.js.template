@@ -13,9 +13,10 @@
 ## the value live (the same expression the server-side Calc evaluator persists). Emits nothing otherwise.
 #macro(calcMeta $property)#if($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate)), calc: '#if($property.calculatedPropertyExpressionCreate)${property.calculatedPropertyExpressionCreate}#{else}${property.calculatedPropertyExpressionUpdate}#end', scale: #if($property.dataScale)${property.dataScale}#{else}2#end#end#end
 ## Depends-On metadata: the item dialog watches the trigger column (`property`), loads its selected
-## record from `url`, reads `valueFrom`, and either re-filters this dropdown's options by `filterBy`
+## record from `url`, reads `valueFrom` - or, for a conditional source (valueBy), the property the
+## classifier picks from `cases` - and either re-filters this dropdown's options by `filterBy`
 ## or copies the value into this column. Emits nothing for an independent column.
-#macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', valueFrom: '${property.widgetDependsOnValueFrom}', #if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
+#macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', #if($property.widgetDependsOnValueFrom)valueFrom: '${property.widgetDependsOnValueFrom}', #{end}#if($property.widgetDependsOnValueBy)valueBy: { path: '${property.widgetDependsOnValueBy}', header: #if($property.widgetDependsOnValueByHeader)true#{else}false#end, #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end }, #end#if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
 ## Static option filter (intent `where:`): the item dialog's chooser narrows to matching rows; the
 ## table's label-resolution lookup stays on the full set so historical rows still resolve.
 #macro(optionsFilterMeta $property)#if($property.widgetOptionsFilterBy), filter: { by: '${property.widgetOptionsFilterBy}', value: ${property.widgetOptionsFilterValueJs} }#end#end

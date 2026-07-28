@@ -93,6 +93,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string,  required: true, length: 100 }
+                  - { name: packPrice, type: decimal }
+                  - { name: unitPrice, type: decimal }
 
               # hierarchy: the self-relation forms the tree; leafOnly references below must reject
               # a parent node server-side.
@@ -149,6 +151,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: debit,  type: decimal }
                   - { name: credit, type: decimal }
+                  # conditional dependsOn (#6358): the copied Unit property is picked by the open
+                  # document header's account name (a header-started classifier path).
+                  - name: price
+                    type: decimal
+                    dependsOn:
+                      relation: Unit
+                      valueFrom:
+                        by: Entry.Account.name
+                        cases: { Assets: packPrice, Cash: unitPrice }
+                        default: unitPrice
                 relations:
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
@@ -1046,6 +1058,19 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+
+        // conditional dependsOn (#6358): the item register carries the classifier metadata (the
+        // header-started by-path, the fetch URL, the cases map, the default) and the document page
+        // carries the resolver that picks the copied property at runtime.
+        String lineRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
+        assertTrue(lineRegister.contains("valueBy: { path: 'Entry.Account.Name', header: true,"),
+                "the conditional dependsOn must emit the header-started classifier path");
+        assertTrue(lineRegister.contains("cases: {\"Assets\":\"PackPrice\",\"Cash\":\"UnitPrice\"}"),
+                "the conditional dependsOn must emit the cases map as a JS literal");
+        assertTrue(lineRegister.contains("deflt: 'UnitPrice'"), "the conditional dependsOn must emit the no-match default");
+        // The resolver ships with every generated document page (Ticket is the fixture's document).
+        assertTrue(contentOf("gen/emission/js/components/pages/Ticket/TicketDocumentPage.js").contains("resolveDependsOnSource"),
+                "the document page must carry the conditional dependsOn classifier resolver");
 
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");

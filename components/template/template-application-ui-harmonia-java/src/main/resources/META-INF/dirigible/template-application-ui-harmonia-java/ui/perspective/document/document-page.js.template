@@ -404,11 +404,16 @@ document.addEventListener('alpine:init', () => {
 #if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.aggregate != "true")
 
     // Depends-On: ${property.name} reacts to ${property.widgetDependsOnProperty} - load the selected
-    // ${property.widgetDependsOnEntity} record and read its ${property.widgetDependsOnValueFrom}.
+    // ${property.widgetDependsOnEntity} record and read its #if($property.widgetDependsOnValueBy)case-selected property#{else}${property.widgetDependsOnValueFrom}#end.
     async applyDependsOn${property.name}(value, adjust) {
       try {
         const rec = await App.services.api.get('${property.widgetDependsOnControllerUrl}/' + encodeURIComponent(value), { baseUrl: '' });
+#if($property.widgetDependsOnValueBy)
+        const prop${property.name} = await this.resolveDependsOnSource({ path: '${property.widgetDependsOnValueBy}', header: false, #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end }, this.form);
+        const from = rec == null || prop${property.name} == null ? null : rec[prop${property.name}];
+#else
         const from = rec == null ? null : rec.${property.widgetDependsOnValueFrom};
+#end
 #if($property.widgetType == "DROPDOWN")
         if (from == null || from === '') return;
         const rows = await App.services.api.post('${property.widgetDropdownControllerUrl}/search', {
@@ -676,7 +681,11 @@ document.addEventListener('alpine:init', () => {
       for (const col of dependents) {
         try {
           const rec = await App.services.api.get(col.dependsOn.url + '/' + encodeURIComponent(value), { baseUrl: '' });
-          const from = rec == null ? null : rec[col.dependsOn.valueFrom];
+          // Conditional source (intent valueFrom: { by, cases, default }): the property to copy is
+          // picked by the classifier; a plain valueFrom copies its one fixed property.
+          const prop = col.dependsOn.valueBy ? await this.resolveDependsOnSource(col.dependsOn.valueBy, this.draft) : col.dependsOn.valueFrom;
+          if (prop == null) continue;
+          const from = rec == null ? null : rec[prop];
           if (col.widget === 'DROPDOWN' && col.lookup) {
             if (from == null || from === '') continue;
             const conditions = [{ propertyName: col.dependsOn.filterBy, operator: 'EQ', value: from }];
@@ -693,6 +702,37 @@ document.addEventListener('alpine:init', () => {
         } catch (e) {
           console.error('[${name}DocumentPage] dependsOn refresh failed for ' + col.name, e);
         }
+      }
+    },
+
+    // Conditional Depends-On source (#6358): resolve the classifier from the by-path - a value of
+    // the given source object (the item draft, or a form), the open document header (path starts at
+    // the item's composition parent relation), or a one-hop related record fetched by url - then
+    // pick the trigger-target property from the cases map (fall back to deflt; null = skip).
+    async resolveDependsOnSource(vb, src) {
+      try {
+        const segs = vb.path.split('.');
+        let value;
+        if (vb.header) {
+          value = this.form[segs[1]];
+          if (segs.length === 3) {
+            if (value == null || value === '') return vb.deflt || null;
+            const rec = await App.services.api.get(vb.url + '/' + encodeURIComponent(value), { baseUrl: '' });
+            value = rec == null ? null : rec[segs[2]];
+          }
+        } else {
+          value = src[segs[0]];
+          if (segs.length === 2) {
+            if (value == null || value === '') return vb.deflt || null;
+            const rec = await App.services.api.get(vb.url + '/' + encodeURIComponent(value), { baseUrl: '' });
+            value = rec == null ? null : rec[segs[1]];
+          }
+        }
+        if (value == null || value === '') return vb.deflt || null;
+        return vb.cases[String(value)] || vb.deflt || null;
+      } catch (e) {
+        console.error('[${name}DocumentPage] dependsOn classifier resolution failed', e);
+        return vb.deflt || null;
       }
     },
 

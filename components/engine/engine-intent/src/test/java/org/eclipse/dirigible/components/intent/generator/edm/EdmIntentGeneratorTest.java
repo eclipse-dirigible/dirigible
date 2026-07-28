@@ -1270,4 +1270,59 @@ class EdmIntentGeneratorTest {
         // Its contributed field is emitted as a normal property (folded into the base table later).
         assertEquals("VARCHAR", propertyByName(ext, "Egn").get("dataType"));
     }
+
+    /**
+     * The conditional valueFrom form (#6358): the classifier by-path, the header-start coordinates, the
+     * hop entity (whose record is fetched), the cases map as JSON with PascalCased properties, and the
+     * no-match default - with NO plain widgetDependsOnValueFrom emitted.
+     */
+    @org.junit.jupiter.api.Test
+    void conditionalDependsOnEmitsClassifierAttributes() {
+        String yaml = """
+                name: shop
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: priceLevel, type: integer }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: wholesalePrice, type: decimal }
+                      - { name: retailPrice, type: decimal }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesOrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - name: price
+                        type: decimal
+                        dependsOn:
+                          relation: Product
+                          valueFrom:
+                            by: SalesOrder.Customer.priceLevel
+                            cases: { 1: wholesalePrice, 2: retailPrice }
+                            default: retailPrice
+                    relations:
+                      - { name: SalesOrder, kind: manyToOne, to: SalesOrder, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                    """;
+        java.util.Map<String, Object> model =
+                EdmIntentGenerator.buildModelJsonForTest(org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml), "shop");
+        java.util.Map<String, Object> price = propertyByName(entityByName(entities(model), "SalesOrderItem"), "Price");
+        assertEquals("Product", price.get("widgetDependsOnProperty"));
+        assertEquals("SalesOrder.Customer.PriceLevel", price.get("widgetDependsOnValueBy"));
+        assertEquals("true", price.get("widgetDependsOnValueByHeader"));
+        assertEquals("SalesOrder", price.get("widgetDependsOnValueByHeaderEntity"));
+        assertEquals("Customer", price.get("widgetDependsOnValueByEntity"));
+        assertEquals("{\"1\":\"WholesalePrice\",\"2\":\"RetailPrice\"}", price.get("widgetDependsOnValueCases"));
+        assertEquals("RetailPrice", price.get("widgetDependsOnValueDefault"));
+        assertNull(price.get("widgetDependsOnValueFrom"), "the conditional form replaces the fixed valueFrom");
+    }
 }
