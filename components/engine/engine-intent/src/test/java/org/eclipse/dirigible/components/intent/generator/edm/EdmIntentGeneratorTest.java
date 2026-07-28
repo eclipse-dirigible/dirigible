@@ -139,6 +139,25 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void crossModelRelationDrawsAnEdgeToTheProjection() {
+        IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "customers");
+
+        // The EDM modeler draws the diagram purely from the <mxGraphModel> edges. A cross-model FK must
+        // emit the same owner-FK -> projection-PK edge a same-model relation does, or the projection box
+        // renders as a disconnected island with no arrow to its owning entity (#6335). Customer.Country
+        // is a manyToOne into the countries model, so the FK property cell is ent_Customer_p_Country and
+        // the edge targets the Country projection's primary-key cell (ent_Country_p_*).
+        int edgeIdx = edm.indexOf("id=\"edge_Customer_Country\"");
+        assertTrue(edgeIdx >= 0, "a diagram edge from the Customer FK to the Country projection must exist");
+        String edge = edm.substring(edm.lastIndexOf("<mxCell", edgeIdx), edm.indexOf('>', edgeIdx) + 1);
+        assertTrue(edge.contains("edge=\"1\""), "the cross-model link must be an mxGraph edge, was: " + edge);
+        assertTrue(edge.contains("source=\"ent_Customer_p_Country\""),
+                "the edge must start at the Customer Country FK property cell, was: " + edge);
+        assertTrue(edge.contains("target=\"ent_Country_p_"), "the edge must point at the Country projection's PK cell, was: " + edge);
+    }
+
+    @Test
     void entityCellsCarryTheModelerStylePerType() {
         // The EDM editor colors each entity solely from the mxCell style attribute (reconciled from
         // entityType only when the entity dialog re-saves, never on load). So an intent-generated .edm must
