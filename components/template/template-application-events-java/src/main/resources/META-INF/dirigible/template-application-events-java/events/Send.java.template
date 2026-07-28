@@ -1,0 +1,84 @@
+package gen.events.${javaGenFolderName};
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.core.Configurations;
+import org.eclipse.dirigible.sdk.mail.Mail;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
+import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+#foreach($load in $notifyRelationLoads)
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
+import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
+
+/**
+ * Sends the mail declared on the '${step}' step of the ${process} process: it re-loads the ${entity}
+ * the process runs on and mails the recipient the step's notify block names.
+ *
+ * Generated from the intent sends glue - do not edit; it is re-generated with the application. Runs as
+ * a BPMN service task (flowable:delegateExpression="\${JavaTask}"). Entity access goes ONLY through
+ * the generated repositories, so the mail sees the same validated, translated row a user would, and
+ * the sender address comes from the DIRIGIBLE_MAIL_SENDER configuration.
+#if($attach == "print")
+ *
+ * The record's own document rides along as a PDF attachment: the generated ${attachEntity}PrintFeeder
+ * assembles the { document, items } payload the print template binds and sdk.print.Print renders it
+ * server-side - the same two steps the snapshot delegate takes.
+#end
+ *
+ * A missing recipient is a no-op (log + skip): the record simply has nobody to mail, which must not
+ * stall the flow. A real delivery failure DOES fail the task, so the process engine's retry applies -
+ * unlike a transition's notify, a send step's whole purpose is the message.
+ */
+public class ${className} implements JavaDelegate {
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        Object key = execution.getVariable("${keyProperty}");
+        if (!(key instanceof Number)) {
+            return;
+        }
+        // The process variable arrives as a plain Number (a JSON double for an integer key), so it is
+        // narrowed once here - both the load and the log line must read the record's actual id.
+        var id = ((Number) key).${keyAccessor}();
+        ${entity}Entity entity = new ${entity}Repository().findById(id);
+        if (entity == null) {
+            return;
+        }
+#foreach($load in $notifyRelationLoads)
+        ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+        String to = ${notifyToExpression};
+        if (to == null || to.isBlank()) {
+            System.out.println("${className}: no recipient on ${entity} " + id + " - nothing sent.");
+            return;
+        }
+        Map part = new HashMap();
+        part.put("type", "text");
+        part.put("contentType", "text/plain");
+        part.put("text", ${notifyBodyExpression});
+        List<Map> parts = new ArrayList<>();
+        parts.add(part);
+#if($attach == "print")
+        Map document = new HashMap();
+        document.put("type", "attachment");
+        document.put("contentType", "application/pdf");
+        document.put("fileName", ${attachFileNameExpression});
+        document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+                new ${attachEntity}PrintFeeder().feed(entity.${keyProperty})));
+        parts.add(document);
+#end
+        String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+        try {
+            Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+        } catch (Exception ex) {
+            throw new RuntimeException("Failed to send the ${step} mail of the ${process} process", ex);
+        }
+    }
+}

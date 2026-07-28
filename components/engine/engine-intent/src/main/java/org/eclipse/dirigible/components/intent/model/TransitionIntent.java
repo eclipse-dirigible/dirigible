@@ -59,6 +59,13 @@ public class TransitionIntent {
     private String icon;
     /** Optional ordering among a view's actions. */
     private Integer order;
+    /**
+     * Optional outbound mail sent AFTER the status flip commits - "on Void, mail the counterparty". The
+     * reusable notify block ({@code to} / {@code subject} / {@code body} / {@code attach: print}),
+     * resolved against the transitioned record. Fail-soft: a send failure is logged and the transition
+     * still succeeds (the status flip is the contract, the mail is its side effect).
+     */
+    private NotificationIntent notify;
 
     public String getName() {
         return name;
@@ -122,5 +129,13 @@ public class TransitionIntent {
 
     public void setOrder(Integer order) {
         this.order = order;
+    }
+
+    public NotificationIntent getNotify() {
+        return notify;
+    }
+
+    public void setNotify(NotificationIntent notify) {
+        this.notify = notify;
     }
 }

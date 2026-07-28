@@ -171,6 +171,13 @@ export function getTemplate(parameters) {
                 collection: "transitions"
             },
             {
+                location: "/template-application-events-java/events/Send.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{className}}.java",
+                engine: "velocity",
+                collection: "sends"
+            },
+            {
                 location: "/template-application-events-java/events/Posting.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{className}}Posting.java",

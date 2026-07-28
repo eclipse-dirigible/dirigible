@@ -731,7 +731,15 @@ export function generateFiles(model, parameters, templateSources) {
                                 guardExpression: model.notifications[n].guardExpression,
                                 toExpression: model.notifications[n].toExpression,
                                 subjectExpression: model.notifications[n].subjectExpression,
-                                bodyExpression: model.notifications[n].bodyExpression
+                                bodyExpression: model.notifications[n].bodyExpression,
+                                // attach: print - the record's own rendered document, produced by the
+                                // generated feeder + the server-side print renderer. The key property
+                                // is what the feeder is fed with; all four are pre-resolved by the glue.
+                                keyProperty: model.notifications[n].keyProperty,
+                                attach: model.notifications[n].attach,
+                                attachEntity: model.notifications[n].attachEntity,
+                                attachLanguage: model.notifications[n].attachLanguage,
+                                attachFileNameExpression: model.notifications[n].attachFileNameExpression
                             };
                             const cleanNotificationParameters = cleanData(notificationParameters);
                             generatedFiles.push({
@@ -770,6 +778,13 @@ export function generateFiles(model, parameters, templateSources) {
                                 toExpression: sc.toExpression,
                                 subjectExpression: sc.subjectExpression,
                                 bodyExpression: sc.bodyExpression,
+                                // attach: print on a notify schedule - the matched row's own rendered
+                                // document (empty strings on a generate schedule).
+                                keyProperty: sc.keyProperty,
+                                attach: sc.attach,
+                                attachEntity: sc.attachEntity,
+                                attachLanguage: sc.attachLanguage,
+                                attachFileNameExpression: sc.attachFileNameExpression,
                                 genToEntity: sc.genToEntity,
                                 genToPk: sc.genToPk,
                                 genFieldAssignments: sc.genFieldAssignments,
@@ -1050,18 +1065,76 @@ export function generateFiles(model, parameters, templateSources) {
                                 entity: t.entity,
                                 perspective: t.perspective,
                                 javaPerspective: sanitizeJavaIdentifier(t.perspective),
+                                keyProperty: t.keyProperty,
                                 statusProperty: t.statusProperty,
                                 setStatus: t.setStatus,
                                 allowedExpr: t.allowedExpr,
                                 fromStatuses: t.fromStatuses,
                                 guardExpr: t.guardExpr,
-                                guardText: t.guardText
+                                guardText: t.guardText,
+                                // The optional notify block sent AFTER the flip commits (fail-soft in
+                                // the generated controller). Same pre-rendered shape as a notification;
+                                // each relation load needs the Java package of its target.
+                                notify: t.notify,
+                                notifyRelationLoads: (t.notifyRelationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
+                                    javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
+                                })),
+                                notifyToExpression: t.notifyToExpression,
+                                notifySubjectExpression: t.notifySubjectExpression,
+                                notifyBodyExpression: t.notifyBodyExpression,
+                                attach: t.attach,
+                                attachEntity: t.attachEntity,
+                                attachLanguage: t.attachLanguage,
+                                attachFileNameExpression: t.attachFileNameExpression
                             };
                             const cleanTransitionParameters = cleanData(transitionParameters);
                             generatedFiles.push({
                                 location: location,
                                 content: getGenerationEngine(template).generate(location, content, cleanTransitionParameters),
                                 path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanTransitionParameters)
+                            });
+                        }
+                    }
+                    break;
+                case "sends":
+                    // Sending steps (intent layer): one JavaDelegate per serviceTask declaring a notify
+                    // block - it re-loads the process's trigger record and mails it, attaching the
+                    // record's rendered document when the block says attach: print. Not entity-shaped,
+                    // own loop; only the Java package segments are sanitized here (every expression is
+                    // pre-rendered by the glue generator).
+                    if (model.sends) {
+                        for (let i = 0; i < model.sends.length; i++) {
+                            const s = model.sends[i];
+                            const sendParameters = {
+                                ...parameters,
+                                process: s.process,
+                                step: s.step,
+                                className: s.className,
+                                entity: s.entity,
+                                perspective: s.perspective,
+                                javaPerspective: sanitizeJavaIdentifier(s.perspective),
+                                keyProperty: s.keyProperty,
+                                keyAccessor: s.keyAccessor,
+                                notifyRelationLoads: (s.notifyRelationLoads || []).map(load => ({
+                                    ...load,
+                                    javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
+                                    javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
+                                })),
+                                notifyToExpression: s.notifyToExpression,
+                                notifySubjectExpression: s.notifySubjectExpression,
+                                notifyBodyExpression: s.notifyBodyExpression,
+                                attach: s.attach,
+                                attachEntity: s.attachEntity,
+                                attachLanguage: s.attachLanguage,
+                                attachFileNameExpression: s.attachFileNameExpression
+                            };
+                            const cleanSendParameters = cleanData(sendParameters);
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, cleanSendParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, cleanSendParameters)
                             });
                         }
                     }

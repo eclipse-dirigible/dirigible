@@ -60,6 +60,56 @@ public class ${className}Transition {
         source = repository.findById(req.id);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
                 "${projectName}-${perspective}-${entity}-transitioned", Json.stringify(source));
+#if($notify == "true")
+        sendNotification(source);
+#end
         return Json.stringify(source);
     }
+#if($notify == "true")
+
+    /**
+     * The transition's `notify` block: mail the counterparty about the record that just transitioned
+     * (e.g. "on Void, tell the customer"), optionally with the record's own rendered document
+     * attached.
+     *
+     * FAIL-SOFT by construction: the status flip is this endpoint's contract and it has already
+     * committed, so a mail problem (no recipient on the record, SMTP unconfigured or unreachable)
+     * must never turn a successful transition into an error. Everything here is logged and swallowed.
+     */
+    private static void sendNotification(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity entity) {
+        try {
+#foreach($load in $notifyRelationLoads)
+            gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} =
+                    entity.${load.fkProperty} == null ? null
+                            : new gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository().findById(entity.${load.fkProperty});
+#end
+            String to = ${notifyToExpression};
+            if (to == null || to.isBlank()) {
+                return;
+            }
+            java.util.Map part = new java.util.HashMap();
+            part.put("type", "text");
+            part.put("contentType", "text/plain");
+            part.put("text", ${notifyBodyExpression});
+            java.util.List<java.util.Map> parts = new java.util.ArrayList<>();
+            parts.add(part);
+#if($attach == "print")
+            // attach: print - the record's own print template rendered to PDF server-side, so the
+            // counterparty receives the document (the voided invoice itself), not just a notice.
+            java.util.Map document = new java.util.HashMap();
+            document.put("type", "attachment");
+            document.put("contentType", "application/pdf");
+            document.put("fileName", ${attachFileNameExpression});
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+                    new ${attachEntity}PrintFeeder().feed(entity.${keyProperty})));
+            parts.add(document);
+#end
+            String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+            org.eclipse.dirigible.sdk.mail.Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression},
+                    parts);
+        } catch (Exception ex) {
+            System.err.println("Transition ${name}: the record transitioned but its mail could not be sent - " + ex.getMessage());
+        }
+    }
+#end
 }
