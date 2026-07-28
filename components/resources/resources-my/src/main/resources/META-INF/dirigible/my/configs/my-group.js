@@ -5,7 +5,7 @@
  */
 exports.getPerspectiveGroup = () => ({
 	id: 'my',
-	label: 'My pages',
+	label: 'My Work',
 	order: 10,
 	// The service classifies a group by the presence of `items` - the aggregated personal
 	// perspectives are pushed into it by groupId.

@@ -29,7 +29,7 @@
     <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
     <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My</title>
+    <title>My Work</title>
 
     <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
     <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
@@ -103,7 +103,7 @@
               <div x-h-sidebar-group-label x-text="T('application-core:shell.nav.application', 'Application')"></div>
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
-                  <!-- The My Shell is task-first: the Inbox IS the home page - a personal task
+                  <!-- The My Work shell is task-first: the Inbox IS the home page - a personal task
                        ("Fill & confirm your July timesheet") is how work arrives here. -->
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isBuiltinActive('/inbox') || isBuiltinActive('/')" @click="navigate('/inbox')">
@@ -162,7 +162,7 @@
                     aria-label="Navigation" @click="openSideNav()" data-size="icon">
               <i role="img" x-h-lucide data-lucide="menu"></i>
             </button>
-            <span x-h-toolbar-title x-text="T('application-core:shell.nav.myApplications', 'My Applications')"></span>
+            <span x-h-toolbar-title x-text="T('application-core:shell.nav.myWork', 'My Work')"></span>
             <div x-h-toolbar-spacer></div>
             <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
                     :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
