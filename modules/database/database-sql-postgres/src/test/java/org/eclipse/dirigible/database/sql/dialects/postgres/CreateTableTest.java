@@ -59,4 +59,23 @@ public class CreateTableTest {
                 sql);
     }
 
+    /**
+     * PostgreSQL has no CLOB / NCLOB type, so the large character types all render as its unbounded
+     * TEXT. A table declaring a CLOB column - what a text field generates - used to fail to create with
+     * 'type "clob" does not exist'.
+     */
+    @Test
+    public void createTableWithLargeCharacterColumns() {
+        String sql = SqlFactory.getNative(new PostgresSqlDialect())
+                               .create()
+                               .table("NOTES")
+                               .column("NOTE", DataType.CLOB)
+                               .column("SUMMARY", DataType.NCLOB)
+                               .column("BODY", DataType.CHARACTER_LARGE_OBJECT)
+                               .build();
+
+        assertNotNull(sql);
+        assertEquals("CREATE TABLE \"NOTES\" ( \"NOTE\" TEXT , \"SUMMARY\" TEXT , \"BODY\" TEXT )", sql);
+    }
+
 }

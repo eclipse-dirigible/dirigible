@@ -502,6 +502,41 @@ class EdmIntentGeneratorTest {
         assertEquals("8", sprint.get("dataLength"), "a week column is sized for YYYY-Www");
     }
 
+    /**
+     * A text field is a wide VARCHAR, not a CLOB: the generated entity declares the same length, so the
+     * entity layer's Hibernate mapping agrees with the column instead of rewriting it to its own
+     * default (which silently made every text column a varchar(255)). Its widget still comes from the
+     * logical type, since the column type no longer tells them apart.
+     */
+    @Test
+    void textFieldIsAWideVarcharWithATextareaWidget() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text }
+                      - { name: excerpt, type: text, length: 500 }
+                      - { name: title, type: string }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> note = entityByName(entities(model), "Note");
+
+        Map<String, Object> body = propertyByName(note, "Body");
+        assertEquals("VARCHAR", body.get("dataType"));
+        assertEquals("4000", body.get("dataLength"));
+        assertEquals("TEXTAREA", body.get("widgetType"));
+
+        // An authored length still wins over the default.
+        assertEquals("500", propertyByName(note, "Excerpt").get("dataLength"));
+
+        // A plain string keeps its own default and widget.
+        Map<String, Object> title = propertyByName(note, "Title");
+        assertEquals("100", title.get("dataLength"));
+        assertEquals("TEXTBOX", title.get("widgetType"));
+    }
+
     @Test
     void immutableAlwaysEmitsTheAppendOnlyAttribute() {
         String yaml = """
