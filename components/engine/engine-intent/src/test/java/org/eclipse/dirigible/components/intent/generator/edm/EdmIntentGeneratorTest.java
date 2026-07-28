@@ -139,6 +139,30 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void notNullPropertiesCarryDataNotNullSoTheModelerKeepsTheConstraint() {
+        IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "customers");
+
+        // The EDM editor's "Not null" checkbox binds to dataNotNull; a NOT NULL column must carry
+        // dataNotNull="true" in its mxGraph <Property> cell exactly as a hand-modeled .edm does, or the
+        // checkbox loads unchecked and a re-save drops the constraint via dataNullable="true" (#6332).
+        // A required field and the primary key are both NOT NULL.
+        assertTrue(propertyCell(edm, "Name").contains("dataNotNull=\"true\""),
+                "a required field must carry dataNotNull=\"true\", was: " + propertyCell(edm, "Name"));
+        assertTrue(propertyCell(edm, "Id").contains("dataNotNull=\"true\""),
+                "a primary key must carry dataNotNull=\"true\", was: " + propertyCell(edm, "Id"));
+        // A nullable field must NOT carry it, so its checkbox stays unchecked and it round-trips nullable.
+        assertTrue(!propertyCell(edm, "Phone").contains("dataNotNull"),
+                "a nullable field must not carry dataNotNull, was: " + propertyCell(edm, "Phone"));
+    }
+
+    private static String propertyCell(String edm, String propertyName) {
+        int idx = edm.indexOf("<Property name=\"" + propertyName + "\"");
+        assertTrue(idx >= 0, "the mxGraph <Property> cell for [" + propertyName + "] must be present");
+        return edm.substring(idx, edm.indexOf("/>", idx));
+    }
+
+    @Test
     void entityCellsCarryTheModelerStylePerType() {
         // The EDM editor colors each entity solely from the mxCell style attribute (reconciled from
         // entityType only when the entity dialog re-saves, never on load). So an intent-generated .edm must
