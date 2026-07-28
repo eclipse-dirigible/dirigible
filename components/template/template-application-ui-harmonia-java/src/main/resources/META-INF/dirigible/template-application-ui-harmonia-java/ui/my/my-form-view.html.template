@@ -110,10 +110,12 @@
             <div x-h-card-header class="hbox items-center">
               <span x-h-card-title x-text="child.label"></span>
               <div class="grow"></div>
+#if(!$personalReadOnly)
               <button x-h-button data-variant="primary" data-size="sm" @click="addChild(child)">
                 <i role="img" x-h-lucide data-lucide="plus"></i>
                 <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
               </button>
+#end
             </div>
             <div x-h-card-content>
               <div x-show="child.state === 'loading'"><div x-h-spinner></div></div>
