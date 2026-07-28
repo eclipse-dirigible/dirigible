@@ -97,7 +97,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> expansions = buildExpansions(model, byName, compositionParents, settings);
         List<Map<String, Object>> settlements = buildSettlements(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> generates = buildGenerates(model, byName, compositionParents, settings, context);
-        List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings);
+        List<Map<String, Object>> transitions = buildTransitions(model, byName, compositionParents, settings, context);
+        List<Map<String, Object>> sends = buildSends(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> postings = buildPostings(model, byName, compositionParents, settings, context);
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
@@ -109,7 +110,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
                 && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty()) {
+                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -132,6 +133,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("settlements", settlements);
         glue.put("generates", generates);
         glue.put("transitions", transitions);
+        glue.put("sends", sends);
         glue.put("postings", postings);
         glue.put("posts", posts);
         glue.put("aggregates", aggregates);
@@ -379,17 +381,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + "] is not a resolvable field or relation.field of [" + entity + "] - the notification was NOT generated");
                 continue;
             }
+            NotifySupport.PrintAttachment attachment =
+                    printAttachment(notification, byName.get(entity), model, context, "Notification [" + notification.getName() + "]");
+            if (attachment == null && NotifySupport.attachesPrint(notification)) {
+                continue; // asked for the document but it cannot be rendered - reported above
+            }
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            // The PK property an `attach: print` hands to the generated print feeder. Deliberately
+            // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
+            // engine IT keys "no trigger was generated" on trigger-only keys being absent.
+            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", NotificationSupport.topicSuffix(NotificationSupport.eventKind(notification)));
             entry.put("relationLoads", relationLoads(plan));
             entry.put("guardExpression", plan.guardExpression());
             entry.put("toExpression", plan.toExpression());
             entry.put("subjectExpression", plan.subjectExpression());
             entry.put("bodyExpression", plan.bodyExpression());
+            entry.putAll(NotifySupport.attachmentFields(attachment));
             notifications.add(entry);
         }
         return notifications;
@@ -689,7 +701,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * {@code source} entity (Calc semantics: a null field reads as 0 - identical to calculated fields).
      */
     private static List<Map<String, Object>> buildTransitions(IntentModel model, Map<String, EntityIntent> byName,
-            Map<String, String> compositionParents, IntentSettings settings) {
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (org.eclipse.dirigible.components.intent.model.TransitionIntent t : model.getTransitions()) {
             if (t.getName() == null || t.getName()
@@ -748,9 +760,60 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             e.put("guardExpr", guardExpr);
             e.put("guardText", guardText);
+            // Optional outbound mail after the flip commits ("on Void, mail the counterparty"),
+            // resolved against the transitioned record - the same notify block a schedule or a
+            // process step authors. Fail-soft in the generated controller: the flip is the contract.
+            e.putAll(notifyFields(t.getNotify(), entity, model, byName, compositionParents, context,
+                    "Transition [" + t.getName() + "] notify"));
             out.add(e);
         }
         return out;
+    }
+
+    /**
+     * The {@code notify*} keys of a descriptor whose call site may carry an embedded notify block (a
+     * transition, a process step): the pre-rendered recipient / subject / body expressions, the
+     * relation loads they need, and the attachment coordinates - or {@code notify: false} and empty
+     * strings when no block was authored (or its recipient does not resolve, which is reported and
+     * dropped rather than mailing garbage).
+     */
+    private static Map<String, Object> notifyFields(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        // A fan-out sends one message PER ROW of a related entity, so every path - recipient,
+        // placeholders, attached document - resolves against the ROW rather than the record the block
+        // hangs on. An unresolvable forEach drops the whole block: mailing the record once instead of
+        // each row would be a different message, quietly sent to the wrong party.
+        NotifySupport.FanOut fanOut = NotifySupport.fanOut(notify, entity, byName, compositionParents);
+        boolean fanOutRequested = notify != null && notify.getForEach() != null && !notify.getForEach()
+                                                                                          .isBlank();
+        if (fanOutRequested && fanOut == null) {
+            reportDroppedGlue(context, subject + " forEach [" + notify.getForEach() + "] is not a declared entity with exactly one to-one"
+                    + " relation back to [" + (entity == null ? "?" : entity.getName()) + "] - the mail was NOT generated");
+        }
+        EntityIntent about = fanOut == null ? entity : byName.get(fanOut.entity());
+        boolean dropped = fanOutRequested && fanOut == null;
+        NotificationSupport.Plan plan = notify == null || dropped ? null
+                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, about, byName, compositionParents,
+                        crossModelLookup(model, context));
+        if (notify != null && plan == null && !dropped) {
+            reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
+                    + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
+        }
+        NotifySupport.PrintAttachment attachment = plan == null ? null : printAttachment(notify, about, model, context, subject);
+        boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
+        fields.put("notify", String.valueOf(send));
+        fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
+        fields.put("notifyToExpression", send ? plan.toExpression() : "null");
+        fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
+        fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
+        fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
+        fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
+        // With a fan-out the attachment (and the recipient) belong to the ROW, so the print feeder is
+        // fed the ROW's key - the loop variable is named `entity` in the templates for exactly this
+        // reason, so one expression set serves both shapes.
+        fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(about) : "");
+        return fields;
     }
 
     /**
@@ -805,7 +868,54 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
 
     /** Test hook: build the {@code transitions} glue collection without a repository. */
     static List<Map<String, Object>> buildTransitionsForTest(IntentModel model) {
-        return buildTransitions(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"));
+        return buildTransitions(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
+    }
+
+    /**
+     * Sends: one entry per {@code serviceTask} that declares a {@code notify} block - the step whose
+     * work IS to send a message about the process's trigger record, optionally with the record's
+     * rendered document attached ({@code attach: print}). Everything is pre-rendered here (the
+     * recipient / subject / body expressions, the relation loads, the attachment coordinates); the BPMN
+     * generator binds the task to the generated {@code <Process><Step>Send} delegate this drives.
+     */
+    private static List<Map<String, Object>> buildSends(IntentModel model, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, IntentSettings settings, IntentGenerationContext context) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (NotifySupport.Sender sender : NotifySupport.senders(model)) {
+            if (!settings.shouldGenerate("sends", sender.className())) {
+                LOGGER.info("Settings opt-out: keeping existing delegate for send [{}] (not generated)", sender.className());
+                continue;
+            }
+            EntityIntent entity = byName.get(sender.entity());
+            Map<String, Object> fields = notifyFields(sender.block(), entity, model, byName, compositionParents, context,
+                    "Process [" + sender.process() + "] step [" + sender.step() + "] notify");
+            if (!"true".equals(fields.get("notify"))) {
+                continue; // unresolvable recipient / unrenderable attachment - reported by notifyFields
+            }
+            Map<String, Object> e = new LinkedHashMap<>();
+            e.put("process", sender.process());
+            e.put("step", sender.step());
+            e.put("className", sender.className());
+            e.put("entity", sender.entity());
+            e.put("perspective", IntentEntities.resolvePerspective(sender.entity(), compositionParents));
+            e.put("keyProperty", sender.keyProperty());
+            e.put("keyAccessor", sender.keyAccessor());
+            e.putAll(fields);
+            out.add(e);
+        }
+        return out;
+    }
+
+    /** Test hook: build the {@code sends} glue collection without a repository. */
+    static List<Map<String, Object>> buildSendsForTest(IntentModel model) {
+        return buildSends(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"), null);
+    }
+
+    /** Test hook: build the {@code notifications} glue collection without a repository. */
+    static List<Map<String, Object>> buildNotificationsForTest(IntentModel model) {
+        return buildNotifications(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
+                null);
     }
 
     /**
@@ -813,8 +923,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.PostIntent}). Each descriptor drives a
      * generated event handler that, on the source document's {@code event:} event, emits mapped rows
      * into the {@code into:} target (per {@code forEach:} line item), idempotently by
-     * {@code idempotentBy}. See the driving suite's PROPOSAL_EVENT_POSTING.md. This is the structural
-     * glue; the handler template + BPMN/listener wiring is the next stage.
+     * {@code idempotentBy}. See kf-catalog PROPOSAL_EVENT_POSTING.md. This is the structural glue; the
+     * handler template + BPMN/listener wiring is the next stage.
      */
     private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
@@ -968,8 +1078,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.AggregateIntent}). Each drives a generated
      * handler that maintains a running sum/count of a source entity's field, grouped by its to-one
      * relations, upserted into a separate target entity keyed by that group. Structural glue; the
-     * keyed-upsert handler template is the next stage. See the driving suite's
-     * PROPOSAL_AGGREGATE_CHECKS.md.
+     * keyed-upsert handler template is the next stage. See kf-catalog PROPOSAL_AGGREGATE_CHECKS.md.
      */
     private static List<Map<String, Object>> buildAggregates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
@@ -1738,7 +1847,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("cron", schedule.getCron());
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            // The PK property an `attach: print` hands to the generated print feeder. Deliberately
+            // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
+            // engine IT keys "no trigger was generated" on trigger-only keys being absent.
+            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
+            // The attachment keys are always present (empty for a generate schedule): an undefined
+            // Velocity variable renders as its own name, so a template must never rely on absence.
+            entry.putAll(NotifySupport.attachmentFields(null));
 
             if (generates) {
                 // Scheduled record generation: the queried row is the source, so its create-from maps the
@@ -1777,11 +1893,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
+                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, context,
+                        "Schedule [" + schedule.getName() + "] notify");
+                if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
+                    continue; // asked for the document but it cannot be rendered - reported above
+                }
                 entry.put("action", "notify");
                 entry.put("relationLoads", relationLoads(plan));
                 entry.put("toExpression", plan.toExpression());
                 entry.put("subjectExpression", plan.subjectExpression());
                 entry.put("bodyExpression", plan.bodyExpression());
+                entry.putAll(NotifySupport.attachmentFields(attachment));
             }
             schedules.add(entry);
         }
@@ -1832,6 +1954,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         if (context != null) {
             context.addIssue(message);
         }
+    }
+
+    /**
+     * Resolve a notify block's {@code attach: print} against the entity the message is about, reporting
+     * the drop when the entity has no printable document shape. The parser rejects that combination up
+     * front, so this is the generation-time backstop (the same belt-and-braces the notify recipient
+     * gets): a mail must never go out claiming a document it could not render.
+     *
+     * @param notify the notify block, may be {@code null}
+     * @param entity the entity the message is about
+     * @param model the parsed model
+     * @param context the generation context (to surface the drop as a response issue)
+     * @param subject the call site, for the reported message
+     * @return the attachment, or {@code null} when none was asked for or it cannot be rendered
+     */
+    private static NotifySupport.PrintAttachment printAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            IntentGenerationContext context, String subject) {
+        NotifySupport.PrintAttachment attachment = NotifySupport.printAttachment(notify, entity, model);
+        if (attachment == null && NotifySupport.attachesPrint(notify)) {
+            reportDroppedGlue(context, subject + " asks to attach the print of [" + (entity == null ? "?" : entity.getName())
+                    + "], which is not a document (header + line-items child) and has no print template - NOT generated");
+        }
+        return attachment;
     }
 
     private static List<Map<String, Object>> relationLoads(NotificationSupport.Plan plan) {

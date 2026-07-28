@@ -1255,7 +1255,12 @@ class IntentEngineIT extends IntegrationTest {
         String stub = contentOf("custom/NotifyCustomer.java");
         assertTrue(stub.contains("package custom;") && stub.contains("class NotifyCustomer implements JavaDelegate"),
                 "the stub should be a custom-package JavaDelegate");
-        assertTrue(stub.contains("OrderApproval: notifyCustomer service task executed."), "the stub should log a default message");
+        // A generated class is read as house style, so the stub logs through the SDK logger - it never
+        // prints.
+        assertTrue(stub.contains("Logging.getLogger(\"custom.NotifyCustomer\")") && stub.contains(
+                "LOG.info(\"The {} step of the {} process ran (stub - not implemented yet)\", \"notifyCustomer\", \"OrderApproval\");"),
+                "the stub should log a default message through the SDK logger");
+        assertFalse(stub.contains("System.out") || stub.contains("System.err"), "the scaffolded stub must never print to stdout/stderr");
 
         // The developer implements it; regeneration must NOT overwrite it.
         writeProjectFile("custom/NotifyCustomer.java", """
@@ -2077,10 +2082,11 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("scrubbed", hasItem("ApproveOrder.form")));
         assertFalse(resource("ApproveOrder.form").exists(), "an opted-out form must not be generated");
         String glue = contentOf("orders.glue");
-        // keyProperty is unique to trigger entries (other glue blocks don't emit it), so its absence
-        // means the opted-out trigger was not generated - other glue (notifications, etc.) still uses
-        // "entity".
-        assertFalse(glue.contains("\"keyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
+        // businessKeyProperty is emitted ONLY by a trigger entry, so its absence means the opted-out
+        // trigger was not generated. (This used to key on "keyProperty", which other glue blocks may
+        // legitimately need too - a notify's attach: print carries its own PK reference - so the proxy
+        // now names a genuinely trigger-only key.)
+        assertFalse(glue.contains("\"businessKeyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
         // The resolver was not opted out, so it survives.
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.

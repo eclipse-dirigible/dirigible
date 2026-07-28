@@ -20,11 +20,11 @@ import org.springframework.stereotype.Component;
 /**
  * Scaffolds a Java {@code JavaDelegate} stub under {@code custom/} for every author-declared
  * service task with <b>no built-in handler</b> - i.e. one that is NOT a {@code call} (TS handler),
- * NOT a {@code setField} / {@code setRelationField} (which the BPMN binds to the generated
- * {@code gen.events.<Process><Step>} delegate), and NOT a {@code delegate} (an author-named client
- * {@code JavaDelegate} the BPMN binds via {@code flowable:class}). The BPMN binds such a bare task
- * to {@code ${JavaTask}} -> {@code custom.<Step>}; this writes {@code custom/<Step>.java} as a
- * minimal logging stub for the developer to implement.
+ * NOT a {@code setField} / {@code setRelationField} / {@code notify} (which the BPMN binds to the
+ * generated {@code gen.events.<Process><Step>} delegate), and NOT a {@code delegate} (an
+ * author-named client {@code JavaDelegate} the BPMN binds via {@code flowable:class}). The BPMN
+ * binds such a bare task to {@code ${JavaTask}} -> {@code custom.<Step>}; this writes
+ * {@code custom/<Step>.java} as a minimal logging stub for the developer to implement.
  * <p>
  * <b>Generate-once, never overwritten.</b> {@code custom/} is the escape-hatch tier the intent
  * layer does not own, so the stub is written only when the file is absent (the developer's edits
@@ -86,6 +86,11 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                                                                          .isBlank())) {
                     continue;
                 }
+                // A `notify` service task is bound by the BPMN to the GENERATED
+                // gen.events.<Process><Step>Send delegate (NotifySupport -> sends glue) - same reason.
+                if (NotifySupport.stepNotify(step) != null) {
+                    continue;
+                }
                 String handler = IntentNaming.pascalCase(step.getName());
                 String fileName = "custom/" + handler + ".java";
                 if (context.getRepository()
@@ -103,6 +108,8 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
         return """
                 package custom;
 
+                import org.eclipse.dirigible.sdk.log.Logger;
+                import org.eclipse.dirigible.sdk.log.Logging;
                 import org.flowable.engine.delegate.DelegateExecution;
                 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -114,12 +121,15 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                  */
                 public class %s implements JavaDelegate {
 
+                    /** Application logger: levelled, timestamped and visible in the Logs view - never print to stdout. */
+                    private static final Logger LOG = Logging.getLogger("custom.%s");
+
                     @Override
                     public void execute(DelegateExecution execution) {
                         // TODO implement the '%s' service task.
-                        System.out.println("%s: %s service task executed.");
+                        LOG.info("The {} step of the {} process ran (stub - not implemented yet)", "%s", "%s");
                     }
                 }
-                """.formatted(step, process, handler, step, process, step);
+                """.formatted(step, process, handler, handler, step, step, process);
     }
 }

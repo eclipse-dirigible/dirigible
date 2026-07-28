@@ -57,9 +57,10 @@ import org.springframework.beans.factory.annotation.Autowired;
  * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, {@code transitions}
  * (the guarded on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code postings}
  * with {@code reverses} (post on a transition; red-storno reversal on void - negated amounts,
- * storno link, fail-soft), and the personal (my) surface
- * ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced owner, stripped
- * fields).
+ * storno link, fail-soft), the {@code notify} block with {@code attach: print} (send the document
+ * itself by e-mail - on a transition and on a process step; the fail-soft contract), and the
+ * personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced
+ * owner, stripped fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -303,12 +304,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # line-items child gets the SYNCHRONOUS recompute in the generated DAO (not an async
               # roll-up). The recompute is triggered by a LINE change, so it must persist ONLY the total
               # columns - a full-row merge reverts a concurrent edit to any other master column.
+              #
+              # Bill doubles as the send-document fixture: it is a printable document (header +
+              # DocumentItem child), it has a counterparty to mail one hop away (Person.email) and an
+              # EntityStatus for the SendBill transition to flip - so a notify block with
+              # `attach: print` is authored on a transition AND on a process step (below).
               - name: Bill
                 function: Document
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: note,   type: string,  length: 200 }
                   - { name: amount, type: decimal, aggregate: true }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person }
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
               - name: BillLine
                 function: DocumentItem
                 fields:
@@ -451,6 +460,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: confirm, kind: userTask, args: { assignee: approver } }
                   - { name: end, kind: end }
 
+              # a SENDING step: the serviceTask's whole work is the mail about the trigger record.
+              # No attach here (the transition below covers the attachment), and the Bills this test
+              # creates carry no Person - so at runtime the delegate takes its no-recipient no-op
+              # path, which is exactly what must not stall a flow.
+              - name: BillFlow
+                trigger: { onCreate: Bill }
+                steps:
+                  - name: mailBill
+                    kind: serviceTask
+                    args:
+                      notify:
+                        to: Person.email
+                        subject: "Bill {note}"
+                        body: "Dear {Person.name}, your bill totals {amount}."
+                      next: end
+                  - { name: end, kind: end }
+
             # transitions: the guarded on-demand status flip - Cancel is allowed only on a DRAFT
             # entry with nothing paid (Calc semantics: a null field reads as 0, so a never-paid
             # entry passes).
@@ -480,6 +506,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 setStatus: 3
                 label: Cancel
                 icon: ban
+              # send-document: the transition mails AFTER the flip commits, with the bill's own print
+              # rendered to PDF and attached. The recipient is a LITERAL so the runtime always gets past
+              # the recipient check and actually attempts the attachment - which cannot succeed on this
+              # instance (no print template in the CMS, no SMTP configured). That is the point: the flip
+              # must still return 200 with the status written. Fail-soft is the contract.
+              - name: SendBill
+                forEntity: Bill
+                from: [1]
+                setStatus: 2
+                label: Send
+                icon: mail
+                notify:
+                  to: ops@example.com
+                  subject: "Bill {note}"
+                  body: "Please find the bill attached."
+                  attach: print
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
@@ -957,6 +999,43 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(transitionExtension.contains("-custom-action"),
                 "the transition button must contribute to the app's custom-action extension point");
 
+        // send a document by e-mail: the notify block, at two of its call sites.
+        //
+        // (1) On a TRANSITION - the mail goes out after the flip, with the record's own print
+        // rendered to PDF and attached. The attachment must come from the generated feeder + the
+        // server-side print renderer (never a hand-rolled payload), and the whole send must be
+        // wrapped so a mail failure cannot fail the already-committed transition.
+        String sendBill = contentOf("gen/events/emission/SendBillTransition.java");
+        assertTrue(sendBill.contains("Mail.send("), "a transition's notify must emit the actual send call");
+        assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
+                "attach: print must emit a PDF attachment part");
+        assertTrue(sendBill.contains("Print.render(\"Bill\", \"en\"") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
+                "the attachment must be the generated feeder's payload rendered by the server-side print engine");
+        assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
+
+        // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger
+        // record through the generated repository, resolves the recipient, and sends. The BPMN must
+        // bind THAT class (a mismatch silently leaves the step calling a non-existent custom stub),
+        // and no custom/ stub may be scaffolded for it.
+        String billSend = contentOf("gen/events/emission/BillFlowMailBillSend.java");
+        assertTrue(billSend.contains("implements JavaDelegate"), "a sending step must emit a JavaDelegate");
+        assertTrue(billSend.contains("new BillRepository().findById("),
+                "the sender must re-load the trigger record through its generated repository");
+        // The recipient is a one-hop relation.field, so the related record must be loaded by FK
+        // before its address can be read (the same mechanism a notification's recipient uses).
+        assertTrue(billSend.contains("new PersonRepository().findById(entity.Person)"),
+                "a one-hop recipient must load the related record by FK before reading the address");
+        assertTrue(billSend.contains("(Person == null ? null : Person.Email)"),
+                "the recipient expression must be null-safe on an unset relation");
+        assertTrue(billSend.contains("Mail.send("), "the sender must emit the actual send call");
+        assertTrue(billSend.contains("no recipient"), "a record with nobody to mail must be a logged no-op, not a failure");
+        String billBpmn = contentOf("BillFlow.bpmn");
+        assertTrue(billBpmn.contains("gen.events.emission.BillFlowMailBillSend"),
+                "the BPMN service task must bind the generated sender delegate");
+        assertFalse(repository.getResource(PROJECT_PATH + "/custom/MailBill.java")
+                              .exists(),
+                "a notify serviceTask must NOT also scaffold a custom stub (it would never be invoked)");
+
         // postings reverses: the reversal handler negates the sibling's amount expressions on the
         // SAME side, locates the original through the empty storno link (fail-soft skip when none)
         // and stamps the link; the sibling's idempotency guard symmetrically excludes linked rows.
@@ -1142,6 +1221,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Status", equalTo(1)));
+
+        // send a document by e-mail, at its outermost layer: SendBill flips the status AND tries to
+        // mail the bill's rendered PDF. This instance has no SMTP and no print template in the CMS,
+        // so the send cannot succeed - and that must not matter: the transition is still a 200 with
+        // the status written. (A regression here - an unguarded send - turns every mail
+        // misconfiguration into a failed business transaction, which is exactly why the generated
+        // controller wraps it.)
+        AtomicInteger bill = new AtomicInteger();
+        restAssuredExecutor.execute(() -> bill.set(given().contentType("application/json")
+                                                          .body("{\"Note\":\"mailed bill\"}")
+                                                          .when()
+                                                          .post(API + "/bill/BillController")
+                                                          .then()
+                                                          .statusCode(200)
+                                                          .extract()
+                                                          .path("Id")));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/SendBillTransition/run")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(2)));
 
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();

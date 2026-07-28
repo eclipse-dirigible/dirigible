@@ -148,8 +148,8 @@ public class MailClient {
      * @return the mime message
      * @throws MessagingException the messaging exception
      */
-    private static MimeMessage createMimeMessage(Session smtpSession, String from, String[] to, String[] cc, String[] bcc,
-            String subjectText, List<Map> parts) throws MessagingException {
+    static MimeMessage createMimeMessage(Session smtpSession, String from, String[] to, String[] cc, String[] bcc, String subjectText,
+            List<Map> parts) throws MessagingException {
 
         MimeMessage mimeMessage = new MimeMessage(smtpSession);
         mimeMessage.setFrom(InternetAddress.parse(from)[0]);
@@ -175,8 +175,6 @@ public class MailClient {
             ContentType contentType;
             String contentId;
             String fileName;
-            String data;
-            Gson gson = new Gson();
             byte[] dataBytes;
             ByteArrayDataSource source;
 
@@ -202,9 +200,7 @@ public class MailClient {
                     contentType = new ContentType((String) mailPart.get("contentType"));
                     contentId = (String) mailPart.get("contentId");
                     fileName = (String) mailPart.get("fileName");
-                    data = (String) mailPart.get("data");
-
-                    dataBytes = gson.fromJson(data, byte[].class);
+                    dataBytes = partBytes(mailPart.get("data"));
 
                     MimeBodyPart inlinePart = new MimeBodyPart();
                     source = new ByteArrayDataSource(dataBytes, String.valueOf(contentType));
@@ -218,9 +214,7 @@ public class MailClient {
                 case "attachment":
                     contentType = new ContentType((String) mailPart.get("contentType"));
                     fileName = (String) mailPart.get("fileName");
-                    data = (String) mailPart.get("data");
-
-                    dataBytes = gson.fromJson(data, byte[].class);
+                    dataBytes = partBytes(mailPart.get("data"));
 
                     MimeBodyPart attachmentPart = new MimeBodyPart();
                     source = new ByteArrayDataSource(dataBytes, String.valueOf(contentType));
@@ -235,6 +229,22 @@ public class MailClient {
         mimeMessage.setContent(multiPart);
 
         return mimeMessage;
+    }
+
+    /**
+     * The bytes of an {@code inline} / {@code attachment} part's {@code data}. A JavaScript caller
+     * passes the byte array as a JSON array string (the historical shape, kept working); a Java caller
+     * holding the bytes already - e.g. a server-side render of a document to PDF - passes the
+     * {@code byte[]} itself, so a binary payload does not have to travel through a JSON int array.
+     *
+     * @param data the part's data value: a {@code byte[]}, or a JSON array string of numbers
+     * @return the decoded bytes
+     */
+    private static byte[] partBytes(Object data) {
+        if (data instanceof byte[] bytes) {
+            return bytes;
+        }
+        return new Gson().fromJson((String) data, byte[].class);
     }
 
     /**

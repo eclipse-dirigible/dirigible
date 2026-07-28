@@ -103,6 +103,8 @@ public final class IntentParser {
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
     private static final Set<String> NOTIFICATION_CHANNELS = Set.of("email");
+    /** Documents a notify block may attach: the record's own rendered print template. */
+    private static final Set<String> NOTIFY_ATTACHMENTS = Set.of("print");
     /** Comparison operators a schedule's {@code where} condition may use. */
     private static final Set<String> SCHEDULE_OPERATORS = Set.of("eq", "ne", "gt", "ge", "lt", "le", "like");
     /** HTTP methods an outbound integration may use. */
@@ -211,19 +213,7 @@ public final class IntentParser {
      * line-items child (a flagged / {@code *Item} child, or a single composition child).
      */
     private static void validateFunctions(IntentModel model, List<String> issues) {
-        Map<String, String> compositionParent = new HashMap<>();
-        for (EntityIntent entity : model.getEntities()) {
-            if (entity.getName() == null) {
-                continue;
-            }
-            for (RelationIntent relation : entity.getRelations()) {
-                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
-                if (toOne && relation.isComposition() && relation.getTo() != null) {
-                    compositionParent.put(entity.getName(), relation.getTo());
-                    break;
-                }
-            }
-        }
+        Map<String, String> compositionParent = compositionParentMap(model);
         for (EntityIntent entity : model.getEntities()) {
             String name = entity.getName();
             if (name == null) {
@@ -282,6 +272,27 @@ public final class IntentParser {
                 }
             }
         }
+    }
+
+    /**
+     * Each entity's composition parent (the target of its first {@code composition: true} to-one
+     * relation), which is what resolves a document master's line-items child.
+     */
+    private static Map<String, String> compositionParentMap(IntentModel model) {
+        Map<String, String> compositionParent = new HashMap<>();
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() == null) {
+                continue;
+            }
+            for (RelationIntent relation : entity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.isComposition() && relation.getTo() != null) {
+                    compositionParent.put(entity.getName(), relation.getTo());
+                    break;
+                }
+            }
+        }
+        return compositionParent;
     }
 
     /**
@@ -678,15 +689,7 @@ public final class IntentParser {
             } else if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
             } else if (hasNotify) {
-                String to = schedule.getNotify()
-                                    .getTo();
-                if (to == null || to.isBlank()) {
-                    issues.add("schedule [" + name + "] notify has no recipient (to)");
-                } else if (!to.contains("@") && to.chars()
-                                                  .filter(c -> c == '.')
-                                                  .count() >= 2) {
-                    issues.add("schedule [" + name + "] notify recipient [" + to + "] uses a multi-hop path, which is not supported");
-                }
+                validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
             } else {
                 validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
             }
@@ -1267,22 +1270,145 @@ public final class IntentParser {
             if (eventCount != 1) {
                 issues.add("notification [" + name + "] must declare exactly one of onCreate/onUpdate/onDelete");
             }
-            String channel = notification.getChannel();
-            if (channel != null && !channel.isBlank() && !NOTIFICATION_CHANNELS.contains(channel)) {
-                issues.add("notification [" + name + "] has unsupported channel [" + channel + "] (supported: email)");
+            // The event entity is what an `attach: print` renders, so resolve it for the shared checks.
+            String eventEntity = null;
+            for (String kind : EVENT_KINDS) {
+                Object target = notification.getEvent()
+                                            .get(kind);
+                if (target != null) {
+                    eventEntity = target.toString();
+                }
             }
-            String to = notification.getTo();
-            if (to == null || to.isBlank()) {
-                issues.add("notification [" + name + "] has no recipient (to)");
-            } else if (!to.contains("@") && to.chars()
-                                              .filter(c -> c == '.')
-                                              .count() >= 2) {
-                // A recipient is a literal address, a direct field, or a one-hop relation.field; multi-hop
-                // paths are not supported (the generator resolves a single to-one relation by FK id).
-                issues.add("notification [" + name + "] recipient [" + to
-                        + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
+            validateNotifyBlock(notification, "notification [" + name + "]", eventEntity, model, issues);
+        }
+    }
+
+    /**
+     * The reusable <b>notify block</b> - the one shape authored by a {@code notifications[]} entry, a
+     * {@code schedules[].notify}, a {@code transitions[].notify} and a {@code serviceTask}'s
+     * {@code args.notify}. Checks the channel, the recipient rule (a literal address, a direct field or
+     * a one-hop {@code relation.field} - the generator resolves a single to-one relation by FK id), and
+     * the {@code attach} switch: {@code print} is the only value, and it renders the record's own
+     * {@code .print} template, so the entity the block is about must be a printable document master (a
+     * line-items child, hence a generated print feeder). Anything else would generate a mail that
+     * claims an attachment it cannot produce.
+     *
+     * @param notify the block, may be {@code null} (nothing to validate)
+     * @param subject the message prefix identifying the call site
+     * @param aboutEntity the entity the message is about, or {@code null} when it is already unknown
+     * @param model the parsed model (to resolve the document-master shape)
+     * @param issues the collected issues
+     */
+    private static void validateNotifyBlock(NotificationIntent notify, String subject, String aboutEntity, IntentModel model,
+            List<String> issues) {
+        if (notify == null) {
+            return;
+        }
+        String channel = notify.getChannel();
+        if (channel != null && !channel.isBlank() && !NOTIFICATION_CHANNELS.contains(channel)) {
+            issues.add(subject + " has unsupported channel [" + channel + "] (supported: email)");
+        }
+        String to = notify.getTo();
+        if (to == null || to.isBlank()) {
+            issues.add(subject + " has no recipient (to)");
+        } else if (!to.contains("@") && to.chars()
+                                          .filter(c -> c == '.')
+                                          .count() >= 2) {
+            issues.add(subject + " recipient [" + to
+                    + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
+        }
+        // A fan-out sends one message per row of a related entity instead of one about the record, so
+        // from here on every path (the recipient, the placeholders, the attachment) is about the ROW -
+        // which is what `aboutEntity` becomes.
+        String forEach = notify.getForEach();
+        if (forEach != null && !forEach.isBlank()) {
+            String rows = forEach.trim();
+            EntityIntent rowEntity = entityByName(model, rows);
+            if (rowEntity == null) {
+                issues.add(subject + " forEach references unknown entity [" + rows + "]");
+                return;
+            }
+            if (aboutEntity != null && backReferencesTo(rowEntity, aboutEntity) != 1) {
+                issues.add(subject + " forEach [" + rows + "] must have exactly ONE to-one relation back to [" + aboutEntity
+                        + "] - that relation is what selects the rows to send about");
+                return;
+            }
+            aboutEntity = rows;
+        }
+        String attach = notify.getAttach();
+        if (attach == null || attach.isBlank()) {
+            return;
+        }
+        if (!NOTIFY_ATTACHMENTS.contains(attach.trim()
+                                               .toLowerCase(Locale.ROOT))) {
+            issues.add(subject + " has unsupported attach [" + attach + "] (supported: print)");
+        } else if (aboutEntity != null && !isPrintableDocument(model, aboutEntity)) {
+            issues.add(subject + " attach: print needs [" + aboutEntity
+                    + "] to be a document (header + line-items child) - only a document has a print template to render");
+        }
+    }
+
+    /** The declared entity with that exact name, or {@code null}. */
+    private static EntityIntent entityByName(IntentModel model, String name) {
+        for (EntityIntent entity : model.getEntities()) {
+            if (name.equals(entity.getName())) {
+                return entity;
             }
         }
+        return null;
+    }
+
+    /**
+     * How many to-one relations of {@code rows} point at the entity named {@code target}. A fan-out
+     * needs exactly one: zero means the rows are not related to the record at all, and two or more make
+     * the intended collection ambiguous - guessing would silently mail about the wrong set.
+     */
+    private static int backReferencesTo(EntityIntent rows, String target) {
+        int count = 0;
+        if (rows.getRelations() != null) {
+            for (RelationIntent relation : rows.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && target.equals(relation.getTo())) {
+                    count++;
+                }
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Whether the entity is a <b>document master</b> in the print sense - it has a line-items child, so
+     * a {@code .print} template and a print feeder are generated for it and its records can be
+     * rendered.
+     * <p>
+     * This deliberately mirrors the print generator's own resolution: a composition child flagged
+     * {@code function: DocumentItem} (or legacy-named {@code *Item}), or - for a master explicitly
+     * flagged {@code function: Document} - its single composition child. It is intentionally STRICTER
+     * than {@link #hasItemsChild} (which accepts any sole composition child, for the
+     * {@code function: Document} consistency check): accepting more here would let a notify block
+     * declare an attachment the generator cannot produce, and the mail would go out without the
+     * document it promised.
+     */
+    private static boolean isPrintableDocument(IntentModel model, String master) {
+        Map<String, String> compositionParent = compositionParentMap(model);
+        int compositionChildren = 0;
+        for (EntityIntent entity : model.getEntities()) {
+            String child = entity.getName();
+            if (child == null || !master.equals(compositionParent.get(child))) {
+                continue;
+            }
+            compositionChildren++;
+            if (entity.isDocumentItem() || child.endsWith("Item")) {
+                return true;
+            }
+        }
+        EntityIntent entity = null;
+        for (EntityIntent candidate : model.getEntities()) {
+            if (master.equals(candidate.getName())) {
+                entity = candidate;
+            }
+        }
+        return entity != null && entity.isDocument() && compositionChildren == 1;
     }
 
     /**
@@ -2178,7 +2304,7 @@ public final class IntentParser {
                 }
             }
             validateDecisionTargets(process, issues);
-            validateSetFieldSteps(process, triggerEntity, byName, issues);
+            validateSetFieldSteps(process, triggerEntity, byName, model, issues);
             validateWaitSteps(process, triggerEntity, byName, issues);
             validateUserTaskTimers(process, triggerEntity, byName, issues);
             validateAbortOn(process, triggerEntity, byName, issues);
@@ -2297,9 +2423,11 @@ public final class IntentParser {
      * the process's trigger entity and carry a {@code value} (the literal to assign). Any step may
      * carry a {@code next} that routes its outgoing flow to a declared step or {@code end} (used to
      * make two decision branches converge). Without these checks a typo would surface only at runtime.
+     * A {@code serviceTask} may instead declare a {@code notify} block - the step SENDS (see
+     * {@link #validateNotifyBlock}) - which is its whole work and therefore stands alone.
      */
     private static void validateSetFieldSteps(ProcessIntent process, String triggerEntity, Map<String, EntityIntent> byName,
-            List<String> issues) {
+            IntentModel model, List<String> issues) {
         Set<String> stepNames = new HashSet<>();
         for (StepIntent step : process.getSteps()) {
             if (step.getName() != null) {
@@ -2380,6 +2508,29 @@ public final class IntentParser {
                                     + "] must be a scalar value");
                         }
                     }
+                }
+            }
+            // A sending step: the reusable notify block, about the process's trigger entity ("after
+            // Issue, mail the invoice to its customer"). It IS the step's work, so it stands alone.
+            Object notifyArg = step.getArgs() == null ? null
+                    : step.getArgs()
+                          .get("notify");
+            if (notifyArg != null) {
+                String stepSubject = "process [" + process.getName() + "] step [" + step.getName() + "] notify";
+                if (!"serviceTask".equals(step.getKind())) {
+                    issues.add(stepSubject + " is only available on a serviceTask");
+                } else if (!(notifyArg instanceof Map)) {
+                    issues.add(stepSubject + " must be a map of to/subject/body (optionally attach: print)");
+                } else if (trigger == null) {
+                    issues.add(stepSubject + " needs a trigger entity - the record the message is about");
+                } else {
+                    boolean hasCall = stepArg(step, "call") != null && !stepArg(step, "call").isBlank();
+                    if ((setField != null && !setField.isBlank()) || (setRelationField != null && !setRelationField.isBlank()) || hasCall
+                            || (delegate != null && !delegate.isBlank())) {
+                        issues.add(stepSubject + " cannot be combined with setField/setRelationField/call/delegate - give the send its own"
+                                + " serviceTask");
+                    }
+                    validateNotifyBlock(NotificationIntent.fromMap(notifyArg), stepSubject, triggerEntity, model, issues);
                 }
             }
             String next = stepArg(step, "next");
@@ -3138,6 +3289,9 @@ public final class IntentParser {
                             + entity.getName() + "]");
                 }
             }
+            // Optional outbound mail after the flip ("on Void, mail the counterparty"), about the
+            // transitioned record itself.
+            validateNotifyBlock(t.getNotify(), subject + " notify", entity == null ? null : entity.getName(), model, issues);
         }
     }
 
