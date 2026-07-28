@@ -23,6 +23,7 @@ import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.data.structures.domain.Table;
 import org.eclipse.dirigible.components.data.structures.service.TableService;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
+import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
@@ -56,6 +57,9 @@ class SchemaRepublishTypeToleranceIT extends IntegrationTest {
     private static final String TABLE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + TABLE_LOCATION;
 
     private static final String TABLE_NAME = "REPUBLISH_NOTE";
+
+    /** The length the fixture's own CREATE TABLE gives NOTE_TEXT. */
+    private static final int FIXTURE_TEXT_LENGTH = 255;
 
     /** What the model declares: a text field is a CLOB, an audit timestamp is a TIMESTAMP. */
     private static final String TABLE_SOURCE = """
@@ -117,19 +121,34 @@ class SchemaRepublishTypeToleranceIT extends IntegrationTest {
         assertThat(table.getError()).isNullOrEmpty();
         assertThat(table.getLifecycle()).isIn(ArtefactLifecycle.CREATED, ArtefactLifecycle.UPDATED);
 
-        // The existing columns are left as they are - the table is not rebuilt behind the user's back.
-        assertThat(columnTypeName("NOTE_TEXT")).containsIgnoringCase("CHARACTER VARYING");
-        assertThat(columnTypeName("NOTE_CREATED_AT")).containsIgnoringCase("TIME ZONE");
+        // The column is left as it is - still the bounded character one the other writer created,
+        // neither widened to the declared CLOB nor rebuilt behind the user's back. Each database
+        // spells the type its own way ("CHARACTER VARYING" on H2, "varchar" on PostgreSQL), so the
+        // assertion goes through the type family and the declared length.
+        Column text = column("NOTE_TEXT");
+        assertThat(DataTypeUtils.isCharacterType(text.typeName())).as("NOTE_TEXT is %s", text)
+                                                                  .isTrue();
+        assertThat(text.size()).as("NOTE_TEXT is %s", text)
+                               .isEqualTo(FIXTURE_TEXT_LENGTH);
     }
 
-    private String columnTypeName(String column) throws Exception {
+    private Column column(String name) throws Exception {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection();
                 ResultSet columns = connection.getMetaData()
-                                              .getColumns(null, connection.getSchema(), TABLE_NAME, column)) {
-            assertThat(columns.next()).as("missing column [%s]", column)
+                                              .getColumns(null, connection.getSchema(), TABLE_NAME, name)) {
+            assertThat(columns.next()).as("missing column [%s]", name)
                                       .isTrue();
-            return columns.getString("TYPE_NAME");
+            return new Column(columns.getString("TYPE_NAME"), columns.getInt("COLUMN_SIZE"));
+        }
+    }
+
+    /** A column as the database reports it back, rendered into every assertion message. */
+    private record Column(String typeName, int size) {
+
+        @Override
+        public String toString() {
+            return typeName + "(" + size + ")";
         }
     }
 
