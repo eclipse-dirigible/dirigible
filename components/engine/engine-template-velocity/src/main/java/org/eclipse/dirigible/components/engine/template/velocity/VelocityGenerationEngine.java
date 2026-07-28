@@ -12,6 +12,8 @@ package org.eclipse.dirigible.components.engine.template.velocity;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
 import org.apache.velocity.runtime.RuntimeConstants;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.eclipse.dirigible.components.engine.template.TemplateEngine;
 import org.springframework.stereotype.Component;
 
@@ -25,6 +27,8 @@ import java.util.Map;
  */
 @Component
 public class VelocityGenerationEngine implements TemplateEngine {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(VelocityGenerationEngine.class);
 
     /** The Constant ENGINE_NAME. */
     public static final String ENGINE_NAME = "velocity";
@@ -41,8 +45,7 @@ public class VelocityGenerationEngine implements TemplateEngine {
             engine.setProperty(RuntimeConstants.VM_PERM_ALLOW_INLINE_REPLACE_GLOBAL, true);
             engine.init();
         } catch (Throwable e) {
-            // if (logger.isErrorEnabled()) {logger.error(e.getMessage(), e);}
-            e.printStackTrace();
+            LOGGER.error("Failed to initialize the Velocity engine", e);
         }
     }
 

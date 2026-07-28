@@ -13,6 +13,8 @@ import org.apache.commons.io.FileUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.RepositoryPath;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +36,8 @@ import java.util.stream.Collectors;
  */
 @Component
 public class TypeScriptService {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TypeScriptService.class);
 
     /** The Constant TS_EXT. */
     private static final String TS_EXT = ".ts";
@@ -164,7 +168,9 @@ public class TypeScriptService {
             BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
             String line;
             while ((line = in.readLine()) != null) {
-                System.out.println(line);
+                // esbuild's own diagnostics: the log, not stdout, so they are levelled, timestamped and
+                // visible in the Logs view like everything else the engine reports.
+                LOGGER.debug("[esbuild] {}", line);
             }
             int statusCode = process.waitFor();
             if (statusCode != 0) {

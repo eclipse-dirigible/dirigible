@@ -14,6 +14,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.antlr.v4.runtime.CharStream;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
@@ -34,6 +36,8 @@ import org.eclipse.dirigible.parsers.typescript.TypeScriptParserBaseVisitor;
  * Main parser class to generate EntityMetadata from TypeScript code.
  */
 public class EntityParser {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(EntityParser.class);
 
     /** The Constant ENTITIES. */
     public static final Map<String, EntityMetadata> ENTITIES = Collections.synchronizedMap(new HashMap<String, EntityMetadata>());
@@ -449,7 +453,7 @@ public class EntityParser {
                         try {
                             columnDetails.setLength(Integer.parseInt(length));
                         } catch (NumberFormatException e) {
-                            System.err.println("Warning: Could not parse length value: " + length);
+                            LOGGER.warn("Could not parse the length value [{}] - ignoring it", length);
                         }
                     }
 
