@@ -5,21 +5,35 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+#if($forEach != "")
+import org.eclipse.dirigible.components.data.store.java.repository.Criteria;
+#end
 import org.eclipse.dirigible.sdk.core.Configurations;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.mail.Mail;
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
 import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+#if($forEach != "")
+import gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity;
+import gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Repository;
+#end
 #foreach($load in $notifyRelationLoads)
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
 #end
 
 /**
- * Sends the mail declared on the '${step}' step of the ${process} process: it re-loads the ${entity}
- * the process runs on and mails the recipient the step's notify block names.
+ * Sends the mail declared on the '${step}' step of the ${process} process.
+#if($forEach != "")
+ * It is a FAN-OUT: it re-loads the ${entity} the process runs on and then sends ONE message per
+ * ${forEach} of it - each to its own recipient, each about its own row.
+#else
+ * It re-loads the ${entity} the process runs on and mails the recipient the step's notify block names.
+#end
  *
  * Generated from the intent sends glue - do not edit; it is re-generated with the application. Runs as
  * a BPMN service task (flowable:delegateExpression="\${JavaTask}"). Entity access goes ONLY through
@@ -27,16 +41,26 @@ import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targe
  * the sender address comes from the DIRIGIBLE_MAIL_SENDER configuration.
 #if($attach == "print")
  *
- * The record's own document rides along as a PDF attachment: the generated ${attachEntity}PrintFeeder
- * assembles the { document, items } payload the print template binds and sdk.print.Print renders it
- * server-side - the same two steps the snapshot delegate takes.
+ * The document rides along as a PDF attachment: the generated ${attachEntity}PrintFeeder assembles the
+ * { document, items } payload the print template binds and sdk.print.Print renders it server-side -
+ * the same two steps the snapshot delegate takes.
 #end
  *
- * A missing recipient is a no-op (log + skip): the record simply has nobody to mail, which must not
- * stall the flow. A real delivery failure DOES fail the task, so the process engine's retry applies -
- * unlike a transition's notify, a send step's whole purpose is the message.
+ * A row with no recipient is a no-op (log + skip): it simply has nobody to mail, which must not stall
+ * the flow.
+#if($forEach != "")
+ * A delivery failure is logged per row and the step still completes - deliberately. Failing the task
+ * would have the engine retry the WHOLE fan-out and mail every recipient that already received their
+ * message a second time; a partial send is not idempotent, so the summary in the log is the report.
+#else
+ * A real delivery failure DOES fail the task, so the process engine's retry applies - unlike a
+ * transition's notify, a send step's whole purpose is the message.
+#end
  */
 public class ${className} implements JavaDelegate {
+
+    /** Application logger - nested under the platform's `app.` root, so levels and appenders are the ones the rest of the app uses. */
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}");
 
     @Override
     public void execute(DelegateExecution execution) {
@@ -47,17 +71,54 @@ public class ${className} implements JavaDelegate {
         // The process variable arrives as a plain Number (a JSON double for an integer key), so it is
         // narrowed once here - both the load and the log line must read the record's actual id.
         var id = ((Number) key).${keyAccessor}();
+#if($forEach != "")
+        ${entity}Entity source = new ${entity}Repository().findById(id);
+        if (source == null) {
+            return;
+        }
+        List<${forEach}Entity> rows = new ${forEach}Repository().findAll(Criteria.create()
+                                                                                .eq("${forEachFkProperty}", id));
+        int sent = 0;
+        int skipped = 0;
+        int failed = 0;
+        // The loop variable is named `entity` on purpose: every expression below is pre-rendered
+        // against the ROW, exactly as the non-fan-out shape renders against the record.
+        for (${forEach}Entity entity : rows) {
+            try {
+                if (send(entity)) {
+                    sent++;
+                } else {
+                    skipped++;
+                }
+            } catch (Exception ex) {
+                failed++;
+                LOG.error("Could not mail ${forEach} [{}]", entity.${forEachKeyProperty}, ex);
+            }
+        }
+        LOG.info("Mailed the ${forEach}s of ${entity} [{}]: sent [{}], no recipient [{}], failed [{}]", id, sent, skipped, failed);
+    }
+
+    /**
+     * Send about one ${forEach}. Returns false when the row has nobody to mail.
+     */
+    private boolean send(${forEach}Entity entity) {
+#else
         ${entity}Entity entity = new ${entity}Repository().findById(id);
         if (entity == null) {
             return;
         }
+#end
 #foreach($load in $notifyRelationLoads)
         ${load.targetEntity}Entity ${load.local} = entity.${load.fkProperty} == null ? null : new ${load.targetEntity}Repository().findById(entity.${load.fkProperty});
 #end
         String to = ${notifyToExpression};
         if (to == null || to.isBlank()) {
-            System.out.println("${className}: no recipient on ${entity} " + id + " - nothing sent.");
+#if($forEach != "")
+            return false;
+#else
+            LOG.info("No recipient on ${entity} [{}] - nothing sent", id);
             return;
+#end
         }
         Map part = new HashMap();
         part.put("type", "text");
@@ -71,14 +132,24 @@ public class ${className} implements JavaDelegate {
         document.put("contentType", "application/pdf");
         document.put("fileName", ${attachFileNameExpression});
         document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
-                new ${attachEntity}PrintFeeder().feed(entity.${keyProperty})));
+                new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
         parts.add(document);
 #end
         String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
+#if($forEach != "")
+        try {
+            Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
+        } catch (Exception ex) {
+            // Rethrown for the per-row counter above; the fan-out never fails the task (see the note).
+            throw new RuntimeException(ex.getMessage(), ex);
+        }
+        return true;
+#else
         try {
             Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression}, parts);
         } catch (Exception ex) {
             throw new RuntimeException("Failed to send the ${step} mail of the ${process} process", ex);
         }
+#end
     }
 }

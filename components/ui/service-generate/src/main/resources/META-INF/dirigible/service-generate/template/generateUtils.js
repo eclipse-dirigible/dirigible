@@ -1082,6 +1082,13 @@ export function generateFiles(model, parameters, templateSources) {
                                     javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
                                     javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
                                 })),
+                                // Fan-out: one message per row of a related entity (empty = one about
+                                // the record). The row entity's Java package segment is sanitized here,
+                                // like every other perspective the templates import.
+                                forEach: t.forEach,
+                                javaForEachPerspective: sanitizeJavaIdentifier(t.forEachPerspective || ""),
+                                forEachFkProperty: t.forEachFkProperty,
+                                forEachKeyProperty: t.forEachKeyProperty,
                                 notifyToExpression: t.notifyToExpression,
                                 notifySubjectExpression: t.notifySubjectExpression,
                                 notifyBodyExpression: t.notifyBodyExpression,
@@ -1123,9 +1130,17 @@ export function generateFiles(model, parameters, templateSources) {
                                     javaTargetPerspective: sanitizeJavaIdentifier(load.targetPerspective),
                                     javaGenFolder: load.crossModel ? sanitizeJavaIdentifier(load.targetModel) : parameters.javaGenFolderName
                                 })),
+                                // Fan-out: one message per row of a related entity (empty = one about
+                                // the record). The row entity's Java package segment is sanitized here,
+                                // like every other perspective the templates import.
+                                forEach: s.forEach,
+                                javaForEachPerspective: sanitizeJavaIdentifier(s.forEachPerspective || ""),
+                                forEachFkProperty: s.forEachFkProperty,
+                                forEachKeyProperty: s.forEachKeyProperty,
                                 notifyToExpression: s.notifyToExpression,
                                 notifySubjectExpression: s.notifySubjectExpression,
                                 notifyBodyExpression: s.notifyBodyExpression,
+                                attachKeyProperty: s.attachKeyProperty,
                                 attach: s.attach,
                                 attachEntity: s.attachEntity,
                                 attachLanguage: s.attachLanguage,

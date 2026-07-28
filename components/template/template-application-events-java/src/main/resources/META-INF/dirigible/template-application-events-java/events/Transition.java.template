@@ -1,6 +1,8 @@
 package gen.events.${javaGenFolderName};
 
 import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
 import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
@@ -24,6 +26,11 @@ import org.eclipse.dirigible.sdk.utils.Json;
 @Component("${javaGenFolderName}_${className}Transition")
 public class ${className}Transition {
 
+#if($notify == "true")
+    /** Application logger - nested under the platform's `app.` root, like every other app logger. */
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}Transition");
+
+#end
     public static class Request {
         public Integer id;
     }
@@ -76,8 +83,31 @@ public class ${className}Transition {
      * committed, so a mail problem (no recipient on the record, SMTP unconfigured or unreachable)
      * must never turn a successful transition into an error. Everything here is logged and swallowed.
      */
+#if($forEach != "")
+    private static void sendNotification(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity source) {
+        // A FAN-OUT: one message per ${forEach} of the transitioned record, each to its own recipient
+        // and about its own row. Every row is attempted - one missing address or one failed send never
+        // stops the rest, and none of it can fail the transition.
+        int sent = 0;
+        for (gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity : new gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Repository().findAll(
+                org.eclipse.dirigible.components.data.store.java.repository.Criteria.create()
+                                                                                   .eq("${forEachFkProperty}", source.${keyProperty}))) {
+            if (sendOne(entity)) {
+                sent++;
+            }
+        }
+        LOG.info("Transition ${name}: mailed [{}] ${forEach} recipient(s) for ${entity} [{}]", sent, source.${keyProperty});
+    }
+
+    /**
+     * Send about one ${forEach} row. Returns whether a message actually went out.
+     */
+    private static boolean sendOne(gen.${javaGenFolderName}.data.${javaForEachPerspective}.${forEach}Entity entity) {
+        try {
+#else
     private static void sendNotification(gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity entity) {
         try {
+#end
 #foreach($load in $notifyRelationLoads)
             gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity ${load.local} =
                     entity.${load.fkProperty} == null ? null
@@ -85,7 +115,11 @@ public class ${className}Transition {
 #end
             String to = ${notifyToExpression};
             if (to == null || to.isBlank()) {
+#if($forEach != "")
+                return false;
+#else
                 return;
+#end
             }
             java.util.Map part = new java.util.HashMap();
             part.put("type", "text");
@@ -107,9 +141,18 @@ public class ${className}Transition {
             String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
             org.eclipse.dirigible.sdk.mail.Mail.send(from, new String[] {to}, new String[0], new String[0], ${notifySubjectExpression},
                     parts);
+#if($forEach != "")
+            return true;
         } catch (Exception ex) {
-            System.err.println("Transition ${name}: the record transitioned but its mail could not be sent - " + ex.getMessage());
+            LOG.error("Transition ${name}: could not mail ${forEach} [{}]", entity.${forEachKeyProperty}, ex);
+            return false;
         }
     }
+#else
+        } catch (Exception ex) {
+            LOG.error("Transition ${name}: the record transitioned but its mail could not be sent", ex);
+        }
+    }
+#end
 #end
 }

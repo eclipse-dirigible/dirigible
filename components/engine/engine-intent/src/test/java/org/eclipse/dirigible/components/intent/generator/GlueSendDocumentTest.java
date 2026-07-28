@@ -135,10 +135,10 @@ class GlueSendDocumentTest {
         assertEquals("true", transition.get("notify"));
         assertEquals("(Customer == null ? null : Customer.Email)", transition.get("notifyToExpression"));
         assertEquals("\"Invoice \" + entity.Number + \" was voided\"", transition.get("notifySubjectExpression"));
-        // The print feeder is fed with the record's key, so the key property must reach the template.
-        assertEquals("Id", transition.get("attachKeyProperty"));
-        // No attach on this one: a plain-text notice.
+        // No attach on this one: a plain-text notice. The attachment keys - including the PK the print
+        // feeder would be fed with - are all empty together, so the template renders no attachment block.
         assertEquals("", transition.get("attach"));
+        assertEquals("", transition.get("attachKeyProperty"));
     }
 
     @Test
@@ -218,6 +218,117 @@ class GlueSendDocumentTest {
         // branch's #if must always have something to compare.
         assertEquals("", schedule.get("attach"));
         assertEquals("", schedule.get("attachFileNameExpression"));
+    }
+
+    /** A payroll-shaped fixture: a run whose payslips each go to their own employee. */
+    private static final String FAN_OUT_YAML = """
+            name: payroll
+            entities:
+              - name: RunStatus
+                function: Setting
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Employee
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: email, type: string }
+              - name: PayrollRun
+                function: Document
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: month, type: string, documentTitle: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: RunStatus, function: EntityStatus, init: 1 }
+              - name: Payslip
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: net, type: decimal }
+                relations:
+                  - { name: PayrollRun, kind: manyToOne, to: PayrollRun, composition: true, required: true }
+                  - { name: Employee, kind: manyToOne, to: Employee, required: true }
+              - name: PayslipItem
+                function: DocumentItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
+
+            processes:
+              - name: RunPosting
+                trigger: { onCreate: PayrollRun }
+                steps:
+                  - { name: post, kind: userTask, args: { assignee: approver, next: mailPayslips } }
+                  - name: mailPayslips
+                    kind: serviceTask
+                    args:
+                      notify:
+                        forEach: Payslip
+                        to: Employee.email
+                        subject: "Payslip {PayrollRun.month}"
+                        body: "Dear {Employee.name}, your payslip is attached. Net {net}."
+                        attach: print
+                      next: end
+                  - { name: end, kind: end }
+            """;
+
+    @Test
+    void aFanOutSendsOnePerRowAndResolvesEveryPathAgainstTheRow() {
+        Map<String, Object> send = GlueIntentGenerator.buildSendsForTest(IntentParser.parse(FAN_OUT_YAML))
+                                                      .get(0);
+
+        assertEquals("true", send.get("notify"));
+        // The rows to send about: the Payslips whose PayrollRun FK points at the record.
+        assertEquals("Payslip", send.get("forEach"));
+        assertEquals("PayrollRun", send.get("forEachFkProperty"));
+        assertEquals("Id", send.get("forEachKeyProperty"));
+        // The recipient is the ROW's employee, not anything on the run - the whole point of a fan-out.
+        assertEquals("(Employee == null ? null : Employee.Email)", send.get("notifyToExpression"));
+        assertTrue(String.valueOf(send.get("notifySubjectExpression"))
+                         .contains("PayrollRun.Month"),
+                "a placeholder may walk one hop from the ROW (its run): " + send.get("notifySubjectExpression"));
+        assertTrue(String.valueOf(send.get("notifyBodyExpression"))
+                         .contains("entity.Net"),
+                "a direct placeholder reads the ROW's own field: " + send.get("notifyBodyExpression"));
+        // ...and the attached document is the ROW's, fed with the ROW's key.
+        assertEquals("Payslip", send.get("attachEntity"));
+        assertEquals("Id", send.get("attachKeyProperty"));
+        // The step still keys off the process variable of the record the flow runs on.
+        assertEquals("PayrollRun", send.get("entity"));
+        assertEquals("Id", send.get("keyProperty"));
+    }
+
+    @Test
+    void aBlockWithoutAFanOutCarriesEmptyForEachKeys() {
+        Map<String, Object> send = GlueIntentGenerator.buildSendsForTest(IntentParser.parse(YAML))
+                                                      .get(0);
+
+        // Present but empty: the templates compare them, and an undefined Velocity variable renders as
+        // its own name.
+        assertEquals("", send.get("forEach"));
+        assertEquals("", send.get("forEachFkProperty"));
+    }
+
+    @Test
+    void aFanOutOverAnUnrelatedEntityIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(FAN_OUT_YAML.replace("forEach: Payslip", "forEach: Employee")));
+
+        assertTrue(failure.getMessage()
+                          .contains("must have exactly ONE to-one relation back to [PayrollRun]"),
+                "a fan-out needs the relation that selects the rows: " + failure.getMessage());
+    }
+
+    @Test
+    void aFanOutOverAnUnknownEntityIsRejected() {
+        IntentValidationException failure = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(FAN_OUT_YAML.replace("forEach: Payslip", "forEach: Payslops")));
+
+        assertTrue(failure.getMessage()
+                          .contains("forEach references unknown entity [Payslops]"),
+                "a typo must fail at parse time: " + failure.getMessage());
     }
 
     @Test

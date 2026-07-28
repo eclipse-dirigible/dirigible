@@ -1317,6 +1317,24 @@ public final class IntentParser {
             issues.add(subject + " recipient [" + to
                     + "] uses a multi-hop path, which is not supported - use a direct field, a one-hop relation.field, or a literal address");
         }
+        // A fan-out sends one message per row of a related entity instead of one about the record, so
+        // from here on every path (the recipient, the placeholders, the attachment) is about the ROW -
+        // which is what `aboutEntity` becomes.
+        String forEach = notify.getForEach();
+        if (forEach != null && !forEach.isBlank()) {
+            String rows = forEach.trim();
+            EntityIntent rowEntity = entityByName(model, rows);
+            if (rowEntity == null) {
+                issues.add(subject + " forEach references unknown entity [" + rows + "]");
+                return;
+            }
+            if (aboutEntity != null && backReferencesTo(rowEntity, aboutEntity) != 1) {
+                issues.add(subject + " forEach [" + rows + "] must have exactly ONE to-one relation back to [" + aboutEntity
+                        + "] - that relation is what selects the rows to send about");
+                return;
+            }
+            aboutEntity = rows;
+        }
         String attach = notify.getAttach();
         if (attach == null || attach.isBlank()) {
             return;
@@ -1328,6 +1346,34 @@ public final class IntentParser {
             issues.add(subject + " attach: print needs [" + aboutEntity
                     + "] to be a document (header + line-items child) - only a document has a print template to render");
         }
+    }
+
+    /** The declared entity with that exact name, or {@code null}. */
+    private static EntityIntent entityByName(IntentModel model, String name) {
+        for (EntityIntent entity : model.getEntities()) {
+            if (name.equals(entity.getName())) {
+                return entity;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * How many to-one relations of {@code rows} point at the entity named {@code target}. A fan-out
+     * needs exactly one: zero means the rows are not related to the record at all, and two or more make
+     * the intended collection ambiguous - guessing would silently mail about the wrong set.
+     */
+    private static int backReferencesTo(EntityIntent rows, String target) {
+        int count = 0;
+        if (rows.getRelations() != null) {
+            for (RelationIntent relation : rows.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && target.equals(relation.getTo())) {
+                    count++;
+                }
+            }
+        }
+        return count;
     }
 
     /**

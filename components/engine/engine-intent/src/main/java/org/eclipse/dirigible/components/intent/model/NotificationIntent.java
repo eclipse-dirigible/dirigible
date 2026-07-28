@@ -48,6 +48,15 @@ public class NotificationIntent {
     private String attach;
     /** The print template language for {@link #attach} (a {@code languages:} code); defaults to en. */
     private String language;
+    /**
+     * Optional <b>fan-out</b>: name a related entity and the block sends ONE message PER ROW of it
+     * instead of one about the record - the payroll run that mails every payslip to its own employee,
+     * the request for quotation that goes out to each invited supplier. The named entity must have a
+     * to-one relation back to the record; every path ({@link #to}, and the placeholders in
+     * {@link #subject} / {@link #body}) then resolves against the ROW, and {@link #attach} attaches the
+     * ROW's own document.
+     */
+    private String forEach;
 
     /**
      * Read an <b>embedded</b> notify block off a free-form map - a process step's {@code args.notify},
@@ -67,6 +76,7 @@ public class NotificationIntent {
         notify.setBody(string(map.get("body")));
         notify.setAttach(string(map.get("attach")));
         notify.setLanguage(string(map.get("language")));
+        notify.setForEach(string(map.get("forEach")));
         String channel = string(map.get("channel"));
         if (channel != null) {
             notify.setChannel(channel);
@@ -140,5 +150,13 @@ public class NotificationIntent {
 
     public void setLanguage(String language) {
         this.language = language;
+    }
+
+    public String getForEach() {
+        return forEach;
+    }
+
+    public void setForEach(String forEach) {
+        this.forEach = forEach;
     }
 }

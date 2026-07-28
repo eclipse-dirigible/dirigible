@@ -732,9 +732,6 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("className", IntentNaming.pascalIdentifier(t.getName()));
             e.put("entity", t.getForEntity());
             e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
-            // The PK property a notify's `attach: print` hands to the generated print feeder (see the
-            // attachKeyProperty note on notifications - keyProperty belongs to trigger entries).
-            e.put("attachKeyProperty", IntentEntities.keyFieldName(entity));
             e.put("statusProperty", statusProperty);
             e.put("setStatus", String.valueOf(t.getSetStatus()));
             List<String> terms = new ArrayList<>();
@@ -783,21 +780,39 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     private static Map<String, Object> notifyFields(NotificationIntent notify, EntityIntent entity, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
         Map<String, Object> fields = new LinkedHashMap<>();
-        NotificationSupport.Plan plan = notify == null ? null
-                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, entity, byName, compositionParents,
-                        crossModelLookup(model, context));
-        if (notify != null && plan == null) {
-            reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
-                    + (entity == null ? "?" : entity.getName()) + "] - the mail was NOT generated");
+        // A fan-out sends one message PER ROW of a related entity, so every path - recipient,
+        // placeholders, attached document - resolves against the ROW rather than the record the block
+        // hangs on. An unresolvable forEach drops the whole block: mailing the record once instead of
+        // each row would be a different message, quietly sent to the wrong party.
+        NotifySupport.FanOut fanOut = NotifySupport.fanOut(notify, entity, byName, compositionParents);
+        boolean fanOutRequested = notify != null && notify.getForEach() != null && !notify.getForEach()
+                                                                                          .isBlank();
+        if (fanOutRequested && fanOut == null) {
+            reportDroppedGlue(context, subject + " forEach [" + notify.getForEach() + "] is not a declared entity with exactly one to-one"
+                    + " relation back to [" + (entity == null ? "?" : entity.getName()) + "] - the mail was NOT generated");
         }
-        NotifySupport.PrintAttachment attachment = plan == null ? null : printAttachment(notify, entity, model, context, subject);
+        EntityIntent about = fanOut == null ? entity : byName.get(fanOut.entity());
+        boolean dropped = fanOutRequested && fanOut == null;
+        NotificationSupport.Plan plan = notify == null || dropped ? null
+                : NotificationSupport.plan(notify.getTo(), notify.getSubject(), notify.getBody(), null, about, byName, compositionParents,
+                        crossModelLookup(model, context));
+        if (notify != null && plan == null && !dropped) {
+            reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
+                    + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
+        }
+        NotifySupport.PrintAttachment attachment = plan == null ? null : printAttachment(notify, about, model, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
         fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
         fields.put("notifyToExpression", send ? plan.toExpression() : "null");
         fields.put("notifySubjectExpression", send ? plan.subjectExpression() : "\"\"");
         fields.put("notifyBodyExpression", send ? plan.bodyExpression() : "\"\"");
+        fields.putAll(NotifySupport.fanOutFields(send ? fanOut : null));
         fields.putAll(NotifySupport.attachmentFields(send ? attachment : null));
+        // With a fan-out the attachment (and the recipient) belong to the ROW, so the print feeder is
+        // fed the ROW's key - the loop variable is named `entity` in the templates for exactly this
+        // reason, so one expression set serves both shapes.
+        fields.put("attachKeyProperty", send && attachment != null ? IntentEntities.keyFieldName(about) : "");
         return fields;
     }
 

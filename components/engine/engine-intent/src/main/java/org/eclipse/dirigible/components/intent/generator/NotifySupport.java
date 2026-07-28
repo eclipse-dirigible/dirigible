@@ -19,6 +19,7 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.StepIntent;
 
@@ -58,6 +59,87 @@ public final class NotifySupport {
     private static final String DEFAULT_LANGUAGE = "en";
 
     private NotifySupport() {}
+
+    /**
+     * A resolved <b>fan-out</b>: the notify block sends one message per row of a related entity instead
+     * of one about the record. The rows are the ones whose {@code fkProperty} points back at the
+     * record, and every path in the block resolves against the ROW.
+     *
+     * @param entity the related entity iterated (e.g. {@code Payslip})
+     * @param perspective its resolved perspective (its generated data subfolder)
+     * @param fkProperty the row's to-one FK back to the record (PascalCase, e.g. {@code PayrollRun})
+     * @param keyProperty the row's own primary-key property
+     */
+    public record FanOut(String entity, String perspective, String fkProperty, String keyProperty) {
+    }
+
+    /**
+     * Resolve a notify block's {@code forEach} against the entity the block is about.
+     *
+     * @param notify the notify block, may be {@code null}
+     * @param about the entity the block is attached to (a process's trigger, a transition's forEntity)
+     * @param byName all entities by name
+     * @param compositionParents composition-parent map (to resolve the row entity's perspective)
+     * @return the fan-out, or {@code null} when none was asked for or it cannot be resolved (no such
+     *         entity, or no unique to-one relation from it back to {@code about})
+     */
+    public static FanOut fanOut(NotificationIntent notify, EntityIntent about, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents) {
+        if (notify == null || notify.getForEach() == null || notify.getForEach()
+                                                                   .isBlank()
+                || about == null) {
+            return null;
+        }
+        EntityIntent rows = byName.get(notify.getForEach()
+                                             .trim());
+        if (rows == null) {
+            return null;
+        }
+        RelationIntent back = backReference(rows, about.getName());
+        if (back == null) {
+            return null;
+        }
+        return new FanOut(rows.getName(), IntentEntities.resolvePerspective(rows.getName(), compositionParents),
+                IntentNaming.pascalCase(back.getName()), IntentEntities.keyFieldName(rows));
+    }
+
+    /**
+     * The row entity's single to-one relation back to the record's entity. Exactly one is required:
+     * with two (say a document that references the same master twice) the intended collection is
+     * ambiguous, and guessing would silently mail the wrong set.
+     */
+    private static RelationIntent backReference(EntityIntent rows, String about) {
+        RelationIntent found = null;
+        for (RelationIntent relation : rows.getRelations()) {
+            boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+            if (toOne && about.equals(relation.getTo())) {
+                if (found != null) {
+                    return null; // ambiguous
+                }
+                found = relation;
+            }
+        }
+        return found;
+    }
+
+    /**
+     * The glue keys a fan-out contributes, always present so the templates can compare them ({@code
+     * forEach} empty = send one message about the record itself).
+     *
+     * @param fanOut the resolved fan-out, or {@code null}
+     * @return the {@code forEach} / {@code forEachPerspective} / {@code forEachFkProperty} /
+     *         {@code forEachKeyProperty} keys
+     */
+    public static Map<String, Object> fanOutFields(FanOut fanOut) {
+        Map<String, Object> fields = new LinkedHashMap<>();
+        fields.put("forEach", fanOut == null ? "" : fanOut.entity());
+        fields.put("forEachPerspective", fanOut == null ? "" : fanOut.perspective());
+        fields.put("forEachFkProperty", fanOut == null ? "" : fanOut.fkProperty());
+        // The row's own PK: the fan-out logs per row, and it does so whether or not a document is
+        // attached (attachKeyProperty is empty without an attachment).
+        fields.put("forEachKeyProperty", fanOut == null ? "" : fanOut.keyProperty());
+        return fields;
+    }
 
     /**
      * A resolved print attachment: everything the generated code needs to render and name the PDF.

@@ -158,6 +158,16 @@ generated code, extend this fixture + both assertion layers in the same PR** - a
 at the `.model` attributes proves parsing, not the promise (that is exactly how a template-side
 regression ships green).
 
+**Generated code logs through the SDK logger, never `System.out` / `System.err`.** Every template
+under `template-application-*` that needs to report something emits
+`private static final Logger LOG = Logging.getLogger("gen.events.<module>.<Class>")` from
+`org.eclipse.dirigible.sdk.log` and calls it with SLF4J-style `{}` placeholders, passing the
+throwable last on failures. A print bypasses levels, appenders and the Logs view, and - worse -
+a generated class is read as the house style by every application developer, so it teaches the
+anti-pattern downstream. The same applies to the `custom/` stubs `ServiceTaskHandlerGenerator`
+scaffolds. This leaked once (the #6356 send templates shipped `System.err.println` in review); the
+platform-wide rule and the single documented exception live in the root `CLAUDE.md`.
+
 **Documentation sync (normative).** A DSL change is not done until its human documentation lands
 in BOTH sites, in the same effort: the vendor-neutral **specification** at `intentfile.org` (repo
 `IntentFile/intentfile.github.io`) and the platform-branded docs at `dirigible.io` (under

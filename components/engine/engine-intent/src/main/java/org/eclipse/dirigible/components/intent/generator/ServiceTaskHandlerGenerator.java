@@ -108,6 +108,8 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
         return """
                 package custom;
 
+                import org.eclipse.dirigible.sdk.log.Logger;
+                import org.eclipse.dirigible.sdk.log.Logging;
                 import org.flowable.engine.delegate.DelegateExecution;
                 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -119,12 +121,15 @@ public class ServiceTaskHandlerGenerator implements IntentTargetGenerator {
                  */
                 public class %s implements JavaDelegate {
 
+                    /** Application logger: levelled, timestamped and visible in the Logs view - never print to stdout. */
+                    private static final Logger LOG = Logging.getLogger("custom.%s");
+
                     @Override
                     public void execute(DelegateExecution execution) {
                         // TODO implement the '%s' service task.
-                        System.out.println("%s: %s service task executed.");
+                        LOG.info("The {} step of the {} process ran (stub - not implemented yet)", "%s", "%s");
                     }
                 }
-                """.formatted(step, process, handler, step, process, step);
+                """.formatted(step, process, handler, handler, step, step, process);
     }
 }
