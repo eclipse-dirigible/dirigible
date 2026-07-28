@@ -2309,6 +2309,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             appendAttribute(sb, attr.getKey(), attr.getValue());
         }
+        // The EDM editor's "Not null" checkbox binds to dataNotNull, not dataNullable (dataNullable is
+        // only the checkbox's derived serializer output). A NOT NULL column must therefore carry
+        // dataNotNull="true" in the mxGraph cell exactly as a hand-modeled .edm does, or the editor loads
+        // the checkbox unchecked and a re-save recomputes dataNullable="true", silently dropping the NOT
+        // NULL constraint (#6332). Emit it for every not-null property (required fields, primary keys,
+        // required / composition foreign keys - all carry dataNullable="false").
+        if ("false".equals(property.get("dataNullable"))) {
+            appendAttribute(sb, "dataNotNull", "true");
+        }
         sb.append(" as=\"value\"/>\n");
     }
 
