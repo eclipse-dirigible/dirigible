@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 
 import static java.text.MessageFormat.format;
 
@@ -130,6 +131,10 @@ public class DataTypeUtils {
     /** The Constant UNIFIED_STRING_FROM_DATABASE_TYPE. */
     private static final Map<String, String> UNIFIED_STRING_FROM_DATABASE_TYPE = Collections.synchronizedMap(new HashMap<String, String>());
 
+    /** The unified character types - see {@link #isCharacterType(String)}. */
+    private static final Set<String> UNIFIED_CHARACTER_TYPES = Set.of(DataType.VARCHAR.toString(), DataType.CHAR.toString(),
+            DataType.TEXT.toString(), DataType.CLOB.toString(), DataType.NCLOB.toString());
+
     static {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.VARCHAR, DataType.VARCHAR);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.NVARCHAR, DataType.NVARCHAR);
@@ -154,6 +159,12 @@ public class DataTypeUtils {
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.ARRAY, DataType.ARRAY);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.TINYINT, DataType.TINYINT);
         DATABASE_TYPE_TO_DATA_TYPE.put(Types.NUMERIC, DataType.NUMERIC);
+        // A temporal column may be reported back by the database as its with-time-zone variant even
+        // when it is defined as a plain TIMESTAMP / TIME - H2 does that for a column created from a
+        // java.time.Instant mapping. These two JDBC codes have no Dirigible counterpart of their own,
+        // so they resolve to the plain temporal types instead of failing the lookup.
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.TIMESTAMP_WITH_TIMEZONE, DataType.TIMESTAMP);
+        DATABASE_TYPE_TO_DATA_TYPE.put(Types.TIME_WITH_TIMEZONE, DataType.TIME);
 
         // chars
         STRING_TO_DATABASE_TYPE.put(VARCHAR, Types.VARCHAR);
@@ -402,6 +413,20 @@ public class DataTypeUtils {
             return UNIFIED_STRING_FROM_DATABASE_TYPE.get(type.toUpperCase());
         }
         return type;
+    }
+
+    /**
+     * Checks if the type belongs to the character family - {@code VARCHAR}, {@code CHAR}, {@code TEXT},
+     * {@code CLOB}, {@code NCLOB} and their aliases. Its members differ in capacity and storage, not in
+     * the kind of value they hold, and databases freely report one for another: H2 answers
+     * {@code CHARACTER VARYING} for a {@code TEXT} column, PostgreSQL renders a {@code CLOB} as
+     * {@code TEXT}.
+     *
+     * @param dataType the data type
+     * @return true, if the type is a character one
+     */
+    public static boolean isCharacterType(String dataType) {
+        return UNIFIED_CHARACTER_TYPES.contains(getUnifiedDatabaseType(dataType).toUpperCase());
     }
 
     /**

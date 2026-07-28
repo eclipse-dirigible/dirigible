@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.database.sql;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Types;
@@ -48,5 +49,64 @@ public class DataTypeUtilsTest {
     public void blobIsSupported() {
         assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.BLOB));
         assertEquals(DataType.BLOB.toString(), DataTypeUtils.getDatabaseTypeName(Types.BLOB));
+    }
+
+    /**
+     * TIMESTAMP WITH TIME ZONE (java.sql.Types 2014) is what H2 reports back for a column created from
+     * a {@code java.time.Instant} mapping. The ALTER TABLE path resolves every existing column's JDBC
+     * type code through getDatabaseTypeName, so the missing entry failed the whole schema artefact with
+     * "Type [2014] not supported".
+     */
+    @Test
+    public void timestampWithTimeZoneIsSupported() {
+        assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.TIMESTAMP_WITH_TIMEZONE));
+        assertEquals(DataType.TIMESTAMP.toString(), DataTypeUtils.getDatabaseTypeName(Types.TIMESTAMP_WITH_TIMEZONE));
+    }
+
+    /**
+     * TIME WITH TIME ZONE (java.sql.Types 2013) is the sibling omission of TIMESTAMP WITH TIME ZONE.
+     */
+    @Test
+    public void timeWithTimeZoneIsSupported() {
+        assertTrue(DataTypeUtils.isDatabaseTypeSupported(Types.TIME_WITH_TIMEZONE));
+        assertEquals(DataType.TIME.toString(), DataTypeUtils.getDatabaseTypeName(Types.TIME_WITH_TIMEZONE));
+    }
+
+    /**
+     * A with-time-zone column is still a temporal one, so it must unify with the plain TIMESTAMP a
+     * table definition declares.
+     */
+    @Test
+    public void timestampWithTimeZoneUnifiesWithTimestamp() {
+        assertEquals(DataTypeUtils.getUnifiedDatabaseType(DataType.TIMESTAMP.toString()),
+                DataTypeUtils.getUnifiedDatabaseType(DataTypeUtils.getDatabaseTypeName(Types.TIMESTAMP_WITH_TIMEZONE)));
+    }
+
+    /**
+     * The character types are one family, aliases included - a CLOB column reported back as VARCHAR (or
+     * CHARACTER VARYING) holds the same kind of value.
+     */
+    @Test
+    public void characterTypesAreOneFamily() {
+        assertTrue(DataTypeUtils.isCharacterType("VARCHAR"));
+        assertTrue(DataTypeUtils.isCharacterType("CHARACTER VARYING"));
+        assertTrue(DataTypeUtils.isCharacterType("NVARCHAR"));
+        assertTrue(DataTypeUtils.isCharacterType("CHAR"));
+        assertTrue(DataTypeUtils.isCharacterType("TEXT"));
+        assertTrue(DataTypeUtils.isCharacterType("CLOB"));
+        assertTrue(DataTypeUtils.isCharacterType("CHARACTER LARGE OBJECT"));
+        assertTrue(DataTypeUtils.isCharacterType("NCLOB"));
+    }
+
+    /**
+     * Everything else is not - the family check must not swallow a real type change.
+     */
+    @Test
+    public void nonCharacterTypesAreNotInTheFamily() {
+        assertFalse(DataTypeUtils.isCharacterType("INTEGER"));
+        assertFalse(DataTypeUtils.isCharacterType("DECIMAL"));
+        assertFalse(DataTypeUtils.isCharacterType("TIMESTAMP"));
+        assertFalse(DataTypeUtils.isCharacterType("BLOB"));
+        assertFalse(DataTypeUtils.isCharacterType("BOOLEAN"));
     }
 }
