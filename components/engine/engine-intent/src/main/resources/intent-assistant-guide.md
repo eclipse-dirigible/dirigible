@@ -54,11 +54,16 @@ Treat it as the contract: anything you propose must parse and validate against i
   user task), where there is no trigger race.
 - **Lifecycle events** (`notifications`, `integrations`): exactly **one** of `onCreate` / `onUpdate` /
   `onDelete` per item, and it must reference a declared entity.
-- **Recipients** (`to` on notifications and schedule notify): a literal email address, a direct field
+- **Recipients** (`to` in any notify block): a literal email address, a direct field
   of the entity, or a **one-hop** `relation.field` (e.g. `member.email`). The relation may be
   **cross-model** - `partner.email` where `partner` targets an entity owned by another `uses` model
   resolves against the owner's model (the generated listener imports the owner's Entity/Repository),
   exactly like a cross-model dropdown. Multi-hop paths are not supported.
+- **The notify block is ONE shape reused at four call sites** - a `notifications[]` entry, a
+  `schedules[].notify`, a `transitions[].notify`, and a `serviceTask`'s `args.notify`. Everywhere it is
+  `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
+  the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
+  document - see *send a document by e-mail*.
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
@@ -174,7 +179,7 @@ composition is opt-in.
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
   synthetic one). The target entity must declare `hierarchy`. Canonical pair:
-    `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
+    `- { name: Account, kind: manyToOne, to: Account, model: kf-accounts, required: true, leafOnly: true }`
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
@@ -194,7 +199,7 @@ composition is opt-in.
   ```yaml
   postings:
     - name: salesInvoicePosting
-      event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
+      event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
       creates: JournalEntry            # a LOCAL document entity owning a composition items child
       backReference: SalesInvoice      # creates' to-one back to the source = the at-most-once guard
       map: { entryDate: date, customer: Customer, reason: "Sales invoice {number}" }
@@ -235,7 +240,7 @@ composition is opt-in.
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
     - name: invoiceStorno
-      event: { onTransition: SalesInvoice, model: billing, when: "Status == 8" }   # the void status
+      event: { onTransition: SalesInvoice, model: kf-billing, when: "Status == 8" }   # the void status
       reverses: salesInvoicePosting     # sibling posting in this block
       storno: Storno                    # the created entity's to-one SELF-relation to the original
   ```
@@ -842,6 +847,11 @@ transitions:
     when: "Paid == 0"           # optional extra guard: <Field> == <number> or <Field> != <number>
     label: Void                 # button label (defaults to a humanized name)
     icon: ban                   # optional Lucide icon
+    notify:                     # optional: mail the counterparty after the flip commits
+      to: Customer.email
+      subject: "Invoice {number} was voided"
+      body: "The invoice has been cancelled."
+      attach: print             # optionally with the document itself (see `attach: print`)
 ```
 
 **Rules:** unique `name`; `forEntity` must be a declared entity with a `function: EntityStatus`
@@ -862,6 +872,10 @@ workflow-style system write: no `-updated` re-fire (no onUpdate reactions), but 
 topic IS published, so `postings:` glue and integrations observe the transition exactly as they
 observe a workflow status set. Pair it with a posting on the same status to derive follow-up records
 (e.g. void -> reversal entry).
+
+An optional `notify:` block mails the counterparty **after** the flip commits (with `attach: print`, the
+document itself). It is fail-soft on purpose: the status flip is the endpoint's contract, so a mail
+problem is logged and the transition still succeeds.
 
 ### generates - create one document from another (create-from)
 
@@ -1123,6 +1137,71 @@ notifications:
 **Rules:** exactly one event referencing a declared entity; `channel` is `email`; `to` follows the
 recipient rule (literal / field / one-hop `relation.field`).
 
+### send a document by e-mail - `attach: print` on any notify block
+
+**Use when:** the mail must carry the **document itself**, not just a notice about it - the invoice to
+its customer, the payslip to its employee, an escalating payment reminder with the invoice attached.
+
+Add `attach: print` to a notify block and the record's own `.print` template is rendered to PDF
+**server-side** and attached. Nothing else changes: the same `to` / `subject` / `body` rules apply, and
+`{field}` / `{relation.field}` interpolation lets the text reference the document's number, amount or
+due date.
+
+```yaml
+    notify:
+      to: Customer.email                 # the counterparty, one hop from the document
+      subject: "Invoice {number}"        # {field} / {relation.field} interpolation
+      body: "Dear {Customer.name}, please find invoice {number} attached."
+      attach: print                      # render this record's .print template to PDF and attach it
+      language: bg                       # optional print-template language (default en)
+```
+
+Where the block can sit - the three places an intent acts, plus the standalone `notifications` entry:
+
+| Call site | Reads | Sends when |
+|---|---|---|
+| `serviceTask` `args.notify` | the process's trigger record | the flow reaches that step ("after Issue, mail it") |
+| `transitions[].notify` | the transitioned record | AFTER the status flip commits ("on Void, tell the customer") |
+| `schedules[].notify` | each matched row | on every cron tick, per row (dunning runs) |
+| `notifications[]` | the event record | on the entity's create / update / delete |
+
+**Rules:** `attach`'s only value is `print`, and the entity the block is about must be a **document**
+(a header with a line-items child) - that is what has a print template and a generated print feeder to
+assemble its data. Attaching the print of a plain entity is a validation error, not a silent
+plain-text mail. `language` names a print-template language.
+
+**Behavior worth knowing:**
+- **The attachment is the same PDF the Print button produces** - the generated `<Entity>PrintFeeder`
+  assembles the `{document, items}` payload through the repositories (so translations and validations
+  apply) and the print engine renders it. No hand-written listener around the print engine.
+- **The file name is the document's number** when the entity declares a `number:` field
+  (`INV0000042.pdf`), else `<Entity> <id>.pdf`.
+- **A missing recipient is a no-op**, logged and skipped - a record with nobody to mail must not stall
+  a flow (the same rule a schedule's notify has always had).
+- **A transition's mail is fail-soft**: the status flip is the endpoint's contract and has already
+  committed, so an SMTP problem is logged and the transition still returns success. A `serviceTask`
+  send, whose whole purpose IS the message, fails the task instead so the engine retries.
+- Per-tenant SMTP comes from the platform mail configuration; the sender address is
+  `DIRIGIBLE_MAIL_SENDER`.
+
+A sending `serviceTask` stands alone: `notify` cannot be combined with `setField` /
+`setRelationField` / `call` / `delegate` on the same step (give the send its own step, and route to it
+with `next`).
+
+```yaml
+processes:
+  - name: InvoiceIssue
+    trigger: { onCreate: Invoice }
+    steps:
+      - { name: issue, kind: userTask, args: { assignee: issuer, setRelationField: Status, value: 3, next: mailIt } }
+      - name: mailIt                     # the step whose work IS the message
+        kind: serviceTask
+        args:
+          notify: { to: Customer.email, subject: "Invoice {number}", body: "Attached.", attach: print }
+          next: end
+      - { name: end, kind: end }
+```
+
 ### schedules - run on a cron and notify or generate records
 
 **Use when:** something must run **on a schedule** (cron), find records matching conditions, and, per
@@ -1142,6 +1221,7 @@ schedules:
       to: member.email
       subject: "Loan overdue"
       body: "Your loan is overdue, please return the book."
+      # add `attach: print` to carry the row's own rendered document (dunning with the invoice)
 ```
 
 **generate** (scheduled record generation) - e.g. "on the 1st of every month, create an
@@ -1330,6 +1410,8 @@ payment's unallocated balance; entity writes go only through the generated repos
 | trigger `businessKeyStrategy` | `timestamp` |
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
 | notification `channel` | `email` |
+| notify `attach` | `print` (the record's own rendered document; the entity must be a document) |
+| notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
 | entity `function` | `Document`, `DocumentItem`, `Master`, `Detail`, `List`, `Setting`, `Calendar` (reserved-and-rejected: `Board`, `Gantt`, `Timeline`) |
@@ -1360,6 +1442,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 - "who can do what" -> **permissions**
 - "preload these values" -> **seeds**
 - "email someone when X is created/updated/deleted" -> **notifications**
+- "send the invoice / payslip / document itself to its customer or employee by e-mail" -> a **notify block with `attach: print`** (on a `serviceTask` step, a `transitions[]`, or a `schedules[]`)
 - "every day/hour, check X and notify" -> **schedules** (`notify`)
 - "on a schedule / every month, create a Y for each X / recurring invoices / auto-generate timesheets" -> **schedules** (`generate`)
 - "call an external API when X changes" -> **integrations**

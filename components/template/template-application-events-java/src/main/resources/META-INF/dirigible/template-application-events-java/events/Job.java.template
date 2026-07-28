@@ -123,9 +123,23 @@ public class ${className}Job implements JobHandler {
             part.put("type", "text");
             part.put("contentType", "text/plain");
             part.put("text", body);
+            List<Map> parts = new java.util.ArrayList<>();
+            parts.add(part);
+#if($attach == "print")
+            // attach: print - render THIS row's own print template to PDF server-side (the generated
+            // feeder assembles the { document, items } payload) and attach it, so a periodic notice
+            // carries the document itself (a reminder with the invoice, not just about it).
+            Map document = new HashMap();
+            document.put("type", "attachment");
+            document.put("contentType", "application/pdf");
+            document.put("fileName", ${attachFileNameExpression});
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
+            parts.add(document);
+#end
             String from = Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");
             try {
-                Mail.send(from, new String[] {to}, new String[0], new String[0], subject, List.of(part));
+                Mail.send(from, new String[] {to}, new String[0], new String[0], subject, parts);
             } catch (Exception ex) {
                 throw new RuntimeException("Failed to send schedule ${name}", ex);
             }

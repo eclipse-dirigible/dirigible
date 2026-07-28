@@ -134,16 +134,38 @@ public final class NotificationSupport {
      */
     public static Plan plan(NotificationIntent notification, EntityIntent eventEntity, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents, CrossModelLookup crossModel) {
-        Resolver resolver = new Resolver(eventEntity, byName, compositionParents, crossModel);
-        String to = resolver.value(notification.getTo());
-        if (to == null) {
-            return null; // an unresolvable recipient relation.field - skip rather than email garbage
-        }
-        String subject = resolver.text(notification.getSubject());
-        String body = resolver.text(notification.getBody());
         Object when = notification.getEvent()
                                   .get("when");
-        return new Plan(resolver.loads(), guard(when == null ? null : when.toString()), to, subject, body);
+        return plan(notification.getTo(), notification.getSubject(), notification.getBody(), when == null ? null : when.toString(),
+                eventEntity, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * Build the translation plan from the raw recipient / subject / body / guard, against the entity
+     * the message is about. This is the entry point for every embedded <b>notify block</b> - a
+     * {@code transitions[].notify}, a {@code serviceTask}'s {@code args.notify} - where there is no
+     * event map because the call site itself IS the event.
+     *
+     * @param to the recipient: a literal address, a direct field, or a one-hop {@code relation.field}
+     * @param subject the subject, with {@code {field}} / {@code {relation.field}} placeholders
+     * @param body the body, with the same placeholders
+     * @param when an optional guard over a direct field, or {@code null} for none
+     * @param entity the entity the message is about (its fields back the paths)
+     * @param byName all LOCAL entities by name (to resolve same-model relation targets)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model relation's owner facts, or {@code null}
+     * @return the plan, or {@code null} if the recipient cannot be resolved
+     */
+    public static Plan plan(String to, String subject, String body, String when, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, CrossModelLookup crossModel) {
+        Resolver resolver = new Resolver(entity, byName, compositionParents, crossModel);
+        String recipient = resolver.value(to);
+        if (recipient == null) {
+            return null; // an unresolvable recipient relation.field - skip rather than email garbage
+        }
+        String subjectExpression = resolver.text(subject);
+        String bodyExpression = resolver.text(body);
+        return new Plan(resolver.loads(), guard(when), recipient, subjectExpression, bodyExpression);
     }
 
     /**

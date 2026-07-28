@@ -36,6 +36,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.Tim
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport;
 import org.eclipse.dirigible.components.intent.generator.WriterSupport.Writer;
+import org.eclipse.dirigible.components.intent.generator.NotifySupport;
 import org.eclipse.dirigible.components.intent.generator.SetFieldSupport;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
@@ -739,6 +740,9 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // JavaDelegate the glue generator emits (sets a field of the trigger entity to a literal value);
         // - an author-declared serviceTask with a `setRelationField` -> JavaTask bound to the same
         // <events pkg>.<Handler> JavaDelegate (sets a to-one relation's FK to a seed id);
+        // - an author-declared serviceTask with a `notify` block -> JavaTask bound to the generated
+        // <events pkg>.<Process><Step>Send JavaDelegate (mails about the trigger record, optionally
+        // attaching its rendered document);
         // - an author-declared serviceTask with a `call` (a TS handler path) -> JSTask, the path qualified
         // with the project name (the JSTask delegate resolves relative to the registry root);
         // - an author-declared serviceTask with none of the above -> JavaTask bound to a custom.<Step> Java
@@ -755,6 +759,8 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         String setField = stringArg(step, "setField");
         String setRelationField = stringArg(step, "setRelationField");
         String call = stringArg(step, "call");
+        boolean sends = step.getArgs() != null && step.getArgs()
+                                                      .get("notify") instanceof Map;
         boolean java;
         String handlerValue;
         if (javaHandler != null && !javaHandler.isBlank()) {
@@ -763,6 +769,11 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         } else if (setField != null && !setField.isBlank() || setRelationField != null && !setRelationField.isBlank()) {
             java = true;
             handlerValue = eventsPackage + "." + SetFieldSupport.className(processName, step.getName());
+        } else if (sends) {
+            // A sending step: the generated <Process><Step>Send delegate mails about the trigger record
+            // (with its rendered document attached when the notify block asks for it).
+            java = true;
+            handlerValue = eventsPackage + "." + NotifySupport.className(processName, step.getName());
         } else if (call != null && !call.isBlank()) {
             java = false;
             handlerValue = qualifyHandlerPath(projectName, call);
