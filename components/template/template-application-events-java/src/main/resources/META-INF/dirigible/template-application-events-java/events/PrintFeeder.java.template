@@ -10,6 +10,10 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Get;
 import org.eclipse.dirigible.sdk.http.PathParam;
+#if($hasCrossModel)
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+#end
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
@@ -18,15 +22,22 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * template binds - so a template path like {{document.<Relation>.<Field>}} resolves.
  *
  * Generated from the intent printFeeders glue - do not edit; it is re-generated with the application.
- * Every fetch and every field handed to the template is explicit below (this class IS the audit of
- * what a print receives). Entity access goes ONLY through the generated repositories, so validations,
- * events and the multilingual translation overlay (print in the caller's language) all apply, and the
- * browser calls it as the logged-in user so authorization and tenant are the caller's own.
+ * Every fetch is explicit below, and so is every field of a record this project owns (this class IS
+ * the audit of what a print receives). A record owned by ANOTHER model is copied field-by-field at
+ * runtime instead - see copyRecordFields. Entity access goes ONLY through the generated repositories,
+ * so validations, events and the multilingual translation overlay (print in the caller's language)
+ * all apply, and the browser calls it as the logged-in user so authorization and tenant are the
+ * caller's own.
  * Served at /services/java/<project>/gen/events/${javaGenFolderName}/${className}PrintFeeder/{id}.
  */
 @Controller
 @Component("${javaGenFolderName}_${className}PrintFeeder")
 public class ${className}PrintFeeder {
+#if($hasCrossModel)
+
+    /** Application logger - nested under the platform's `app.` root, so levels and appenders are the ones the rest of the app uses. */
+    private static final Logger LOG = Logging.getLogger("gen.events.${javaGenFolderName}.${className}PrintFeeder");
+#end
 
     @Get("/{id}")
     public String feed(@PathParam("id") Integer id) {
@@ -52,6 +63,14 @@ public class ${className}PrintFeeder {
             ${n.entityVar} = new gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Repository().findById(${n.parentEntityVar}.${n.fkProperty});
         }
         if (${n.entityVar} != null) {
+#if($n.crossModel)
+            // ${n.model} owns this record, so its fields are copied as they are TODAY rather than named
+            // here: a name baked in would be a snapshot of another model's schema (dirigible #6422).
+            copyRecordFields(${n.entityVar}, ${n.mapVar});
+#if($n.labelField != "")
+            ${n.mapVar}.put("__label", ${n.mapVar}.get("${n.labelField}"));
+#end
+#else
 #if($n.labelField != "")
             ${n.mapVar}.put("__label", ${n.entityVar}.${n.labelField});
 #end
@@ -60,6 +79,7 @@ public class ${className}PrintFeeder {
             ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name} == null ? null : ${n.entityVar}.${s.name}.toString());
 #else
             ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name});
+#end
 #end
 #end
         }
@@ -84,4 +104,38 @@ public class ${className}PrintFeeder {
         payload.put("items", items);
         return Json.stringify(payload);
     }
+#if($hasCrossModel)
+
+    /**
+     * Copy every field of a record owned by ANOTHER model onto the print payload, reading the record as
+     * it is at runtime instead of naming the fields here.
+     *
+     * The owner model is generated on its own cycle. A field list written into this class would be a
+     * snapshot of the owner's schema taken when THIS project was last generated, so the day the owner
+     * retires a field this class stops compiling - and client Java compiles in one all-or-nothing
+     * batch, so it would take every module's beans down with it, in a project that never changed
+     * (dirigible #6422). Reading the record instead means a retired field simply stops appearing and a
+     * new one appears, with no regeneration of this project.
+     *
+     * Dates become their ISO string, exactly as for a relation this project owns; everything else stays
+     * raw so the print binder's own number/money formatting still applies.
+     */
+    private static void copyRecordFields(Object record, Map<String, Object> target) {
+        for (java.lang.reflect.Field field : record.getClass()
+                                                   .getFields()) {
+            if (java.lang.reflect.Modifier.isStatic(field.getModifiers())) {
+                continue;
+            }
+            try {
+                Object value = field.get(record);
+                boolean temporal = value instanceof java.time.temporal.Temporal || value instanceof java.util.Date;
+                target.put(field.getName(), temporal ? value.toString() : value);
+            } catch (ReflectiveOperationException | RuntimeException ex) {
+                LOG.warn("Could not read [{}] of [{}] for the print payload - it is omitted", field.getName(), record.getClass()
+                                                                                                                    .getName(),
+                        ex);
+            }
+        }
+    }
+#end
 }

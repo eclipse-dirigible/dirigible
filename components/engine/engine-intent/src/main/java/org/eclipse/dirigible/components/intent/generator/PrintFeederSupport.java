@@ -36,15 +36,27 @@ import org.eclipse.dirigible.components.intent.model.UsesIntent;
  * <b>Model-driven, not template-driven:</b> the feeder provides the master's whole reachable to-one
  * graph, not just the paths the current {@code .print} happens to reference — because the
  * {@code .print} is generate-once and adapted per tenant, so a hand-added path must resolve without
- * regenerating the feeder against the frozen template. The generated Java is the audit artifact: it
- * names, line by line, every repository loaded and every field put on the payload.
+ * regenerating the feeder against the frozen template. For a <b>same-model</b> node the generated
+ * Java is the audit artifact: it names, line by line, every repository loaded and every field put
+ * on the payload.
+ *
+ * <p>
+ * <b>A cross-model node's fields are NOT named one by one</b> (dirigible #6422). Naming them would
+ * bake a snapshot of <i>another</i> model's schema into this model's compiled code: the owner is
+ * generated on its own cycle, so the day it retires a field, every consumer's already-committed
+ * {@code gen/} stops compiling — and because client Java compiles in one all-or-nothing batch, that
+ * takes down every module's beans, not just the consumer's. Nothing regenerates the consumer in
+ * between; the consumer never changed. So the template copies the loaded record's fields
+ * <b>reflectively</b> instead, which (a) cannot go stale, and (b) lets a hand-adapted
+ * {@code .print} see the owner's <i>current</i> fields rather than the set that existed when the
+ * consumer was last generated. The audit is still explicit at the level that matters — the node
+ * names the repository it loads and the key it hangs the record under.
  *
  * <p>
  * <b>Depth:</b> same-model relations recurse to depth 2 (cycle-guarded by entity name); a
- * cross-model relation is resolved to depth 1 (the target's own fields via
- * {@link CrossModelSupport}) — descending <i>into</i> a cross-model entity's own relations needs
- * the target's relation graph, which {@code CrossModelSupport} does not expose yet (documented
- * follow-up).
+ * cross-model relation is resolved to depth 1 (the target's own fields) — descending <i>into</i> a
+ * cross-model entity's own relations needs the target's relation graph, which
+ * {@link CrossModelSupport} does not expose yet (documented follow-up).
  *
  * <p>
  * The plan is <b>flattened</b> into an ordered node list (parent before child), each node carrying
@@ -98,6 +110,9 @@ final class PrintFeederSupport {
             addNode(relation, "root", "document", 1, model, byName, compositionParents, context, nodes, usedVars, visited);
         }
         feeder.put("nodes", nodes);
+        // Drives the one reflective copy helper the template emits - only when a cross-model node needs it.
+        feeder.put("hasCrossModel", nodes.stream()
+                                         .anyMatch(node -> Boolean.TRUE.equals(node.get("crossModel"))));
         return feeder;
     }
 
@@ -131,7 +146,10 @@ final class PrintFeederSupport {
             node.put("model", relation.getModel());
             node.put("perspective", target != null ? target.perspectiveName() : relation.getTo());
             node.put("labelField", target != null ? target.labelField() : "Name");
-            node.put("scalars", crossModelScalars(target));
+            // No `scalars`: the template copies the owner's fields reflectively (see the class note) -
+            // the label is looked up on the copied map, so even a retired label field is a null, not a
+            // compile error.
+            node.put("scalars", List.of());
             nodes.add(node);
             // Depth-2 into a cross-model entity's own relations is a documented follow-up.
         } else {
@@ -166,21 +184,6 @@ final class PrintFeederSupport {
                     scalars.add(scalar(IntentNaming.pascalCase(field.getName()), isDateType(field.getType())));
                 }
             }
-        }
-        return scalars;
-    }
-
-    /**
-     * A cross-model target's fields as descriptors. {@link CrossModelSupport} exposes only property
-     * names (not types), so none are flagged as dates — a cross-model date field stays raw (rare, and a
-     * documented limitation alongside cross-model depth-2).
-     */
-    private static List<Map<String, Object>> crossModelScalars(CrossModelSupport.TargetInfo target) {
-        List<Map<String, Object>> scalars = new ArrayList<>();
-        java.util.Collection<String> names = target != null && target.propertyNames() != null ? target.propertyNames()
-                : List.of(target != null ? target.labelField() : "Name");
-        for (String name : names) {
-            scalars.add(scalar(name, false));
         }
         return scalars;
     }

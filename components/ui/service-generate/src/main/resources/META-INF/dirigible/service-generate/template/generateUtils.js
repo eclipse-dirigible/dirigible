@@ -1246,6 +1246,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 itemsJavaPerspective: sanitizeJavaIdentifier(feeder.itemsPerspective),
                                 itemsFkProperty: feeder.itemsFkProperty,
                                 itemScalars: feeder.itemScalars,
+                                // A cross-model node's fields are NOT enumerated (dirigible #6422): the
+                                // template copies the loaded record reflectively, so this project's
+                                // committed gen/ survives the owner retiring a field. hasCrossModel emits
+                                // that one helper only where it is needed.
+                                hasCrossModel: feeder.hasCrossModel === true,
                                 nodes: (feeder.nodes || []).map(function (n) {
                                     return {
                                         entityVar: n.entityVar,
@@ -1255,6 +1260,8 @@ export function generateFiles(model, parameters, templateSources) {
                                         fkProperty: n.fkProperty,
                                         keyInParent: n.keyInParent,
                                         entity: n.entity,
+                                        crossModel: n.crossModel === true,
+                                        model: n.model,
                                         genFolder: n.crossModel ? sanitizeJavaIdentifier(n.model) : parameters.javaGenFolderName,
                                         javaPerspective: sanitizeJavaIdentifier(n.perspective),
                                         labelField: n.labelField,
