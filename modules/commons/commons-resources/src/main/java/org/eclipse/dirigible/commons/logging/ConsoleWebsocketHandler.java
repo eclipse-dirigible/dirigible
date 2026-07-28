@@ -105,7 +105,11 @@ public class ConsoleWebsocketHandler extends TextWebSocketHandler {
                         session.sendMessage(new TextMessage(GsonHelper.toJson(record)));
                     }
                 } catch (IOException e) {
-                    System.err.println(e.getMessage());
+                    // NOT the logger, on purpose: this method is called BY the logging appender
+                    // (ConsoleLoggingAppender), so logging here would re-enter it and recurse. Standard
+                    // error is the one correct sink in this single place - with the cause, not just its
+                    // message.
+                    e.printStackTrace(System.err);
                 }
             }
         }

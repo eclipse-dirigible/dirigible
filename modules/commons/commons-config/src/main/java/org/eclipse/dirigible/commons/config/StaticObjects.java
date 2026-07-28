@@ -78,10 +78,11 @@ public final class StaticObjects {
         Object object = OBJECTS.get(key);
         if (object == null) {
             String message = "Static object by key: " + key + " is null";
+            // One report, in the log, WITH the stack that shows who asked for the missing object -
+            // the synthetic exception used to go to stderr, where nothing collects it.
             if (logger.isErrorEnabled()) {
-                logger.error(message);
+                logger.error(message, new IllegalStateException(message));
             }
-            new Exception(message).printStackTrace();
         }
         return object;
     }
