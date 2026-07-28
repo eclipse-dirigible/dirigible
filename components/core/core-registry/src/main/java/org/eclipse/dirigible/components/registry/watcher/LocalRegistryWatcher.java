@@ -23,6 +23,7 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.WatchEvent;
 import java.nio.file.WatchKey;
+import java.nio.file.ClosedWatchServiceException;
 import java.nio.file.WatchService;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
@@ -55,6 +57,9 @@ public class LocalRegistryWatcher implements DisposableBean {
     /** The Constant logger. */
     private static final Logger logger = LoggerFactory.getLogger(LocalRegistryWatcher.class);
 
+    /** How long destroy() waits for the watch loop to leave before closing the service. */
+    private static final long SHUTDOWN_TIMEOUT_SECONDS = 5;
+
     /** The key to path map. */
     private final Map<WatchKey, Path> keyToPathMap = new HashMap<>();
 
@@ -69,6 +74,28 @@ public class LocalRegistryWatcher implements DisposableBean {
 
     /** The executor service. */
     private ExecutorService executorService;
+
+    /**
+     * Whether the watch loop should keep taking events. Cleared by {@link #destroy()} BEFORE the
+     * service is closed, so the loop leaves on its own terms instead of being torn out from under a
+     * blocking {@code take()} - see the shutdown-order note on {@link #destroy()}.
+     */
+    private volatile boolean watching;
+
+    /**
+     * The thread running the watch loop, kept so shutdown can be observed (and asserted) rather than
+     * only assumed. Set when the loop starts, cleared when it leaves.
+     */
+    private volatile Thread watchThread;
+
+    /**
+     * How the watch loop last left: {@code interrupted} (shutdown asked it to stop - the correct
+     * order), {@code closed} (the service was closed underneath a blocking {@code take()} - the order
+     * that deadlocks on macOS), or {@code null} if it left on the cleared flag. Read by the shutdown
+     * test, which is how "the loop was stopped BEFORE the service was closed" becomes an assertion
+     * instead of a comment.
+     */
+    private volatile String lastExitCause;
 
     /** The repository. */
     private final IRepository repository;
@@ -108,7 +135,9 @@ public class LocalRegistryWatcher implements DisposableBean {
                 if (this.watchService != null) {
                     logger.warn(
                             "Local Registry Watcher has been initialized already. Existing watcher will be closed and a new one will be created.");
-                    destroy();
+                    // Only the service: this runs ON the watcher thread, so shutting the executor down
+                    // and awaiting it (what destroy() does) would be this thread waiting for itself.
+                    closeWatchService();
                 }
 
                 this.watchService = FileSystems.getDefault()
@@ -259,8 +288,55 @@ public class LocalRegistryWatcher implements DisposableBean {
     public void startWatching() throws IOException, InterruptedException {
         logger.info("Recursively watching: " + sourceDir);
 
-        while (true) {
-            WatchKey key = watchService.take();
+        watching = true;
+        watchThread = Thread.currentThread();
+        try {
+            watchLoop();
+        } finally {
+            watching = false;
+            watchThread = null;
+        }
+    }
+
+    /**
+     * Whether the watch loop is still running. Package-private: the shutdown test asserts the loop is
+     * actually gone after {@link #destroy()} instead of trusting that it is.
+     *
+     * @return true while the watch thread is inside the loop
+     */
+    boolean isWatching() {
+        Thread thread = watchThread;
+        return watching && thread != null && thread.isAlive();
+    }
+
+    /**
+     * How the watch loop last left. Package-private for the shutdown test.
+     *
+     * @return {@code interrupted}, {@code closed}, or {@code null} - see {@link #lastExitCause}
+     */
+    String getLastExitCause() {
+        return lastExitCause;
+    }
+
+    /**
+     * The event loop itself. Leaves on a cleared {@code watching} flag, on an interrupt, or on a closed
+     * service - so a shutdown never has to tear the loop out of a blocking {@code take()}.
+     *
+     * @throws IOException Signals that an I/O exception has occurred.
+     */
+    private void watchLoop() throws IOException {
+        while (watching) {
+            WatchKey key;
+            try {
+                key = watchService.take();
+            } catch (ClosedWatchServiceException | InterruptedException e) {
+                // The normal way out: destroy() cleared `watching` and interrupted this thread (or, in
+                // the legacy order, closed the service under us). Either way there is nothing left to
+                // watch - leave the loop so the service can be closed with no poller inside it.
+                lastExitCause = e instanceof InterruptedException ? "interrupted" : "closed";
+                logger.debug("Local Registry Watcher stopped watching ({}): {}", lastExitCause, e.getMessage());
+                return;
+            }
             Path dir = keyToPathMap.get(key);
             if (dir == null) {
                 logger.error("WatchKey not recognized!");
@@ -431,20 +507,60 @@ public class LocalRegistryWatcher implements DisposableBean {
     /**
      * Destroy.
      *
+     * <p>
+     * <b>Order matters: stop the watching thread FIRST, close the service second.</b> Closing the
+     * service while the thread sits in {@code take()} deadlocks on macOS, where the JDK has no native
+     * file-event source and falls back to {@code sun.nio.fs.PollingWatchService}: its {@code close()}
+     * walks the registered keys and locks each one while holding the key map, whereas the polling
+     * thread locks a key first and then the map - a lock-order inversion, and Spring's singleton
+     * teardown hangs for good (every {@code @DirtiesContext} integration test on a developer's Mac).
+     * Linux and Windows have native watchers and never showed it.
+     *
+     * <p>
+     * So: clear {@code watching}, {@code shutdownNow()} to interrupt the blocking {@code take()} (the
+     * loop returns on the {@code InterruptedException}), wait briefly for the thread to actually be
+     * gone, and only then close the service - by which point no one is inside it.
+     *
      * @throws IOException Signals that an I/O exception has occurred.
      */
     @Override
     public void destroy() throws IOException {
         logger.info("Destroying Local Registry Watcher");
 
-        if (null != watchService) {
-            watchService.close();
-            watchService = null;
+        watching = false;
+
+        ExecutorService executor = this.executorService;
+        this.executorService = null;
+        if (null != executor) {
+            executor.shutdownNow();
+            try {
+                if (!executor.awaitTermination(SHUTDOWN_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+                    // Not fatal: the watch loop only reads the file system, so a straggler cannot
+                    // corrupt anything. Say so instead of closing the service on top of it silently.
+                    logger.warn("The Local Registry Watcher thread did not stop within [{}]s - closing the watch service anyway",
+                            SHUTDOWN_TIMEOUT_SECONDS);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread()
+                      .interrupt();
+                logger.warn("Interrupted while waiting for the Local Registry Watcher thread to stop", e);
+            }
         }
 
-        if (null != executorService) {
-            executorService.shutdown();
-            executorService = null;
+        closeWatchService();
+    }
+
+    /**
+     * Close the watch service, if any. Split out of {@link #destroy()} because the re-initialization
+     * path runs on the watcher thread itself and must not shut down the executor it is running in.
+     *
+     * @throws IOException if the close fails
+     */
+    private void closeWatchService() throws IOException {
+        WatchService service = this.watchService;
+        this.watchService = null;
+        if (null != service) {
+            service.close();
         }
     }
 }
