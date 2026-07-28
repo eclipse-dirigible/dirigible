@@ -4,7 +4,7 @@ The authoritative in-repo description of **how multitenancy actually works**. Mu
 
 Read this before touching tenant resolution, provisioning, the tenant-aware datasource routing, or before adding a new artefact type that should be per-tenant.
 
-> The user-facing announcement is the March 2024 blog ["Multitenant applications with zero effort"](https://www.dirigible.io/blogs/2024/03/26/multitenancy). It is still directionally correct but has drifted — see [Where the blog is out of date](#where-the-blog-is-out-of-date). For an AWS deployment architecture built on this model, see [`AWS_MULTITENANCY_RESEARCH.md`](../../../AWS_MULTITENANCY_RESEARCH.md) at the repo root.
+> The user-facing announcement is the March 2024 blog ["Multitenant applications with zero effort"](https://www.dirigible.io/blogs/2024/03/26/multitenancy). It is still directionally correct but has drifted — see [Where the blog is out of date](#where-the-blog-is-out-of-date). For an AWS deployment architecture built on this model, see [`AWS_MULTITENANCY_RESEARCH.md`](../../../AWS_MULTITENANCY_RESEARCH.md) at the repo root; for a proposed **replacement** of the identity half of this model (cross-tenant login, identity and roles from the IdP token rather than `DIRIGIBLE_USERS`), see [`AWS_MULTITENANCY_TARGET_ARCHITECTURE.md`](../../../AWS_MULTITENANCY_TARGET_ARCHITECTURE.md). This file describes what the code does **now**.
 
 ## The model in one paragraph
 

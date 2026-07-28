@@ -4,6 +4,7 @@
 **Date:** 2026-07-27
 **Scope:** a production AWS architecture for a multitenant Dirigible deployment — one application instance today, scaling as tenant count grows.
 **Companion:** [`components/core/core-tenants/CLAUDE.md`](components/core/core-tenants/CLAUDE.md) — the platform-side multitenancy reference this document is built on (how resolution, isolation, pooling and provisioning actually work). Read that first if you want the behaviour rather than the deployment.
+**Sequel:** [`AWS_MULTITENANCY_TARGET_ARCHITECTURE.md`](AWS_MULTITENANCY_TARGET_ARCHITECTURE.md) — the *recommended* architecture, written without the "no code changes" constraint below. It adds cross-tenant login (one identity, many tenants, per-tenant roles) by making identity, membership and roles come from the IdP token instead of the platform's own tables. Read this document for what you can deploy today; read that one for where the model should go.
 
 ---
 
