@@ -1255,7 +1255,12 @@ class IntentEngineIT extends IntegrationTest {
         String stub = contentOf("custom/NotifyCustomer.java");
         assertTrue(stub.contains("package custom;") && stub.contains("class NotifyCustomer implements JavaDelegate"),
                 "the stub should be a custom-package JavaDelegate");
-        assertTrue(stub.contains("OrderApproval: notifyCustomer service task executed."), "the stub should log a default message");
+        // A generated class is read as house style, so the stub logs through the SDK logger - it never
+        // prints.
+        assertTrue(stub.contains("Logging.getLogger(\"custom.NotifyCustomer\")") && stub.contains(
+                "LOG.info(\"The {} step of the {} process ran (stub - not implemented yet)\", \"notifyCustomer\", \"OrderApproval\");"),
+                "the stub should log a default message through the SDK logger");
+        assertFalse(stub.contains("System.out") || stub.contains("System.err"), "the scaffolded stub must never print to stdout/stderr");
 
         // The developer implements it; regeneration must NOT overwrite it.
         writeProjectFile("custom/NotifyCustomer.java", """
