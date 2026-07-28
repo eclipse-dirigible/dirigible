@@ -47,7 +47,7 @@ public class MonitoringPerspectiveIT extends UserInterfaceIntegrationTest {
 
     @Test
     void monitoringPerspectiveOpensAndRendersAllViews() {
-        ide.openHomePage();
+        ide.openIde();
 
         Browser browser = ide.getBrowser();
         browser.clickOnElementById(PERSPECTIVE_ID);
