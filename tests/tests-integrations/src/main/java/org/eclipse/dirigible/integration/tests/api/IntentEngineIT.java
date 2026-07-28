@@ -2077,10 +2077,11 @@ class IntentEngineIT extends IntegrationTest {
                                                  .body("scrubbed", hasItem("ApproveOrder.form")));
         assertFalse(resource("ApproveOrder.form").exists(), "an opted-out form must not be generated");
         String glue = contentOf("orders.glue");
-        // keyProperty is unique to trigger entries (other glue blocks don't emit it), so its absence
-        // means the opted-out trigger was not generated - other glue (notifications, etc.) still uses
-        // "entity".
-        assertFalse(glue.contains("\"keyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
+        // businessKeyProperty is emitted ONLY by a trigger entry, so its absence means the opted-out
+        // trigger was not generated. (This used to key on "keyProperty", which other glue blocks may
+        // legitimately need too - a notify's attach: print carries its own PK reference - so the proxy
+        // now names a genuinely trigger-only key.)
+        assertFalse(glue.contains("\"businessKeyProperty\""), "an opted-out trigger must not appear in the glue (no trigger entries)");
         // The resolver was not opted out, so it survives.
         assertTrue(glue.contains("\"handler\": \"ResolveCustomerCreditLimit\""), "a non-opted-out resolver should still be generated");
         // The developer's settings file is preserved verbatim, not overwritten by the scaffold.

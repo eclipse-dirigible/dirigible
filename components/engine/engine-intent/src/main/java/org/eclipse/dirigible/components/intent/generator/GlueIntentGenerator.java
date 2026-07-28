@@ -391,8 +391,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
-            // The PK property an `attach: print` hands to the generated print feeder.
-            entry.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            // The PK property an `attach: print` hands to the generated print feeder. Deliberately
+            // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
+            // engine IT keys "no trigger was generated" on trigger-only keys being absent.
+            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("topicSuffix", NotificationSupport.topicSuffix(NotificationSupport.eventKind(notification)));
             entry.put("relationLoads", relationLoads(plan));
             entry.put("guardExpression", plan.guardExpression());
@@ -730,8 +732,9 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("className", IntentNaming.pascalIdentifier(t.getName()));
             e.put("entity", t.getForEntity());
             e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
-            // The PK property a notify's `attach: print` hands to the generated print feeder.
-            e.put("keyProperty", IntentEntities.keyFieldName(entity));
+            // The PK property a notify's `attach: print` hands to the generated print feeder (see the
+            // attachKeyProperty note on notifications - keyProperty belongs to trigger entries).
+            e.put("attachKeyProperty", IntentEntities.keyFieldName(entity));
             e.put("statusProperty", statusProperty);
             e.put("setStatus", String.valueOf(t.getSetStatus()));
             List<String> terms = new ArrayList<>();
@@ -1829,8 +1832,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("cron", schedule.getCron());
             entry.put("entity", entity);
             entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
-            // The PK property an `attach: print` hands to the generated print feeder.
-            entry.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            // The PK property an `attach: print` hands to the generated print feeder. Deliberately
+            // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
+            // engine IT keys "no trigger was generated" on trigger-only keys being absent.
+            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
             // The attachment keys are always present (empty for a generate schedule): an undefined
             // Velocity variable renders as its own name, so a template must never rely on absence.

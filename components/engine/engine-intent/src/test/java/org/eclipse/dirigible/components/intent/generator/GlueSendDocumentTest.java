@@ -136,7 +136,7 @@ class GlueSendDocumentTest {
         assertEquals("(Customer == null ? null : Customer.Email)", transition.get("notifyToExpression"));
         assertEquals("\"Invoice \" + entity.Number + \" was voided\"", transition.get("notifySubjectExpression"));
         // The print feeder is fed with the record's key, so the key property must reach the template.
-        assertEquals("Id", transition.get("keyProperty"));
+        assertEquals("Id", transition.get("attachKeyProperty"));
         // No attach on this one: a plain-text notice.
         assertEquals("", transition.get("attach"));
     }
@@ -163,7 +163,7 @@ class GlueSendDocumentTest {
                                                           .get(0);
 
         assertEquals("notify", schedule.get("action"));
-        assertEquals("Id", schedule.get("keyProperty"));
+        assertEquals("Id", schedule.get("attachKeyProperty"));
         assertPrintAttachment(schedule, "bg");
     }
 
@@ -182,7 +182,7 @@ class GlueSendDocumentTest {
         Map<String, Object> notification = GlueIntentGenerator.buildNotificationsForTest(IntentParser.parse(yaml))
                                                               .get(0);
 
-        assertEquals("Id", notification.get("keyProperty"));
+        assertEquals("Id", notification.get("attachKeyProperty"));
         assertEquals("-updated", notification.get("topicSuffix"));
         assertPrintAttachment(notification, "en");
     }

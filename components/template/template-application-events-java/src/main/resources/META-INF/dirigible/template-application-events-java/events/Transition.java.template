@@ -101,7 +101,7 @@ public class ${className}Transition {
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
             document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
-                    new ${attachEntity}PrintFeeder().feed(entity.${keyProperty})));
+                    new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
             parts.add(document);
 #end
             String from = org.eclipse.dirigible.sdk.core.Configurations.get("DIRIGIBLE_MAIL_SENDER", "noreply@dirigible.io");

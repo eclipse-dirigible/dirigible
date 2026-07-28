@@ -733,9 +733,10 @@ export function generateFiles(model, parameters, templateSources) {
                                 subjectExpression: model.notifications[n].subjectExpression,
                                 bodyExpression: model.notifications[n].bodyExpression,
                                 // attach: print - the record's own rendered document, produced by the
-                                // generated feeder + the server-side print renderer. The key property
-                                // is what the feeder is fed with; all four are pre-resolved by the glue.
-                                keyProperty: model.notifications[n].keyProperty,
+                                // generated feeder + the server-side print renderer. attachKeyProperty
+                                // is what the feeder is fed with (NOT keyProperty - that key marks a
+                                // trigger entry); all four are pre-resolved by the glue.
+                                attachKeyProperty: model.notifications[n].attachKeyProperty,
                                 attach: model.notifications[n].attach,
                                 attachEntity: model.notifications[n].attachEntity,
                                 attachLanguage: model.notifications[n].attachLanguage,
@@ -780,7 +781,7 @@ export function generateFiles(model, parameters, templateSources) {
                                 bodyExpression: sc.bodyExpression,
                                 // attach: print on a notify schedule - the matched row's own rendered
                                 // document (empty strings on a generate schedule).
-                                keyProperty: sc.keyProperty,
+                                attachKeyProperty: sc.attachKeyProperty,
                                 attach: sc.attach,
                                 attachEntity: sc.attachEntity,
                                 attachLanguage: sc.attachLanguage,
@@ -1065,7 +1066,7 @@ export function generateFiles(model, parameters, templateSources) {
                                 entity: t.entity,
                                 perspective: t.perspective,
                                 javaPerspective: sanitizeJavaIdentifier(t.perspective),
-                                keyProperty: t.keyProperty,
+                                attachKeyProperty: t.attachKeyProperty,
                                 statusProperty: t.statusProperty,
                                 setStatus: t.setStatus,
                                 allowedExpr: t.allowedExpr,
