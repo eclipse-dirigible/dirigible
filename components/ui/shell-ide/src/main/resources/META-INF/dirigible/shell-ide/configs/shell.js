@@ -12,7 +12,10 @@
 const shellData = {
 	id: 'shellIde',
 	path: '/services/web/shell-ide/index.html',
-	label: 'Workbench'
+	label: 'Workbench',
+	icon: 'code',
+	description: 'The development workbench for building on the platform.',
+	order: 40
 };
 if (typeof exports !== 'undefined') {
 	exports.getShell = () => shellData;

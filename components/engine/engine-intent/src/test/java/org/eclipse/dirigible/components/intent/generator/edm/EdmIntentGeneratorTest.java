@@ -158,6 +158,30 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
+    void notNullPropertiesCarryDataNotNullSoTheModelerKeepsTheConstraint() {
+        IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
+        String edm = EdmIntentGenerator.buildEdmXmlForTest(parsed, "customers");
+
+        // The EDM editor's "Not null" checkbox binds to dataNotNull; a NOT NULL column must carry
+        // dataNotNull="true" in its mxGraph <Property> cell exactly as a hand-modeled .edm does, or the
+        // checkbox loads unchecked and a re-save drops the constraint via dataNullable="true" (#6332).
+        // A required field and the primary key are both NOT NULL.
+        assertTrue(propertyCell(edm, "Name").contains("dataNotNull=\"true\""),
+                "a required field must carry dataNotNull=\"true\", was: " + propertyCell(edm, "Name"));
+        assertTrue(propertyCell(edm, "Id").contains("dataNotNull=\"true\""),
+                "a primary key must carry dataNotNull=\"true\", was: " + propertyCell(edm, "Id"));
+        // A nullable field must NOT carry it, so its checkbox stays unchecked and it round-trips nullable.
+        assertTrue(!propertyCell(edm, "Phone").contains("dataNotNull"),
+                "a nullable field must not carry dataNotNull, was: " + propertyCell(edm, "Phone"));
+    }
+
+    private static String propertyCell(String edm, String propertyName) {
+        int idx = edm.indexOf("<Property name=\"" + propertyName + "\"");
+        assertTrue(idx >= 0, "the mxGraph <Property> cell for [" + propertyName + "] must be present");
+        return edm.substring(idx, edm.indexOf("/>", idx));
+    }
+
+    @Test
     void entityCellsCarryTheModelerStylePerType() {
         // The EDM editor colors each entity solely from the mxCell style attribute (reconciled from
         // entityType only when the entity dialog re-saves, never on load). So an intent-generated .edm must
@@ -476,6 +500,41 @@ class EdmIntentGeneratorTest {
         assertEquals("VARCHAR", sprint.get("dataType"));
         assertEquals("WEEK", sprint.get("widgetType"));
         assertEquals("8", sprint.get("dataLength"), "a week column is sized for YYYY-Www");
+    }
+
+    /**
+     * A text field is a wide VARCHAR, not a CLOB: the generated entity declares the same length, so the
+     * entity layer's Hibernate mapping agrees with the column instead of rewriting it to its own
+     * default (which silently made every text column a varchar(255)). Its widget still comes from the
+     * logical type, since the column type no longer tells them apart.
+     */
+    @Test
+    void textFieldIsAWideVarcharWithATextareaWidget() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Note
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text }
+                      - { name: excerpt, type: text, length: 500 }
+                      - { name: title, type: string }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "ledger");
+        Map<String, Object> note = entityByName(entities(model), "Note");
+
+        Map<String, Object> body = propertyByName(note, "Body");
+        assertEquals("VARCHAR", body.get("dataType"));
+        assertEquals("4000", body.get("dataLength"));
+        assertEquals("TEXTAREA", body.get("widgetType"));
+
+        // An authored length still wins over the default.
+        assertEquals("500", propertyByName(note, "Excerpt").get("dataLength"));
+
+        // A plain string keeps its own default and widget.
+        Map<String, Object> title = propertyByName(note, "Title");
+        assertEquals("100", title.get("dataLength"));
+        assertEquals("TEXTBOX", title.get("widgetType"));
     }
 
     @Test

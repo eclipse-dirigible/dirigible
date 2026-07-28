@@ -1,0 +1,23 @@
+{
+    "name": "SCHEMA_FIRST_NOTE",
+    "type": "TABLE",
+    "columns": [
+        {
+            "type": "INTEGER",
+            "primaryKey": true,
+            "identity": true,
+            "nullable": false,
+            "name": "NOTE_ID"
+        },
+        {
+            "type": "CLOB",
+            "nullable": true,
+            "name": "NOTE_TEXT"
+        },
+        {
+            "type": "TIMESTAMP",
+            "nullable": true,
+            "name": "NOTE_CREATED_AT"
+        }
+    ]
+}

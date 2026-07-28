@@ -34,6 +34,7 @@ import org.eclipse.dirigible.sdk.db.Entity;
 import org.eclipse.dirigible.sdk.db.GeneratedValue;
 import org.eclipse.dirigible.sdk.db.GenerationType;
 import org.eclipse.dirigible.sdk.db.Id;
+import org.eclipse.dirigible.sdk.db.Lob;
 import org.eclipse.dirigible.sdk.db.Table;
 import org.eclipse.dirigible.sdk.db.Transient;
 import org.eclipse.dirigible.sdk.db.UpdatedAt;
@@ -129,6 +130,13 @@ public final class JavaEntityToHbmMapper {
             String type = hibernateTypeFor(field.getType());
 
             Integer length = (col != null) ? col.length() : null;
+            if (field.isAnnotationPresent(Lob.class)) {
+                // Large text: a length past every dialect's maximum VARCHAR, which is how Hibernate is
+                // told to resolve the column to the database's own large-text type (CLOB / TEXT). Without
+                // it the mapping claims @Column's length - 255 by default - and the schema update
+                // rewrites an existing large-text column down to that.
+                length = Integer.MAX_VALUE;
+            }
             boolean nullable = col == null || col.nullable();
             Integer precision = (col != null && col.precision() > 0) ? col.precision() : null;
             Integer scale = (col != null && col.scale() > 0) ? col.scale() : null;

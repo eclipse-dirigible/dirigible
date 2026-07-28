@@ -12,7 +12,10 @@
 const shellData = {
     id: 'myShell',
     path: '/services/web/my/index.html',
-    label: 'My'
+    label: 'My Work',
+    icon: 'inbox',
+    description: 'Your tasks and your records - the personal workspace.',
+    order: 20
 };
 if (typeof exports !== 'undefined') {
     exports.getShell = () => shellData;

@@ -30,6 +30,7 @@ public class IDE {
 
     private static final String LOGIN_PAGE_TITLE = "Please sign in";
     private static final String ROOT_PATH = "/";
+    private static final String IDE_PATH = "/services/web/shell-ide/";
     private static final String USERNAME_FIELD_ID = "username";
     private static final String PASSWORD_FIELD_ID = "password";
     private static final String SUBMIT_TYPE = "submit";
@@ -89,7 +90,7 @@ public class IDE {
     }
 
     public DatabasePerspective openDatabasePerspective() {
-        openHomePage();
+        openIde();
 
         browser.clickOnElementById("perspective-database");
 
@@ -98,6 +99,15 @@ public class IDE {
 
     public void openHomePage() {
         browser.openPath(ROOT_PATH);
+        login(false);
+    }
+
+    /**
+     * Opens the Workbench IDE shell directly. The root path lands on the Home landing page (the
+     * DIRIGIBLE_HOME_URL default), which carries no IDE perspectives - IDE flows start here.
+     */
+    public void openIde() {
+        browser.openPath(IDE_PATH);
         login(false);
     }
 
@@ -118,7 +128,7 @@ public class IDE {
     }
 
     public GitPerspective openGitPerspective() {
-        openHomePage();
+        openIde();
 
         browser.clickOnElementById("perspective-git");
 
@@ -134,7 +144,7 @@ public class IDE {
     }
 
     public Workbench openWorkbench() {
-        openHomePage();
+        openIde();
 
         browser.clickOnElementById("perspective-workbench");
 

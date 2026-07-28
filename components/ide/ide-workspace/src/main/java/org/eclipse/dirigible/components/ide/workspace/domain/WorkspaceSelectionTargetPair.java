@@ -113,7 +113,6 @@ public class WorkspaceSelectionTargetPair {
                                                .getPath();
             String pathToCompare =
                     pathOfNode.substring(0, pathOfNode.length() >= skipPath.length() ? skipPath.length() : pathOfNode.length());
-            System.out.println(pathToCompare + ", " + pathOfNode);
             if (pathToCompare.equals(skipPath)) {
                 sourceSelection.set(i, sourceSelection.get(i)
                                                       .setResolution("skip"));

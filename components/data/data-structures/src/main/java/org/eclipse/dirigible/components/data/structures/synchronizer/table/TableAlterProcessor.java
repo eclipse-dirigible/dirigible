@@ -135,11 +135,21 @@ public class TableAlterProcessor {
             } else {
                 String typeFromMetadata = columnDefinitions.get(nameOriginalCanonical);
                 String typeFromDefinition = type.toString();
-                if (!DataTypeUtils.getUnifiedDatabaseType(typeFromMetadata)
-                                  .equals(DataTypeUtils.getUnifiedDatabaseType(typeFromDefinition))) {
-                    logger.error("Column Definitions: {}", columnDefinitions);
-                    throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
-                            "of type " + typeFromMetadata + " to be changed to " + type));
+                String unifiedTypeFromMetadata = DataTypeUtils.getUnifiedDatabaseType(typeFromMetadata);
+                String unifiedTypeFromDefinition = DataTypeUtils.getUnifiedDatabaseType(typeFromDefinition);
+                if (!unifiedTypeFromMetadata.equals(unifiedTypeFromDefinition)) {
+                    if (!DataTypeUtils.isCharacterType(unifiedTypeFromMetadata)
+                            || !DataTypeUtils.isCharacterType(unifiedTypeFromDefinition)) {
+                        logger.error("Column Definitions: {}", columnDefinitions);
+                        throw new SQLException(String.format(INCOMPATIBLE_CHANGE_OF_TABLE, tableName, name,
+                                "of type " + typeFromMetadata + " to be changed to " + type));
+                    }
+                    // Both are character types, so the existing column can hold the same kind of value and
+                    // is left as it is - the alternative, failing the whole table, drowns the real
+                    // incompatible changes in noise on every re-publish over an existing database.
+                    logger.warn(
+                            "Column [{}] of table [{}] is [{}] in the database while it is defined as [{}]. The column is kept as it is.",
+                            name, tableName, typeFromMetadata, typeFromDefinition);
                 }
             }
         }

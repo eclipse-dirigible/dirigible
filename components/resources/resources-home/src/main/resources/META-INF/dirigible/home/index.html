@@ -1,0 +1,119 @@
+<!--
+
+    Copyright (c) 2010-2026 Eclipse Dirigible contributors
+
+    All rights reserved. This program and the accompanying materials
+    are made available under the terms of the Eclipse Public License v2.0
+    which accompanies this distribution, and is available at
+    http://www.eclipse.org/legal/epl-v20.html
+
+    SPDX-FileCopyrightText: Eclipse Dirigible contributors
+    SPDX-License-Identifier: EPL-2.0
+
+-->
+<!DOCTYPE html>
+<!--
+  The Home landing page - the platform's default entry point (DIRIGIBLE_HOME_URL).
+
+  A brand-neutral welcome: the instance branding (DIRIGIBLE_BRANDING_*) supplies the mark and
+  name, the logged-in user gets a greeting, and the destinations below are aggregated from the
+  `platform-shells` extension point - so every stack shows exactly the shells it ships
+  (Applications / My Work / Partner / Workbench, or whatever a stack contributes) with zero
+  configuration. Pure Harmonia + Alpine; no shell runtime is loaded here.
+-->
+<html lang="en">
+
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime from the platform branding. -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Home</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+    <style>
+      /* The destination rows: editorial paragraphs with a link affordance, not dashboard cards. */
+      .home-entry { text-decoration: none; color: inherit; }
+      .home-entry .home-entry-arrow { opacity: 0; transform: translateX(-4px); transition: opacity .15s ease, transform .15s ease; }
+      .home-entry:hover .home-entry-arrow, .home-entry:focus-visible .home-entry-arrow { opacity: 1; transform: translateX(0); }
+    </style>
+  </head>
+
+  <body class="vbox size-full" x-data="home">
+
+    <!-- Top bar: the instance brand on the left, theme + user on the right. -->
+    <div x-h-toolbar data-variant="transparent" x-cloak>
+      <div class="hbox items-center gap-2 p-1">
+        <img x-show="branding.logo" :src="branding.logo" :alt="branding.name" class="size-5" />
+        <div class="vbox gap-0">
+          <span class="font-bold leading-tight" x-text="branding.name"></span>
+          <span x-show="branding.subtitle" class="text-xs text-muted-foreground leading-tight" x-text="branding.subtitle"></span>
+        </div>
+      </div>
+      <div x-h-toolbar-spacer></div>
+      <button x-h-button data-variant="transparent" data-size="icon-sm" @click="toggleTheme()"
+              :aria-label="dark ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+        <svg x-h-lucide x-show="!dark" role="img" data-lucide="moon"></svg>
+        <svg x-h-lucide x-show="dark" role="img" data-lucide="sun"></svg>
+      </button>
+      <span class="text-sm text-muted-foreground px-2" x-show="userName" x-text="userName"></span>
+      <button x-h-button data-variant="transparent" data-size="sm" @click="logout()">
+        <i role="img" x-h-lucide data-lucide="log-out"></i> <span>Log out</span>
+      </button>
+    </div>
+
+    <!-- The welcome column. -->
+    <div class="flex-1 overflow-auto" x-cloak>
+      <div class="mx-auto w-full px-6" style="max-width: 640px; padding-top: 9vh; padding-bottom: 4rem;">
+
+        <p class="text-sm text-muted-foreground" x-text="greeting()"></p>
+        <h1 class="text-3xl font-bold leading-tight" style="margin-top: .25rem;">
+          Welcome<span x-show="userName">, <span x-text="userName"></span></span>
+        </h1>
+        <p class="text-muted-foreground" style="margin-top: .75rem; max-width: 46ch;">
+          Everything starts here. Pick where you want to work today.
+        </p>
+
+        <!-- Destinations: one entry per shell registered on the `platform-shells` extension point. -->
+        <div class="vbox" style="margin-top: 2.5rem; gap: .25rem;">
+          <template x-for="s in shells" :key="s.id">
+            <a class="home-entry group hbox items-start gap-4 rounded-control p-4 hover:bg-accent" :href="s.path">
+              <span class="hbox items-center justify-center rounded-control bg-accent" style="width: 2.75rem; height: 2.75rem; flex: none;">
+                <i role="img" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-5"></i>
+              </span>
+              <span class="vbox min-w-0" style="gap: .15rem;">
+                <span class="hbox items-center gap-2 text-lg font-semibold">
+                  <span x-text="s.label"></span>
+                  <i role="img" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4"></i>
+                </span>
+                <span class="text-sm text-muted-foreground" x-text="s.description || descriptionFor(s.id)"></span>
+              </span>
+            </a>
+          </template>
+          <p x-show="loaded && shells.length === 0" class="text-sm text-muted-foreground p-4">
+            Nothing is published here yet.
+          </p>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Instance branding (DIRIGIBLE_BRANDING_*): sets window.PlatformBranding before Alpine starts. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="./js/home.js" defer></script>
+
+    <!-- Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+  </body>
+
+</html>

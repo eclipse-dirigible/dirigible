@@ -147,7 +147,10 @@ public class PostgresSqlDialect extends
         return switch (dataType) {
             case BLOB -> "bytea";
             case DOUBLE -> "DOUBLE PRECISION";
-            case CHARACTER_LARGE_OBJECT -> "TEXT";
+            // PostgreSQL has neither CLOB nor NCLOB - TEXT is its unbounded character type, the same
+            // rendering CHARACTER LARGE OBJECT already gets. Without this a table declaring a CLOB
+            // column (what a text field generates) fails to create with 'type "clob" does not exist'.
+            case CHARACTER_LARGE_OBJECT, CLOB, NCLOB -> "TEXT";
             case NVARCHAR -> "VARCHAR";
             default -> super.getDataTypeName(dataType);
         };

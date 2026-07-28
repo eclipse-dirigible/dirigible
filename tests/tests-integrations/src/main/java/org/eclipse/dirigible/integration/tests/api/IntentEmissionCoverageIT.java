@@ -14,10 +14,14 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -25,7 +29,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.gson.Gson;
 
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
+import org.eclipse.dirigible.database.sql.DataTypeUtils;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
@@ -64,6 +70,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private static final String GENERATE_URL =
             "/services/ide/intent/generate?workspace=" + WORKSPACE + "&project=" + PROJECT + "&path=app.intent";
     private static final String API = "/services/java/" + PROJECT + "/gen/emission/api";
+    /** What a {@code type: text} field's column is sized to (EdmIntentGenerator's TEXT_LENGTH). */
+    private static final int TEXT_COLUMN_LENGTH = 4000;
 
     private static final String INTENT_YAML = """
             name: emission
@@ -574,6 +582,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     private RestAssuredExecutor restAssuredExecutor;
     @Autowired
     private SynchronizationProcessor synchronizationProcessor;
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
 
     @Test
     void generated_code_contains_every_feature_enforcement_and_the_published_app_enforces_it() {
@@ -601,7 +611,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         publishProject();
         synchronizationProcessor.forceProcessSynchronizers();
 
+        assertTextColumnKeepsItsDeclaredWidth();
         assertRuntimeEnforcement();
+    }
+
+    /**
+     * A {@code type: text} field is a wide VARCHAR, and it has to still be one after the generated
+     * entity registers against the table. The entity layer's Hibernate mapping creates or alters
+     * columns from its own annotations, so it silently narrowed a text column to the mapping's default
+     * (255) until the generated entity started declaring the same length as the table.
+     */
+    private void assertTextColumnKeepsItsDeclaredWidth() {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection();
+                ResultSet columns = connection.getMetaData()
+                                              .getColumns(null, connection.getSchema(), "EMISSION_TICKET_MESSAGE", "TICKET_MESSAGE_BODY")) {
+            assertTrue(columns.next(), "the text column of the generated document-item table must exist");
+            String typeName = columns.getString("TYPE_NAME");
+            int size = columns.getInt("COLUMN_SIZE");
+            assertTrue(DataTypeUtils.isCharacterType(typeName), "a text column must be a character one, was " + typeName);
+            assertEquals(TEXT_COLUMN_LENGTH, size, "a text column must keep its declared width, was " + typeName + "(" + size + ")");
+        } catch (SQLException ex) {
+            throw new IllegalStateException("Failed to read the text column's metadata", ex);
+        }
     }
 
     /** Layer 1: the enforcement TOKENS are present in the generated sources. */

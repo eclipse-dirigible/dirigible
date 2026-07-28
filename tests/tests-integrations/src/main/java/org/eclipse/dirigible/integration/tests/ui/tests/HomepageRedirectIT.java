@@ -17,6 +17,9 @@ import org.junit.jupiter.api.Test;
 @Tag("smoke")
 public class HomepageRedirectIT extends UserInterfaceIntegrationTest {
 
+    /** Static copy on the Home landing page - deterministic, unlike the user-dependent greeting. */
+    private static final String HOME_LANDING_TAGLINE = "Everything starts here. Pick where you want to work today.";
+
     @Test
     void testOpenHomepage() {
         ide.openHomePage();
@@ -27,7 +30,6 @@ public class HomepageRedirectIT extends UserInterfaceIntegrationTest {
 
     private void assertHomeRedirect(String path) {
         browser.openPath(path);
-        browser.assertElementExistsByTypeAndText(HtmlElementType.ANCHOR, "Welcome");
-
+        browser.assertElementExistsByTypeAndText(HtmlElementType.PARAGRAPH, HOME_LANDING_TAGLINE);
     }
 }
