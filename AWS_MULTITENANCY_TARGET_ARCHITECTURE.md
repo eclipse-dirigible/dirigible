@@ -6,6 +6,7 @@
 
 **Companion documents**
 - [`AWS_MULTITENANCY_RESEARCH.md`](AWS_MULTITENANCY_RESEARCH.md) — what you can deploy on AWS *today* with zero code changes. Still valid; this document does not replace it.
+- [`AWS_MULTITENANCY_SETUP_GUIDE.md`](AWS_MULTITENANCY_SETUP_GUIDE.md) — the step-by-step Cognito + Dirigible setup that implements this model (user pool, per-tenant app clients, the pre-token Lambda, DynamoDB membership, exact config).
 - [`components/core/core-tenants/CLAUDE.md`](components/core/core-tenants/CLAUDE.md) — the behaviour reference for how multitenancy works now.
 
 ---
