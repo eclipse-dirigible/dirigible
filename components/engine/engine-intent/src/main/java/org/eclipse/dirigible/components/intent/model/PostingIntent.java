@@ -13,13 +13,15 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Declarative posting: when a (usually cross-model) source document reaches a status, create ONE
- * local document with computed multi-line content - the accounting "source document → balanced
- * journal entry" shape, generalized. The generated artifact is a client-Java {@code MessageHandler}
- * on the source's {@code -transitioned} topic that re-loads the source by id (the event payload is
- * as-of the transition; later-step data such as a stamped number is not in it), guards on the
- * status, enforces at-most-once via the {@link #backReference}, resolves the {@link #rule} row, and
- * writes the target document + items through their repositories.
+ * Declarative posting: when a (usually cross-model) source document reaches a status - or, for a
+ * source with no status lifecycle (a booked payment), when it is created - create ONE local
+ * document with computed multi-line content - the accounting "source document → balanced journal
+ * entry" shape, generalized. The generated artifact is a client-Java {@code MessageHandler} on the
+ * source's {@code -transitioned} (or, for {@code onCreate}, the bare create) topic that re-loads
+ * the source by id (the event payload is as-of the event; later-step data such as a stamped number
+ * is not in it), guards on the status, enforces at-most-once via the {@link #backReference},
+ * resolves the {@link #rule} row, and writes the target document + items through their
+ * repositories.
  *
  * <pre>
  * postings:
@@ -39,9 +41,11 @@ public class PostingIntent {
 
     private String name;
     /**
-     * The trigger: {@code onTransition} names the source entity, {@code model} its owning intent model
-     * alias (absent = same model), {@code when} the status guard as {@code <Property> == <seed id>} -
-     * evaluated against the RE-LOADED source, not the raw payload.
+     * The trigger: {@code onTransition} (a status write) or {@code onCreate} (the source's insert - for
+     * a source with no status lifecycle) names the source entity, {@code model} its owning intent model
+     * alias (absent = same model), {@code when} the guard as {@code <Property> == <seed id>} -
+     * mandatory for {@code onTransition}, optional for {@code onCreate} - evaluated against the
+     * RE-LOADED source, not the raw payload.
      */
     private Map<String, Object> event;
     /** The local document entity this posting creates (must own a composition items child). */

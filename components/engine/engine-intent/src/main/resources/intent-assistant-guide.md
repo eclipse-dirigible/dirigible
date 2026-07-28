@@ -188,8 +188,9 @@ composition is opt-in.
   A failed document check aborts the transition (the workflow task completion fails with the
   authored message).
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
-  reaches a status, create ONE local document with computed multi-line content (the accounting
-  "source document -> balanced journal entry" shape, generalized):
+  reaches a status - or, for a source with no status lifecycle, when it is created - create ONE
+  local document with computed multi-line content (the accounting "source document -> balanced
+  journal entry" shape, generalized):
   ```yaml
   postings:
     - name: salesInvoicePosting
@@ -203,8 +204,24 @@ composition is opt-in.
         - { Account: rule(revenueAccount),    credit: "Net" }
         - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
   ```
-  Semantics: binds the source's `-transitioned` topic and RE-LOADS the source by id (the payload is
-  as-of the transition; the topic is published only after the source's whole synchronous BPMN chain
+  The trigger is `onTransition` (a status write; the `when` status guard is mandatory) or
+  `onCreate` (the source's INSERT - the trigger for a source with no status lifecycle at all, e.g.
+  a booked payment whose only event is being created; `when` stays optional there as a plain
+  `<Property> == <number>` guard):
+  ```yaml
+    - name: customerPaymentPosting
+      event: { onCreate: CustomerPayment, model: customer-payments }   # no status, no guard
+      creates: JournalEntry
+      backReference: CustomerPayment
+      map: { entryDate: date, customer: Customer, reason: "Payment {number}" }
+      rule: { entity: PostingRule, match: { documentType: "Customer Payment" } }
+      items:
+        - { Account: rule(bankAccount),       debit: "Amount" }
+        - { Account: rule(receivableAccount), credit: "Amount" }
+  ```
+  Semantics: binds the source's `-transitioned` (or, for `onCreate`, the entity's create) topic and RE-LOADS
+  the source by id (the payload is
+  as-of the event; the topic is published only after the source's whole synchronous BPMN chain
   commits, so writes by steps that follow the status set - a number-generation delegate - are
   visible to the re-load). Still prefer ordering such steps BEFORE the status set (issue ->
   generateNumber -> markIssued): "the transition is final" then also means "the document is

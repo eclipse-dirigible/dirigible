@@ -2787,12 +2787,13 @@ public final class IntentParser {
      */
     /**
      * A {@code postings} entry: the trigger names a source entity ({@code model:} alias for a
-     * cross-model source, which must be in {@code uses:}) with a {@code when} status guard
-     * ({@code <Property> == <seed id>}); {@code creates} is a LOCAL document entity owning a
-     * composition items child; {@code backReference} its to-one relation to the source (the
-     * at-most-once guard); {@code rule.entity} a local entity with a single {@code match} selector;
-     * item rows assign fields/relations of the items entity from {@code rule(<column>)} references or
-     * source expressions, with an optional {@code when} row guard.
+     * cross-model source, which must be in {@code uses:}) - {@code onTransition} with a mandatory
+     * {@code when} status guard ({@code <Property> == <seed id>}), or {@code onCreate} for a source
+     * with no status lifecycle (the guard is optional there); {@code creates} is a LOCAL document
+     * entity owning a composition items child; {@code backReference} its to-one relation to the source
+     * (the at-most-once guard); {@code rule.entity} a local entity with a single {@code match}
+     * selector; item rows assign fields/relations of the items entity from {@code rule(<column>)}
+     * references or source expressions, with an optional {@code when} row guard.
      */
     private static void validatePostings(IntentModel model, Set<String> usesAliases, List<String> issues) {
         java.util.Map<String, EntityIntent> byName = new java.util.HashMap<>();
@@ -2808,27 +2809,42 @@ public final class IntentParser {
                 continue;
             }
             String subject = "posting [" + posting.getName() + "]";
-            // event
-            if (posting.getEvent() == null || posting.getEvent()
-                                                     .get("onTransition") == null) {
-                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`");
+            // event: exactly one trigger - `onTransition` (a status write; requires the `when`
+            // status guard) or `onCreate` (the source's insert - the trigger for a source with no
+            // status lifecycle at all, e.g. a booked payment whose only event is being created;
+            // `when` stays optional there as a plain `<Property> == <number>` guard).
+            Object onTransition = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get("onTransition");
+            Object onCreate = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get("onCreate");
+            if (onTransition == null && onCreate == null) {
+                issues.add(subject + " requires `event: { onTransition: <SourceEntity>, ... }`"
+                        + " or `event: { onCreate: <SourceEntity>, ... }`");
+            } else if (onTransition != null && onCreate != null) {
+                issues.add(subject + " event declares both onTransition and onCreate - exactly one trigger is allowed");
             } else {
+                String source = String.valueOf(onTransition != null ? onTransition : onCreate);
                 Object alias = posting.getEvent()
                                       .get("model");
                 if (alias != null && !usesAliases.contains(String.valueOf(alias))) {
                     issues.add(subject + " event model [" + alias + "] is not declared in uses:");
                 }
-                if (alias == null && !byName.containsKey(String.valueOf(posting.getEvent()
-                                                                               .get("onTransition")))) {
-                    issues.add(subject + " event source [" + posting.getEvent()
-                                                                    .get("onTransition")
+                if (alias == null && !byName.containsKey(source)) {
+                    issues.add(subject + " event source [" + source
                             + "] is not a declared entity (declare `model:` for a cross-model source)");
                 }
                 Object when = posting.getEvent()
                                      .get("when");
-                if (when == null || !String.valueOf(when)
-                                           .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
-                    issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
+                if (onTransition != null) {
+                    if (when == null || !String.valueOf(when)
+                                               .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+                        issues.add(subject + " event requires `when: \"<Property> == <status seed id>\"`");
+                    }
+                } else if (when != null && !String.valueOf(when)
+                                                  .matches("\\s*\\w+\\s*==\\s*\\d+\\s*")) {
+                    issues.add(subject + " event when [" + when + "] must be `<Property> == <numeric value>`");
                 }
             }
             // Reversal mode: creates/backReference/rule/map/items are inherited from the reversed

@@ -1104,8 +1104,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (creates == null || itemsEntity == null) {
                 continue; // parser already reported it
             }
-            String sourceEntity = String.valueOf(posting.getEvent()
-                                                        .get("onTransition"));
+            // The trigger: `onTransition` binds the -transitioned topic (status guard mandatory);
+            // `onCreate` binds the source's CREATE topic (the bare entity topic - the platform
+            // publishes creates unsuffixed) - the source with no status lifecycle (a booked
+            // payment) whose only event is its insert. The guard stays optional for onCreate.
+            Object onCreateSource = posting.getEvent()
+                                           .get("onCreate");
+            boolean isCreate = onCreateSource != null;
+            String sourceEntity = String.valueOf(isCreate ? onCreateSource
+                    : posting.getEvent()
+                             .get("onTransition"));
             Object alias = posting.getEvent()
                                   .get("model");
             String sourceProject;
@@ -1132,24 +1140,35 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     sourceKeyField = IntentEntities.keyFieldName(local);
                 }
             }
-            // The status guard: "<Property> == <seed id>", evaluated against the RE-LOADED source.
-            java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
-                                                                  .matcher(String.valueOf(posting.getEvent()
-                                                                                                 .get("when")));
-            if (!when.matches()) {
-                continue; // parser already reported it
+            // The guard: "<Property> == <seed id>", evaluated against the RE-LOADED source.
+            // Mandatory for onTransition (the status guard); optional for onCreate.
+            String guardProperty = "";
+            String guardValue = "";
+            Object whenValue = posting.getEvent()
+                                      .get("when");
+            if (whenValue != null) {
+                java.util.regex.Matcher when = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*")
+                                                                      .matcher(String.valueOf(whenValue));
+                if (!when.matches()) {
+                    continue; // parser already reported it
+                }
+                guardProperty = IntentNaming.pascalCase(when.group(1));
+                guardValue = when.group(2);
+            } else if (!isCreate) {
+                continue; // parser already reported it (onTransition requires the status guard)
             }
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", posting.getName());
             e.put("className", IntentNaming.pascalIdentifier(posting.getName()));
+            e.put("isCreate", isCreate);
             e.put("crossModel", alias != null);
             e.put("sourceProject", sourceProject);
             e.put("sourceGenFolder", sourceGenFolder);
             e.put("sourcePerspective", sourcePerspective);
             e.put("sourceEntity", sourceEntity);
             e.put("sourceKeyField", sourceKeyField);
-            e.put("guardProperty", IntentNaming.pascalCase(when.group(1)));
-            e.put("guardValue", when.group(2));
+            e.put("guardProperty", guardProperty);
+            e.put("guardValue", guardValue);
             e.put("targetEntity", creates.getName());
             e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
