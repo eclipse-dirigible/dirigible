@@ -95,6 +95,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /** Id of the shell-provided perspective every {@code SETTING} entity is grouped under. */
     private static final String SETTINGS_PERSPECTIVE = "Settings";
 
+    /**
+     * Length of a {@code text} field's column. It is a wide {@code VARCHAR} rather than a {@code CLOB}
+     * on purpose: the generated entity declares the same length, so the entity layer's Hibernate
+     * mapping agrees with the column and leaves it alone - it maps a {@code String} to a large-text
+     * type only past the dialect's maximum {@code VARCHAR} (a million characters and up), and otherwise
+     * rewrites the column to match its own idea of it. A bounded {@code VARCHAR} is also the type CSVIM
+     * can seed and every supported database renders the same way.
+     */
+    private static final int TEXT_LENGTH = 4000;
+
     @Override
     public String name() {
         return "edm";
@@ -1843,16 +1853,22 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
         }
         for (FieldIntent field : target.getFields()) {
-            if (field.getName() != null && "VARCHAR".equals(mapDataType(field.getType())) && !field.isPrimaryKey()) {
+            // A text field is a VARCHAR too, but a paragraph makes a poor dropdown label.
+            if (field.getName() != null && "VARCHAR".equals(mapDataType(field.getType())) && !isTextField(field) && !field.isPrimaryKey()) {
                 return IntentNaming.pascalCase(field.getName());
             }
         }
         return keyFieldName(target);
     }
 
+    private static boolean isTextField(FieldIntent field) {
+        return field.getType() != null && "text".equalsIgnoreCase(field.getType()
+                                                                       .trim());
+    }
+
     /**
-     * Declared length, with type-derived defaults ({@code uuid} -> 36, {@code month} -> 7, {@code week}
-     * -> 8).
+     * Declared length, with type-derived defaults ({@code text} -> 4000, {@code uuid} -> 36,
+     * {@code month} -> 7, {@code week} -> 8).
      */
     private static Integer fieldLength(FieldIntent field) {
         if (field.getLength() != null) {
@@ -1861,6 +1877,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (field.getType() != null) {
             switch (field.getType()
                          .toLowerCase(Locale.ROOT)) {
+                case "text":
+                    return TEXT_LENGTH;
                 case "uuid":
                     return 36;
                 case "month": // YYYY-MM
@@ -1893,8 +1911,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 return "DATE";
             case "timestamp":
                 return "TIMESTAMP";
-            case "text":
-                return "CLOB";
+            case "text": // a wide VARCHAR, not a CLOB - see TEXT_LENGTH
             case "uuid":
             case "string":
             case "month": // stored as the picker's YYYY-MM string
@@ -1905,15 +1922,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Widget for a field. {@code month}/{@code week} are both stored as {@code VARCHAR}, so they are
-     * indistinguishable at the JDBC-type level - the picker widget is chosen from the logical type (the
-     * same reason {@code documentTitle} is special-cased at the call site).
+     * Widget for a field. {@code text}, {@code month} and {@code week} are all stored as
+     * {@code VARCHAR}, so they are indistinguishable at the JDBC-type level - their widget is chosen
+     * from the logical type (the same reason {@code documentTitle} is special-cased at the call site).
      */
     private static String widgetForField(FieldIntent field, String dataType) {
         String type = field.getType() == null ? ""
                 : field.getType()
                        .toLowerCase(Locale.ROOT);
         switch (type) {
+            case "text":
+                return "TEXTAREA";
             case "month":
                 return "MONTH";
             case "week":
