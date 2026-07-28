@@ -12,7 +12,10 @@
 const shellData = {
     id: 'applicationShell',
     path: '/services/web/application/index.html',
-    label: 'Applications'
+    label: 'Applications',
+    icon: 'layout-grid',
+    description: 'All business applications in one workspace.',
+    order: 10
 };
 if (typeof exports !== 'undefined') {
     exports.getShell = () => shellData;

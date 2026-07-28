@@ -12,7 +12,10 @@
 const shellData = {
     id: 'partnerShell',
     path: '/services/web/partner/index.html',
-    label: 'Partner'
+    label: 'Partner',
+    icon: 'handshake',
+    description: 'The portal for external partners.',
+    order: 30
 };
 if (typeof exports !== 'undefined') {
     exports.getShell = () => shellData;

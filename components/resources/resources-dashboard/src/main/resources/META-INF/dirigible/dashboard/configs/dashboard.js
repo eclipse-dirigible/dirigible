@@ -13,6 +13,9 @@ const shellData = {
     id: 'dashboardShell',
     path: '/services/web/dashboard/index.html',
     label: 'Dashboard',
+    icon: 'layout-dashboard',
+    description: 'Charts and widgets at a glance.',
+    order: 50,
     translation: {
         key: 'dashboard:dashboard',
     },

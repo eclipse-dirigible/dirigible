@@ -252,6 +252,7 @@
         <module>resources/resources-theme-mystic</module>
         <module>resources/resources-dashboard</module>
         <module>resources/resources-application</module>
+        <module>resources/resources-home</module>
         <module>resources/resources-my</module>
         <module>resources/resources-partner</module>
         <module>resources/resources-inbox</module>
@@ -1376,6 +1377,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-home</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
