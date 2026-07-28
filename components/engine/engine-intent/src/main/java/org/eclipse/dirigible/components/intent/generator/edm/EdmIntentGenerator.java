@@ -446,8 +446,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     continue;
                 }
                 // A cross-model relation references an entity owned by another intent model: emit a
-                // PROJECTION to that model plus a local integer FK + dropdown, and no <relation> link (the
-                // target is not an entity in this model's XML). The owner owns the table / DAO / controller.
+                // PROJECTION to that model plus a local integer FK + dropdown. The owner owns the table /
+                // DAO / controller. The FK relation is still emitted as a <relation> link (below), exactly
+                // like a same-model one, so the EDM modeler draws the arrow from the FK to the projection
+                // box (the diagram edge is generated from document.relationsByEntity); the intent pipeline
+                // generates downstream code from the .model twin, which carries no relations, so this link
+                // only affects the .edm diagram.
                 if (relation.isCrossModel()) {
                     UsesIntent uses = usesByAlias.get(relation.getModel());
                     if (uses == null) {
@@ -465,6 +469,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     properties.add(fkProperty);
                     projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
+                    // Draw the FK arrow to the projection the same way a same-model relation draws it: this
+                    // link feeds document.relationsByEntity, from which appendMxGraphModel emits the mxGraph
+                    // edge (owner FK cell -> projection PK cell). The target lives in another model, so
+                    // relationLink's target is null and referencedProperty defaults to the projection's "Id".
+                    relations.add(relationLink(name, relation, null, compositionParents, settingEntities));
                     continue;
                 }
                 boolean composition = !compositionAssigned && relation.isComposition();
