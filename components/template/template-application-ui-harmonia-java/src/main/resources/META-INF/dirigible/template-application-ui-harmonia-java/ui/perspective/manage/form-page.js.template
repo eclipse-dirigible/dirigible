@@ -242,7 +242,7 @@ document.addEventListener('alpine:init', () => {
         this.state = 'empty-form';
       }
 #foreach($property in $properties)
-#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && !$property.widgetDependsOnHeader)
 #if($property.widgetType == "DROPDOWN")
       // Depends-On: filter ${property.name}'s options for an already-populated trigger
       // (edit/prefill) WITHOUT touching the stored value, then watch for user changes.
@@ -297,7 +297,7 @@ document.addEventListener('alpine:init', () => {
 #end
 #end
 #foreach($property in $properties)
-#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN")
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && $property.widgetType == "DROPDOWN" && !$property.widgetDependsOnHeader)
       // Re-apply the Depends-On filter after a full reload (Refresh / Add-new keep the cascade).
       if (this.form.${property.widgetDependsOnProperty} != null && this.form.${property.widgetDependsOnProperty} !== '') {
         await this.applyDependsOn${property.name}(this.form.${property.widgetDependsOnProperty}, false);
@@ -413,7 +413,7 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 #foreach($property in $properties)
-#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl && !$property.widgetDependsOnHeader)
 
     // Depends-On: ${property.name} reacts to ${property.widgetDependsOnProperty} - load the selected
     // ${property.widgetDependsOnEntity} record and read its #if($property.widgetDependsOnValueBy)case-selected property#{else}${property.widgetDependsOnValueFrom}#end.

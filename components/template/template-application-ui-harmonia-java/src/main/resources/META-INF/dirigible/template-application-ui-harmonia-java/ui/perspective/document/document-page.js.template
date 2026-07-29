@@ -283,12 +283,23 @@ document.addEventListener('alpine:init', () => {
 
       // Depends-On watchers for the item dialog, one per distinct trigger column (metadata-driven,
       // registered once; openRowDialog suppresses them while a draft is being built).
-      const draftDepTriggers = [...new Set(this.editColumns.filter(c => c.dependsOn)
+      const draftDepTriggers = [...new Set(this.editColumns.filter(c => c.dependsOn && !c.dependsOn.header)
                                                            .map(c => c.dependsOn.property))];
       for (const t of draftDepTriggers) {
         this.${dollar}watch('draft.' + t, (v) => {
           if (this._draftInitializing || v == null || v === '') return;
           this.applyDraftDependsOn(t, true);
+        });
+      }
+
+      // Header-mediated Depends-On (#6358): the trigger is a HEADER relation, so watch the header form
+      // and refresh an open line draft when the document's selection changes.
+      const headerDepTriggers = [...new Set(this.editColumns.filter(c => c.dependsOn && c.dependsOn.header)
+                                                            .map(c => c.dependsOn.property))];
+      for (const t of headerDepTriggers) {
+        this.${dollar}watch('form.' + t, (v) => {
+          if (this._draftInitializing || !this.rowDialogOpen || v == null || v === '') return;
+          this.applyHeaderDependsOnToDraft();
         });
       }
 
@@ -681,7 +692,9 @@ document.addEventListener('alpine:init', () => {
     async applyDraftDependsOn(triggerName, adjust) {
       const value = this.draft[triggerName];
       if (value == null || value === '') return;
-      const dependents = this.editColumns.filter(c => c.dependsOn && c.dependsOn.property === triggerName);
+      // Header-mediated dependents (#6358) are driven off the header form, not off a draft column, so
+      // they must not be picked up by a same-named row column.
+      const dependents = this.editColumns.filter(c => c.dependsOn && !c.dependsOn.header && c.dependsOn.property === triggerName);
       for (const col of dependents) {
         try {
           const rec = await App.services.api.get(col.dependsOn.url + '/' + encodeURIComponent(value), { baseUrl: '' });
@@ -705,6 +718,31 @@ document.addEventListener('alpine:init', () => {
           }
         } catch (e) {
           console.error('[${name}DocumentPage] dependsOn refresh failed for ' + col.name, e);
+        }
+      }
+    },
+
+    // Header-mediated Depends-On (#6358): a line field defaults from a record the open DOCUMENT points
+    // at (the header partner's standard discount, say) rather than from one of the line's own
+    // relations. The trigger value therefore comes off the header form; the source record is fetched
+    // and copied exactly as in the sibling-triggered case. Only ever auto-populates a scalar - a header
+    // selection has no business filtering a line's dropdown - and never runs on an existing row, whose
+    // stored value the user may have overridden deliberately.
+    async applyHeaderDependsOnToDraft() {
+      const dependents = this.editColumns.filter(c => c.dependsOn && c.dependsOn.header);
+      for (const col of dependents) {
+        const value = this.form[col.dependsOn.property];
+        if (value == null || value === '') continue;
+        try {
+          const rec = await App.services.api.get(col.dependsOn.url + '/' + encodeURIComponent(value), { baseUrl: '' });
+          const prop = col.dependsOn.valueBy ? await this.resolveDependsOnSource(col.dependsOn.valueBy, this.draft) : col.dependsOn.valueFrom;
+          if (prop == null) continue;
+          const from = rec == null ? null : rec[prop];
+          if (from == null) continue;
+          this.draft[col.name] = col.date ? this.toDateInput(from, col.widget) : from;
+          this.recalcDraft();
+        } catch (e) {
+          console.error('[${name}DocumentPage] header dependsOn refresh failed for ' + col.name, e);
         }
       }
     },
@@ -844,11 +882,14 @@ document.addEventListener('alpine:init', () => {
       this.draft = draft;
       this.recalcDraft();
       // Filter dependent dropdowns for already-populated triggers (edit) WITHOUT touching values.
-      const depTriggers = [...new Set(this.editColumns.filter(c => c.dependsOn)
+      const depTriggers = [...new Set(this.editColumns.filter(c => c.dependsOn && !c.dependsOn.header)
                                                       .map(c => c.dependsOn.property))];
       for (const t of depTriggers) {
         if (draft[t] != null && draft[t] !== '') this.applyDraftDependsOn(t, false);
       }
+      // A NEW line takes its header-mediated defaults (#6358) straight away; an existing row keeps the
+      // stored value, which the user may have deliberately overridden.
+      if (this.draftMode === 'create') this.applyHeaderDependsOnToDraft();
       this.${dollar}nextTick(() => { this._draftInitializing = false; });
       this.rowDialogOpen = true;
       this.refreshIcons();

@@ -228,6 +228,12 @@ function createModel(graph) {
 					if (property.widgetDependsOnValueFrom !== null) {
 						model.push(' widgetDependsOnValueFrom="' + _.escape(property.widgetDependsOnValueFrom) + '"');
 					}
+					if (property.widgetDependsOnHeader !== null && property.widgetDependsOnHeader !== undefined) {
+						model.push(' widgetDependsOnHeader="' + _.escape(property.widgetDependsOnHeader) + '"');
+					}
+					if (property.widgetDependsOnHeaderEntity !== null && property.widgetDependsOnHeaderEntity !== undefined) {
+						model.push(' widgetDependsOnHeaderEntity="' + _.escape(property.widgetDependsOnHeaderEntity) + '"');
+					}
 					if (property.widgetDependsOnValueBy !== null && property.widgetDependsOnValueBy !== undefined) {
 						model.push(' widgetDependsOnValueBy="' + _.escape(property.widgetDependsOnValueBy) + '"');
 					}

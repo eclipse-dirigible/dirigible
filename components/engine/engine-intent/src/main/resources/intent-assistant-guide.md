@@ -166,6 +166,18 @@ composition is opt-in.
     (`SalesOrder.Customer.priceLevel`: the header's customer is fetched and its price level read).
     `cases` keys are literals matched against the resolved classifier value; case values (and
     `default`) are properties of the trigger's target, like a plain `valueFrom`. Harmonia UI only.
+  - **header-mediated auto-populate** (document item field only) - the trigger is a to-one of the open
+    DOCUMENT rather than of the line, so a line field defaults from what the HEADER points at:
+    ```yaml
+    - name: discount
+      type: decimal
+      dependsOn: { relation: SalesOrder.Customer, valueFrom: standardDiscount }
+    ```
+    `relation` is `<composition parent relation>.<header to-one relation>`. A NEW line takes the value
+    as soon as the dialog opens, and changing the header's selection refreshes an open line; an
+    EXISTING line keeps its stored value (the user may have overridden it deliberately). Fields only -
+    a header selection does not filter a line's own dropdown - so `valueFrom` is mandatory and
+    `filterBy` is rejected. Composable with the conditional `valueFrom` above. Harmonia UI only.
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching

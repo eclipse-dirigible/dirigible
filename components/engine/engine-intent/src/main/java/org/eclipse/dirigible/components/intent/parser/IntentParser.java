@@ -2169,6 +2169,12 @@ public final class IntentParser {
             issues.add(subject + " dependsOn requires `relation`: the sibling to-one relation that triggers it");
             return;
         }
+        // A dotted `relation` is the header-mediated form (#6358): the trigger is not a sibling of this
+        // entity but a to-one of the open document header, reached through the composition parent.
+        if (triggerName.indexOf('.') >= 0) {
+            validateHeaderMediatedDependsOn(entity, subject, dependsOn, ownRelation, triggerName, byName, issues);
+            return;
+        }
         if (ownRelation != null && triggerName.equals(ownRelation.getName())) {
             issues.add(subject + " dependsOn cannot reference itself as the trigger");
             return;
@@ -2211,6 +2217,74 @@ public final class IntentParser {
     }
 
     /**
+     * The header-mediated trigger form (#6358): {@code relation: <composition parent>.<header to-one>}
+     * on a document ITEM field, so the line defaults a value from a record the DOCUMENT points at (the
+     * canonical case: a line discount defaulting from the header partner's standard discount). The
+     * trigger lives on the header, so there is no option list to cascade - fields only, and
+     * {@code valueFrom} is mandatory exactly as for a sibling-triggered field.
+     */
+    private static void validateHeaderMediatedDependsOn(EntityIntent entity, String subject, DependsOnIntent dependsOn,
+            RelationIntent ownRelation, String triggerName, java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        if (ownRelation != null) {
+            issues.add(subject + " dependsOn header-mediated `relation` [" + triggerName
+                    + "] is supported on a field (auto-populate), not on a relation - the header's selection cannot filter this dropdown");
+            return;
+        }
+        String[] segments = triggerName.split("\\.");
+        if (segments.length != 2) {
+            issues.add(subject + " dependsOn `relation` [" + triggerName
+                    + "] must be `<composition parent relation>.<header to-one relation>`");
+            return;
+        }
+        RelationIntent compositionParent = compositionParentRelation(entity, segments[0]);
+        if (compositionParent == null) {
+            issues.add(subject + " dependsOn `relation` [" + triggerName + "]: [" + segments[0]
+                    + "] is not the composition parent relation of [" + entity.getName() + "]");
+            return;
+        }
+        if (!dependsOn.hasValueFrom()) {
+            issues.add(subject + " dependsOn requires `valueFrom`: the property to copy from the header's [" + segments[1] + "] record");
+        }
+        if (!isBlank(dependsOn.getFilterBy())) {
+            issues.add(subject + " dependsOn `filterBy` applies only to a relation (a dropdown) - a field has no option list");
+        }
+        if (compositionParent.isCrossModel()) {
+            return; // the header lives in another model - resolved at generation time
+        }
+        EntityIntent header = byName.get(compositionParent.getTo());
+        if (header == null) {
+            return; // the dangling composition target is reported separately
+        }
+        RelationIntent trigger = toOneRelationByName(header, segments[1]);
+        if (trigger == null) {
+            issues.add(subject + " dependsOn `relation` [" + triggerName + "]: [" + segments[1] + "] is not a to-one relation of ["
+                    + compositionParent.getTo() + "]");
+            return;
+        }
+        if (trigger.isEntityStatus()) {
+            issues.add(subject + " dependsOn relation [" + triggerName + "] is an EntityStatus (a read-only badge) so it cannot trigger");
+        }
+        java.util.Map<String, Object> conditional = dependsOn.getValueFromConditional();
+        if (conditional != null) {
+            validateConditionalValueFrom(entity, subject, conditional, trigger, byName, issues);
+        }
+        validateDependsOnProperty(subject, "valueFrom", dependsOn.getValueFrom(), trigger, byName, issues);
+    }
+
+    /**
+     * The composition parent relation of an item entity by name, or null when the entity has no such
+     * relation - i.e. the name does not denote the open document header.
+     */
+    private static RelationIntent compositionParentRelation(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isComposition() && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
+    /**
      * The conditional {@code valueFrom: { by, cases, default? }} form (#6358): {@code by} is a 1-3
      * segment classifier path - an own property, a one-hop {@code <OwnRelation>.<property>}, or (on a
      * composition item) a path starting at the composition parent relation, i.e. the open document
@@ -2245,12 +2319,7 @@ public final class IntentParser {
         // Resolve the path start: an own property (1 segment), an own to-one (2 segments), or the
         // composition parent relation - the open document header (2-3 segments, items only).
         String first = segments[0];
-        RelationIntent compositionParent = null;
-        for (RelationIntent relation : entity.getRelations()) {
-            if (relation.isComposition() && first.equals(relation.getName())) {
-                compositionParent = relation;
-            }
-        }
+        RelationIntent compositionParent = compositionParentRelation(entity, first);
         if (compositionParent != null) {
             EntityIntent header = compositionParent.isCrossModel() ? null : byName.get(compositionParent.getTo());
             if (segments.length == 2) {

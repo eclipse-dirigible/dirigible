@@ -96,6 +96,8 @@ class IntentEngineIT extends IntegrationTest {
                 fields:
                   - { name: id,       type: integer, primaryKey: true, generated: true }
                   - { name: quantity, type: integer, required: true }
+                  # Header-mediated Depends-On: the line defaults from the DOCUMENT's customer.
+                  - { name: creditSnapshot, type: decimal, dependsOn: { relation: order.customer, valueFrom: creditLimit } }
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
@@ -1324,6 +1326,15 @@ class IntentEngineIT extends IntegrationTest {
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
                 "the item dialog should carry the metadata-driven dependsOn machinery");
+        // Header-mediated Depends-On (#6358): the line's creditSnapshot is driven off the HEADER's
+        // Customer, so the page watches the header form for it and applies the defaults to the draft.
+        assertTrue(documentPage.contains("applyHeaderDependsOnToDraft"),
+                "the document page should carry the header-mediated dependsOn application");
+        assertTrue(documentPage.contains("dependsOn.header"),
+                "the draft machinery should separate header-mediated columns from row-triggered ones");
+        String detailRegister = contentOf("gen/orders/js/components/pages/Order/OrderItem.detail.js");
+        assertTrue(detailRegister.contains("header: true"),
+                "the item column metadata should flag the header-mediated trigger, got: " + detailRegister);
     }
 
     @Test
@@ -1961,6 +1972,11 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(edmXml.contains("widgetDependsOnFilterBy=\"Id\""), "filterBy should default to the dependent's own target primary key");
         assertTrue(edmXml.contains("widgetDependsOnValueFrom=\"CreditLimit\""),
                 "the scalar auto-populate should read the customer's creditLimit");
+        // Header-mediated trigger (#6358): OrderItem.creditSnapshot is triggered by the DOCUMENT's
+        // customer, so the trigger resolves on Order and the item carries the header markers.
+        assertTrue(edmXml.contains("widgetDependsOnHeader=\"true\""), "a header-mediated dependent should be flagged as header-triggered");
+        assertTrue(edmXml.contains("widgetDependsOnHeaderEntity=\"Order\""),
+                "a header-mediated dependent should name the document header entity");
         assertTrue(
                 modelBody.contains("\"widgetDependsOnProperty\": \"Customer\"")
                         && modelBody.contains("\"widgetDependsOnValueFrom\": \"CreditLimit\""),
