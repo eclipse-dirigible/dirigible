@@ -1175,6 +1175,31 @@ due date.
       language: bg                       # optional print-template language (default en)
 ```
 
+**One message per related row: `forEach`.** Some sends are naturally per-row rather than per-record -
+a payroll run mails every payslip to its own employee, an order confirmation goes to each contact. Name
+the related entity with `forEach:` and the block sends ONE message per row of it; from then on every
+path resolves against the **ROW**: the recipient, the `{placeholders}`, and `attach: print` (the row's
+own document).
+
+```yaml
+    notify:
+      forEach: Payslip                     # the rows: Payslips whose FK points at this record
+      to: Employee.email                   # the ROW's employee
+      subject: "Payslip {PayrollRun.month}"    # one hop from the ROW (its run)
+      body: "Dear {Employee.name}, net pay {net}."   # {net} is the ROW's own field
+      attach: print                        # the ROW's rendered document
+```
+
+The row entity must have **exactly one** to-one relation back to the record: none means the rows are
+unrelated, several make the intended set ambiguous, and both are validation errors rather than a
+quietly wrong list of recipients.
+
+**A fan-out is fail-soft per row, at every call site** - including a process step, which otherwise
+fails. A row with no address is skipped, a failed send is logged, and the step completes with a summary
+count. That is deliberate: failing the task would have the engine retry the WHOLE fan-out and mail
+everyone who already received their message a second time, and a partial send cannot be made
+idempotent.
+
 Where the block can sit - the three places an intent acts, plus the standalone `notifications` entry:
 
 | Call site | Reads | Sends when |
@@ -1430,6 +1455,7 @@ payment's unallocated balance; entity writes go only through the generated repos
 | lifecycle event | `onCreate`, `onUpdate`, `onDelete` |
 | notification `channel` | `email` |
 | notify `attach` | `print` (the record's own rendered document; the entity must be a document) |
+| notify `forEach` | a declared entity with exactly ONE to-one relation back to the record (one message per row; every path resolves against the row) |
 | notify block sites | `notifications[]`, `schedules[].notify`, `transitions[].notify`, `serviceTask` `args.notify` |
 | schedule `where` `op` | `eq`, `ne`, `gt`, `ge`, `lt`, `le`, `like` |
 | integration `method` | `GET`, `POST`, `PUT`, `PATCH`, `DELETE` |
