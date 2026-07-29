@@ -1350,6 +1350,7 @@ class EdmIntentGeneratorTest {
         java.util.Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(intent, "invoices");
         assertEquals("/companies/companies.model", entityByName(entities(model), "Company").get("projectionReferencedModel"),
                 "the path must carry no environment detail - only the owner project and its model");
+    }
 
     /** A field's input-format regex (#6336) becomes the property's widgetPattern, XML-escaped. */
     @org.junit.jupiter.api.Test

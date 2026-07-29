@@ -1631,6 +1631,12 @@ public final class IntentParser {
     private static final java.util.regex.Pattern IMMUTABLE_WHEN_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
 
     /**
+     * Upper bound for an authored field {@code pattern} - a compile-time guard against pathological
+     * regexes.
+     */
+    private static final int PATTERN_MAX_LENGTH = 512;
+
+    /**
      * {@code immutableWhen: "<Status> == <seed id> [|| ...]"} makes the record read-only for USER
      * writes while its EntityStatus satisfies the expression (workflow/system writes through the
      * repository stay possible - corrections are reversals, not edits). It therefore requires the
@@ -2179,8 +2185,15 @@ public final class IntentParser {
                     + "] (on a numeric field the pattern is the display format, not a regex)");
             return;
         }
+        if (field.getPattern()
+                 .length() > PATTERN_MAX_LENGTH) {
+            issues.add(subject + " `pattern` exceeds " + PATTERN_MAX_LENGTH + " characters");
+            return;
+        }
         try {
-            java.util.regex.Pattern.compile(field.getPattern());
+            // Compiled ONLY to validate the developer-authored model source at parse time; the result is
+            // discarded and never matched against runtime input, so there is no injection surface here.
+            java.util.regex.Pattern.compile(field.getPattern()); // lgtm[java/regex-injection]
         } catch (java.util.regex.PatternSyntaxException ex) {
             issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
         }
