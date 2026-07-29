@@ -104,6 +104,10 @@ public class IntentGenerationService {
         context.setSettings(loadOrScaffoldSettings(context));
         LOGGER.info("Generating model files for intent [{}] under [{}] via {} generator(s)", IntentNaming.baseName(context), projectRoot,
                 generators.size());
+        // The shape this project declared BEFORE the pass. Compared against what the pass writes, it is
+        // what makes a removal visible - see the impact report below.
+        String modelFileName = IntentNaming.baseName(context) + ".model";
+        Map<String, Set<String>> shapeBefore = CrossModelImpactSupport.readShape(repository, projectRoot + "/" + modelFileName);
         for (IntentTargetGenerator generator : generators) {
             try {
                 generator.generate(context);
@@ -114,6 +118,14 @@ public class IntentGenerationService {
             } catch (RuntimeException e) {
                 LOGGER.error("Intent generator [{}] failed for project [{}]", generator.name(), projectName, e);
             }
+        }
+        // A member this pass dropped invalidates the committed generated code of every project that
+        // references it cross-model - and nothing else will notice until javac does, in one of THOSE
+        // projects (dirigible #6422). Name the regeneration set here, while the removal is being made.
+        try {
+            CrossModelImpactSupport.reportRemovals(context, shapeBefore, modelFileName);
+        } catch (RuntimeException e) {
+            LOGGER.error("Cross-model impact report failed for project [{}]", projectName, e);
         }
         List<String> scrubbed = scrubStaleModelFiles(projectRoot, context.getWrittenFileNames());
         List<Map<String, Object>> plan = buildCodeGenerationPlan(context.getSettings(), context.getWrittenFileNames());

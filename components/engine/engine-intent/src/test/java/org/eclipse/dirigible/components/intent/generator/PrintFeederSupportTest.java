@@ -134,4 +134,62 @@ class PrintFeederSupportTest {
         assertEquals("document", region.get("parentMapVar"));
         assertTrue(nodes.indexOf(region) < nodes.indexOf(country), "parent materialised before child");
     }
+
+    /**
+     * dirigible #6422: the owner's field list must NOT be baked into this project's feeder - it would
+     * be a snapshot of another model's schema, and the day the owner retires a field the consumer's
+     * committed gen/ stops compiling (taking the whole client-Java batch with it). Only same-model
+     * nodes name their fields; a cross-model node carries none and the template copies the record
+     * reflectively instead.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void crossModelNodeNamesNoFieldsOfTheOwner() {
+        Map<String, Object> feeder = feeder();
+        List<Map<String, Object>> nodes = (List<Map<String, Object>>) feeder.get("nodes");
+        Map<String, Map<String, Object>> byVar = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : nodes) {
+            byVar.put((String) node.get("entityVar"), node);
+        }
+
+        List<Map<String, Object>> customerScalars = (List<Map<String, Object>>) byVar.get("customer")
+                                                                                     .get("scalars");
+        assertTrue(customerScalars.isEmpty(), "a cross-model node dereferences no named field of the owner");
+
+        List<Map<String, Object>> regionScalars = (List<Map<String, Object>>) byVar.get("region")
+                                                                                   .get("scalars");
+        assertFalse(regionScalars.isEmpty(), "a same-model node still names its fields - it is regenerated with them");
+
+        assertEquals(Boolean.TRUE, feeder.get("hasCrossModel"), "the reflective copy helper is emitted for this feeder");
+    }
+
+    /** A document whose whole relation graph is local needs no reflective copy helper. */
+    @Test
+    void feederWithoutCrossModelRelationsSkipsTheHelper() {
+        IntentModel local = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: SalesInvoiceStatus }
+                  - name: SalesInvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: quantity, type: decimal, required: true }
+                    relations:
+                      - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                  - name: SalesInvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                """);
+        List<Map<String, Object>> feeders = PrintFeederSupport.buildPrintFeeders(local, IntentEntities.byName(local),
+                IntentEntities.compositionParents(local), TestContexts.context(local));
+        assertEquals(Boolean.FALSE, feeders.get(0)
+                                           .get("hasCrossModel"));
+    }
 }
