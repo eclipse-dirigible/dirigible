@@ -37,27 +37,28 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
 /**
- * dirigible #6422: an owner module retiring a field must not invalidate the already-generated code of
- * the modules that reference it cross-model.
+ * dirigible #6422: an owner module retiring a field must not invalidate the already-generated code
+ * of the modules that reference it cross-model.
  *
  * <p>
  * The shape that used to break: the consumer's generated print feeder named every property of the
  * owner's entity ({@code invoiceMap.put("CustomerEmail", invoice.CustomerEmail)}) - a snapshot of
  * ANOTHER model's schema, baked into this module's compiled code. The owner then retired the field
  * and regenerated cleanly (its own pass is green); the consumer was never regenerated, because the
- * consumer did not change. The next client-Java pass failed on {@code cannot find symbol}, and since
- * that batch is all-or-nothing it took every module's beans down with it - not just the consumer's.
+ * consumer did not change. The next client-Java pass failed on {@code cannot find symbol}, and
+ * since that batch is all-or-nothing it took every module's beans down with it - not just the
+ * consumer's.
  *
  * <p>
  * The assertions walk the three layers the emission contract asks for:
  * <ol>
  * <li><b>Emission</b> - the consumer's feeder names no field of the owner and copies the record
  * reflectively instead.</li>
- * <li><b>Report</b> - regenerating the owner AFTER the removal warns, naming the consumer project as
- * the regeneration set (nothing else would have said so before javac did).</li>
+ * <li><b>Report</b> - regenerating the owner AFTER the removal warns, naming the consumer project
+ * as the regeneration set (nothing else would have said so before javac did).</li>
  * <li><b>Runtime, the outermost layer</b> - with the owner regenerated WITHOUT the field and the
- * consumer deliberately NOT regenerated, the whole instance still compiles: the consumer's controller
- * answers, and its print feeder serves a payload carrying the owner's CURRENT fields (no
+ * consumer deliberately NOT regenerated, the whole instance still compiles: the consumer's
+ * controller answers, and its print feeder serves a payload carrying the owner's CURRENT fields (no
  * {@code CustomerEmail}, and the surviving ones present).</li>
  * </ol>
  */
