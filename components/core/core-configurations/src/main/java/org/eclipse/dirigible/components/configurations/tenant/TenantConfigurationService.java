@@ -29,6 +29,12 @@ public class TenantConfigurationService {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TenantConfigurationService.class);
 
+    /** Tenants whose configuration loaded successfully at least once - a later failure is abnormal. */
+    private final java.util.Set<String> loadedOnce = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** Tenants already warned during warm-up - keeps the boot log to ONE line per tenant. */
+    private final java.util.Set<String> warmupWarned = java.util.concurrent.ConcurrentHashMap.newKeySet();
+
     private final TenantConfigurationStore store;
 
     private final TenantConfigurationCache cache;
@@ -56,11 +62,28 @@ public class TenantConfigurationService {
         if (tenantContext.isNotInitialized()) {
             return Map.of();
         }
+        String tenantId = currentTenantId();
         try {
-            return keyPolicy.filterInjectable(load());
+            Map<String, String> injectable = keyPolicy.filterInjectable(load());
+            loadedOnce.add(tenantId);
+            return injectable;
         } catch (SQLException | RuntimeException ex) {
-            LOGGER.error("Failed to resolve tenant configuration for tenant [{}]. Continuing without tenant overrides.", currentTenantId(),
-                    ex);
+            // The store is unreachable on the FIRST requests of a fresh instance: the default
+            // datasource artefact is registered by the first synchronization pass, which may still
+            // be running when the request arrives. That warm-up gap is expected and fail-soft - one
+            // WARN line without a stack trace, not an ERROR per request. A failure AFTER the tenant's
+            // configuration has loaded successfully is abnormal and keeps the full ERROR.
+            if (loadedOnce.contains(tenantId)) {
+                LOGGER.error("Failed to resolve tenant configuration for tenant [{}]. Continuing without tenant overrides.", tenantId, ex);
+            } else if (warmupWarned.add(tenantId)) {
+                LOGGER.warn(
+                        "Tenant configuration for tenant [{}] is not readable yet ({}). Continuing without tenant overrides"
+                                + " - expected on a starting instance until the first synchronization pass completes.",
+                        tenantId, ex.getMessage());
+            } else {
+                LOGGER.debug("Tenant configuration for tenant [{}] is still not readable. Continuing without tenant overrides.", tenantId,
+                        ex);
+            }
             return Map.of();
         }
     }
