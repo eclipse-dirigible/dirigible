@@ -467,8 +467,8 @@ public class ${name}Controller {
         }
 #end
 #if($property.widgetPattern && $property.widgetPattern != "")
-        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPattern}")) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPattern}'");
+        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
         }
 #end
 #end

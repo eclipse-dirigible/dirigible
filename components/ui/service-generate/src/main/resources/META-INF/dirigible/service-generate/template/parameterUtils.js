@@ -428,6 +428,10 @@ export function process(model, parameters) {
             // so both backslashes and quotes must be escaped here rather than in the templates.
             if (p.widgetPattern) {
                 p.widgetPatternJs = "'" + String(p.widgetPattern).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+                // The same regex as a Java string-literal BODY (no quotes added): '\.' must become
+                // '\\.' or the generated controller does not compile ("illegal escape character")
+                // and the all-or-nothing client-Java batch takes every module down with it.
+                p.widgetPatternJava = String(p.widgetPattern).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
             }
             if (p.widgetOptionsFilterBy && p.widgetOptionsFilterValue !== undefined) {
                 const raw = String(p.widgetOptionsFilterValue);
