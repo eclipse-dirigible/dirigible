@@ -6,6 +6,13 @@
   while visible - an inline x-show=display:none block measures 0x0 and ignores data-size). No own
   x-data: it inherits the shell's `app` component (settingsItems / selectSetting / settingsUrl).
 -->
+<!-- vbox wrapper so the split fills #app (issue #6334): #app is a block container, so `flex-1` on a
+     bare split is inert and the split collapses to its content height - the 75% panel then stretched
+     only that far and the absolutely-positioned setting iframe rendered in a short box. Wrapping the
+     split in `vbox size-full` (a flex column at #app's full height) lets `flex-1` fill it, matching
+     every other view routed into #app (_dashboard/_inbox/_documents/_reports) and the per-project
+     settings view. -->
+<div class="vbox size-full">
 <div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
   <div x-h-split-panel data-size="25%" data-min="200">
     <div class="vbox gap-2 p-3">
@@ -185,4 +192,5 @@
     <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
             style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
   </div>
+</div>
 </div>
