@@ -38,10 +38,15 @@
       })();
     </script>
     <style>
-      /* The destination rows: editorial paragraphs with a link affordance, not dashboard cards. */
       .home-entry { text-decoration: none; color: inherit; }
+      /* The arrow is the "this is a link" affordance - it slides in on hover/keyboard focus. */
       .home-entry .home-entry-arrow { opacity: 0; transform: translateX(-4px); transition: opacity .15s ease, transform .15s ease; }
       .home-entry:hover .home-entry-arrow, .home-entry:focus-visible .home-entry-arrow { opacity: 1; transform: translateX(0); }
+      /* The primary destinations are framed tiles that lift towards the brand colour on hover. */
+      .home-tile { transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease; }
+      .home-tile:hover, .home-tile:focus-visible { border-color: var(--primary); box-shadow: 0 6px 20px -8px rgb(0 0 0 / .18); transform: translateY(-2px); }
+      .home-tile:hover .home-tile-icon, .home-tile:focus-visible .home-tile-icon { background: var(--primary); color: var(--primary-foreground); }
+      .home-tile-icon { transition: background-color .15s ease, color .15s ease; }
     </style>
   </head>
 
@@ -70,21 +75,25 @@
 
     <!-- The welcome column. -->
     <div class="flex-1 overflow-auto" x-cloak>
-      <div class="mx-auto w-full px-6" style="max-width: 640px; padding-top: 9vh; padding-bottom: 4rem;">
+      <div class="mx-auto w-full px-6" style="max-width: 46rem; padding-top: 8vh; padding-bottom: 4rem;">
 
         <p class="text-sm text-muted-foreground" x-text="greeting()"></p>
-        <h1 class="text-3xl font-bold leading-tight" style="margin-top: .25rem;">
+        <h1 class="text-3xl font-bold leading-tight tracking-tight" style="margin-top: .25rem;">
           Welcome<span x-show="userName">, <span x-text="userName"></span></span>
         </h1>
         <p class="text-muted-foreground" style="margin-top: .75rem; max-width: 46ch;">
           Everything starts here. Pick where you want to work today.
         </p>
 
-        <!-- Destinations: one entry per shell registered on the `platform-shells` extension point. -->
-        <div class="vbox" style="margin-top: 2.5rem; gap: .25rem;">
-          <template x-for="s in shells" :key="s.id">
-            <a class="home-entry group hbox items-start gap-4 rounded-control p-4 hover:bg-accent" :href="s.path">
-              <span class="hbox items-center justify-center rounded-control bg-accent" style="width: 2.75rem; height: 2.75rem; flex: none;">
+        <!--
+          The primary destinations - the two places the company actually works. One tile per
+          non-secondary shell registered on the `platform-shells` extension point, so a stack that
+          ships more of them keeps working without a change here.
+        -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="margin-top: 2.5rem;">
+          <template x-for="s in primaryShells" :key="s.id">
+            <a class="home-entry home-tile vbox gap-3 rounded-lg border border-border bg-card p-5" :href="s.path">
+              <span class="home-tile-icon hbox items-center justify-center rounded-md bg-muted size-11 flex-none">
                 <i role="img" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-5"></i>
               </span>
               <span class="vbox min-w-0" style="gap: .15rem;">
@@ -96,10 +105,28 @@
               </span>
             </a>
           </template>
-          <p x-show="loaded && shells.length === 0" class="text-sm text-muted-foreground p-4">
-            Nothing is published here yet.
-          </p>
         </div>
+
+        <!-- The secondary destinations - present for whoever has them, but out of the main path. -->
+        <div x-show="secondaryShells.length" class="vbox border-t border-border"
+             style="margin-top: 2rem; padding-top: 1rem; gap: .25rem;">
+          <template x-for="s in secondaryShells" :key="s.id">
+            <a class="home-entry hbox items-center gap-3 rounded-md p-3 hover:bg-muted" :href="s.path">
+              <i role="img" x-h-lucide :data-lucide="s.icon || iconFor(s.id)" class="size-4 text-muted-foreground flex-none"></i>
+              <span class="text-sm font-medium flex-none" x-text="s.label"></span>
+              <!-- The description is the first thing to give up room on a narrow window. -->
+              <span class="text-sm text-muted-foreground truncate hidden sm:block"
+                    x-text="s.description || descriptionFor(s.id)"></span>
+              <span class="flex-1"></span>
+              <i role="img" x-h-lucide data-lucide="arrow-right" class="home-entry-arrow size-4 text-muted-foreground flex-none"></i>
+            </a>
+          </template>
+        </div>
+
+        <p x-show="loaded && shells.length === 0" class="text-sm text-muted-foreground"
+           style="margin-top: 2.5rem;">
+          Nothing is published here yet.
+        </p>
 
       </div>
     </div>
