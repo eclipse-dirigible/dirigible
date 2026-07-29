@@ -369,6 +369,7 @@ Past what one unit sustains (connection budget, CPU, or blast-radius tolerance):
 - **DNS changes shape once:** wildcard-to-one-ALB becomes a per-tenant Route 53 alias created at onboarding, pointing at the tenant's unit. (Keep the wildcard as a catch-all to a "no such tenant" page.)
 - **What stays shared:** the Cognito user pool (identity, SSO and per-tenant roles are unit-agnostic), the pre-token Lambda + client map, the image pipeline, WAF rules, the wildcard certificate.
 - **Watchpoints on the way:** the 100-groups-per-user Cognito hard limit (a person in ~30+ tenants — that is the trigger to move the membership graph to a store, per the research branch's model); per-unit connection budget; and only if a *single tenant* outgrows a unit does the deep fork surgery (external broker, non-local repository) become worth discussing.
+- **True horizontal scaling** (more than one task per unit) is blocked by the platform, not by this model — the layer-by-layer analysis of what blocks it today and what enabling it would take (external broker, per-node synchronizer replay, boot-race fixes, cache invalidation, external sessions) lives in [`AWS_SINGLE_HOST_TENANT_PICKER_PROPOSAL.md`](AWS_SINGLE_HOST_TENANT_PICKER_PROPOSAL.md) §10; items 1–5 there apply to both models verbatim.
 
 ---
 

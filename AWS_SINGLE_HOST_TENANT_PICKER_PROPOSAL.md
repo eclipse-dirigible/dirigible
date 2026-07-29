@@ -232,6 +232,7 @@ Actors: Browser · Dirigible (app.example.com) · Cognito (one pool, one client)
 | DNS/TLS | Wildcard cert + wildcard DNS | One record, one plain cert |
 | Fork surface (identity layer) | Small — per-host sessions do the heavy lifting | **Larger** — S1–S6: resolver, neutral mapper, switch endpoint, picker UI, M2M header, tab guard |
 | Per-tenant enterprise federation later | Per-app-client setting, clean | Needs home-realm discovery (an email-domain → IdP hint step at login) — doable, not free |
+| Scale-out routing to more units | Per-tenant DNS records — clean | The edge cannot see the tenant (it lives in the session); needs a routing cookie + CloudFront Function, or a gateway tier — §10.3 |
 | Tenant onboarding | Cognito client + secret + registration per tenant | Groups only — the simplest onboarding of any variant |
 
 **Rejected alternative — path-based tenancy (`/t/{tenant}/…`).** It would restore per-request tenant signal (fixing concurrent tabs and deep links) while keeping one host. Rejected because Dirigible's URL space is absolute-path-native everywhere — `/services/**`, `/public/**`, `/webjars/**`, WebSocket endpoints, generated UI assets, OAuth callback paths — so a tenant path prefix means either a rewriting reverse-proxy layer with cookie-path juggling or invasive URL surgery across the platform and every generated application. That is an order of magnitude more fork than S1–S6 for a UX refinement the picker requirement doesn't demand. Revisit only if concurrent multi-tenant tabs become a hard requirement.
@@ -247,3 +248,56 @@ Inherited from the companion (still valid here): `@RolesAllowed` inert under the
 3. **Group-claim size:** a user with the maximum realistic memberships fits the ID-token/JWT header limits comfortably (arithmetic says yes; verify with a real pool).
 4. **Cognito Lite vs Essentials:** confirm the no-Lambda baseline works on Lite pricing for your MAU; the Lambda upgrade path forces Essentials.
 5. **Session semantics under the shipped UI:** the full-reload-on-switch leaves no stale per-tenant state in shell/iframe caches (exercise the deepest generated app view before and after a switch).
+
+---
+
+## 10. Horizontal scaling — will this design run on more than one instance?
+
+**Short answer: not today, and that is a platform property, not a picker property.** The same single-writer constraints that pin the subdomain model to `desiredCount=1` (companion §2.2) pin this one. The picker's session mechanism adds exactly **one** extra requirement for the day replicas become possible — an external session store — and that requirement has a standard, well-understood answer. This section separates the three questions people conflate: what happens if you just raise the count, what enabling true replicas would take, and how this model scales *out* by units.
+
+### 10.1 What happens if you raise `desiredCount` today
+
+The second task **blocks at boot**: the embedded ActiveMQ broker uses a JDBC locker on SystemDB and `broker.start()` waits until it holds the exclusive lock, so the new task's Spring context never finishes refreshing and it never passes the health check. The failure mode is a stuck deployment, not split traffic — no request ever reaches a second instance, so the in-heap session is never silently wrong. This is inconvenient but *safe*: the platform protects its own constraint by construction.
+
+### 10.2 Enabling true replicas — the layer-by-layer bill
+
+What each layer needs before two runtime tasks can serve one unit's traffic. Items 1–5 are platform blockers shared by both models; item 6 is the only picker-specific one.
+
+| # | Layer | Multi-instance today? | What enabling it takes |
+| --- | --- | --- | --- |
+| 1 | **Embedded ActiveMQ** (`vm://localhost` hardcoded, JDBC lock, `MessagingConfig.java`) | ✗ — blocks the second boot | Replace with an external broker (Amazon MQ for ActiveMQ) or refactor `.listener` processing onto SQS/SNS. Fork change to `engine-listeners`; the connector URL is a constant, there is no configuration path |
+| 2 | **Synchronizer model** — artefact checksums/state are *shared* in SystemDB, but the side effects (Camel routes, JMS listeners, Quartz registrations, compiled client Java) are *per-JVM* | ✗ — the second node sees checksums already current and **never materializes its own runtime state** | Per-node reconciliation: node-scoped sync state, or an unconditional full replay at boot regardless of stored checksums. A real `core-initializers` engine rework — this is the deepest item on the list |
+| 3 | **Repository + Lucene** (`LocalRepository`, local filesystem) | ✓ for **runtime-only** tasks — baked-in content is expanded identically into each task's ephemeral disk at boot; nothing shared is written (`DIRIGIBLE_PUBLISH_DISABLED=true`) | Nothing, for runtime replicas. The **authoring** instance can never be replicated (workspaces, git, Lucene are stateful and local) — it stays at 1 |
+| 4 | **Boot-time DDL races** — Quartz `initialize-schema=always` drops/recreates `QRTZ_*`, `JobsInitializer` unschedule/reschedule, Flowable schema update, check-then-insert initializers | ✗ — concurrent boots corrupt shared state | Switch Quartz schema init to `never` (manage it once via migration), make the initializers concurrency-safe or serialize instance boots (one-at-a-time rolling) |
+| 5 | **Per-JVM caches with no invalidation channel** — tenant lookup cache, tenant-config cache, `.access` ACL cache | ✗ — a write on node A is invisible on node B until TTL (or forever) | Short TTLs everywhere as the cheap fix; a Redis pub/sub invalidation bus as the proper one |
+| 6 | **HTTP session (picker-specific)** — `activeTenant` + the rebuilt `SecurityContext` live in the Tomcat heap | ✗ — a `JSESSIONID` is only valid on the instance that minted it | **`spring-session` + ElastiCache Redis** (or JDBC). The tenant-picker design survives *unchanged*: the tenant stays session state, the switch endpoint keeps its validate-store-rebuild atomicity — only where the session physically lives moves. Implementation caveat: the principal and membership map must serialize cleanly into the store. ALB stickiness is a stopgap only — failover or a deploy wipes the stuck-to instance's sessions |
+
+Two cross-cutting consequences of any replication:
+
+- **Connection budget multiplies per instance.** Pools are per *(instance, tenant)*, so N replicas ≈ N× the idle and peak connections. The configurable-pool-sizing fork fix (companion §6, fix 1) goes from important to non-negotiable, and the RDS class must be re-sized for the product.
+- **WebSockets and other instance-local endpoints** (terminal, LSP, debug — authoring concerns mostly, but also `data/transfer`) bind to one JVM; replicated runtimes need ALB stickiness for those paths regardless of the session store.
+
+**Verdict:** items 1, 2 and 4 are substantial fork surgery in the engine layer. They are only worth paying for when a *single unit's single task* can no longer be scaled vertically (bigger Fargate task) or the SLO genuinely requires intra-unit HA. Until then, the sanctioned growth path is **more units**, not more replicas — which leads to the picker-specific catch below.
+
+### 10.3 Scaling out by units under a single host — the picker-specific catch
+
+A "unit" is {ECS service + RDS + ALB}, tenants pinned to a unit. Under subdomains, routing tenants to units is trivial — a per-tenant DNS record pointing at the right ALB. Under a single host **the edge has nothing to route on**: the tenant lives in a server-side session the ALB cannot see, and ALB listener rules cannot match on cookies at all. Worse, one user may belong to tenants pinned to *different* units, and their one session cannot span units.
+
+Options, in order of preference:
+
+1. **Routing cookie + CloudFront Function.** The switch endpoint sets a `unit=<n>` cookie (routing metadata only — never an authorization input; membership is still enforced server-side). A CloudFront Function in front selects the origin (unit ALB) from that cookie. Cross-unit switches bounce through a small redirect step that re-establishes a session on the target unit (a fresh OIDC round-trip — silent, the Cognito session is pool-wide). Workable, adds one edge component.
+2. **A thin gateway/router tier** in front of the units that terminates the session and proxies by tenant. Clean model, but it *is* a new stateful service — the thing this architecture has avoided everywhere else.
+3. **Placement constraint:** "all of a user's tenants live on the same unit." Avoids cross-unit sessions entirely but collapses the moment memberships grow organically across units — acceptable only as a temporary rule while unit count is 2–3.
+
+If none of these appeals, the pragmatic hybrid is to reintroduce hostnames **for routing only** (e.g. `unit2.app.example.com` hosting the same single-host application) — invisible to the tenancy model, which stays session-based.
+
+### 10.4 Recommended posture
+
+| Phase | Shape | What to do |
+| --- | --- | --- |
+| Now | One unit, one task | The design as specified. Nothing session-related to change |
+| Early optional win | One task + external sessions | Add `spring-session` + Redis ahead of need: sessions survive deploys/restarts, so users stop being logged out by every release. Cheap, independent of replication |
+| Unit growth | 2–5 units | §10.3 option 1 (routing cookie + CloudFront Function); revisit the subdomain hybrid if edge complexity grows |
+| True replicas | N tasks per unit | Pay the §10.2 bill: external broker, per-node sync replay, boot-race fixes, cache invalidation — then the picker mechanism scales with the session store unchanged |
+
+**Bottom line:** the tenant-picker approach is not what stands between this deployment and horizontal scaling — the platform's single-writer engine layer is, identically in both models. When (if) those blockers are paid down, the picker's session-scoped tenancy scales horizontally with one standard addition, `spring-session` on Redis, and no change to its security model.
