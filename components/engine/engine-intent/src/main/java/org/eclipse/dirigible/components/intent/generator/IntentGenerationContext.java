@@ -46,8 +46,9 @@ public final class IntentGenerationContext {
     private final String projectName;
 
     /**
-     * The workspace the target project lives in (e.g. {@code workspace}); used to build cross-model
-     * projection paths {@code /<workspace>/<project>/<model>.model}.
+     * The workspace the target project lives in (e.g. {@code workspace}) - generation-target identity.
+     * No generator reads it any more: it used to be baked into the cross-model projection path, which
+     * made a committed model file depend on whose IDE produced it (#6423).
      */
     private final String workspaceName;
 

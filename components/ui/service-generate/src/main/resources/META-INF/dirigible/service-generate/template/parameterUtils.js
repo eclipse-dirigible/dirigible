@@ -35,6 +35,22 @@ export function humanizeName(name) {
     return out;
 }
 
+// A PROJECTION entity's `projectionReferencedModel` names the owner: `/<project>/<model>.model`.
+// Read the LAST two segments rather than fixed indices, so both that form and the older
+// `/<workspace>/<project>/<model>.model` one (still written by the entity editor, which records the
+// workspace it picked the file in, and present in every already-committed model) resolve identically
+// - no lockstep regeneration needed (#6423).
+function projectionOwner(referencedModel) {
+    const tokens = String(referencedModel).split('/').filter(token => token.length > 0);
+    if (tokens.length < 2) return null;
+    const file = tokens[tokens.length - 1];
+    const dot = file.indexOf('.');
+    return {
+        project: tokens[tokens.length - 2],
+        genFolderName: dot >= 0 ? file.substring(0, dot) : file
+    };
+}
+
 export function process(model, parameters) {
     parameters.javaGenFolderName = sanitizeJavaIdentifier(parameters.genFolderName);
 
@@ -65,7 +81,7 @@ export function process(model, parameters) {
                 const projectionEntity = model.entities.filter(entity => entity.name === relationshipEntityName && entity.type === "PROJECTION")[0];
                 if (projectionEntity) {
                     e.hasReferencedProjection = true;
-                    e.referencedProjectionProjectName = projectionEntity.projectionReferencedModel.split('/')[2];
+                    e.referencedProjectionProjectName = (projectionOwner(projectionEntity.projectionReferencedModel) || {}).project;
                     e.referencedProjectionPerspectiveName = projectionEntity.perspectiveName;
                 }
             }
@@ -170,12 +186,12 @@ export function process(model, parameters) {
 
             model.entities.forEach(ep => {
                 if (p.relationshipEntityName === ep.name) {
-                    if (ep.projectionReferencedModel) {
-                        const tokens = ep.projectionReferencedModel.split('/');
+                    const owner = ep.projectionReferencedModel ? projectionOwner(ep.projectionReferencedModel) : null;
+                    if (owner) {
                         e.referencedProjections.push({
                             name: ep.name,
-                            project: tokens[2],
-                            genFolderName: tokens[3].substring(0, tokens[3].indexOf('.'))
+                            project: owner.project,
+                            genFolderName: owner.genFolderName
                         })
                     }
                 }
