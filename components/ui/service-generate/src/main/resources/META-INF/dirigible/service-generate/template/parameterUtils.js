@@ -423,6 +423,12 @@ export function process(model, parameters) {
             // ready JS literal so the templates emit it verbatim into the generated /search call -
             // numeric stays a number (FK ids / numeric columns type-match the EQ condition), anything
             // else becomes a quoted string.
+            // Input-format regex (#6336) as a ready JS single-quoted literal for the item-dialog
+            // metadata: a regex is full of backslashes, and '\d' inside a JS string collapses to 'd',
+            // so both backslashes and quotes must be escaped here rather than in the templates.
+            if (p.widgetPattern) {
+                p.widgetPatternJs = "'" + String(p.widgetPattern).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";
+            }
             if (p.widgetOptionsFilterBy && p.widgetOptionsFilterValue !== undefined) {
                 const raw = String(p.widgetOptionsFilterValue);
                 p.widgetOptionsFilterValueJs = /^-?\d+(\.\d+)?$/.test(raw) ? raw : "'" + raw.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'";

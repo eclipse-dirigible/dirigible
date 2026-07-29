@@ -161,6 +161,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: debit,  type: decimal }
                   - { name: credit, type: decimal }
+                  # #6336 on a document ITEM: the pattern must reach the item-dialog column metadata.
+                  - { name: reference, type: string, length: 20, pattern: '^[A-Z]{3}-[0-9]{4}$' }
                   # conditional dependsOn (#6358): the copied Unit property is picked by the open
                   # document header's account name (a header-started classifier path).
                   - name: price
@@ -736,6 +738,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "a field pattern must emit the server-side regex check in the REST controller");
         String personForm = contentOf("gen/emission/views/Person/Person-form.html");
         assertTrue(personForm.contains("pattern=\""), "a field pattern must reach the form input as an HTML pattern attribute");
+        // On a document item the dialog is metadata-driven, so the regex travels as a JS literal in
+        // the detail register (backslash-safe) rather than as markup.
+        String linePatternRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
+        assertTrue(linePatternRegister.contains("pattern: '^[A-Z]{3}-[0-9]{4}$'"),
+                "an item field pattern must reach the item-dialog column metadata, got: " + linePatternRegister);
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),

@@ -68,7 +68,7 @@
           <div x-h-time-picker-popup></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}" />
+        <input x-h-input type="text" x-model="form.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
 #end
       </div>
 #end
@@ -180,7 +180,7 @@
                 <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
               </template>
               <template x-if="!col.lookup && !col.date && !col.number">
-                <input x-h-input type="text" x-model="draft[col.name]" />
+                <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
               </template>
             </div>
           </template>

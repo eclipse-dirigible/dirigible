@@ -72,7 +72,7 @@
           <div x-h-time-picker-popup></div>
         </div>
 #else
-        <input x-h-input type="text" x-model="form.${property.name}" />
+        <input x-h-input type="text" x-model="form.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
 #end
       </div>
 #end
