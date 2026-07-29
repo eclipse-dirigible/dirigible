@@ -214,6 +214,8 @@ previewView.controller('PreviewController', ($scope, $document, ButtonStates) =>
                 case 'form':
                 case 'report':
 				case 'intent':
+                case 'settings':
+                case 'glue':
                     return;
                 default:
                     url += '/web';
