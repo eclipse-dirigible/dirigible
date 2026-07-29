@@ -18,6 +18,7 @@ import org.eclipse.dirigible.commons.process.execution.output.ProcessResult;
 
 import java.io.File;
 import java.io.IOException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -68,6 +69,13 @@ public abstract class ProcessExecutor<TOut> {
                 executor.setWorkingDirectory(workingDirectory);
             }
 
+            Long maybeTimeoutMillis = options.getTimeoutMillis();
+            if (maybeTimeoutMillis != null) {
+                executor.setWatchdog(ExecuteWatchdog.builder()
+                                                    .setTimeout(Duration.ofMillis(maybeTimeoutMillis))
+                                                    .get());
+            }
+
             return executeProcess(commandLine, executor, environmentVariables);
         } catch (Throwable t) {
             throw new ProcessExecutionException(t);
@@ -110,7 +118,7 @@ public abstract class ProcessExecutor<TOut> {
      */
     protected ProcessExecutionFuture execute(DefaultExecutor executor, CommandLine commandLine, Map<String, String> environmentVariables)
             throws IOException {
-        ProcessExecutionFuture processExecutionFuture = new ProcessExecutionFuture();
+        ProcessExecutionFuture processExecutionFuture = new ProcessExecutionFuture(executor.getWatchdog());
         executor.execute(commandLine, environmentVariables, processExecutionFuture);
         return processExecutionFuture;
     }

@@ -4,11 +4,12 @@
  * @name Command
  * @overview
  * 
- * The Command module provides a static utility class for executing system commands through the platform's CommandEngine. It allows developers to run shell commands with configurable options, including working directory and environment variable management. The module abstracts the complexities of process execution, providing a simple interface for integrating command execution into applications.
- * 
+ * The Command module provides a static utility class for executing system commands through the platform's CommandEngine. It allows developers to run shell commands with configurable options, including working directory, execution timeout and environment variable management. The module abstracts the complexities of process execution, providing a simple interface for integrating command execution into applications.
+ *
  * ### Key Features:
  * - **Command Execution**: The `execute` method allows for running system commands with specified options and environment variable configurations.
  * - **Structured Output**: The method returns a structured output containing the exit code, standard output, and error output of the executed command.
+ * - **Timeouts**: A `timeoutMillis` option destroys a command that outlives it, so a hung process cannot block the caller indefinitely.
  * 
  * ### Use Cases:
  * - **System Integration**: This module is ideal for applications that need to interact with the underlying operating system or execute external processes as part of their functionality.
@@ -22,6 +23,9 @@
  * console.log("Exit Code:", result.exitCode);
  * console.log("Standard Output:", result.standardOutput);
  * console.log("Error Output:", result.errorOutput);
+ *
+ * // Give up on a command that takes longer than five seconds
+ * Command.execute("./long-running.sh", { timeoutMillis: 5000 });
  * ```
  */
 
@@ -33,7 +37,13 @@ const ProcessExecutionOptions = Java.type("org.eclipse.dirigible.commons.process
  */
 interface CommandOptions {
 	/** The directory in which the command will be executed. */
-	workingDirectory: string
+	workingDirectory?: string
+	/**
+	 * The maximum time in milliseconds the command is allowed to run. A command still running when the
+	 * timeout elapses is destroyed and the execution throws instead of returning an exit code.
+	 * Omit to let the command run for as long as it needs.
+	 */
+	timeoutMillis?: number
 }
 
 /**
@@ -76,6 +86,10 @@ export class Command {
 
 		if (options?.workingDirectory) {
 			processExecutionOptions.setWorkingDirectory(options.workingDirectory);
+		}
+
+		if (options?.timeoutMillis) {
+			processExecutionOptions.setTimeoutMillis(options.timeoutMillis);
 		}
 
 		// The facade returns a JSON string, which we parse into the CommandOutput interface

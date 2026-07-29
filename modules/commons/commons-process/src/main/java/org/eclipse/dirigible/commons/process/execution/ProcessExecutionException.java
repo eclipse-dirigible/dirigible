@@ -22,4 +22,14 @@ public class ProcessExecutionException extends RuntimeException {
     public ProcessExecutionException(Throwable cause) {
         super(cause);
     }
+
+    /**
+     * Instantiates a new process execution exception.
+     *
+     * @param message the message
+     * @param cause the cause
+     */
+    public ProcessExecutionException(String message, Throwable cause) {
+        super(message, cause);
+    }
 }

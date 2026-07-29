@@ -19,13 +19,11 @@ import org.eclipse.dirigible.components.api.platform.CommandFacade;
 /**
  * Spawns OS-level processes from the JVM, captures their merged stdout/stderr, and returns it as a
  * String. The first overload runs with the inherited environment; the second and third let you add
- * or remove specific variables; the third also accepts a {@link ProcessExecutionOptions} record for
- * advanced settings (working directory, timeout, capture-error-stream toggle).
+ * or remove specific variables; the third also accepts {@link ProcessExecutionOptions} for advanced
+ * settings (working directory and execution timeout).
  * <p>
- * Use with caution — the command string is passed to a shell on POSIX and to {@code cmd /c} on
- * Windows, so any user-supplied input must be sanitized or the call should use an
- * {@code ProcessExecutionOptions} variant that takes an argv array (see the commons-process package
- * for the full API).
+ * Use with caution — the command string is split into an executable and its arguments, so any
+ * user-supplied input must be sanitized by the caller.
  */
 public final class Command {
 
