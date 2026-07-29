@@ -30,8 +30,18 @@ public class DependsOnIntent {
      * name in intent notation (e.g. {@code price} on {@code Product}, or the {@code uom} FK). Optional
      * on a relation (defaults to the trigger target's primary key - the cascade case); mandatory on a
      * field (there is nothing sensible to default a scalar to).
+     *
+     * <p>
+     * On a FIELD the value may also be the CONDITIONAL form (#6358): {@code valueFrom: { by: <path>,
+     * cases: { <literal>: <property>, ... }, default: <property>? }} - the copied trigger-target
+     * property is picked by a classifier value resolved from the {@code by} path: an own property
+     * ({@code priceLevel}), a one-hop {@code <OwnRelation>.<property>} ({@code Customer.priceLevel}),
+     * or - on a document item - a path starting at the composition parent relation, i.e. the open
+     * document header ({@code SalesInvoice.Customer.priceLevel}). {@code cases} keys are literals
+     * matched against the resolved classifier; {@code default} is the property used when no case
+     * matches (no match and no default = no copy).
      */
-    private String valueFrom;
+    private Object valueFrom;
 
     /**
      * Property of <b>this relation's target entity</b> the dropdown options are filtered by, compared
@@ -50,11 +60,23 @@ public class DependsOnIntent {
         this.relation = relation;
     }
 
+    /** The simple (string) form of {@code valueFrom}, or null when absent or conditional. */
     public String getValueFrom() {
-        return valueFrom;
+        return valueFrom instanceof String string ? string : null;
     }
 
-    public void setValueFrom(String valueFrom) {
+    /** The conditional form of {@code valueFrom}, or null when absent or a plain string. */
+    @SuppressWarnings("unchecked")
+    public java.util.Map<String, Object> getValueFromConditional() {
+        return valueFrom instanceof java.util.Map ? (java.util.Map<String, Object>) valueFrom : null;
+    }
+
+    /** True when {@code valueFrom} is declared in either form. */
+    public boolean hasValueFrom() {
+        return valueFrom != null;
+    }
+
+    public void setValueFrom(Object valueFrom) {
         this.valueFrom = valueFrom;
     }
 

@@ -377,6 +377,26 @@ export function process(model, parameters) {
                 if (trigger && trigger.widgetDropdownControllerUrl) {
                     p.widgetDependsOnControllerUrl = trigger.widgetDropdownControllerUrl;
                 }
+                // A conditional valueFrom (#6358) whose by-path hops through a to-one needs that
+                // relation's controller URL to fetch the classifier record: the relation lives on
+                // this entity (own 2-segment path) or on the document header (3-segment path).
+                if (p.widgetDependsOnValueBy) {
+                    const segs = p.widgetDependsOnValueBy.split('.');
+                    let hopOwner = null, hopProperty = null;
+                    if (p.widgetDependsOnValueByHeader === 'true' && segs.length === 3) {
+                        hopOwner = model.entities.find(x => x.name === p.widgetDependsOnValueByHeaderEntity);
+                        hopProperty = segs[1];
+                    } else if (p.widgetDependsOnValueByHeader !== 'true' && segs.length === 2) {
+                        hopOwner = e;
+                        hopProperty = segs[0];
+                    }
+                    if (hopOwner && hopProperty) {
+                        const hop = hopOwner.properties.find(t => t.name === hopProperty);
+                        if (hop && hop.widgetDropdownControllerUrl) {
+                            p.widgetDependsOnValueByUrl = hop.widgetDropdownControllerUrl;
+                        }
+                    }
+                }
             }
             // Static option filter (intent relation `where:`): pre-render the condition value as a
             // ready JS literal so the templates emit it verbatim into the generated /search call -

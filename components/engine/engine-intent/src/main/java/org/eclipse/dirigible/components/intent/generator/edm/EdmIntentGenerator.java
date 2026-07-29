@@ -1279,11 +1279,75 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 triggerKeyField = keyFieldName(triggerTarget);
             }
         }
-        String valueFrom = notBlank(dependsOn.getValueFrom()) ? IntentNaming.pascalCase(dependsOn.getValueFrom()) : triggerKeyField;
-        requireTargetProperty(valueFrom, triggerPropertyNames, "valueFrom", trigger.getTo());
         p.put("widgetDependsOnProperty", IntentNaming.pascalCase(trigger.getName()));
         p.put("widgetDependsOnEntity", trigger.getTo());
-        p.put("widgetDependsOnValueFrom", valueFrom);
+        java.util.Map<String, Object> conditional = dependsOn.getValueFromConditional();
+        if (conditional != null) {
+            // The conditional form (#6358): the copied trigger-target property is picked by a
+            // classifier resolved from the `by` path. Everything is emitted as scalar attributes so
+            // it flows into the .edm and the .model like the plain form: the PascalCased path, a
+            // header-start flag (the path begins at the item's composition parent - the open
+            // document), the entity whose record the path FETCHES for its hop (the URL is derived at
+            // template-parameter time, like the trigger's), the cases map as a JSON string with
+            // PascalCased property values, and the optional no-match default.
+            String[] segments = String.valueOf(conditional.get("by"))
+                                      .split("\\.");
+            RelationIntent compositionParent = null;
+            for (RelationIntent relation : owner.getRelations()) {
+                if (relation.isComposition() && segments[0].equals(relation.getName())) {
+                    compositionParent = relation;
+                }
+            }
+            StringBuilder path = new StringBuilder();
+            for (String segment : segments) {
+                path.append(path.length() == 0 ? "" : ".")
+                    .append(IntentNaming.pascalCase(segment));
+            }
+            p.put("widgetDependsOnValueBy", path.toString());
+            if (compositionParent != null) {
+                p.put("widgetDependsOnValueByHeader", "true");
+                p.put("widgetDependsOnValueByHeaderEntity", compositionParent.getTo());
+                if (segments.length == 3) {
+                    EntityIntent header = byName.get(compositionParent.getTo());
+                    RelationIntent headerHop = header == null ? null : toOneRelationByName(header, segments[1]);
+                    if (headerHop != null) {
+                        p.put("widgetDependsOnValueByEntity", headerHop.getTo());
+                    }
+                }
+            } else if (segments.length == 2) {
+                RelationIntent hop = toOneRelationByName(owner, segments[0]);
+                if (hop != null) {
+                    p.put("widgetDependsOnValueByEntity", hop.getTo());
+                }
+            }
+            StringBuilder cases = new StringBuilder("{");
+            for (java.util.Map.Entry<?, ?> entry : ((java.util.Map<?, ?>) conditional.get("cases")).entrySet()) {
+                String property = IntentNaming.pascalCase(String.valueOf(entry.getValue()));
+                requireTargetProperty(property, triggerPropertyNames, "cases", trigger.getTo());
+                // A whole-number classifier literal renders without the Gson double suffix (1, not 1.0).
+                String literal = String.valueOf(entry.getKey());
+                if (literal.endsWith(".0")) {
+                    literal = literal.substring(0, literal.length() - 2);
+                }
+                cases.append(cases.length() == 1 ? "" : ",")
+                     .append('"')
+                     .append(literal)
+                     .append("\":\"")
+                     .append(property)
+                     .append('"');
+            }
+            p.put("widgetDependsOnValueCases", cases.append('}')
+                                                    .toString());
+            if (conditional.get("default") != null) {
+                String defaultProperty = IntentNaming.pascalCase(String.valueOf(conditional.get("default")));
+                requireTargetProperty(defaultProperty, triggerPropertyNames, "default", trigger.getTo());
+                p.put("widgetDependsOnValueDefault", defaultProperty);
+            }
+        } else {
+            String valueFrom = notBlank(dependsOn.getValueFrom()) ? IntentNaming.pascalCase(dependsOn.getValueFrom()) : triggerKeyField;
+            requireTargetProperty(valueFrom, triggerPropertyNames, "valueFrom", trigger.getTo());
+            p.put("widgetDependsOnValueFrom", valueFrom);
+        }
         if (ownTargetKeyField != null) {
             String filterBy = notBlank(dependsOn.getFilterBy()) ? IntentNaming.pascalCase(dependsOn.getFilterBy()) : ownTargetKeyField;
             requireTargetProperty(filterBy, ownTargetPropertyNames, "filterBy", String.valueOf(p.get("relationshipEntityName")));

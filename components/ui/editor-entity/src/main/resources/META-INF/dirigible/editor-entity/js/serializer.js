@@ -228,6 +228,24 @@ function createModel(graph) {
 					if (property.widgetDependsOnValueFrom !== null) {
 						model.push(' widgetDependsOnValueFrom="' + _.escape(property.widgetDependsOnValueFrom) + '"');
 					}
+					if (property.widgetDependsOnValueBy !== null && property.widgetDependsOnValueBy !== undefined) {
+						model.push(' widgetDependsOnValueBy="' + _.escape(property.widgetDependsOnValueBy) + '"');
+					}
+					if (property.widgetDependsOnValueByHeader !== null && property.widgetDependsOnValueByHeader !== undefined) {
+						model.push(' widgetDependsOnValueByHeader="' + _.escape(property.widgetDependsOnValueByHeader) + '"');
+					}
+					if (property.widgetDependsOnValueByHeaderEntity !== null && property.widgetDependsOnValueByHeaderEntity !== undefined) {
+						model.push(' widgetDependsOnValueByHeaderEntity="' + _.escape(property.widgetDependsOnValueByHeaderEntity) + '"');
+					}
+					if (property.widgetDependsOnValueByEntity !== null && property.widgetDependsOnValueByEntity !== undefined) {
+						model.push(' widgetDependsOnValueByEntity="' + _.escape(property.widgetDependsOnValueByEntity) + '"');
+					}
+					if (property.widgetDependsOnValueCases !== null && property.widgetDependsOnValueCases !== undefined) {
+						model.push(' widgetDependsOnValueCases="' + _.escape(property.widgetDependsOnValueCases) + '"');
+					}
+					if (property.widgetDependsOnValueDefault !== null && property.widgetDependsOnValueDefault !== undefined) {
+						model.push(' widgetDependsOnValueDefault="' + _.escape(property.widgetDependsOnValueDefault) + '"');
+					}
 					if (property.widgetDependsOnFilterBy !== null) {
 						model.push(' widgetDependsOnFilterBy="' + _.escape(property.widgetDependsOnFilterBy) + '"');
 					}

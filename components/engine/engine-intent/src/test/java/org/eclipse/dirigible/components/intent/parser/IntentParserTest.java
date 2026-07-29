@@ -268,6 +268,82 @@ class IntentParserTest {
                   - { name: Country, kind: manyToOne, to: Country }
             """;
 
+    private static final String CONDITIONAL_DEPENDS_ON = """
+            name: shop
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: priceLevel, type: integer }
+              - name: Product
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: wholesalePrice, type: decimal }
+                  - { name: retailPrice, type: decimal }
+              - name: SalesOrder
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: date, type: date }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer }
+              - name: SalesOrderItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: price
+                    type: decimal
+                    dependsOn:
+                      relation: Product
+                      valueFrom:
+                        by: SalesOrder.Customer.priceLevel
+                        cases: { 1: wholesalePrice, 2: retailPrice }
+                        default: retailPrice
+                relations:
+                  - { name: SalesOrder, kind: manyToOne, to: SalesOrder, composition: true, required: true }
+                  - { name: Product, kind: manyToOne, to: Product }
+            """;
+
+    /**
+     * The conditional valueFrom form (#6358): the copied trigger-target property is picked by a
+     * classifier - here the open document header's customer price level (a header-started by-path).
+     */
+    @Test
+    void conditionalDependsOnParses() {
+        IntentModel model = IntentParser.parse(CONDITIONAL_DEPENDS_ON);
+        var dependsOn = model.getEntities()
+                             .get(3)
+                             .getFields()
+                             .get(1)
+                             .getDependsOn();
+        assertEquals(null, dependsOn.getValueFrom(), "the conditional form has no simple valueFrom string");
+        assertEquals("SalesOrder.Customer.priceLevel", dependsOn.getValueFromConditional()
+                                                                .get("by"));
+    }
+
+    @Test
+    void conditionalDependsOnRejectsBadShapesAndPaths() {
+        // missing cases + a foreign key in the map + a dangling by-path property + a bad case property
+        String yaml = CONDITIONAL_DEPENDS_ON.replace("cases: { 1: wholesalePrice, 2: retailPrice }", "cases: { 1: nonsuchPrice }")
+                                            .replace("by: SalesOrder.Customer.priceLevel", "by: SalesOrder.Customer.nonsuchLevel");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("cases [nonsuchPrice]")),
+                "expected a bad case-property issue, got: " + ex.getIssues());
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("[nonsuchLevel] is not a field or to-one relation of [Customer]")),
+                "expected a bad by-path issue, got: " + ex.getIssues());
+
+        String unknownKey = CONDITIONAL_DEPENDS_ON.replace("default: retailPrice", "fallback: retailPrice");
+        IntentValidationException ex2 = assertThrows(IntentValidationException.class, () -> IntentParser.parse(unknownKey));
+        assertTrue(ex2.getIssues()
+                      .stream()
+                      .anyMatch(i -> i.contains("got [fallback]")),
+                "expected an unknown-key issue, got: " + ex2.getIssues());
+    }
+
     @Test
     void dependsOnCascadeAndAutoPopulateParse() {
         // filterBy/valueFrom reference the target's properties by their AUTHORED names (a field by its

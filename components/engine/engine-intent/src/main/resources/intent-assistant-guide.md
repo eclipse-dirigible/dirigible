@@ -148,6 +148,24 @@ composition is opt-in.
     `- { name: UoM, kind: manyToOne, to: UoM, dependsOn: { relation: Product, valueFrom: UoM } }`
   - auto-populate - price copied from the chosen product:
     `- { name: price, type: decimal, dependsOn: { relation: Product, valueFrom: price } }`
+  - **conditional auto-populate** (field only) - WHICH property is copied is picked by a classifier
+    (price levels, partner terms):
+    ```yaml
+    - name: price
+      type: decimal
+      dependsOn:
+        relation: Product
+        valueFrom:
+          by: SalesOrder.Customer.priceLevel   # the classifier path
+          cases: { 1: wholesalePrice, 2: retailPrice }
+          default: retailPrice                 # optional; no match + no default = no copy
+    ```
+    The `by` path resolves against the CURRENT form values: an own property (`priceLevel`), a one-hop
+    `<OwnRelation>.<property>` (`Customer.priceLevel` - the related record is fetched), or - on a
+    document item - a path STARTING AT the composition parent relation, i.e. the open document header
+    (`SalesOrder.Customer.priceLevel`: the header's customer is fetched and its price level read).
+    `cases` keys are literals matched against the resolved classifier value; case values (and
+    `default`) are properties of the trigger's target, like a plain `valueFrom`. Harmonia UI only.
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching

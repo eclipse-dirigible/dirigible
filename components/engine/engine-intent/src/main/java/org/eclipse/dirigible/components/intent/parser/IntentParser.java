@@ -2183,22 +2183,117 @@ public final class IntentParser {
         }
         if (ownRelation == null) {
             // A scalar field is auto-populated - it needs the source property and has no option list.
-            if (dependsOn.getValueFrom() == null || dependsOn.getValueFrom()
-                                                             .isBlank()) {
+            if (!dependsOn.hasValueFrom()) {
                 issues.add(subject + " dependsOn requires `valueFrom`: the trigger target's property to copy the value from");
             }
             if (dependsOn.getFilterBy() != null && !dependsOn.getFilterBy()
                                                              .isBlank()) {
                 issues.add(subject + " dependsOn `filterBy` applies only to a relation (a dropdown) - a field has no option list");
             }
-        } else if (isBlank(dependsOn.getValueFrom()) && isBlank(dependsOn.getFilterBy())) {
+        } else if (!dependsOn.hasValueFrom() && isBlank(dependsOn.getFilterBy())) {
             issues.add(subject + " dependsOn requires `valueFrom` and/or `filterBy` - with neither, the filter would compare the target's"
                     + " primary key against the trigger's primary key");
+        }
+        // The conditional valueFrom form (#6358): { by, cases, default? } - fields only.
+        java.util.Map<String, Object> conditional = dependsOn.getValueFromConditional();
+        if (conditional != null) {
+            if (ownRelation != null) {
+                issues.add(subject + " dependsOn conditional valueFrom is supported on a field (auto-populate), not on a relation");
+            } else {
+                validateConditionalValueFrom(entity, subject, conditional, trigger, byName, issues);
+            }
         }
         // valueFrom lives on the TRIGGER's target entity; filterBy on the OWNING relation's target.
         validateDependsOnProperty(subject, "valueFrom", dependsOn.getValueFrom(), trigger, byName, issues);
         if (ownRelation != null) {
             validateDependsOnProperty(subject, "filterBy", dependsOn.getFilterBy(), ownRelation, byName, issues);
+        }
+    }
+
+    /**
+     * The conditional {@code valueFrom: { by, cases, default? }} form (#6358): {@code by} is a 1-3
+     * segment classifier path - an own property, a one-hop {@code <OwnRelation>.<property>}, or (on a
+     * composition item) a path starting at the composition parent relation, i.e. the open document
+     * header; {@code cases} maps classifier literals to properties of the TRIGGER's target (validated
+     * like a plain {@code valueFrom}); {@code default} is the optional no-match property.
+     */
+    private static void validateConditionalValueFrom(EntityIntent entity, String subject, java.util.Map<String, Object> conditional,
+            RelationIntent trigger, java.util.Map<String, EntityIntent> byName, List<String> issues) {
+        for (Object key : conditional.keySet()) {
+            if (!"by".equals(key) && !"cases".equals(key) && !"default".equals(key)) {
+                issues.add(subject + " dependsOn conditional valueFrom supports `by`, `cases` and `default` - got [" + key + "]");
+            }
+        }
+        Object casesValue = conditional.get("cases");
+        if (!(casesValue instanceof java.util.Map) || ((java.util.Map<?, ?>) casesValue).isEmpty()) {
+            issues.add(subject + " dependsOn conditional valueFrom requires `cases`: a non-empty `<classifier literal>: <property>` map");
+        } else {
+            for (Object property : ((java.util.Map<?, ?>) casesValue).values()) {
+                validateDependsOnProperty(subject, "cases", String.valueOf(property), trigger, byName, issues);
+            }
+        }
+        Object defaultValue = conditional.get("default");
+        if (defaultValue != null) {
+            validateDependsOnProperty(subject, "default", String.valueOf(defaultValue), trigger, byName, issues);
+        }
+        Object by = conditional.get("by");
+        if (!(by instanceof String) || ((String) by).isBlank()) {
+            issues.add(subject + " dependsOn conditional valueFrom requires `by`: the classifier path");
+            return;
+        }
+        String[] segments = ((String) by).split("\\.");
+        // Resolve the path start: an own property (1 segment), an own to-one (2 segments), or the
+        // composition parent relation - the open document header (2-3 segments, items only).
+        String first = segments[0];
+        RelationIntent compositionParent = null;
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isComposition() && first.equals(relation.getName())) {
+                compositionParent = relation;
+            }
+        }
+        if (compositionParent != null) {
+            EntityIntent header = compositionParent.isCrossModel() ? null : byName.get(compositionParent.getTo());
+            if (segments.length == 2) {
+                requirePathProperty(subject, by, segments[1], header, compositionParent.getTo(), issues);
+            } else if (segments.length == 3) {
+                RelationIntent headerRelation = header == null ? null : toOneRelationByName(header, segments[1]);
+                if (header != null && headerRelation == null) {
+                    issues.add(subject + " dependsOn `by` [" + by + "]: [" + segments[1] + "] is not a to-one relation of ["
+                            + compositionParent.getTo() + "]");
+                } else if (headerRelation != null && !headerRelation.isCrossModel()) {
+                    requirePathProperty(subject, by, segments[2], byName.get(headerRelation.getTo()), headerRelation.getTo(), issues);
+                }
+            } else {
+                issues.add(subject + " dependsOn `by` [" + by + "]: a header-started path needs a header property" + " (`" + first
+                        + ".<property>` or `" + first + ".<Relation>.<property>`)");
+            }
+            return;
+        }
+        if (segments.length == 1) {
+            if (fieldByName(entity, first) == null && toOneRelationByName(entity, first) == null) {
+                issues.add(subject + " dependsOn `by` [" + by + "] is not a field or to-one relation of [" + entity.getName() + "]");
+            }
+        } else if (segments.length == 2) {
+            RelationIntent hop = toOneRelationByName(entity, first);
+            if (hop == null) {
+                issues.add(subject + " dependsOn `by` [" + by + "]: [" + first + "] is not a to-one relation of [" + entity.getName()
+                        + "] (or the composition parent relation of an item)");
+            } else if (!hop.isCrossModel()) {
+                requirePathProperty(subject, by, segments[1], byName.get(hop.getTo()), hop.getTo(), issues);
+            }
+        } else {
+            issues.add(subject + " dependsOn `by` [" + by + "]: a 3-segment path must start at the composition parent relation");
+        }
+    }
+
+    private static void requirePathProperty(String subject, Object path, String property, EntityIntent target, String targetName,
+            List<String> issues) {
+        if (target == null) {
+            return; // dangling/cross-model target reported (or validated) elsewhere
+        }
+        if (fieldByName(target, property) == null && toOneRelationByName(target, property) == null) {
+            issues.add(subject + " dependsOn `by` [" + path + "]: [" + property + "] is not a field or to-one relation of [" + targetName
+                    + "]");
         }
     }
 
