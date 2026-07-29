@@ -211,8 +211,9 @@ composition is opt-in.
   A failed document check aborts the transition (the workflow task completion fails with the
   authored message).
 - `postings:` (top-level) - **declarative posting**: when a (usually cross-model) source document
-  reaches a status, create ONE local document with computed multi-line content (the accounting
-  "source document -> balanced journal entry" shape, generalized):
+  reaches a status - or, for a source with no status lifecycle, when it is created - create ONE
+  local document with computed multi-line content (the accounting "source document -> balanced
+  journal entry" shape, generalized):
   ```yaml
   postings:
     - name: salesInvoicePosting
@@ -226,8 +227,24 @@ composition is opt-in.
         - { Account: rule(revenueAccount),    credit: "Net" }
         - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
   ```
-  Semantics: binds the source's `-transitioned` topic and RE-LOADS the source by id (the payload is
-  as-of the transition; the topic is published only after the source's whole synchronous BPMN chain
+  The trigger is `onTransition` (a status write; the `when` status guard is mandatory) or
+  `onCreate` (the source's INSERT - the trigger for a source with no status lifecycle at all, e.g.
+  a booked payment whose only event is being created; `when` stays optional there as a plain
+  `<Property> == <number>` guard):
+  ```yaml
+    - name: customerPaymentPosting
+      event: { onCreate: CustomerPayment, model: customer-payments }   # no status, no guard
+      creates: JournalEntry
+      backReference: CustomerPayment
+      map: { entryDate: date, customer: Customer, reason: "Payment {number}" }
+      rule: { entity: PostingRule, match: { documentType: "Customer Payment" } }
+      items:
+        - { Account: rule(bankAccount),       debit: "Amount" }
+        - { Account: rule(receivableAccount), credit: "Amount" }
+  ```
+  Semantics: binds the source's `-transitioned` (or, for `onCreate`, the entity's create) topic and RE-LOADS
+  the source by id (the payload is
+  as-of the event; the topic is published only after the source's whole synchronous BPMN chain
   commits, so writes by steps that follow the status set - a number-generation delegate - are
   visible to the re-load). Still prefer ordering such steps BEFORE the status set (issue ->
   generateNumber -> markIssued): "the transition is final" then also means "the document is
@@ -320,10 +337,11 @@ server-side on writes, foreign records 404. A field marked `sensitive: true` (no
 identity field, or the owner FK) is stripped from personal responses and ignored on personal
 writes - use it for billing rates and amounts the person must not see. Add `personalReadOnly: true`
 alongside `personal: true` to make the personal surface **see-only**: the generated `MyController`
-serves the scoped reads but its create/update/delete return **405**, and the my pages drop
-New/Edit/Delete - for records the owner may view but never author (a leave-balance account, a
-payslip); the regular (power) controller still writes them normally. The regular controller is
-unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
+serves the scoped reads but its create/update/delete return **403**, and the my pages render no
+write affordance at all - no New on the list, no Save/Delete on the form or the document, and no
+Add on a child panel or on the document's items - for records the owner may view but never author
+(a leave-balance account, a payslip); the regular (power) controller still writes them normally.
+The regular controller is unaffected. Sensitivity propagates to derived fields automatically: a rollup target (`op: sum` /
 `latest`) whose `of:` child field is sensitive, and an `aggregate: true` master field fed by a
 same-named sensitive item field, are treated as sensitive whenever their entity has a personal
 surface (own `personal:` relation, or scope inherited through a composition parent chain) - the

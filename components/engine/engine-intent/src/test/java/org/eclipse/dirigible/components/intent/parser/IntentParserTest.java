@@ -630,6 +630,113 @@ class IntentParserTest {
                 "expected an unknown-item-field issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A source with no status lifecycle (a booked payment) posts on its INSERT: {@code onCreate} is a
+     * valid trigger and needs no {@code when} status guard.
+     */
+    @Test
+    void postingOnCreateAcceptsALifecycleLessSource() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                postings:
+                  - name: paymentPosting
+                    event: { onCreate: Payment }
+                    creates: JournalEntry
+                    backReference: Payment
+                    items:
+                      - { debit: "Amount" }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        assertEquals(1, model.getPostings()
+                             .size());
+    }
+
+    /** The event declares exactly one trigger - onTransition XOR onCreate. */
+    @Test
+    void postingEventDeclaresExactlyOneTrigger() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                postings:
+                  - name: doubled
+                    event: { onCreate: Payment, onTransition: Payment, when: "Status == 2" }
+                    creates: JournalEntry
+                    backReference: Payment
+                    items:
+                      - { debit: "Amount" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("exactly one trigger")),
+                "expected an exactly-one-trigger issue, got: " + ex.getIssues());
+    }
+
+    /** An onCreate guard stays optional, but a malformed one is rejected, not silently dropped. */
+    @Test
+    void postingOnCreateRejectsAMalformedGuard() {
+        String yaml = """
+                name: ledger
+                entities:
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                postings:
+                  - name: paymentPosting
+                    event: { onCreate: Payment, when: "whenever" }
+                    creates: JournalEntry
+                    backReference: Payment
+                    items:
+                      - { debit: "Amount" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("must be `<Property> == <numeric value>`")),
+                "expected a malformed-guard issue, got: " + ex.getIssues());
+    }
+
     @Test
     void whereStaticOptionFilterParses() {
         String yaml = DEPENDS_ON_HEAD.stripTrailing() + """

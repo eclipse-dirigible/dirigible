@@ -223,7 +223,7 @@ export function process(model, parameters) {
                         e.personalIdentityEntityClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Entity`;
                         e.personalIdentityRepositoryClass = `gen.${javaGen}.data.${javaPerspective}.${p.relationshipEntityName}Repository`;
                         // See-only personal surface (intent personalReadOnly): the my controller's
-                        // writes 405 and the my pages drop New/Edit/Delete.
+                        // writes 403 and the my pages render no write affordance.
                         e.personalReadOnly = !!p.relationshipPersonalReadOnly;
                     }
                     // partner (intent `partner: true`): the external-partner mirror of the personal

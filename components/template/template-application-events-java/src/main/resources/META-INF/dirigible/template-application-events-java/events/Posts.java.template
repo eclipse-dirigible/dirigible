@@ -13,7 +13,7 @@ import org.eclipse.dirigible.sdk.utils.Json;
  * PROPOSAL_EVENT_POSTING.md.
  *
  * Contract (mirrors the postings skeleton, flattened - no header document):
- * - binds the source's #if($isCreate)-created#{else}-transitioned#end topic and RE-LOADS the source by
+ * - binds the source's #if($isCreate)create (bare entity)#{else}-transitioned#end topic and RE-LOADS the source by
  *   id (the payload is as-of the event and may lack later-step data);
  * - idempotent by ${backRef}: if ${into} rows already back-reference this source, it is a no-op;
  * - all writes go through the generated ${into} repository (so its own create logic fires).
@@ -23,7 +23,7 @@ public class ${className}Post implements MessageHandler {
 
     @Override
     public String destination() {
-        return "${projectName}-${sourcePerspective}-${sourceEntity}-#if($isCreate)created#{else}transitioned#end";
+        return "${projectName}-${sourcePerspective}-${sourceEntity}#if(!$isCreate)-transitioned#end";
     }
 
     @Override

@@ -131,8 +131,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
                   - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                   # postings back-reference + the reversal's storno self-link (reverses fixture).
-                  - { name: Doc,    kind: manyToOne, to: Doc }
-                  - { name: Storno, kind: manyToOne, to: Entry }
+                  - { name: Doc,     kind: manyToOne, to: Doc }
+                  - { name: Storno,  kind: manyToOne, to: Entry }
+                  # the onCreate posting's back-reference (a lifecycle-less source).
+                  - { name: Payment, kind: manyToOne, to: Payment }
 
               # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
               # CANCELLED (the reverses posting fires - red storno).
@@ -143,6 +145,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
+              # postings onCreate source (#6421): a booked payment has NO status lifecycle -
+              # its INSERT is the posting event.
+              - name: Payment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal }
 
               - name: EntryLine
                 checks:
@@ -215,7 +225,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Claim, kind: manyToOne, to: Claim, composition: true }
 
               # personalReadOnly: a see-only personal surface - the owner reads their own Balance
-              # rows but the my controller's writes 405 (a record the back office grants, the
+              # rows but the my controller's writes 403 (a record the back office grants, the
               # person must never author - the self-grant guard).
               - name: Balance
                 fields:
@@ -223,6 +233,34 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: days, type: decimal }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, required: true, personal: true, personalReadOnly: true }
+
+              # A composition child of the see-only personal root: the child inherits the read-only
+              # scope, so the parent's my FORM renders its panel for reading but must offer no Add -
+              # an affordance whose every use the child's own my controller refuses.
+              - name: BalanceEntry
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Balance, kind: manyToOne, to: Balance, composition: true, required: true }
+
+              # The see-only personal surface in its DOCUMENT shape (a payslip the employee may read
+              # and never author): the same personalReadOnly flag must strip the item Add/Delete, the
+              # item dialog's Save and the Save/Delete footer from the my-document view too.
+              - name: Payslip
+                function: Document
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 20, function: DocumentTitle }
+                relations:
+                  - { name: Person, kind: manyToOne, to: Person, required: true, personal: true, personalReadOnly: true }
+              - name: PayslipLine
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
@@ -551,6 +589,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 event: { onTransition: Doc, when: "Status == 3" }
                 reverses: docPosting
                 storno: Storno
+              # onCreate (#6421): the lifecycle-less Payment posts on its INSERT - no status guard.
+              - name: paymentPosting
+                event: { onCreate: Payment }
+                creates: Entry
+                backReference: Payment
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
 
             seeds:
               - name: people
@@ -807,7 +854,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(lineMy.contains("entity.Cost = null"),
                 "a sensitive field on a scope-inheriting child must be scrubbed from its personal controller");
 
-        // personalReadOnly: the scoped controller still serves reads but its write methods 405 -
+        // personalReadOnly: the scoped controller still serves reads but its write methods 403 -
         // no repository.save on the personal surface (the power controller keeps writing).
         String balanceMy = contentOf("gen/emission/api/balance/BalanceMyController.java");
         assertTrue(balanceMy.contains("read-only on your personal surface"),
@@ -817,6 +864,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "personalReadOnly must NOT emit a persisting create/update on the personal controller");
         String balanceMyView = contentOf("gen/emission/views/my/Balance-list.html");
         assertTrue(!balanceMyView.contains("newEntity()"), "personalReadOnly my list must not render the New button");
+        // ... and no write affordance survives on the my FORM either. The child panel's Add was the
+        // last one left: the child controller refuses every use of it (403), so it was an affordance
+        // that always failed on exactly the surface whose point is read-without-author.
+        String balanceMyForm = contentOf("gen/emission/views/my/Balance-form.html");
+        // The positive anchor first: the READ half must still be there, or the assertions below would
+        // pass on an empty/missing file instead of on a rendered see-only form.
+        assertTrue(balanceMyForm.contains("x-for=\"child in children\"") && balanceMyForm.contains("goBack()"),
+                "personalReadOnly my form must still render the child panel and the Back button");
+        assertTrue(!balanceMyForm.contains("addChild(child)"), "personalReadOnly my form must not render the child Add button");
+        assertTrue(!balanceMyForm.contains("save()") && !balanceMyForm.contains("deleteOpen = true"),
+                "personalReadOnly my form must not render Save or Delete");
+        // The guard is conditional, not blanket: a WRITABLE personal form keeps its child Add.
+        String claimMyForm = contentOf("gen/emission/views/my/Claim-form.html");
+        assertTrue(claimMyForm.contains("addChild(child)"), "a writable personal form must still render the child Add button");
+        // Same flag, DOCUMENT shape: items add/delete, the item dialog's Save and the Save/Delete
+        // footer all go; Back stays. The read surface (the items table itself) is untouched.
+        String payslipMyDoc = contentOf("gen/emission/views/my/Payslip-document.html");
+        assertTrue(!payslipMyDoc.contains("openItem(null)") && !payslipMyDoc.contains("deleteItem(row)"),
+                "personalReadOnly my document must not render the item Add or the per-row Delete");
+        assertTrue(!payslipMyDoc.contains("saveItem()"), "personalReadOnly my document must not render the item dialog's Save");
+        assertTrue(!payslipMyDoc.contains("save()") && !payslipMyDoc.contains("deleteOpen = true"),
+                "personalReadOnly my document must not render the Save or Delete footer buttons");
+        assertTrue(payslipMyDoc.contains("openItem(row)"), "personalReadOnly my document must still open an item for reading");
+        // Positive control on the document shape too - the writable personal chat keeps its composer.
+        String ticketMyDoc = contentOf("gen/emission/views/my/Ticket-document.html");
+        assertTrue(ticketMyDoc.contains("sendMessage(chatDraft)"), "a writable personal document must still render the chat composer");
 
         // assignee: personal - the BPMN assigns the task to the start-time-resolved owner and the
         // trigger listener seeds that variable from the identity mapping.
@@ -1058,6 +1131,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+        assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
+
+        // postings onCreate (#6421): a source with no status lifecycle posts on its INSERT - the
+        // handler binds the source's bare create topic (creates publish unsuffixed) and carries no
+        // status guard.
+        String createPosting = contentOf("gen/events/emission/PaymentPostingPosting.java");
+        assertTrue(createPosting.contains("-Payment\";"), "an onCreate posting must bind the source's bare create topic");
+        assertTrue(!createPosting.contains("-transitioned"), "an onCreate posting must not bind the -transitioned topic");
+        assertTrue(!createPosting.contains("source.Status"), "an onCreate posting without a when guard must not emit a status guard");
+        assertTrue(createPosting.contains("target.Payment = source.Id;"), "the onCreate posting must stamp its back-reference");
 
         // conditional dependsOn (#6358): the item register carries the classifier metadata (the
         // header-started by-path, the fetch URL, the cases map, the default) and the document page
@@ -1324,6 +1407,36 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
                                                          + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
 
+        // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
+        // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.
+        AtomicInteger payment = new AtomicInteger();
+        restAssuredExecutor.execute(() -> payment.set(given().contentType("application/json")
+                                                             .body("{\"Date\":\"2026-01-18\",\"Amount\":90}")
+                                                             .when()
+                                                             .post(API + "/payment/PaymentController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
+        AtomicInteger paymentEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> paymentEntry.set(given().when()
+                                                                  .get(API + "/entry/EntryController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .body("findAll { it.Payment == " + payment.get() + " }.size()",
+                                                                          equalTo(1))
+                                                                  .extract()
+                                                                  .path("find { it.Payment == " + payment.get() + " }.Id")),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + paymentEntry.get() + " && it.Debit != null }.size()",
+                                                         equalTo(1))
+                                                 .body("findAll { it.Entry == " + paymentEntry.get() + " && it.Credit != null }.size()",
+                                                         equalTo(1)));
+
         // personal: the my-surface lists ONLY the current user's rows, with the sensitive field
         // stripped; a foreign record is a 404 (indistinguishable from missing).
         restAssuredExecutor.execute(() -> given().when()
@@ -1446,7 +1559,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 30);
 
         // personalReadOnly: the scoped read serves 200 (the owner sees their own rows), but a write
-        // to the personal surface is refused 405 - the see-only guarantee at the outermost layer.
+        // to the personal surface is refused 403 - the see-only guarantee at the outermost layer.
         restAssuredExecutor.execute(() -> given().when()
                                                  .get(API + "/balance/BalanceMyController")
                                                  .then()
