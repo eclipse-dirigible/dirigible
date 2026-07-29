@@ -10,8 +10,13 @@
 package org.eclipse.dirigible.components.base.readiness;
 
 import java.time.Instant;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * The platform readiness state, keyed to artefact depletion (#6448): a synchronization pass that
@@ -28,7 +33,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public final class PlatformReadiness {
 
-    /** The lifecycle: INITIALIZING (boot) -> READY | READY_DEGRADED <-> SYNCHRONIZING. */
+    /** The lifecycle: INITIALIZING (boot) &rarr; READY | READY_DEGRADED &harr; SYNCHRONIZING. */
     public enum State {
         /** Booting - the first synchronization pass has not depleted yet. */
         INITIALIZING,
@@ -42,9 +47,13 @@ public final class PlatformReadiness {
 
     private static final PlatformReadiness INSTANCE = new PlatformReadiness();
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(PlatformReadiness.class);
+
     private final AtomicReference<State> state = new AtomicReference<>(State.INITIALIZING);
     private final AtomicBoolean bootCompleted = new AtomicBoolean(false);
+    private final List<Consumer<State>> listeners = new CopyOnWriteArrayList<>();
     private volatile int failedArtefacts = 0;
+    private volatile int pendingArtefacts = 0;
     private volatile Instant since = Instant.now();
 
     private PlatformReadiness() {}
@@ -67,8 +76,24 @@ public final class PlatformReadiness {
      */
     public void passCompleted(int failed) {
         failedArtefacts = Math.max(failed, 0);
+        pendingArtefacts = 0;
         bootCompleted.set(true);
         transition(failedArtefacts == 0 ? State.READY : State.READY_DEGRADED);
+    }
+
+    /**
+     * Reports how many artefacts the running pass has still to deplete, so the readiness endpoint and
+     * the IDE indicator can show progress rather than an opaque spinner.
+     *
+     * @param pending the undepleted artefact count
+     */
+    public void passProgress(int pending) {
+        pendingArtefacts = Math.max(pending, 0);
+    }
+
+    /** The artefacts the running pass has still to deplete (0 when no pass is running). */
+    public int getPendingArtefacts() {
+        return pendingArtefacts;
     }
 
     public State getState() {
@@ -90,17 +115,40 @@ public final class PlatformReadiness {
         return bootCompleted.get();
     }
 
+    /**
+     * Registers a listener notified after every state change. Listeners run on the synchronizer's
+     * thread, so a slow or throwing one must not disturb the pass - a failure is logged and swallowed.
+     *
+     * @param listener the listener
+     */
+    public void addStateListener(Consumer<State> listener) {
+        listeners.add(listener);
+    }
+
     /** Test seam: reset to the boot state (the singleton outlives a test's application context). */
     public void reset() {
         state.set(State.INITIALIZING);
         bootCompleted.set(false);
         failedArtefacts = 0;
+        pendingArtefacts = 0;
         since = Instant.now();
+        listeners.clear();
     }
 
     private void transition(State next) {
         if (state.getAndSet(next) != next) {
             since = Instant.now();
+            notifyListeners(next);
+        }
+    }
+
+    private void notifyListeners(State next) {
+        for (Consumer<State> listener : listeners) {
+            try {
+                listener.accept(next);
+            } catch (RuntimeException ex) {
+                LOGGER.error("Platform readiness listener [{}] failed for state [{}]", listener, next, ex);
+            }
         }
     }
 }
