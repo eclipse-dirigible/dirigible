@@ -262,6 +262,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Payslip, kind: manyToOne, to: Payslip, composition: true, required: true }
 
+              # The dead-Create family (found live 2026-07-29): a USER-ENTERED document title
+              # (function: DocumentTitle without a number series) must render as an editable input
+              # on the create page, and a required relation with init: (a DB-level default) must
+              # not be demanded by create validation on any layer - the database guarantees the
+              # value and the create echo must carry it.
+              - name: Voucher
+                function: Document
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: refNumber, type: string, required: true, length: 50, function: DocumentTitle }
+                  - { name: date,      type: date, required: true }
+                relations:
+                  - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1, required: true }
+              - name: VoucherLine
+                function: DocumentItem
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: amount, type: decimal }
+                relations:
+                  - { name: Voucher, kind: manyToOne, to: Voucher, composition: true, required: true }
+
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
               # the body maps to the messageBody field, author/timestamp to the child's audit columns.
@@ -1164,6 +1185,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // repository OVERRIDES updateProperties to recompute it on that path too.
         assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
                 "a label entity must recompute its display Name on the targeted updateProperties write path");
+
+        // The dead-Create family: a user-entered document title must be an editable input on the
+        // document page, and a required-with-init property must not be demanded by any validation
+        // layer (the DB default guarantees the value). Both halves shipped silently broken once:
+        // the title rendered only as the isEdit/isPreview header span, so client validation failed
+        // on a field the layout never rendered and the Create button looked dead.
+        String voucherView = contentOf("gen/emission/views/Voucher/Voucher-document.html");
+        assertTrue(voucherView.contains("x-model=\"form.RefNumber\""),
+                "a user-entered documentTitle (no number series) must render an editable input on the document page");
+        String voucherController = contentOf("gen/emission/api/voucher/VoucherController.java");
+        assertTrue(voucherController.contains("The 'RefNumber' property is required"),
+                "a plain required field keeps its REST create validation");
+        assertFalse(voucherController.contains("The 'Status' property is required"),
+                "required + init must not demand the payload value - the DB default guarantees it");
+        String voucherPage = contentOf("gen/emission/js/components/pages/Voucher/VoucherDocumentPage.js");
+        assertTrue(voucherPage.contains("RefNumber: [{ rule: 'required'"), "the client schema keeps required for the user-entered title");
+        assertFalse(voucherPage.contains("Status: [{ rule: 'required'"), "the client schema must not require a defaulted (init:) property");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1184,6 +1222,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
+
+        // The dead-Create family at the outermost layer: creating the document WITHOUT the
+        // defaulted status must succeed, and the echo must carry the DB-applied default (the
+        // persisted row, not the request payload the caller sent).
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"RefNumber\":\"INV-77\",\"Date\":\"2026-01-15\"}")
+                                                 .when()
+                                                 .post(API + "/voucher/VoucherController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("Status", equalTo(1))
+                                                 .body("RefNumber", equalTo("INV-77")));
+        // Omitting the user-entered title stays a validation rejection.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Date\":\"2026-01-15\"}")
+                                                 .when()
+                                                 .post(API + "/voucher/VoucherController")
+                                                 .then()
+                                                 .statusCode(400));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")

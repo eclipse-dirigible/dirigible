@@ -31,7 +31,7 @@
          the title bar, totals in the footer). -->
     <div class="grid grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{partnerProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.widgetType != "DOCUMENT_NUMBER" && $property.aggregate != "true")
+#if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != "$!{partnerProperty}" && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.aggregate != "true")
       <div x-h-field style="grid-column: span #if($property.widgetSize && $property.widgetSize != "")${property.widgetSize}#{else}6#end">
         <label x-h-label>
           <span x-text="T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end')"></span>#if($property.isRequiredProperty == "true") <span class="text-destructive">*</span>#end

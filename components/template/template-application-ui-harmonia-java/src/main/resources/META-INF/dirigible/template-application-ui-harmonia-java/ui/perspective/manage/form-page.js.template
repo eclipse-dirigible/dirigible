@@ -462,7 +462,7 @@ document.addEventListener('alpine:init', () => {
     validationSchema() {
       return {
 #foreach($property in $properties)
-#if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.isRequiredProperty == "true")
+#if(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.isRequiredProperty == "true" && !$property.dataDefaultValue)
         ${property.name}: [{ rule: 'required', message: 'This field is required.' }],
 #elseif(!$property.dataAutoIncrement && !$property.isCalculatedProperty && $property.widgetType == "EMAIL")
         ${property.name}: [{ rule: 'email', message: 'Enter a valid email address.' }],
@@ -481,6 +481,10 @@ document.addEventListener('alpine:init', () => {
       if (this.isPreview) return;
       if (!this.validate()) {
         this.state = 'validation-error';
+        // Name the failing fields in the visible summary - an invalid field the layout does not
+        // render (or one scrolled out of view) is otherwise indistinguishable from a dead button.
+        const _failed = Object.keys(this.errors).filter(k => k !== '__summary' && this.errors[k]);
+        if (_failed.length) this.errors.__summary = 'Fields that need attention: ' + _failed.join(', ');
         this.scrollToSummary();
         return;
       }

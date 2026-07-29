@@ -278,7 +278,7 @@ class ${name}Controller {
 
     private validateEntity(entity: any): void {
 #foreach ($property in $properties)
-#if($property.isRequiredProperty)
+#if($property.isRequiredProperty && !$property.dataDefaultValue)
         if (entity.${property.name} === null || entity.${property.name} === undefined) {
             throw new ValidationError(`The '${property.name}' property is required, provide a valid value`);
         }
