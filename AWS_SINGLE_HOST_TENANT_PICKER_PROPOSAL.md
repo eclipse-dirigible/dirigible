@@ -4,6 +4,32 @@
 **Date:** 2026-07-29
 **Companion:** [`AWS_DEPLOYMENT_PROPOSAL.md`](AWS_DEPLOYMENT_PROPOSAL.md) — the subdomain-per-tenant variant of the same one-unit deployment. Everything below the identity layer (compute, database, storage, hardening, operations) is inherited from it unchanged; this document specifies only what the changed requirements alter, and §8 weighs the two models honestly.
 
+**Contents**
+
+- [0. The changed requirements, and what they force](#0-the-changed-requirements-and-what-they-force)
+- [1. Topology — what changes on AWS (almost nothing)](#1-topology--what-changes-on-aws-almost-nothing)
+- [2. Identity — one client, multi-tenant tokens, roles filtered at pick time](#2-identity--one-client-multi-tenant-tokens-roles-filtered-at-pick-time)
+  - [2.1 Why one app client is now the right answer](#21-why-one-app-client-is-now-the-right-answer)
+  - [2.2 The token contract](#22-the-token-contract)
+  - [2.3 Optional pre-token Lambda](#23-optional-pre-token-lambda)
+- [3. The tenant-picker mechanism (the heart of the fork change)](#3-the-tenant-picker-mechanism-the-heart-of-the-fork-change)
+  - [3.1 Session model](#31-session-model)
+  - [3.2 Request → tenant resolution (replacing `TenantExtractor`)](#32-request--tenant-resolution-replacing-tenantextractor)
+  - [3.3 Login and switch, end to end](#33-login-and-switch-end-to-end)
+  - [3.4 The one behavioural cost to state up front](#34-the-one-behavioural-cost-to-state-up-front)
+  - [3.5 Security notes specific to this model](#35-security-notes-specific-to-this-model)
+- [4. Fork changes](#4-fork-changes)
+- [5. Machine-to-machine access](#5-machine-to-machine-access)
+- [6. Tenant onboarding (simpler than the subdomain runbook)](#6-tenant-onboarding-simpler-than-the-subdomain-runbook)
+- [7. Login & switch — sequence (for the visualization)](#7-login--switch--sequence-for-the-visualization)
+- [8. Honest comparison with the subdomain model — and one rejected alternative](#8-honest-comparison-with-the-subdomain-model--and-one-rejected-alternative)
+- [9. Hypotheses to verify before go-live](#9-hypotheses-to-verify-before-go-live)
+- [10. Horizontal scaling — will this design run on more than one instance?](#10-horizontal-scaling--will-this-design-run-on-more-than-one-instance)
+  - [10.1 What happens if you raise `desiredCount` today](#101-what-happens-if-you-raise-desiredcount-today)
+  - [10.2 Enabling true replicas — the layer-by-layer bill](#102-enabling-true-replicas--the-layer-by-layer-bill)
+  - [10.3 Scaling out by units under a single host — the picker-specific catch](#103-scaling-out-by-units-under-a-single-host--the-picker-specific-catch)
+  - [10.4 Recommended posture](#104-recommended-posture)
+
 ---
 
 ## 0. The changed requirements, and what they force

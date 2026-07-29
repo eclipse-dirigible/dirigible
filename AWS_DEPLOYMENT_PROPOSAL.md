@@ -5,6 +5,28 @@
 **Scope:** one production deployment ("unit") of a multitenant Dirigible application on ECS, sized for ~50–100 tenants, with subdomain-per-tenant addressing and cross-tenant login (one identity, different roles per tenant).
 **Independence note:** this document was designed independently from the earlier research on branch `docs/aws-multitenancy-research`, from the code and AWS constraints alone; §10 records where the two efforts agree and differ.
 
+**Contents**
+
+- [0. Decisions at a glance](#0-decisions-at-a-glance)
+- [1. Requirements](#1-requirements)
+- [2. What the platform gives you and what it imposes](#2-what-the-platform-gives-you-and-what-it-imposes)
+- [3. Topology — one production unit](#3-topology--one-production-unit)
+- [4. Identity — one pool, per-tenant app clients, roles as prefixed groups](#4-identity--one-pool-per-tenant-app-clients-roles-as-prefixed-groups)
+  - [4.1 Why Cognito (and not Keycloak on ECS)](#41-why-cognito-and-not-keycloak-on-ecs)
+  - [4.2 One app client for all tenants, or one per tenant? — the decision](#42-one-app-client-for-all-tenants-or-one-per-tenant--the-decision)
+  - [4.3 The topology](#43-the-topology)
+  - [4.4 Membership and roles: prefixed Cognito groups](#44-membership-and-roles-prefixed-cognito-groups)
+  - [4.5 The pre-token-generation Lambda (V2_0) — the per-tenant lens](#45-the-pre-token-generation-lambda-v2_0--the-per-tenant-lens)
+  - [4.6 Flows](#46-flows)
+- [5. Isolation summary](#5-isolation-summary)
+- [6. Fork changes (minimal set)](#6-fork-changes-minimal-set)
+- [7. Tenant onboarding (automation runbook)](#7-tenant-onboarding-automation-runbook)
+- [8. Security hardening checklist](#8-security-hardening-checklist)
+- [9. Operations](#9-operations)
+- [10. Where this agrees / differs with `docs/aws-multitenancy-research`](#10-where-this-agrees--differs-with-docsaws-multitenancy-research)
+- [11. How it grows](#11-how-it-grows)
+- [12. Hypotheses to verify before go-live](#12-hypotheses-to-verify-before-go-live)
+
 ---
 
 ## 0. Decisions at a glance
