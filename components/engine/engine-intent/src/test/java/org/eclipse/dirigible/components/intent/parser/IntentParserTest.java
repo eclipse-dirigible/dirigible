@@ -1719,4 +1719,47 @@ class IntentParserTest {
                                                                                                                                        "setStatus` but its outcome is [task]")),
                 "a setStatus on a task outcome must be rejected");
     }
+
+    private static final String FIELD_PATTERN = """
+            name: banking
+            entities:
+              - name: Account
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: iban, type: string, length: 34, pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$' }
+                  - { name: balance, type: decimal }
+            """;
+
+    /** A field's input-format regex (#6336). */
+    @Test
+    void fieldPatternParses() {
+        IntentModel model = IntentParser.parse(FIELD_PATTERN);
+        assertEquals("^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$", model.getEntities()
+                                                               .get(0)
+                                                               .getFields()
+                                                               .get(1)
+                                                               .getPattern());
+    }
+
+    @Test
+    void fieldPatternIsRejectedOnANonStringField() {
+        // On a numeric property widgetPattern is the DISPLAY format, so a regex there would corrupt it.
+        String yaml =
+                FIELD_PATTERN.replace("- { name: balance, type: decimal }", "- { name: balance, type: decimal, pattern: '^[0-9]+$' }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("`pattern` applies to a string/text field")),
+                "expected a type restriction issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void fieldPatternIsRejectedWhenItIsNotAValidRegex() {
+        String yaml = FIELD_PATTERN.replace("'^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'", "'^[A-Z(unclosed'");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("`pattern` is not a valid regular expression")),
+                "expected an invalid-regex issue, got: " + ex.getIssues());
+    }
 }

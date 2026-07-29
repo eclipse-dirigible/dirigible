@@ -1488,6 +1488,9 @@ public final class IntentParser {
                 if (field.getNumber() != null) {
                     validateNumber(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (!isBlank(field.getPattern())) {
+                    validatePattern("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -2159,6 +2162,27 @@ public final class IntentParser {
             } else if (!scopeHasYear) {
                 issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
             }
+        }
+    }
+
+    /**
+     * A field's input-format {@code pattern} (#6336): a compilable regex on a string-typed field. The
+     * type restriction is not cosmetic - on a numeric property the emitted {@code widgetPattern} is
+     * read as the DISPLAY format, so a regex there would silently corrupt how the number renders.
+     */
+    private static void validatePattern(String subject, FieldIntent field, List<String> issues) {
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase();
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " `pattern` applies to a string/text field - got type [" + field.getType()
+                    + "] (on a numeric field the pattern is the display format, not a regex)");
+            return;
+        }
+        try {
+            java.util.regex.Pattern.compile(field.getPattern());
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
         }
     }
 

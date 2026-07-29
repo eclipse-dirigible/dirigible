@@ -201,6 +201,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: name,  type: string, required: true, length: 200 }
                   - { name: email, type: string, required: true, unique: true, length: 320 }
+                  # #6336: an input-format regex must survive Generate and be enforced server-side.
+                  # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
+                  - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
 
               - name: Claim
                 label: "{note} ({Person.name})"
@@ -727,6 +730,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
+        // #6336 pattern: the server-side regex check and the client-side HTML pattern attribute.
+        String personController = contentOf("gen/emission/api/person/PersonController.java");
+        assertTrue(personController.contains(".matches(") && personController.contains("does not match the required pattern"),
+                "a field pattern must emit the server-side regex check in the REST controller");
+        String personForm = contentOf("gen/emission/views/Person/Person-form.html");
+        assertTrue(personForm.contains("pattern=\""), "a field pattern must reach the form input as an HTML pattern attribute");
+
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),
                 "checks: itemsMin must emit its authored message into the repository gate");
@@ -1241,6 +1251,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/voucher/VoucherController")
                                                  .then()
                                                  .statusCode(400));
+
+        // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a
+        // well-formed one accepted - the regex authored in the intent is what actually runs.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Bad\",\"Email\":\"p1@example.com\",\"ContactEmail\":\"not-an-email\"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(400));
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Name\":\"Good\",\"Email\":\"p2@example.com\",\"ContactEmail\":\"good@example.com\"}")
+                                                 .when()
+                                                 .post(API + "/person/PersonController")
+                                                 .then()
+                                                 .statusCode(200));
 
         // leafOnly: Account 1 has a child, so referencing it must be rejected server-side.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
