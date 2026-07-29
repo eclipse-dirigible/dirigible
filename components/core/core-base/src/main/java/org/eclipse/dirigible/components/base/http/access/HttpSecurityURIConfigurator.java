@@ -45,6 +45,7 @@ public class HttpSecurityURIConfigurator {
             "/services/core/theme/**", //
             "/services/core/version/**", //
             "/services/core/healthcheck/**", //
+            "/services/core/readiness/**", //
             "/services/web/resources/**", //
             "/services/web/resources-locale/**", //
             "/services/web/platform-core/**", //

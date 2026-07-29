@@ -196,6 +196,8 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         }
         logger.info("Executing synchronization...");
 
+        org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                         .passStarted();
         processing.set(true);
         synchronizationWatcher.reset();
 
@@ -411,6 +413,10 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             });
 
             logger.info("Processing synchronizers completed!");
+            // The queue is depleted - the instance is READY (#6448). Artefacts that parked FAILED
+            // after their retries degrade the state but never block it.
+            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                             .passCompleted(getErrors().size());
 
         } finally {
             if (logger.isDebugEnabled()) {
