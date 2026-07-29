@@ -25,6 +25,26 @@ document.addEventListener('alpine:init', () => {
         shellIde: 'The development workbench for building on the platform.',
     };
 
+    /*
+     * Registered shells that are deliberately not offered as a Home destination. They stay
+     * registered on `platform-shells` (the IDE's Window menu still lists them) and remain
+     * reachable by their own URL - Home simply is not the way in. Only the legacy
+     * AngularJS/BlimpKit dashboard, superseded by the Harmonia shells; its module stays, because
+     * the generated AngularJS apps still load its services.
+     */
+    const HIDDEN = ['dashboardShell'];
+
+    /*
+     * Shells that belong on Home but are not where the working day starts - rendered as quiet rows
+     * below the primary destinations, in registration order (Partner above Workbench, least
+     * technical first):
+     *  - partnerShell: external partners are led straight to /services/web/partner/, so this is
+     *    not their way in - it is here for the employees who need to see what a partner sees.
+     *  - shellIde: a developer tool. Every developer is also an employee, so it must stay visible,
+     *    but it should not compete with the two shells the rest of the company opens every morning.
+     */
+    const SECONDARY = ['partnerShell', 'shellIde'];
+
     Alpine.data('home', () => ({
         branding: { name: '', subtitle: '', logo: '' },
         userName: '',
@@ -63,12 +83,15 @@ document.addEventListener('alpine:init', () => {
                 if (!r.ok) return;
                 const list = await r.json();
                 this.shells = (Array.isArray(list) ? list : [])
-                    .filter((s) => s && s.path && s.label)
+                    .filter((s) => s && s.path && s.label && !HIDDEN.includes(s.id))
                     .sort((a, b) => (a.order ?? 100) - (b.order ?? 100));
             } catch (e) {
                 console.error('home: could not load the shells', e);
             }
         },
+
+        get primaryShells() { return this.shells.filter((s) => !SECONDARY.includes(s.id)); },
+        get secondaryShells() { return this.shells.filter((s) => SECONDARY.includes(s.id)); },
 
         greeting() {
             const h = new Date().getHours();
