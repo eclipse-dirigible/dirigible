@@ -62,6 +62,12 @@ public enum DirigibleConfig {
 
     SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS("DIRIGIBLE_SYNCHRONIZER_CROSS_RETRY_INTERVAL_MILLIS", "10000"), //
 
+    /** Bridge the platform readiness onto Spring's ApplicationAvailability (#6448). */
+    READINESS_AVAILABILITY_BRIDGE_ENABLED("DIRIGIBLE_READINESS_AVAILABILITY_BRIDGE_ENABLED", Boolean.FALSE.toString()), //
+
+    /** Seconds an API client is asked to wait when the boot gate refuses a request (#6448). */
+    READINESS_GATE_RETRY_AFTER_SECONDS("DIRIGIBLE_READINESS_GATE_RETRY_AFTER_SECONDS", "5"), //
+
     HOME_URL("DIRIGIBLE_HOME_URL", "services/web/home/"), //
 
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en,bg"), //

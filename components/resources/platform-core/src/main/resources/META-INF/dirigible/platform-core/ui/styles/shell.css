@@ -252,3 +252,27 @@ body:not(.bk-backdrop--active)>.main-header>.fd-shellbar {
     word-wrap: break-word;
     white-space: wrap;
 }
+/* The platform readiness indicator (#6448): pinned to the trailing edge of the status bar - a
+   spinner while a synchronization pass runs, then a quiet "Ready", or a warning tint when
+   artefacts parked terminally FAILED. */
+.statusbar-readiness {
+    min-width: fit-content;
+    max-width: fit-content;
+    justify-content: end;
+    margin-inline-start: auto;
+    padding-inline: 0.5rem;
+    gap: 0.5rem;
+}
+
+.statusbar-readiness>* {
+    box-sizing: border-box;
+}
+
+.statusbar-readiness--degraded {
+    color: var(--warning-foreground);
+    background-color: var(--warning);
+}
+
+.statusbar-readiness--degraded .statusbar--icon {
+    color: var(--warning-foreground);
+}

@@ -699,11 +699,49 @@ if (window !== top) {
             </bk-notification>
         </div>`,
     }))
-    .directive("statusBar", () => ({
+    .directive("statusBar", ["$http", "$interval", ($http, $interval) => ({
       restrict: "E",
       replace: true,
       link: (scope) => {
         const statusBarHub = new StatusBarHub();
+        // The platform readiness indicator (#6448): the honest answer to "did the synchronization
+        // finish?", which until now meant grepping the log for "Processing synchronizers completed!".
+        // Polled fast while a pass is running, slowly once booted (just to catch a publish).
+        const READINESS_URL = "/services/core/readiness";
+        const POLL_BOOTING = 3000;
+        const POLL_IDLE = 30000;
+        let readinessPoll = null;
+        scope.readiness = null;
+        scope.readinessText = () => {
+          const r = scope.readiness;
+          if (!r) return "";
+          if (r.status === "INITIALIZING" || r.status === "SYNCHRONIZING") {
+            return r.pendingArtefacts > 0 ? `Synchronizing... (${r.pendingArtefacts} pending)` : "Synchronizing...";
+          }
+          return r.status === "READY_DEGRADED" ? `Ready - ${r.failedArtefacts} failed` : "Ready";
+        };
+        scope.readinessBusy = () => {
+          const s = scope.readiness && scope.readiness.status;
+          return s === "INITIALIZING" || s === "SYNCHRONIZING";
+        };
+        scope.readinessDegraded = () => scope.readiness && scope.readiness.status === "READY_DEGRADED";
+        const pollReadiness = () => {
+          $http.get(READINESS_URL).then(
+            (response) => {
+              const wasBusy = scope.readinessBusy();
+              scope.readiness = response.data;
+              // Re-arm the interval when the pace should change (a pass started or finished).
+              if (wasBusy !== scope.readinessBusy()) scheduleReadiness();
+            },
+            () => (scope.readiness = null),
+          );
+        };
+        const scheduleReadiness = () => {
+          if (readinessPoll) $interval.cancel(readinessPoll);
+          readinessPoll = $interval(pollReadiness, scope.readinessBusy() ? POLL_BOOTING : POLL_IDLE);
+        };
+        pollReadiness();
+        scheduleReadiness();
         scope.busy = "";
         scope.message = "";
         scope.label = "";
@@ -727,6 +765,7 @@ if (window !== top) {
           statusBarHub.removeMessageListener(messageListener);
           statusBarHub.removeMessageListener(errorListener);
           statusBarHub.removeMessageListener(labelListener);
+          if (readinessPoll) $interval.cancel(readinessPoll);
         });
       },
       template: `<div class="statusbar bk-border--top">
@@ -742,5 +781,11 @@ if (window !== top) {
                 <i class="statusbar--icon statusbar--link sap-icon--delete" ng-click="clearError()"></i>
             </div>
             <div class="statusbar-label" ng-if="label"><span class="statusbar--text">{{ label }}</span></div>
+            <div class="statusbar-readiness" ng-if="readiness" ng-class="{ 'statusbar-readiness--degraded': readinessDegraded() }" title="{{ readinessText() }}">
+                <bk-loader ng-if="readinessBusy()" contrast="true"></bk-loader>
+                <i ng-if="!readinessBusy() && !readinessDegraded()" class="statusbar--icon sap-icon--sys-enter-2"></i>
+                <i ng-if="readinessDegraded()" class="statusbar--icon sap-icon--alert"></i>
+                <span class="statusbar--text">{{ readinessText() }}</span>
+            </div>
         </div>`,
-    }));
+    })]);

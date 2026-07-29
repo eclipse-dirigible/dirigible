@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class ReadinessEndpoint {
 
     /** The readiness payload. */
-    public record Readiness(String status, boolean acceptingTraffic, int failedArtefacts, String since) {
+    public record Readiness(String status, boolean acceptingTraffic, int pendingArtefacts, int failedArtefacts, String since) {
     }
 
     /**
@@ -39,8 +39,8 @@ public class ReadinessEndpoint {
         PlatformReadiness readiness = PlatformReadiness.getInstance();
         return ResponseEntity.ok(new Readiness(readiness.getState()
                                                         .name(),
-                readiness.isBootCompleted(), readiness.getFailedArtefacts(), readiness.getSince()
-                                                                                      .toString()));
+                readiness.isBootCompleted(), readiness.getPendingArtefacts(), readiness.getFailedArtefacts(), readiness.getSince()
+                                                                                                                       .toString()));
     }
 
 }

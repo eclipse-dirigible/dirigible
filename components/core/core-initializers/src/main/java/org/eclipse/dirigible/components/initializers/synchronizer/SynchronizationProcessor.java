@@ -339,6 +339,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
                             logger.info("Retry [{}] - cross-processing of [{}] undepleated artefacts: [{}]", (retryCount + 1),
                                     undepleted.size(), undepleted);
+                            // Progress for the readiness endpoint and the IDE indicator (#6448).
+                            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                                             .passProgress(undepleted.size());
                             Set<TopologyWrapper<? extends Artefact>> cross = new HashSet<>();
                             Set<TopologyWrapper<? extends Artefact>> results = depleter.deplete(undepleted, ArtefactPhase.PREPARE);
                             cross.addAll(results);
@@ -413,10 +416,6 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
             });
 
             logger.info("Processing synchronizers completed!");
-            // The queue is depleted - the instance is READY (#6448). Artefacts that parked FAILED
-            // after their retries degrade the state but never block it.
-            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
-                                                                             .passCompleted(getErrors().size());
 
         } finally {
             if (logger.isDebugEnabled()) {
@@ -444,6 +443,12 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
             initialized.set(true);
             processing.set(false);
+            // The queue is depleted - the instance is READY (#6448). Artefacts that parked FAILED
+            // after their retries degrade the state but never block it. Deliberately in the finally:
+            // the boot gate is keyed to this latch, so a pass that THREW must not pin the instance at
+            // INITIALIZING forever - one broken pass blocks traffic no more than one broken artefact.
+            org.eclipse.dirigible.components.base.readiness.PlatformReadiness.getInstance()
+                                                                             .passCompleted(getErrors().size());
         }
     }
 
