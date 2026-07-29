@@ -8,14 +8,15 @@ import org.eclipse.dirigible.sdk.utils.Calc;
 import org.eclipse.dirigible.sdk.utils.Json;
 
 /**
- * Posting ${name}: when a ${sourceEntity} transitions into status ${guardValue}, create one
+ * Posting ${name}: when a ${sourceEntity}#if($isCreate) is created#{else} transitions into status ${guardValue}#end, create one
  * ${targetEntity} with its ${itemsEntity} rows computed from the source's totals per the resolved
  * rule row. Generated from the intent postings block - do not edit; it is re-generated with the
  * application.
  *
  * Contract (the accounting posting semantics, generalized):
- * - binds the -transitioned topic (workflow status writes publish it; -updated reactions never see
- *   it, so no loops) and RE-LOADS the source by id - the payload is as-of the transition and lacks
+ * - binds the #if($isCreate)source's create topic (the bare entity topic - the platform publishes
+ *   creates unsuffixed; the source has no status lifecycle, its insert IS the posting event)#{else}-transitioned topic (workflow status writes publish it; -updated reactions never see
+ *   it, so no loops)#end and RE-LOADS the source by id - the payload is as-of the event and lacks
  *   later-step data such as a stamped document number;
  * - idempotent + resumable via the ${backRefProperty} back-reference: a redelivery of a complete post
  *   is a no-op, and a redelivery of a half-post (an item write failed after the target was saved)
@@ -36,7 +37,7 @@ public class ${className}Posting implements MessageHandler {
 
     @Override
     public String destination() {
-        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}-transitioned";
+        return "${sourceTopicProject}-${sourcePerspective}-${sourceEntity}#if(!$isCreate)-transitioned#end";
     }
 
     @Override
@@ -51,12 +52,18 @@ public class ${className}Posting implements MessageHandler {
         if (payload == null || payload.${sourceKeyField} == null) {
             return;
         }
-        // Re-load: the transition payload lacks later-step data (e.g. the number stamped after Issue).
+        // Re-load: the event payload lacks later-step data (e.g. the number stamped after Issue).
         gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Entity source =
                 new gen.${sourceJavaGenFolder}.data.${sourceJavaPerspective}.${sourceEntity}Repository().findById(payload.${sourceKeyField});
+#if($guardProperty != "")
         if (source == null || source.${guardProperty} == null || source.${guardProperty} != ${guardValue}) {
             return;
         }
+#else
+        if (source == null) {
+            return;
+        }
+#end
 #if($hasRule)
         // Determination rule first (the item derivation depends on it): a missing rule or a null
         // referenced column SKIPS - the document stays on the unposted worklist, never half-posted.

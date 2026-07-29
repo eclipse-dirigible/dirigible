@@ -73,6 +73,7 @@ class GluePostingsTest {
         assertEquals(1, postings.size());
         Map<String, Object> p = postings.get(0);
         assertEquals("SalesInvoicePosting", p.get("className"));
+        assertEquals(false, p.get("isCreate"));
         assertEquals(true, p.get("crossModel"));
         assertEquals("sales-invoices", p.get("sourceProject"));
         assertEquals("SalesInvoice", p.get("sourceEntity"));
@@ -109,5 +110,47 @@ class GluePostingsTest {
         assertEquals("Calc.eval(\"Vat\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", rows.get(2)
                                                                                                           .get("guard"));
         assertEquals(List.of("ReceivableAccount", "RevenueAccount", "VatAccount"), p.get("usedRuleColumns"));
+    }
+
+    /**
+     * The onCreate trigger (#6421): a source with no status lifecycle - a booked payment - posts on its
+     * INSERT. The glue flags the create event and carries no status guard.
+     */
+    @Test
+    void onCreatePostingBindsTheCreateEventWithoutAGuard() {
+        String yaml = """
+                name: ledger
+                uses:
+                  - { model: payments }
+                entities:
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reason, type: string, length: 400 }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment, model: payments }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                postings:
+                  - name: paymentPosting
+                    event: { onCreate: Payment, model: payments }
+                    creates: JournalEntry
+                    backReference: Payment
+                    map: { reason: "Payment {number}" }
+                    items:
+                      - { debit: "Amount" }
+                """;
+        List<Map<String, Object>> postings = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml));
+        assertEquals(1, postings.size());
+        Map<String, Object> p = postings.get(0);
+        assertEquals("PaymentPosting", p.get("className"));
+        assertEquals(true, p.get("isCreate"));
+        assertEquals("Payment", p.get("sourceEntity"));
+        assertEquals("", p.get("guardProperty"));
+        assertEquals("", p.get("guardValue"));
     }
 }

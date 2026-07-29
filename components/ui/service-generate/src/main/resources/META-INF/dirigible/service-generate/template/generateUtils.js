@@ -1279,6 +1279,7 @@ export function generateFiles(model, parameters, templateSources) {
                                 ...parameters,
                                 name: po.name,
                                 className: po.className,
+                                isCreate: po.isCreate,
                                 sourceTopicProject: po.crossModel ? po.sourceProject : parameters.projectName,
                                 sourceJavaGenFolder: po.crossModel ? sanitizeJavaIdentifier(po.sourceGenFolder) : parameters.javaGenFolderName,
                                 sourcePerspective: po.sourcePerspective,

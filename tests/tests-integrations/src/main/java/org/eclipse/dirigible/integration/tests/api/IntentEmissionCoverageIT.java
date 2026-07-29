@@ -129,8 +129,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Account, kind: manyToOne, to: Account, leafOnly: true }
                   - { name: Status,  kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
                   # postings back-reference + the reversal's storno self-link (reverses fixture).
-                  - { name: Doc,    kind: manyToOne, to: Doc }
-                  - { name: Storno, kind: manyToOne, to: Entry }
+                  - { name: Doc,     kind: manyToOne, to: Doc }
+                  - { name: Storno,  kind: manyToOne, to: Entry }
+                  # the onCreate posting's back-reference (a lifecycle-less source).
+                  - { name: Payment, kind: manyToOne, to: Payment }
 
               # postings source: PostDoc flips it POSTED (posting fires), VoidDoc flips it
               # CANCELLED (the reverses posting fires - red storno).
@@ -141,6 +143,14 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+
+              # postings onCreate source (#6421): a booked payment has NO status lifecycle -
+              # its INSERT is the posting event.
+              - name: Payment
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: date,   type: date, required: true }
+                  - { name: amount, type: decimal }
 
               - name: EntryLine
                 checks:
@@ -567,6 +577,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 event: { onTransition: Doc, when: "Status == 3" }
                 reverses: docPosting
                 storno: Storno
+              # onCreate (#6421): the lifecycle-less Payment posts on its INSERT - no status guard.
+              - name: paymentPosting
+                event: { onCreate: Payment }
+                creates: Entry
+                backReference: Payment
+                map: { date: date }
+                items:
+                  - { debit: "Amount" }
+                  - { credit: "Amount" }
 
             seeds:
               - name: people
@@ -1100,6 +1119,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(stornoPosting.contains("target.Storno = original.Id;"), "the reversal must stamp the storno link to the original");
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
+        assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
+
+        // postings onCreate (#6421): a source with no status lifecycle posts on its INSERT - the
+        // handler binds the source's bare create topic (creates publish unsuffixed) and carries no
+        // status guard.
+        String createPosting = contentOf("gen/events/emission/PaymentPostingPosting.java");
+        assertTrue(createPosting.contains("-Payment\";"), "an onCreate posting must bind the source's bare create topic");
+        assertTrue(!createPosting.contains("-transitioned"), "an onCreate posting must not bind the -transitioned topic");
+        assertTrue(!createPosting.contains("source.Status"), "an onCreate posting without a when guard must not emit a status guard");
+        assertTrue(createPosting.contains("target.Payment = source.Id;"), "the onCreate posting must stamp its back-reference");
 
         // label: the repository recomputes the stored display Name on every write path.
         String claimRepository = contentOf("gen/emission/data/claim/ClaimRepository.java");
@@ -1352,6 +1381,36 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                          + " && it.Debit != null && it.Debit < 0 }.size()", equalTo(1))
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
                                                          + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
+
+        // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
+        // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.
+        AtomicInteger payment = new AtomicInteger();
+        restAssuredExecutor.execute(() -> payment.set(given().contentType("application/json")
+                                                             .body("{\"Date\":\"2026-01-18\",\"Amount\":90}")
+                                                             .when()
+                                                             .post(API + "/payment/PaymentController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .path("Id")));
+        AtomicInteger paymentEntry = new AtomicInteger();
+        restAssuredExecutor.execute(() -> paymentEntry.set(given().when()
+                                                                  .get(API + "/entry/EntryController")
+                                                                  .then()
+                                                                  .statusCode(200)
+                                                                  .body("findAll { it.Payment == " + payment.get() + " }.size()",
+                                                                          equalTo(1))
+                                                                  .extract()
+                                                                  .path("find { it.Payment == " + payment.get() + " }.Id")),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + paymentEntry.get() + " && it.Debit != null }.size()",
+                                                         equalTo(1))
+                                                 .body("findAll { it.Entry == " + paymentEntry.get() + " && it.Credit != null }.size()",
+                                                         equalTo(1)));
 
         // personal: the my-surface lists ONLY the current user's rows, with the sensitive field
         // stripped; a foreign record is a 404 (indistinguishable from missing).
