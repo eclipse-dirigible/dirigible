@@ -165,7 +165,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                 usesByAlias.put(uses.getModel(), uses);
             }
         }
-        String workspaceName = context != null && notBlank(context.getWorkspaceName()) ? context.getWorkspaceName() : "workspace";
         // Cross-model targets become read-only PROJECTION entities (dedup by target name; parameterUtils
         // links a consuming FK to its projection by matching relationshipEntityName == projection name).
         Map<String, Map<String, Object>> projectionEntities = new LinkedHashMap<>();
@@ -478,7 +477,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     putPersonal(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     putPartner(fkProperty, relation, info.identityProperty(), info.labelField(), info.resolved());
                     properties.add(fkProperty);
-                    projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info, workspaceName));
+                    projectionEntities.computeIfAbsent(relation.getTo(), target -> projectionEntity(uses, target, info));
                     // Draw the FK arrow to the projection the same way a same-model relation draws it: this
                     // link feeds document.relationsByEntity, from which appendMxGraphModel emits the mxGraph
                     // edge (owner FK cell -> projection PK cell). The target lives in another model, so
@@ -1644,11 +1643,12 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * / DAO / controller (downstream filters skip {@code type=PROJECTION}); it carries the owner's
      * table name and primary-key column so the {@code .schema} foreign key resolves to the owner's
      * table, and a blank {@code perspectiveName} so it never shows up in this app's navigation. The
-     * {@code projectionReferencedModel} path {@code /<workspace>/<project>/<model>.model} is the format
-     * the template's {@code parameterUtils} splits to find the owner project + gen folder.
+     * {@code projectionReferencedModel} path is {@code /<project>/<model>.model} - the owner project
+     * plus its model file, which is all {@code parameterUtils} reads out of it (the owner project + gen
+     * folder). It deliberately carries NO workspace segment: generated model files are committed, so an
+     * environment detail in them would make the artefact depend on whose IDE produced it (#6423).
      */
-    private static Map<String, Object> projectionEntity(UsesIntent uses, String targetEntity, CrossModelSupport.TargetInfo info,
-            String workspaceName) {
+    private static Map<String, Object> projectionEntity(UsesIntent uses, String targetEntity, CrossModelSupport.TargetInfo info) {
         String project = uses.resolveProject();
         String alias = uses.getModel();
         Map<String, Object> e = new LinkedHashMap<>();
@@ -1677,7 +1677,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         e.put("perspectiveRole", "");
         e.put("generateReport", "false");
         e.put("generateDefaultRoles", "false");
-        e.put("projectionReferencedModel", "/" + workspaceName + "/" + project + "/" + alias + ".model");
+        e.put("projectionReferencedModel", "/" + project + "/" + alias + ".model");
         e.put("projectionReferencedEntity", targetEntity);
         List<Map<String, Object>> properties = new ArrayList<>();
         Map<String, Object> key = new LinkedHashMap<>();

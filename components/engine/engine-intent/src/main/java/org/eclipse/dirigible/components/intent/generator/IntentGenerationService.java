@@ -90,7 +90,8 @@ public class IntentGenerationService {
      * @param projectRoot repository path of the target project root, e.g.
      *        {@code /users/admin/workspace/my-library}
      * @param projectName the target project name
-     * @param workspaceName the workspace the project lives in (used for cross-model projection paths)
+     * @param workspaceName the workspace the project lives in (generation-target identity; no generator
+     *        reads it - see {@code IntentGenerationContext#getWorkspaceName()})
      * @param fallbackName base name used for single-file outputs when the YAML omits {@code name:} -
      *        conventionally the intent file's base name
      * @return the files written and scrubbed

@@ -43,7 +43,8 @@ class EdmIntentGeneratorTest {
         Map<String, Object> country = entityByName(entities, "Country");
         assertNotNull(country, "a Country projection entity must be emitted");
         assertEquals("PROJECTION", country.get("type"));
-        assertEquals("/workspace/countries/countries.model", country.get("projectionReferencedModel"));
+        assertEquals("/countries/countries.model", country.get("projectionReferencedModel"),
+                "the projection path must name only the owner project + model - no workspace segment (#6423)");
         assertEquals("Country", country.get("projectionReferencedEntity"));
         // A projection must stay out of this app's navigation - no perspective.
         assertEquals("", country.get("perspectiveName"));
@@ -220,7 +221,7 @@ class EdmIntentGeneratorTest {
 
         Map<String, Object> paymentProjection = entityByName(entities, "CustomerPayment");
         assertEquals("PROJECTION", paymentProjection.get("type"));
-        assertEquals("/workspace/customer-payments/customer-payments.model", paymentProjection.get("projectionReferencedModel"));
+        assertEquals("/customer-payments/customer-payments.model", paymentProjection.get("projectionReferencedModel"));
 
         // The invoice number is a calculated property assigned on create.
         Map<String, Object> invoice = entityByName(entities, "SalesInvoice");
@@ -1324,5 +1325,30 @@ class EdmIntentGeneratorTest {
         assertEquals("{\"1\":\"WholesalePrice\",\"2\":\"RetailPrice\"}", price.get("widgetDependsOnValueCases"));
         assertEquals("RetailPrice", price.get("widgetDependsOnValueDefault"));
         assertNull(price.get("widgetDependsOnValueFrom"), "the conditional form replaces the fixed valueFrom");
+    }
+
+    /**
+     * Reproducibility (#6423): generated model files are committed, so the projection reference must
+     * depend only on the sources - generating the same intent in a differently-named IDE workspace must
+     * not rewrite it.
+     */
+    @org.junit.jupiter.api.Test
+    void projectionPathIsIndependentOfTheGeneratingWorkspace() {
+        String yaml = """
+                name: invoices
+                uses:
+                  - { model: companies, project: companies }
+                entities:
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, model: companies }
+                    """;
+        org.eclipse.dirigible.components.intent.model.IntentModel intent =
+                org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml);
+        java.util.Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(intent, "invoices");
+        assertEquals("/companies/companies.model", entityByName(entities(model), "Company").get("projectionReferencedModel"),
+                "the path must carry no environment detail - only the owner project and its model");
     }
 }
