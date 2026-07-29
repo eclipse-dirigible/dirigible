@@ -132,7 +132,8 @@ public class ${name}Controller {
 #if($hasReferenceValidations)
         validateReferences(entity);
 #end
-        return repository.save(entity);
+        ${name}Entity saved = repository.save(entity);
+        return repository.findOne(saved.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end).orElse(saved);
     }
 #if($attachmentEntity)
 #if(!$attachmentReadOnly)
@@ -455,7 +456,7 @@ public class ${name}Controller {
 #end
 #end
 #foreach($property in $properties)
-#if($property.isRequiredProperty)
+#if($property.isRequiredProperty && !$property.dataDefaultValue)
         if (entity.${property.name} == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The '${property.name}' property is required");
         }

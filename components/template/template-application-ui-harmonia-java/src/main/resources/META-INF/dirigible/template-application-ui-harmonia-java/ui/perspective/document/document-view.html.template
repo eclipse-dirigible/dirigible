@@ -72,7 +72,7 @@
 ## Read-only / system fields (ProcessId, audit, uuid, any field marked read-only) render in the
 ## read-only details block below the header form, not as editable inputs; they stay in the model for
 ## round-trip. Aggregate totals go in the totals footer; calculated fields stay inline (read-only).
-#if(!$property.dataAutoIncrement && $property.aggregate != "true" && $property.widgetType != "DOCUMENT_NUMBER" && $property.widgetType != "DOCUMENT_STATUS" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
+#if(!$property.dataAutoIncrement && $property.aggregate != "true" && !($property.widgetType == "DOCUMENT_NUMBER" && $property.numberSeries) && $property.widgetType != "DOCUMENT_STATUS" && $property.isReadOnlyProperty != "true" && !($property.auditType && $property.auditType != "NONE"))
 #set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
