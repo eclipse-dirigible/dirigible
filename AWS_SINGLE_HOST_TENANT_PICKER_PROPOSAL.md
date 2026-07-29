@@ -53,7 +53,7 @@ What does **not** change: `TenantContext` is a clean thread-local SPI (`componen
 | No tenant selected | Redirect to the **tenant picker page** (auto-select when the user has exactly one membership); never fall through to the default tenant | Silent default-tenant fallback would read/write the wrong tenant's data |
 | Identity | One Cognito user pool | Same-credentials requirement |
 | OAuth app clients | **ONE confidential app client** (single callback `https://app.example.com/login/oauth2/code/cognito`) | One host = one callback; the per-tenant-client rationale from the subdomain proposal (per-tenant callbacks, tenant signal at mint time) evaporates — see §2 |
-| Membership & roles | Cognito groups `t:<tenantId>:<role>` — same model as the subdomain proposal | One source of truth in the IdP; the full set arrives in the token and is filtered app-side per pick |
+| Membership & roles | Cognito groups `t:<tenantId>:<role>` — same model as the subdomain proposal; **no tenant user attribute** (membership is derived from the group pattern, §2.2) | One source of truth in the IdP; the full set arrives in the token and is filtered app-side per pick |
 | Pre-token Lambda | **Not required** (optional refinement, §2.3) | With one client there is no per-tenant token to mint; prefixed groups pass through as-is — Cognito **Lite** plan may suffice |
 | Roles at runtime | Authorities **rebuilt on every tenant switch** from the session's membership snapshot; one active tenant per browser session | §3 — the load-bearing fork mechanism |
 | Everything below identity | Inherited unchanged from `AWS_DEPLOYMENT_PROPOSAL.md` | ECS Fargate desiredCount=1, RDS Multi-AZ schema-per-tenant, S3 CMS, baked-in content, hardening, ops |
@@ -120,6 +120,13 @@ So: **one confidential app client**, the shipped static registration, standard `
 | `email` | Sign-in / display identity | `user-name-attribute` |
 | `cognito:groups` | **All** memberships as prefixed groups: `["t:acme:manager", "t:acme:ADMINISTRATOR", "t:globex:viewer"]` | Parsed **once at login** into a membership map `{acme: [manager, ADMINISTRATOR], globex: [viewer]}` held on the principal; **no authorities are granted from it directly** |
 | `scope` (M2M only) | `<tenantId>/<role>` per-tenant scopes | membership + roles for client-credentials callers |
+
+**There is no tenant user attribute.** The shipped `CognitoTenantFilter` reads a `custom:tenant` attribute (a user-global comma-separated list); this design retires it entirely, like the subdomain proposal. A user's tenants are **derived from the group pattern**: membership in a tenant *is* holding at least one `t:<tenant>:*` group. The picker lists exactly the tenants present in the parsed membership map, the switch endpoint's membership check is a key lookup in that same map, and the roles granted after a pick are that key's values — one claim (`cognito:groups`) feeds all three, so there is no second source of truth to drift out of sync.
+
+Two consequences of deriving membership purely from the pattern:
+
+- **Administration is a single operation surface.** Add someone to a tenant = add a group; change their roles = change groups; remove them = delete their `t:<tenant>:*` groups. Nothing else to update anywhere.
+- **A "member with zero roles" state does not exist** — removing someone's last `t:<tenant>:*` group removes the membership itself (the tenant disappears from their picker at the next login/switch). If "belongs, but no permissions yet" is ever needed, adopt a conventional marker role (e.g. `t:<tenant>:member`) that the mapper treats as membership-only.
 
 The 100-groups-per-user Cognito hard limit applies to the *person's total* tenant-role pairs — same watchpoint as the subdomain design, unchanged.
 

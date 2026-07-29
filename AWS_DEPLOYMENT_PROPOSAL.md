@@ -227,7 +227,10 @@ Roles live in Cognito as groups named **`t:<subdomain>:<roleName>`** — e.g. `t
 
 Arithmetic at target scale: 100 tenants × ~5 roles = ~500 groups (pool limit 10,000). The **non-adjustable 100-groups-per-user** limit caps one person at ~100 tenant-role pairs — a non-issue for a person in a handful of tenants; flagged as a growth watchpoint (§11).
 
-The `custom:tenant` user attribute that the shipped `CognitoTenantFilter` reads is **retired** — a user-global comma-separated attribute is a second source of truth that drifts, and it carries no per-tenant roles.
+The `custom:tenant` user attribute that the shipped `CognitoTenantFilter` reads is **retired** — a user-global comma-separated attribute is a second source of truth that drifts, and it carries no per-tenant roles. There is **no tenant user attribute at all** in this design: a user's tenants are *derived* from the group pattern, nowhere stored as a separate fact. Two consequences:
+
+- **Administration is a single operation surface.** Add someone to a tenant = add a group; change their roles = change groups; remove them = delete their `t:<sub>:*` groups. Nothing else to keep in sync.
+- **A "member with zero roles" state does not exist** — removing someone's last `t:<sub>:*` group removes the membership itself (the Lambda finds no matching groups and denies the token). If "belongs, but no permissions yet" is ever needed, adopt a conventional marker role (e.g. `t:<sub>:member`).
 
 ### 4.5 The pre-token-generation Lambda (V2_0) — the per-tenant lens
 
