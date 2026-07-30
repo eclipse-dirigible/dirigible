@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<!--
+  The ADMINISTRATION surface of this module - deliberately PLAIN, one level above the database:
+  every non-projection entity as a flat server-side-paged table of EVERY column plus a flat record
+  editor. Writes go through the generated REST controllers, so repository events, checks, numbering
+  and audit fire exactly like any application write (an immutable record answers 409 here too).
+  Hosted by the Administration shell (/services/web/admin/), which is ADMINISTRATOR-gated.
+-->
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${appTitle} - Administration</title>
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <style>
+        html, body { height: 100%; }
+        .admin-cell { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    </style>
+</head>
+<body x-data="adminApp" x-cloak class="hbox size-full">
+
+    <!-- Entity navigation: every entity of the module, no grouping, no opinions. -->
+    <aside class="vbox gap-1 p-3 border-e overflow-y-auto shrink-0" style="width: 15rem;">
+        <div class="hbox items-center gap-2 pb-2">
+            <svg x-h-lucide role="img" data-lucide="wrench" class="size-4"></svg>
+            <span class="font-semibold" x-text="config.title"></span>
+        </div>
+        <template x-for="e in config.entities" :key="e.name">
+            <button type="button" x-h-button :data-variant="selected && selected.name === e.name ? 'secondary' : 'transparent'"
+                    class="justify-start" @click="select(e)">
+                <span x-text="e.label"></span>
+            </button>
+        </template>
+    </aside>
+
+    <!-- The selected entity: flat table + record editor. -->
+    <main class="vbox grow overflow-hidden" x-show="selected">
+        <div x-h-toolbar>
+            <span x-h-toolbar-title x-text="selected ? selected.label : ''"></span>
+            <span class="text-sm opacity-70" x-text="total + ' record(s)'"></span>
+            <span class="grow"></span>
+            <button type="button" x-h-button data-variant="transparent" @click="load()" aria-label="Refresh">
+                <svg x-h-lucide role="img" data-lucide="refresh-cw" class="size-4"></svg>
+            </button>
+            <button type="button" x-h-button data-variant="primary" @click="startCreate()">
+                <svg x-h-lucide role="img" data-lucide="plus" class="size-4"></svg> New
+            </button>
+        </div>
+
+        <div x-show="error" x-h-alert data-variant="negative" role="alert" class="m-3">
+            <span x-text="error"></span>
+        </div>
+
+        <!-- Every column, raw. Row click opens the editor. -->
+        <div class="grow overflow-auto p-3" x-show="!editing">
+            <table x-h-table>
+                <thead>
+                    <tr>
+                        <template x-for="p in (selected ? selected.properties : [])" :key="p.name">
+                            <th x-h-table-head scope="col"><span x-text="p.name"></span></th>
+                        </template>
+                        <th x-h-table-head scope="col"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="row in rows" :key="rowKey(row)">
+                        <tr x-h-table-row data-hoverable="true" @click="startEdit(row)">
+                            <template x-for="p in selected.properties" :key="p.name">
+                                <td x-h-table-cell><span class="admin-cell inline-block" x-text="cell(row[p.name])"></span></td>
+                            </template>
+                            <td x-h-table-cell class="text-end" @click.stop>
+                                <button type="button" x-h-button data-variant="transparent" aria-label="Delete" @click="remove(row)">
+                                    <svg x-h-lucide role="img" data-lucide="trash-2" class="size-4"></svg>
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            <div class="hbox items-center gap-2 pt-3" x-show="total > limit">
+                <button type="button" x-h-button data-variant="outline" :disabled="offset === 0" @click="page(-1)">Previous</button>
+                <span class="text-sm" x-text="(offset + 1) + ' - ' + Math.min(offset + limit, total) + ' of ' + total"></span>
+                <button type="button" x-h-button data-variant="outline" :disabled="offset + limit >= total" @click="page(1)">Next</button>
+            </div>
+        </div>
+
+        <!-- The flat record editor: every column an input; read-only/system columns visible but disabled. -->
+        <div class="grow overflow-auto p-4" x-show="editing">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4" style="max-width: 60rem;">
+                <template x-for="p in (selected ? selected.properties : [])" :key="p.name">
+                    <div x-h-field x-show="!(isNew && p.pk)">
+                        <label x-h-label :for="'a_' + p.name">
+                            <span x-text="p.name"></span>
+                            <span class="text-negative" x-show="p.required && !p.readonly">*</span>
+                            <span class="opacity-60 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
+                        </label>
+                        <template x-if="p.type === 'boolean'">
+                            <span x-h-checkbox><input type="checkbox" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></span>
+                        </template>
+                        <template x-if="p.type === 'number'">
+                            <div x-h-input-number><input type="number" step="any" :id="'a_' + p.name" x-model.number="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></div>
+                        </template>
+                        <template x-if="p.type !== 'boolean' && p.type !== 'number'">
+                            <input x-h-input type="text" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" />
+                        </template>
+                    </div>
+                </template>
+            </div>
+            <div class="hbox gap-2 pt-4">
+                <button type="button" x-h-button data-variant="primary" @click="save()" :disabled="saving">
+                    <span x-show="saving" x-h-spinner></span>
+                    <span x-text="isNew ? 'Create' : 'Save'"></span>
+                </button>
+                <button type="button" x-h-button data-variant="transparent" @click="cancel()">Cancel</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // Generated metadata: every non-projection, non-report entity of this module with its full
+        // column list and its power REST controller (the same API the application pages use).
+        window.AdminConfig = {
+            title: '${appTitle}',
+            entities: ${adminEntitiesJson}
+        };
+
+        document.addEventListener('alpine:init', () => {
+            Alpine.data('adminApp', () => ({
+                config: window.AdminConfig,
+                selected: null,
+                rows: [],
+                total: 0,
+                limit: 50,
+                offset: 0,
+                error: '',
+                editing: false,
+                isNew: false,
+                saving: false,
+                draft: {},
+
+                init() { if (this.config.entities.length) this.select(this.config.entities[0]); },
+
+                async select(entity) {
+                    this.selected = entity;
+                    this.offset = 0;
+                    this.editing = false;
+                    await this.load();
+                },
+
+                // The REST error body carries the validation reason (server.error.include-message) -
+                // surface it verbatim; an admin wants the raw truth.
+                async apiError(res) {
+                    let message = 'HTTP ' + res.status;
+                    try {
+                        const body = await res.json();
+                        if (body && (body.message || body.error)) message += ': ' + (body.message || body.error);
+                    } catch (e) { /* no JSON body */ }
+                    return message;
+                },
+
+                async load() {
+                    if (!this.selected) return;
+                    this.error = '';
+                    try {
+                        // The generated controller answers {"count": n}.
+                        const count = await fetch(this.selected.api + '/count',
+                            { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                        this.total = count.ok ? ((await count.json()).count || 0) : 0;
+                        // $limit/$offset are the generated controller's paging parameters.
+                        const res = await fetch(this.selected.api + '?$limit=' + this.limit + '&$offset=' + this.offset,
+                            { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                        if (!res.ok) throw new Error(await this.apiError(res));
+                        this.rows = await res.json();
+                    } catch (e) {
+                        this.rows = [];
+                        this.error = String(e.message || e);
+                    }
+                },
+
+                page(direction) {
+                    this.offset = Math.max(0, this.offset + direction * this.limit);
+                    this.load();
+                },
+
+                rowKey(row) { return row[this.selected.pk]; },
+                cell(value) { return value === null || value === undefined ? '' : String(value); },
+
+                startCreate() {
+                    this.isNew = true;
+                    this.draft = {};
+                    this.editing = true;
+                    this.error = '';
+                },
+
+                startEdit(row) {
+                    this.isNew = false;
+                    this.draft = Object.assign({}, row);
+                    this.editing = true;
+                    this.error = '';
+                },
+
+                cancel() { this.editing = false; this.draft = {}; this.error = ''; },
+
+                async save() {
+                    this.saving = true;
+                    this.error = '';
+                    try {
+                        const payload = {};
+                        for (const p of this.selected.properties) {
+                            if (this.isNew && p.pk) continue;
+                            let v = this.draft[p.name];
+                            if (v === '' || v === undefined) v = null;
+                            payload[p.name] = v;
+                        }
+                        const id = this.draft[this.selected.pk];
+                        const res = await fetch(this.isNew ? this.selected.api : this.selected.api + '/' + encodeURIComponent(id), {
+                            method: this.isNew ? 'POST' : 'PUT',
+                            credentials: 'same-origin',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(payload)
+                        });
+                        if (!res.ok) throw new Error(await this.apiError(res));
+                        this.editing = false;
+                        await this.load();
+                    } catch (e) {
+                        this.error = String(e.message || e);
+                    } finally {
+                        this.saving = false;
+                    }
+                },
+
+                async remove(row) {
+                    if (!window.confirm('Delete ' + this.selected.name + ' ' + row[this.selected.pk] + '?')) return;
+                    this.error = '';
+                    try {
+                        const res = await fetch(this.selected.api + '/' + encodeURIComponent(row[this.selected.pk]), {
+                            method: 'DELETE', credentials: 'same-origin'
+                        });
+                        if (!res.ok && res.status !== 204) throw new Error(await this.apiError(res));
+                        await this.load();
+                    } catch (e) {
+                        this.error = String(e.message || e);
+                    }
+                }
+            }));
+        });
+    </script>
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+</body>
+</html>
