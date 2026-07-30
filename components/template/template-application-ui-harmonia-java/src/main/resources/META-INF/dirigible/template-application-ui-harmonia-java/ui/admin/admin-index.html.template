@@ -66,7 +66,7 @@
                     <template x-for="row in rows" :key="rowKey(row)">
                         <tr x-h-table-row data-hoverable="true" @click="startEdit(row)">
                             <template x-for="p in selected.properties" :key="p.name">
-                                <td x-h-table-cell><span class="admin-cell inline-block" x-text="cell(row[p.name])"></span></td>
+                                <td x-h-table-cell><span class="admin-cell inline-block" x-text="display(p, row[p.name])"></span></td>
                             </template>
                             <td x-h-table-cell class="text-end" @click.stop>
                                 <button type="button" x-h-button data-variant="transparent" aria-label="Delete" @click="remove(row)">
@@ -94,13 +94,24 @@
                             <span class="text-negative" x-show="p.required && !p.readonly">*</span>
                             <span class="opacity-60 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
                         </label>
-                        <template x-if="p.type === 'boolean'">
+                        <template x-if="p.lookup">
+                            <div x-h-select data-filter="contains" :data-disabled="p.readonly">
+                                <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :placeholder="'Select ' + p.name + '...'" />
+                                <div x-h-select-content>
+                                    <div x-h-select-search></div>
+                                    <template x-for="opt in (options[p.name] || [])" :key="opt.value">
+                                        <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                        <template x-if="!p.lookup && p.type === 'boolean'">
                             <span x-h-checkbox><input type="checkbox" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></span>
                         </template>
-                        <template x-if="p.type === 'number'">
+                        <template x-if="!p.lookup && p.type === 'number'">
                             <div x-h-input-number><input type="number" step="any" :id="'a_' + p.name" x-model.number="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" /></div>
                         </template>
-                        <template x-if="p.type !== 'boolean' && p.type !== 'number'">
+                        <template x-if="!p.lookup && p.type !== 'boolean' && p.type !== 'number'">
                             <input x-h-input type="text" :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly || (p.pk && !isNew)" />
                         </template>
                     </div>
@@ -137,6 +148,10 @@
                 isNew: false,
                 saving: false,
                 draft: {},
+                // Per relation column: the option list for the combobox and the id -> label map the
+                // table renders through. Loaded once per selected entity.
+                options: {},
+                labels: {},
 
                 init() { if (this.config.entities.length) this.select(this.config.entities[0]); },
 
@@ -144,7 +159,50 @@
                     this.selected = entity;
                     this.offset = 0;
                     this.editing = false;
-                    await this.load();
+                    this.options = {};
+                    this.labels = {};
+                    await Promise.all([this.load(), this.loadLookups()]);
+                },
+
+                /** Load every relation column's options: the same controller the business dropdowns use.
+                 *  A failing lookup degrades to the raw id - never to a broken page. */
+                async loadLookups() {
+                    const relations = (this.selected.properties || []).filter(p => p.lookup);
+                    await Promise.all(relations.map(async (p) => {
+                        try {
+                            const res = await fetch(p.lookup.url + '?$limit=1000&$offset=0',
+                                { credentials: 'same-origin', headers: { 'Accept': 'application/json' } });
+                            if (!res.ok) return;
+                            const rows = await res.json();
+                            const map = {};
+                            const list = rows.map(r => {
+                                const value = r[p.lookup.key];
+                                const text = r[p.lookup.label] != null ? String(r[p.lookup.label]) : String(value);
+                                map[String(value)] = text;
+                                return { value: value, text: text };
+                            });
+                            this.options[p.name] = list;
+                            this.labels[p.name] = map;
+                        } catch (e) { /* raw id stays the fallback */ }
+                    }));
+                },
+
+                /** Table rendering: a relation shows "Label (id)" when resolvable, the raw id otherwise -
+                 *  an administrator needs to see the actual foreign key, not only its label. */
+                display(property, value) {
+                    if (value === null || value === undefined) return '';
+                    const map = this.labels[property.name];
+                    const label = map && map[String(value)];
+                    if (label) return label + ' (' + value + ')';
+                    // A temporal column arrives as the JSON array the Java serializer emits
+                    // ([y,m,d] / [y,m,d,h,mi,s]) - render it readably rather than as raw commas.
+                    if (Array.isArray(value) && value.length >= 3 && value.every(n => typeof n === 'number')) {
+                        const pad = (n) => String(n).padStart(2, '0');
+                        const date = value[0] + '-' + pad(value[1]) + '-' + pad(value[2]);
+                        return value.length >= 6 ? date + ' ' + pad(value[3]) + ':' + pad(value[4]) + ':' + pad(value[5])
+                             : (value.length === 5 ? date + ' ' + pad(value[3]) + ':' + pad(value[4]) : date);
+                    }
+                    return String(value);
                 },
 
                 // The REST error body carries the validation reason (server.error.include-message) -

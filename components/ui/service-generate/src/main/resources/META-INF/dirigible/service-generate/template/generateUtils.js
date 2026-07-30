@@ -444,7 +444,16 @@ export function generateFiles(model, parameters, templateSources) {
                                     readonly: !!p.dataAutoIncrement || p.isCalculatedProperty === true
                                         || p.isReadOnlyProperty === true || !!(p.auditType && p.auditType !== 'NONE'),
                                     pk: !!p.dataPrimaryKey,
-                                    fk: p.relationshipEntityName || null
+                                    fk: p.relationshipEntityName || null,
+                                    // A relation renders as a COMBOBOX resolving the id to its label
+                                    // (raw id inputs are how an administrator corrupts data). The
+                                    // lookup URL / key / label field are the ones parameterUtils
+                                    // already computed for the business dropdowns. No inline create
+                                    // here on purpose - the admin surface edits what exists.
+                                    lookup: p.widgetDropdownControllerUrl
+                                        ? { url: p.widgetDropdownControllerUrl, key: p.widgetDropDownKey || 'Id',
+                                            label: p.widgetDropDownValue || 'Name' }
+                                        : null
                                 }))
                             }));
                         const adminParameters = cleanData({ ...parameters, adminEntitiesJson: JSON.stringify(adminEntities) });
