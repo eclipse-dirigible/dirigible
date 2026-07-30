@@ -22,6 +22,14 @@ public class DependsOnIntent {
     /**
      * Name of the sibling <b>to-one relation</b> of the same entity that triggers this dependency (the
      * master control, e.g. {@code Country} for a dependent {@code City}). Mandatory.
+     *
+     * <p>
+     * On a document ITEM field this may also be the HEADER-MEDIATED form (#6358):
+     * {@code <composition parent relation>.<header to-one relation>} (e.g.
+     * {@code SalesInvoice.Customer}), so the line defaults a value from a record the open DOCUMENT
+     * points at rather than from one of its own relations - the canonical case being a line discount
+     * defaulting from the header partner's standard discount. The trigger is then a header property, so
+     * there is no option list to cascade: fields only, and {@link #valueFrom} stays mandatory.
      */
     private String relation;
 

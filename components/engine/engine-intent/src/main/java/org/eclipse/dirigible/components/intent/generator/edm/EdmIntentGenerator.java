@@ -1251,13 +1251,43 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * @param ownTargetPropertyNames the dependent's own target property names when it is a resolved
      *        cross-model target (for {@code filterBy} validation), else {@code null}
      */
+    /**
+     * The composition parent relation of an item entity by name, or null when the entity has no such
+     * relation - i.e. the name does not denote the open document header.
+     *
+     * @param entity the entity
+     * @param name the relation name
+     * @return the composition parent relation, or null
+     */
+    private static RelationIntent compositionParentRelation(EntityIntent entity, String name) {
+        for (RelationIntent relation : entity.getRelations()) {
+            if (relation.isComposition() && name.equals(relation.getName())) {
+                return relation;
+            }
+        }
+        return null;
+    }
+
     private static void putDependsOn(Map<String, Object> p, EntityIntent owner, DependsOnIntent dependsOn, String ownTargetKeyField,
             Set<String> ownTargetPropertyNames, Map<String, EntityIntent> byName, Map<String, UsesIntent> usesByAlias,
             IntentGenerationContext context) {
         if (dependsOn == null) {
             return;
         }
-        RelationIntent trigger = toOneRelationByName(owner, dependsOn.getRelation());
+        // A dotted `relation` is the header-mediated trigger (#6358): the trigger is a to-one of the
+        // open document header, reached through this item's composition parent relation. The resolved
+        // relation is a HEADER property, so the runtime watches the header form instead of a sibling.
+        RelationIntent compositionParent = null;
+        RelationIntent trigger;
+        String triggerName = dependsOn.getRelation();
+        if (triggerName != null && triggerName.indexOf('.') >= 0) {
+            String[] segments = triggerName.split("\\.");
+            compositionParent = compositionParentRelation(owner, segments[0]);
+            EntityIntent header = compositionParent == null ? null : byName.get(compositionParent.getTo());
+            trigger = header == null || segments.length != 2 ? null : toOneRelationByName(header, segments[1]);
+        } else {
+            trigger = toOneRelationByName(owner, triggerName);
+        }
         if (trigger == null) {
             // The parser already reported the dangling trigger; stay lenient here.
             return;
@@ -1280,6 +1310,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         }
         p.put("widgetDependsOnProperty", IntentNaming.pascalCase(trigger.getName()));
         p.put("widgetDependsOnEntity", trigger.getTo());
+        if (compositionParent != null) {
+            // The trigger property is read off the DOCUMENT header, not off this row.
+            p.put("widgetDependsOnHeader", "true");
+            p.put("widgetDependsOnHeaderEntity", compositionParent.getTo());
+        }
         java.util.Map<String, Object> conditional = dependsOn.getValueFromConditional();
         if (conditional != null) {
             // The conditional form (#6358): the copied trigger-target property is picked by a
@@ -1291,23 +1326,18 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // PascalCased property values, and the optional no-match default.
             String[] segments = String.valueOf(conditional.get("by"))
                                       .split("\\.");
-            RelationIntent compositionParent = null;
-            for (RelationIntent relation : owner.getRelations()) {
-                if (relation.isComposition() && segments[0].equals(relation.getName())) {
-                    compositionParent = relation;
-                }
-            }
+            RelationIntent byCompositionParent = compositionParentRelation(owner, segments[0]);
             StringBuilder path = new StringBuilder();
             for (String segment : segments) {
                 path.append(path.length() == 0 ? "" : ".")
                     .append(IntentNaming.pascalCase(segment));
             }
             p.put("widgetDependsOnValueBy", path.toString());
-            if (compositionParent != null) {
+            if (byCompositionParent != null) {
                 p.put("widgetDependsOnValueByHeader", "true");
-                p.put("widgetDependsOnValueByHeaderEntity", compositionParent.getTo());
+                p.put("widgetDependsOnValueByHeaderEntity", byCompositionParent.getTo());
                 if (segments.length == 3) {
-                    EntityIntent header = byName.get(compositionParent.getTo());
+                    EntityIntent header = byName.get(byCompositionParent.getTo());
                     RelationIntent headerHop = header == null ? null : toOneRelationByName(header, segments[1]);
                     if (headerHop != null) {
                         p.put("widgetDependsOnValueByEntity", headerHop.getTo());

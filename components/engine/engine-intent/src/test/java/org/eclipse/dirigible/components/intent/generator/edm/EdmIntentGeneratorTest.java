@@ -1351,4 +1351,43 @@ class EdmIntentGeneratorTest {
         assertEquals("/companies/companies.model", entityByName(entities(model), "Company").get("projectionReferencedModel"),
                 "the path must carry no environment detail - only the owner project and its model");
     }
+
+    /**
+     * The header-mediated trigger (#6358): the trigger property is resolved on the DOCUMENT header, so
+     * the runtime watches the header form rather than a sibling of the row.
+     */
+    @org.junit.jupiter.api.Test
+    void headerMediatedDependsOnEmitsHeaderTriggerAttributes() {
+        String yaml = """
+                name: shop
+                entities:
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: standardDiscount, type: decimal }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: SalesOrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: discount, type: decimal, dependsOn: { relation: SalesOrder.Customer, valueFrom: standardDiscount } }
+                    relations:
+                      - { name: SalesOrder, kind: manyToOne, to: SalesOrder, composition: true, required: true }
+                    """;
+        java.util.Map<String, Object> model =
+                EdmIntentGenerator.buildModelJsonForTest(org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml), "shop");
+        java.util.Map<String, Object> discount = propertyByName(entityByName(entities(model), "SalesOrderItem"), "Discount");
+        // The trigger is the HEADER's Customer relation, not anything on the row.
+        assertEquals("Customer", discount.get("widgetDependsOnProperty"));
+        assertEquals("Customer", discount.get("widgetDependsOnEntity"));
+        assertEquals("true", discount.get("widgetDependsOnHeader"));
+        assertEquals("SalesOrder", discount.get("widgetDependsOnHeaderEntity"));
+        assertEquals("StandardDiscount", discount.get("widgetDependsOnValueFrom"));
+        assertNull(discount.get("widgetDependsOnFilterBy"), "a field has no option list to filter");
+    }
 }

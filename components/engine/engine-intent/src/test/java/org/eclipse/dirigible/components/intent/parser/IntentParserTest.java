@@ -305,6 +305,92 @@ class IntentParserTest {
             """;
 
     /**
+     * The header-mediated trigger form (#6358): the line's discount defaults from a record the open
+     * DOCUMENT points at (its customer), not from a relation of the line itself.
+     */
+    private static final String HEADER_MEDIATED_DEPENDS_ON = """
+            name: shop
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+                  - { name: standardDiscount, type: decimal }
+              - name: Product
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: SalesOrder
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: date, type: date }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer }
+              - name: SalesOrderItem
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: discount, type: decimal, dependsOn: { relation: SalesOrder.Customer, valueFrom: standardDiscount } }
+                relations:
+                  - { name: SalesOrder, kind: manyToOne, to: SalesOrder, composition: true, required: true }
+                  - { name: Product, kind: manyToOne, to: Product }
+            """;
+
+    @Test
+    void headerMediatedDependsOnParses() {
+        IntentModel model = IntentParser.parse(HEADER_MEDIATED_DEPENDS_ON);
+        var dependsOn = model.getEntities()
+                             .get(3)
+                             .getFields()
+                             .get(1)
+                             .getDependsOn();
+        assertEquals("SalesOrder.Customer", dependsOn.getRelation());
+        assertEquals("standardDiscount", dependsOn.getValueFrom());
+    }
+
+    @Test
+    void headerMediatedDependsOnRequiresTheCompositionParentAsFirstSegment() {
+        // Product is a plain to-one of the item, not the composition parent (the open document).
+        String yaml = HEADER_MEDIATED_DEPENDS_ON.replace("relation: SalesOrder.Customer", "relation: Product.Customer");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("[Product] is not the composition parent relation of [SalesOrderItem]")),
+                "expected a non-composition first segment issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void headerMediatedDependsOnRejectsUnknownHeaderRelation() {
+        String yaml = HEADER_MEDIATED_DEPENDS_ON.replace("relation: SalesOrder.Customer", "relation: SalesOrder.Supplier");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("[Supplier] is not a to-one relation of [SalesOrder]")),
+                "expected an unknown header relation issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void headerMediatedDependsOnValidatesValueFromAgainstTheHeaderRelationTarget() {
+        String yaml = HEADER_MEDIATED_DEPENDS_ON.replace("valueFrom: standardDiscount", "valueFrom: nonsuchDiscount");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("valueFrom [nonsuchDiscount] is not a field or to-one relation of [Customer]")),
+                "expected valueFrom to be resolved against the header relation's target, got: " + ex.getIssues());
+    }
+
+    @Test
+    void headerMediatedDependsOnIsRejectedOnARelation() {
+        // A header selection has no business filtering a line's own dropdown - fields only.
+        String yaml = HEADER_MEDIATED_DEPENDS_ON.replace("- { name: Product, kind: manyToOne, to: Product }",
+                "- { name: Product, kind: manyToOne, to: Product, dependsOn: { relation: SalesOrder.Customer, valueFrom: id } }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("is supported on a field (auto-populate), not on a relation")),
+                "expected a fields-only issue, got: " + ex.getIssues());
+    }
+
+    /**
      * The conditional valueFrom form (#6358): the copied trigger-target property is picked by a
      * classifier - here the open document header's customer price level (a header-started by-path).
      */

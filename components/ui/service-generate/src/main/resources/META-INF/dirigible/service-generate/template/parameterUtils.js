@@ -389,7 +389,12 @@ export function process(model, parameters) {
     model.entities.forEach(e => {
         e.properties.forEach(p => {
             if (p.widgetDependsOnProperty) {
-                const trigger = e.properties.find(t => t.name === p.widgetDependsOnProperty);
+                // A header-mediated trigger (#6358) is a property of the DOCUMENT header, not of this
+                // item, so its controller URL has to be resolved on the header entity.
+                const triggerOwner = p.widgetDependsOnHeader === 'true'
+                    ? model.entities.find(x => x.name === p.widgetDependsOnHeaderEntity)
+                    : e;
+                const trigger = triggerOwner && triggerOwner.properties.find(t => t.name === p.widgetDependsOnProperty);
                 if (trigger && trigger.widgetDropdownControllerUrl) {
                     p.widgetDependsOnControllerUrl = trigger.widgetDropdownControllerUrl;
                 }

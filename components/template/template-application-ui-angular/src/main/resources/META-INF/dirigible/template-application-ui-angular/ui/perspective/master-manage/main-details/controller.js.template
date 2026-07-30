@@ -114,7 +114,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformLocale', 'EntitySer
 #end
 
 #foreach ($property in $properties)
-#if($property.widgetDependsOnProperty && $property.widgetDependsOnValueFrom)
+#if($property.widgetDependsOnProperty && $property.widgetDependsOnValueFrom && !$property.widgetDependsOnHeader)
 
 		${dollar}scope.${dollar}watch('entity.${property.widgetDependsOnProperty}', (newValue, oldValue) => {
 			if (newValue !== undefined && newValue !== null) {
