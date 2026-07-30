@@ -115,6 +115,15 @@ public class FieldIntent {
     private Integer size;
 
     /**
+     * Optional named input format for a {@code string} field - a preset over {@link #pattern}. Today
+     * the only value is {@code email}, which selects the EMAIL widget in the generated UI (so the input
+     * is a {@code type="email"} control) and supplies the canonical address regex, giving the same
+     * server-side 400 and client-side feedback an authored {@code pattern} would. Mutually exclusive
+     * with {@code pattern}: declaring both would leave which one wins ambiguous.
+     */
+    private String format;
+
+    /**
      * Optional input-format regex for a {@code string} / {@code text} field (IBAN, VAT number,
      * postcode, e-mail, ...). Emitted as the property's {@code widgetPattern}: the generated REST
      * controller rejects a non-matching value with 400, and the form input carries it as an HTML
@@ -143,6 +152,10 @@ public class FieldIntent {
      * {@link NumberIntent}.
      */
     private NumberIntent number;
+
+    public String getFormat() {
+        return format;
+    }
 
     public String getPattern() {
         return pattern;

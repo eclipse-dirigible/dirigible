@@ -1409,4 +1409,47 @@ class EdmIntentGeneratorTest {
         assertEquals("StandardDiscount", discount.get("widgetDependsOnValueFrom"));
         assertNull(discount.get("widgetDependsOnFilterBy"), "a field has no option list to filter");
     }
+
+    /**
+     * `format: email` (#6463) selects the EMAIL widget - the only way to reach a type="email" control
+     * from the DSL - and supplies the canonical regex through the SAME widgetPattern attribute a raw
+     * pattern uses, so the server-side 400 and the client-side feedback come from one path, not two.
+     */
+    @org.junit.jupiter.api.Test
+    void fieldFormatEmailEmitsTheEmailWidgetAndTheCanonicalPattern() {
+        String yaml = """
+                name: crm
+                entities:
+                  - name: Contact
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: email, type: string, length: 320, format: email }
+                      - { name: note, type: string }
+                    """;
+        java.util.Map<String, Object> model =
+                EdmIntentGenerator.buildModelJsonForTest(org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml), "crm");
+        java.util.Map<String, Object> contact = entityByName(entities(model), "Contact");
+        java.util.Map<String, Object> email = propertyByName(contact, "Email");
+        assertEquals("EMAIL", email.get("widgetType"));
+        String pattern = (String) email.get("widgetPattern");
+        assertNotNull(pattern, "format: email must supply the canonical regex via widgetPattern");
+        // The emitted regex must be valid where it is USED: a Java regex in the generated controller's
+        // matches(), and an HTML pattern in the form input. Compiling it here covers the Java half.
+        java.util.regex.Pattern compiled = java.util.regex.Pattern.compile(pattern);
+        assertTrue(compiled.matcher("a.b@example.com")
+                           .matches(),
+                "a normal address must match: " + pattern);
+        assertTrue(!compiled.matcher("not-an-email")
+                            .matches(),
+                "a bare word must not match: " + pattern);
+        assertTrue(!compiled.matcher("a b@example.com")
+                            .matches(),
+                "whitespace must not match: " + pattern);
+        assertTrue(!compiled.matcher("a@b")
+                            .matches(),
+                "a dotless domain must not match: " + pattern);
+        // An untouched string field stays a plain textbox with no pattern.
+        assertEquals("TEXTBOX", propertyByName(contact, "Note").get("widgetType"));
+        assertNull(propertyByName(contact, "Note").get("widgetPattern"));
+    }
 }

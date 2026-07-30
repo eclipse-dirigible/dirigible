@@ -1762,4 +1762,56 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("`pattern` is not a valid regular expression")),
                 "expected an invalid-regex issue, got: " + ex.getIssues());
     }
+
+    private static final String FIELD_FORMAT = """
+            name: crm
+            entities:
+              - name: Contact
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: email, type: string, length: 320, format: email }
+                  - { name: age, type: integer }
+            """;
+
+    /** A field's named `format` (#6463) - a preset over `pattern`. */
+    @Test
+    void fieldFormatParses() {
+        IntentModel model = IntentParser.parse(FIELD_FORMAT);
+        assertEquals("email", model.getEntities()
+                                   .get(0)
+                                   .getFields()
+                                   .get(1)
+                                   .getFormat());
+    }
+
+    @Test
+    void unknownFieldFormatIsRejected() {
+        String yaml = FIELD_FORMAT.replace("format: email", "format: iban");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("unknown `format` [iban]")),
+                "expected an unknown-format issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void fieldFormatIsRejectedOnANonStringField() {
+        String yaml = FIELD_FORMAT.replace("- { name: age, type: integer }", "- { name: age, type: integer, format: email }");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("`format` applies to a string field")),
+                "expected a type restriction issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void declaringBothFormatAndPatternIsRejected() {
+        // Both land on widgetPattern, so which one wins would be invisible to the author.
+        String yaml = FIELD_FORMAT.replace("format: email", "format: email, pattern: '^x$'");
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("declares both `format` and `pattern`")),
+                "expected a both-declared issue, got: " + ex.getIssues());
+    }
 }

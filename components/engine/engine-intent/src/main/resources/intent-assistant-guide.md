@@ -179,6 +179,9 @@ composition is opt-in.
     a header selection does not filter a line's own dropdown - so `valueFrom` is mandatory and
     `filterBy` is rejected. Composable with the conditional `valueFrom` above. Harmonia UI only.
   A `documentStatus` relation can neither declare `dependsOn` nor trigger one (it is a read-only pill).
+- `format` (on a `string` field) - **a named input format**: `- { name: email, type: string, length: 320, format: email }`
+  Today the only value is `email`. It renders a `type="email"` control AND validates the address server-side (400 on a
+  bad value) - prefer it over hand-writing an email regex. Do NOT declare `format` and `pattern` on the same field.
 - `pattern` (on a `string`/`text` field) - **an input-format regex**: durable format validation for an IBAN, VAT
   number, postcode, e-mail, phone. `- { name: iban, type: string, length: 34, pattern: '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$' }`
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
