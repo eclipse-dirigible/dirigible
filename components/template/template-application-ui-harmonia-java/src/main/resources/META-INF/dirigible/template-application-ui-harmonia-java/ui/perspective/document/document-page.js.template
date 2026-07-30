@@ -212,11 +212,58 @@ document.addEventListener('alpine:init', () => {
     // like the line items, only once the document (header) exists (nothing to allocate against on Create).
     get secondaryDetails() { return this.itemsEnabled ? App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}') : []; },
 
+    // The read-only Snapshot child (intent `function: Snapshot`), when this document declares one.
+    // A files def is a Snapshot exactly when it is read-only - an editable one is a user Attachment.
+    get snapshotDef() { return App.detailsFor('${name}').find(d => d.files && d.files.readOnly) || null; },
+
+    // The stored copy that Print must serve, if any. Returns the highest-Version row, `null` when the
+    // document provably has none (a draft - nothing has been issued yet), or `{ failed: true }` when it
+    // could not be determined. The failure case matters: falling back to a live render there would
+    // silently defeat the guardrail, so the caller reports it instead.
+    async storedSnapshot() {
+      const def = this.snapshotDef;
+      if (!def || this.id == null) return null;
+      try {
+        const rows = await App.services.api.get(
+          def.apiPath + '?' + encodeURIComponent(def.masterEntityId) + '=' + encodeURIComponent(this.id));
+        if (!Array.isArray(rows) || !rows.length) return null;
+        return rows.reduce((best, row) => (Number(row.Version || 0) > Number(best.Version || 0) ? row : best));
+      } catch (e) {
+        console.error('[${name}DocumentPage] could not determine whether a stored copy exists', e);
+        return { failed: true };
+      }
+    },
+
+    // A stored copy is downloaded straight from its own controller (a plain browser GET, like the Files
+    // panel's download link) - the bytes are the record, so nothing is re-rendered.
+    openStoredSnapshot(row) {
+      const def = this.snapshotDef;
+      const base = (App.config && App.config.restBase) || '';
+      window.open(base + def.apiPath + '/' + encodeURIComponent(row[def.primaryKey]) + '/download', '_blank');
+    },
+
     // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
     // can be customized via the Documents perspective. One language prints directly; several ask.
+    //
+    // GUARDRAIL: a document that already carries a generated Snapshot prints THAT copy and nothing else.
+    // The print feeder dereferences LIVE master data, so re-rendering an issued document after its
+    // partner was renamed would hand back a PDF showing today's name while claiming to be that issued
+    // document - editing master data would rewrite history on paper. The stored copy IS the record; the
+    // language it was rendered in is part of it, so the language dialog is skipped as well.
     async openPrint() {
       this.printError = null;
       this.printBusy = true;
+      const stored = await this.storedSnapshot();
+      if (stored && stored.failed) {
+        this.printBusy = false;
+        this.printError = 'Could not verify whether an issued copy exists - printing was not attempted.';
+        return;
+      }
+      if (stored) {
+        this.printBusy = false;
+        this.openStoredSnapshot(stored);
+        return;
+      }
       let languages = [];
       try {
         languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];

@@ -101,6 +101,13 @@ class IntentEngineIT extends IntegrationTest {
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
+              # function: Snapshot - the immutable, versioned copy generated at issue. Its mere presence
+              # is what arms the print guardrail: Print must serve the stored copy, never re-render.
+              - name: OrderCopy
+                function: Snapshot
+                relations:
+                  - { name: order, kind: manyToOne, to: Order, composition: true }
+
             processes:
               - name: OrderApproval
                 trigger: { onCreate: Order }
@@ -249,7 +256,7 @@ class IntentEngineIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("name", equalTo("orders"))
-                                                 .body("entities", hasSize(4))
+                                                 .body("entities", hasSize(5))
                                                  .body("entities.name", hasItems("Country", "Customer", "Order", "OrderItem"))
                                                  .body("processes", hasSize(1))
                                                  .body("processes[0].steps", hasSize(6))
@@ -1323,6 +1330,22 @@ class IntentEngineIT extends IntegrationTest {
                 "the dropdown refresh should POST the /search EQ filter on the defaulted filterBy");
         assertTrue(documentPage.contains("CustomerController/' + encodeURIComponent(value)"),
                 "the trigger's selected record should be loaded from its own controller URL");
+        // The print guardrail (#6359): a document carrying a generated Snapshot must print the STORED
+        // copy, never re-render from live master data. The page has to (a) recognise its read-only
+        // Snapshot child, (b) look the stored copy up before printing, and (c) refuse to fall back to a
+        // live render when it cannot tell - a silent fallback would defeat the whole guardrail.
+        assertTrue(documentPage.contains("snapshotDef") && documentPage.contains("storedSnapshot"),
+                "the document page must resolve its Snapshot child and look up the stored copy before printing");
+        assertTrue(documentPage.contains("openStoredSnapshot"),
+                "the document page must be able to serve the stored copy instead of rendering");
+        assertTrue(documentPage.contains("failed: true") && documentPage.contains("printing was not attempted"),
+                "an undeterminable snapshot state must abort the print rather than silently re-render");
+        // The child is registered as a READ-ONLY files def - that flag is what identifies it as a
+        // Snapshot rather than a user-uploaded Attachment.
+        String copyRegister = contentOf("gen/orders/js/components/pages/Order/OrderCopy.detail.js");
+        assertTrue(copyRegister.contains("files: { readOnly: true }"),
+                "a function: Snapshot child must register as a read-only files def, got: " + copyRegister);
+
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
                 "the item dialog should carry the metadata-driven dependsOn machinery");
