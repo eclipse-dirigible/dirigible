@@ -1,0 +1,143 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Settings master-detail for the application shell, Pinecone-routed into #app (so the split is laid out
+  while visible - an inline x-show=display:none block measures 0x0 and ignores data-size). No own
+  x-data: it inherits the shell's `app` component (settingsItems / selectSetting / settingsUrl).
+-->
+<div x-h-split class="bk-stretch flex-1" data-orientation="horizontal" data-variant="border">
+  <div x-h-split-panel data-size="25%" data-min="200">
+    <div class="vbox gap-2 p-3">
+      <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.configAll', 'Configuration and nomenclature across all applications.')"></span>
+      <!-- Region & Language: a built-in settings entry (not from an app) - the platform-wide
+           data-language preference. Selecting it renders the local detail page on the right. -->
+      <button x-h-button data-variant="outline" class="justify-start"
+              :data-state="isSettingActive({ id: 'region-language' }) ? 'selected' : ''"
+              @click="selectSetting({ id: 'region-language' })">
+        <i role="img" x-h-lucide data-lucide="globe"></i>
+        <span x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+      </button>
+      <!-- Tenant Configuration: a built-in settings entry (not from an app) - the predefined,
+           per-tenant-overridable properties (branding). Selecting it renders the local detail on the right. -->
+      <button x-h-button data-variant="outline" class="justify-start"
+              :data-state="isSettingActive({ id: 'tenant-configuration' }) ? 'selected' : ''"
+              @click="selectSetting({ id: 'tenant-configuration' })">
+        <i role="img" x-h-lucide data-lucide="sliders-horizontal"></i>
+        <span x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+      </button>
+      <template x-for="item in visibleSettingsItems()" :key="item.id">
+        <button x-h-button data-variant="outline" class="justify-start"
+                :data-state="isSettingActive(item) ? 'selected' : ''" @click="selectSetting(item)">
+          <i role="img" x-h-lucide data-lucide="settings"></i>
+          <span x-text="item.tkey ? T(item.tkey, item.label) : item.label"></span>
+        </button>
+      </template>
+    </div>
+  </div>
+  <div x-h-split-panel data-size="75%" style="position: relative;">
+    <div x-show="!settingsUrl && settingsSelected !== 'region-language' && settingsSelected !== 'tenant-configuration'" x-h-info-page class="p-4">
+      <div x-h-info-page-header>
+        <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
+        <div x-h-info-page-title x-text="T('application-core:shell.settings.selectSetting', 'Select a setting')"></div>
+        <div x-h-info-page-description x-text="T('application-core:shell.settings.selectSettingHint', 'Choose a configuration entity on the left to manage it here.')"></div>
+      </div>
+    </div>
+    <!-- Region & Language detail: rendered locally (no iframe) - the platform-wide language
+         preference (localStorage codbex.harmonia.language, sent as Accept-Language by every app's
+         fetch client). Offered codes are the PLATFORM's set (DIRIGIBLE_APPLICATION_LANGUAGES,
+         default en,bg) - never per-module; modules missing a platform language are listed as
+         warnings (their untranslated content falls back to the default language). -->
+    <div x-show="settingsSelected === 'region-language'" class="size-full overflow-auto">
+      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+        <div class="vbox gap-1">
+          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.rlDescription', 'One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.')"></span>
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.language', 'Language')"></span>
+          <div x-h-select>
+            <input x-h-select-input x-model="language" placeholder="Language" />
+            <div x-h-select-content>
+              <template x-for="opt in languageOptions()" :key="opt.value">
+                <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>
+              </template>
+            </div>
+          </div>
+        </div>
+        <!-- Display formats: instance-wide patterns for dates, timestamps and floating-point numbers,
+             persisted per user in localStorage (like the language flag) and applied across every app on
+             this origin. Number pattern controls the grouping/decimal separators; each field keeps its
+             own decimal count. Apply reloads so all views re-format at once. -->
+        <div class="vbox gap-1">
+          <span class="text-base font-medium" x-text="T('application-core:shell.settings.formats', 'Display formats')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.formatsHint', 'Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.')"></span>
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.dateFormat', 'Date format')"></span>
+          <input x-h-input x-model="$store.formats.date" placeholder="yyyy-MM-dd" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.timestampFormat', 'Timestamp format')"></span>
+          <input x-h-input x-model="$store.formats.dateTime" placeholder="yyyy-MM-dd HH:mm:ss" />
+        </div>
+        <div class="vbox gap-1">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberFormat', 'Number format')"></span>
+          <input x-h-input x-model="$store.formats.number" placeholder="### ### ### ##0.00" />
+        </div>
+        <div class="hbox gap-2">
+          <button x-h-button data-variant="emphasized" @click="$store.formats.apply()" x-text="T('application-core:shell.settings.apply', 'Apply')"></button>
+          <button x-h-button data-variant="outline" @click="$store.formats.reset()" x-text="T('application-core:shell.settings.resetDefaults', 'Reset to defaults')"></button>
+        </div>
+        <template x-if="languageWarnings().length > 0">
+          <div class="vbox gap-2">
+            <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.missingTranslations', 'Missing translations')"></span>
+            <template x-for="warn in languageWarnings()" :key="warn.app">
+              <div x-h-alert data-variant="warning" role="alert">
+                <div x-h-alert-description
+                     x-text="T('application-core:shell.settings.missingWarning', warn.app + ' does not provide: ' + warn.missing.join(', ') + ' - falls back to the default language.', { app: warn.app, missing: warn.missing.join(', ') })"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+      </div>
+    </div>
+    <!-- Tenant Configuration detail: rendered locally (no iframe) - the predefined, per-tenant
+         overridable properties (branding for now), read from and written to the platform endpoint
+         /services/core/configurations/tenant. An empty value means the property is not overridden and
+         falls back to the platform default. -->
+    <div x-show="settingsSelected === 'tenant-configuration'" class="size-full overflow-auto">
+      <div class="vbox gap-4 p-4" style="max-width: 40rem;">
+        <div class="vbox gap-1">
+          <span class="text-lg font-medium" x-text="T('application-core:shell.settings.tenantConfig', 'Tenant Configuration')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.tenantConfigHint', 'Per-tenant overrides for the predefined branding properties. Leave a value empty to fall back to the platform default.')"></span>
+        </div>
+        <template x-if="tenantConfigError">
+          <div x-h-alert data-variant="warning" role="alert">
+            <div x-h-alert-description
+                 x-text="tenantConfigError === 'forbidden' ? T('application-core:shell.settings.tenantConfigForbidden', 'You do not have permission to view or change the tenant configuration.') : T('application-core:shell.settings.tenantConfigFailed', 'Something went wrong. Please try again.')"></div>
+          </div>
+        </template>
+        <template x-if="tenantConfigLoading">
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
+        </template>
+        <template x-if="!tenantConfigLoading && tenantConfigError !== 'forbidden'">
+          <div class="vbox gap-4">
+            <template x-for="entry in tenantConfig" :key="entry.key">
+              <div class="vbox gap-1">
+                <span x-h-text.muted class="text-sm" x-text="tenantConfigLabel(entry.key)"></span>
+                <input x-h-input x-model="entry.value" :placeholder="entry.key" />
+              </div>
+            </template>
+            <div class="hbox gap-2">
+              <button x-h-button data-variant="emphasized" @click="saveTenantConfig()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
+              <button x-h-button data-variant="outline" @click="loadTenantConfig()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+    <iframe x-show="settingsUrl" :src="settingsUrl" title="Settings"
+            style="position:absolute; inset:0; width:100%; height:100%; border:0;"></iframe>
+  </div>
+</div>

@@ -1,0 +1,4 @@
+{
+    "name": "application-admin-perspectives",
+    "description": "Extension Point for the administration perspective providers, aggregated by the Administration shell"
+}
