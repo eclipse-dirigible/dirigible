@@ -17,6 +17,7 @@
     <description>Dirigible Dependencies</description>
 
     <dependencyManagement>
+
         <dependencies>
             <!--		Dependency versions of the top declared -->
             <!--		pom imports have higher precedence-->
@@ -161,4 +162,16 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
+
+    <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.eclipse.dirigible</groupId>
+                    <artifactId>flowable-bpmn-docs-maven-plugin</artifactId>
+                    <version>${project.version}</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
+    </build>
 </project>
