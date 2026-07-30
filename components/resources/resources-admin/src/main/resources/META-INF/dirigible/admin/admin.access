@@ -1,0 +1,12 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/admin/",
+            "method": "*",
+            "roles": [
+                "ADMINISTRATOR"
+            ]
+        }
+    ]
+}

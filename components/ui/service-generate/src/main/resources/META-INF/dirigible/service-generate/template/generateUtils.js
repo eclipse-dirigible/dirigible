@@ -420,6 +420,50 @@ export function generateFiles(model, parameters, templateSources) {
                 case "partnerFormModels":
                     generatedFiles.push(...generateCollection(location, content, template, partnerFormModels, parameters));
                     break;
+                case "adminModel":
+                    // The ADMINISTRATION surface (one render per MODULE, not per entity): every
+                    // non-projection, non-report entity as plain-table/plain-form metadata, baked
+                    // into the page as JSON. The API is the entity's POWER controller - admin
+                    // writes fire the same repository events/checks/audit as application writes.
+                    {
+                        const adminEntities = model.entities
+                            .filter(e => e.type !== "PROJECTION" && String(e.layoutType || '').indexOf("REPORT") !== 0)
+                            .map(e => ({
+                                name: e.name,
+                                label: e.menuLabel || e.name,
+                                api: '/services/java/' + parameters.projectName + '/gen/' + parameters.javaGenFolderName
+                                    + '/api/' + sanitizeJavaIdentifier(e.perspectiveName) + '/' + e.name + 'Controller',
+                                pk: (e.primaryKeys && e.primaryKeys[0]) || 'Id',
+                                properties: (e.properties || []).map(p => ({
+                                    name: p.name,
+                                    type: p.dataTypeTypescript === 'number' ? 'number'
+                                        : (p.dataTypeTypescript === 'boolean' ? 'boolean' : 'string'),
+                                    required: !!p.isRequiredProperty,
+                                    // System/derived columns stay visible but not editable: identity,
+                                    // calculated, read-only and audit columns.
+                                    readonly: !!p.dataAutoIncrement || p.isCalculatedProperty === true
+                                        || p.isReadOnlyProperty === true || !!(p.auditType && p.auditType !== 'NONE'),
+                                    pk: !!p.dataPrimaryKey,
+                                    fk: p.relationshipEntityName || null,
+                                    // A relation renders as a COMBOBOX resolving the id to its label
+                                    // (raw id inputs are how an administrator corrupts data). The
+                                    // lookup URL / key / label field are the ones parameterUtils
+                                    // already computed for the business dropdowns. No inline create
+                                    // here on purpose - the admin surface edits what exists.
+                                    lookup: p.widgetDropdownControllerUrl
+                                        ? { url: p.widgetDropdownControllerUrl, key: p.widgetDropDownKey || 'Id',
+                                            label: p.widgetDropDownValue || 'Name' }
+                                        : null
+                                }))
+                            }));
+                        const adminParameters = cleanData({ ...parameters, adminEntitiesJson: JSON.stringify(adminEntities) });
+                        generatedFiles.push({
+                            location: location,
+                            content: getGenerationEngine(template).generate(location, content, adminParameters),
+                            path: templateEngines.getMustacheEngine().generate(location, template.rename, adminParameters)
+                        });
+                    }
+                    break;
                 case "uiReportChartModels":
                     generatedFiles.push(...generateCollection(location, content, template, uiReportChartModels, parameters));
                     break;

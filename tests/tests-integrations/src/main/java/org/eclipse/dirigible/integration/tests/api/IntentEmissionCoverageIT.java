@@ -1219,6 +1219,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String voucherPage = contentOf("gen/emission/js/components/pages/Voucher/VoucherDocumentPage.js");
         assertTrue(voucherPage.contains("RefNumber: [{ rule: 'required'"), "the client schema keeps required for the user-entered title");
         assertFalse(voucherPage.contains("Status: [{ rule: 'required'"), "the client schema must not require a defaulted (init:) property");
+
+        // The ADMINISTRATION surface: one plain page per MODULE listing EVERY non-projection,
+        // non-report entity (the low-level ones the business UIs hide included), registered on the
+        // disjoint application-admin-perspectives point. This is the level above the Database
+        // perspective - what an administrator corrects data through.
+        String adminPage = contentOf("gen/emission/admin/index.html");
+        assertTrue(adminPage.contains("window.AdminConfig"), "the admin surface must bake its entity metadata into the page");
+        assertTrue(adminPage.contains("\"name\":\"Snapshot\""),
+                "the admin surface must list the low-level append-only entity the business UI hides");
+        assertTrue(adminPage.contains("\"name\":\"EntryLine\""),
+                "the admin surface must list composition children as first-class entities");
+        assertFalse(adminPage.contains("\"name\":\"Company\""),
+                "a cross-model PROJECTION is rendered by its OWNER module, never duplicated here");
+        // A relation is a combobox over the same lookup controller the business dropdowns use - a raw
+        // foreign-key id input is how an administrator corrupts data.
+        assertTrue(adminPage.contains("\"lookup\":{\"url\":"), "a relation column must carry its lookup URL for the combobox");
+        assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
+        assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
+        String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
+        assertTrue(adminPerspective.contains("kind: 'ADMIN'") && adminPerspective.contains("groupId: 'admin'"),
+                "the admin perspective must declare the ADMIN kind and group");
+        assertTrue(contentOf("gen/emission/perspectives/admin/perspective.extension").contains("application-admin-perspectives"),
+                "the admin perspective must register on the admin extension point (never the application/my/partner ones)");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1635,6 +1658,32 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+        // ADMINISTRATION shell: the shell page is served, aggregates this module's admin perspective
+        // through its own disjoint extension point, and the generated admin page itself serves.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/web/admin/index.html")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-admin-perspectives")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body(org.hamcrest.Matchers.containsString(PROJECT + "-admin")),
+                30);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/services/web/" + PROJECT + "/gen/emission/admin/index.html")
+                                                 .then()
+                                                 .statusCode(200));
+        // The promise that makes this surface safe: an admin correction goes through the SAME power
+        // controller, so an append-only record is still rejected (409) - the administrator sees the
+        // reason, never a silent bypass.
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Id\":" + snapshot.get() + ",\"Payload\":\"admin tamper\"}")
+                                                 .when()
+                                                 .put(API + "/snapshot/SnapshotController/" + snapshot.get())
+                                                 .then()
+                                                 .statusCode(409));
+
         // Partner shell: served + aggregates the published partner perspective (the disjoint point).
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/web/partner/index.html")

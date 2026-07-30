@@ -1,0 +1,5 @@
+{
+    "module": "${projectName}/gen/${genFolderName}/perspectives/admin/perspective.js",
+    "extensionPoint": "application-admin-perspectives",
+    "description": "${projectName} - Administration perspective"
+}

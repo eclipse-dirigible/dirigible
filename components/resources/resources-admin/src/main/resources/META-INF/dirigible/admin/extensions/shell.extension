@@ -1,0 +1,5 @@
+{
+    "module": "admin/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Administration Shell"
+}
