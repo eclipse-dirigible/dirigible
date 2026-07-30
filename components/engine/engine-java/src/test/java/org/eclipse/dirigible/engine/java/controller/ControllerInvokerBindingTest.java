@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.engine.java.controller;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -159,9 +160,12 @@ class ControllerInvokerBindingTest {
                            .findFirst()
                            .orElseThrow();
 
-        ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> invoker.invoke(new RouteMatch(entry, route, Map.of("id", "abc")), mockRequest(null), new FakeResponse()));
-        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of("id", "abc")), mockRequest(null), response);
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatus());
+        assertTrue(response.body()
+                           .contains("\"status\":400"),
+                response.body());
     }
 
     @Test
@@ -175,9 +179,12 @@ class ControllerInvokerBindingTest {
                            .findFirst()
                            .orElseThrow();
 
-        ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest("not json"), new FakeResponse()));
-        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest("not json"), response);
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatus());
+        assertTrue(response.body()
+                           .contains("\"status\":400"),
+                response.body());
     }
 
     @Test
@@ -191,9 +198,9 @@ class ControllerInvokerBindingTest {
                            .findFirst()
                            .orElseThrow();
 
-        ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), new FakeResponse()));
-        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, e.getStatusCode());
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), response.getStatus());
     }
 
     @Test
@@ -207,12 +214,15 @@ class ControllerInvokerBindingTest {
                            .findFirst()
                            .orElseThrow();
 
-        ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), new FakeResponse()));
+        FakeResponse response = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), mockRequest(null), response);
         // A domain validation (checks: gate, capacity guard, hand-written) is a user-fixable client
-        // error - the dispatcher maps ValidationException to 400 with the authored message, not a 500.
-        assertEquals(HttpStatus.BAD_REQUEST, e.getStatusCode());
-        assertEquals("debits must equal credits", e.getReason());
+        // error - the dispatcher maps ValidationException to 400 with the authored message, not a 500 -
+        // and the message must REACH THE CALLER in the body (Spring Boot 4 drops the exception reason).
+        assertEquals(HttpStatus.BAD_REQUEST.value(), response.getStatus());
+        assertTrue(response.body()
+                           .contains("debits must equal credits"),
+                response.body());
     }
 
     // --- fixtures --------------------------------------------------------------------------------

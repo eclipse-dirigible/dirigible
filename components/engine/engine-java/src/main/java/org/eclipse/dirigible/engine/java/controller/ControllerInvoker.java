@@ -253,8 +253,11 @@ public class ControllerInvoker {
             body.put("message", e.getReason());
         }
         try {
-            response.getWriter()
-                    .write(objectMapper.writeValueAsString(body));
+            // Same channel as writeResponse: the output stream, written and flushed here rather than
+            // left to the container's commit.
+            objectMapper.writeValue(response.getOutputStream(), body);
+            response.getOutputStream()
+                    .flush();
         } catch (IOException writeFailure) {
             LOGGER.warn("Could not write the error body for status [{}]: {}", status, writeFailure.getMessage());
         }
