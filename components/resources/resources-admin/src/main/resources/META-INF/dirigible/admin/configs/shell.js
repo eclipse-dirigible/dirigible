@@ -15,7 +15,9 @@ const shellData = {
     label: 'Administration',
     icon: 'shield',
     description: 'The administration surface: every entity as a plain table and form, one level above the database.',
-    order: 40
+    // Between the Partner portal (30) and the Workbench (40): the Administration shell is an
+    // operator surface, so it belongs with the runtime shells rather than after the development one.
+    order: 35
 };
 if (typeof exports !== 'undefined') {
     exports.getShell = () => shellData;
