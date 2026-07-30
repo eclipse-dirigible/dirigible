@@ -9,7 +9,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <name>Components - Template - Form Builder - Harmonia</name>
+    <name>Components - Template - Form Generator - Harmonia</name>
     <artifactId>dirigible-components-template-form-builder-harmonia</artifactId>
     <packaging>jar</packaging>
 
