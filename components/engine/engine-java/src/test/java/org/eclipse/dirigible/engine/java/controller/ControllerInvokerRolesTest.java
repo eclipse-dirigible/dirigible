@@ -64,9 +64,9 @@ class ControllerInvokerRolesTest {
         when(req.getRemoteUser()).thenReturn("alice");
         // every isUserInRole call returns false by default.
 
-        ResponseStatusException e = assertThrows(ResponseStatusException.class,
-                () -> invoker.invoke(new RouteMatch(entry, route, Map.of()), req, new FakeResponse()));
-        assertEquals(HttpStatus.FORBIDDEN, e.getStatusCode());
+        FakeResponse resp = new FakeResponse();
+        invoker.invoke(new RouteMatch(entry, route, Map.of()), req, resp);
+        assertEquals(HttpStatus.FORBIDDEN.value(), resp.status());
     }
 
     @Test

@@ -14,6 +14,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -67,8 +68,27 @@ public class ControllerInvoker {
         this.objectMapper = objectMapper;
     }
 
-    /** Resolve roles + bind params + invoke + serialise the result. */
+    /**
+     * Resolve roles + bind params + invoke + serialise the result.
+     *
+     * <p>
+     * Every {@link ResponseStatusException} raised on this path is rendered HERE, with its reason in
+     * the JSON body: Spring Boot 4 drops {@code getReason()} from the error body it builds, so
+     * {@code server.error.include-message=always} no longer surfaces it and a caller receives a bare
+     * {@code 400 Bad Request} for a perfectly actionable failure ("The 'Email' does not match the
+     * required pattern", "Entry needs at least one line"). Generated controllers carry their validation
+     * messages in exactly that reason, so dropping it makes the whole generated validation layer
+     * undiagnosable over REST.
+     */
     public void invoke(RouteMatch match, HttpServletRequest request, HttpServletResponse response) {
+        try {
+            invokeInternal(match, request, response);
+        } catch (ResponseStatusException e) {
+            writeError(response, e);
+        }
+    }
+
+    private void invokeInternal(RouteMatch match, HttpServletRequest request, HttpServletResponse response) {
         Route route = match.route();
         checkRoles(route.roles(), request);
 
@@ -210,6 +230,36 @@ public class ControllerInvoker {
                 return merged;
             default:
                 throw new BindingException("Unknown parameter binding kind: " + binding.kind());
+        }
+    }
+
+    /**
+     * Render a failed request as {@code {"status","error","message"}} with the exception's reason. A
+     * committed response is left alone (the controller already wrote something).
+     */
+    private void writeError(HttpServletResponse response, ResponseStatusException e) {
+        int status = e.getStatusCode()
+                      .value();
+        if (response.isCommitted()) {
+            return;
+        }
+        response.setStatus(status);
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("status", status);
+        body.put("error", HttpStatus.valueOf(status)
+                                    .getReasonPhrase());
+        if (e.getReason() != null) {
+            body.put("message", e.getReason());
+        }
+        try {
+            // Same channel as writeResponse: the output stream, written and flushed here rather than
+            // left to the container's commit.
+            objectMapper.writeValue(response.getOutputStream(), body);
+            response.getOutputStream()
+                    .flush();
+        } catch (IOException writeFailure) {
+            LOGGER.warn("Could not write the error body for status [{}]: {}", status, writeFailure.getMessage());
         }
     }
 
