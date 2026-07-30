@@ -546,11 +546,54 @@ document.addEventListener('alpine:init', () => {
     },
 #if($hasPrint == "true")
 
+    // The read-only Snapshot child (intent `function: Snapshot`), when this entity declares one - a files
+    // def is a Snapshot exactly when it is read-only (an editable one is a user Attachment).
+    get snapshotDef() { return (this.detailDefs || []).find(d => d.files && d.files.readOnly) || null; },
+
+    // The stored copy Print must serve: the highest-Version row, `null` when there provably is none, or
+    // `{ failed: true }` when it could not be determined (in which case printing must not silently fall
+    // back to a live render - that would defeat the guardrail).
+    async storedSnapshot() {
+      const def = this.snapshotDef;
+      if (!def || this.id == null) return null;
+      try {
+        const rows = await App.services.api.get(
+          def.apiPath + '?' + encodeURIComponent(def.masterEntityId) + '=' + encodeURIComponent(this.id));
+        if (!Array.isArray(rows) || !rows.length) return null;
+        return rows.reduce((best, row) => (Number(row.Version || 0) > Number(best.Version || 0) ? row : best));
+      } catch (e) {
+        console.error('[${name}FormPage] could not determine whether a stored copy exists', e);
+        return { failed: true };
+      }
+    },
+
+    openStoredSnapshot(row) {
+      const def = this.snapshotDef;
+      const base = (App.config && App.config.restBase) || '';
+      window.open(base + def.apiPath + '/' + encodeURIComponent(row[def.primaryKey]) + '/download', '_blank');
+    },
+
     // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
     // can be customized via the Documents perspective. One language prints directly; several ask.
+    //
+    // GUARDRAIL: the same rule as the document layout - a record that already carries a generated
+    // Snapshot prints THAT copy. The print feeder dereferences LIVE master data, so re-rendering an
+    // issued record would silently rewrite its history on paper. Guarding only the document page would
+    // leave this surface as a way around it.
     async openPrint() {
       this.printError = null;
       this.printBusy = true;
+      const stored = await this.storedSnapshot();
+      if (stored && stored.failed) {
+        this.printBusy = false;
+        this.printError = 'Could not verify whether an issued copy exists - printing was not attempted.';
+        return;
+      }
+      if (stored) {
+        this.printBusy = false;
+        this.openStoredSnapshot(stored);
+        return;
+      }
       let languages = [];
       try {
         languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];
