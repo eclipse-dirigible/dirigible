@@ -17,11 +17,13 @@
  */
 document.addEventListener('alpine:init', () => {
     // Fallbacks for shells that do not declare their own icon/description (older registrations).
-    const ICONS = { applicationShell: 'layout-grid', myShell: 'inbox', partnerShell: 'handshake', shellIde: 'code' };
+    const ICONS = { applicationShell: 'layout-grid', myShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
+        shellIde: 'code' };
     const DESCRIPTIONS = {
         applicationShell: 'All business applications in one workspace.',
         myShell: 'Your tasks and your records - the personal workspace.',
         partnerShell: 'The portal for external partners.',
+        adminShell: 'Every record as a plain table and form - one level above the database.',
         shellIde: 'The development workbench for building on the platform.',
     };
 
@@ -40,10 +42,12 @@ document.addEventListener('alpine:init', () => {
      * technical first):
      *  - partnerShell: external partners are led straight to /services/web/partner/, so this is
      *    not their way in - it is here for the employees who need to see what a partner sees.
+     *  - adminShell: an operator tool. Everything it shows is reachable through the applications
+     *    themselves; it is the way in only when someone needs the plain, every-column view.
      *  - shellIde: a developer tool. Every developer is also an employee, so it must stay visible,
      *    but it should not compete with the two shells the rest of the company opens every morning.
      */
-    const SECONDARY = ['partnerShell', 'shellIde'];
+    const SECONDARY = ['partnerShell', 'adminShell', 'shellIde'];
 
     Alpine.data('home', () => ({
         branding: { name: '', subtitle: '', logo: '' },
