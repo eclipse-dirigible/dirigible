@@ -17,6 +17,9 @@
 ## classifier picks from `cases` - and either re-filters this dropdown's options by `filterBy`
 ## or copies the value into this column. Emits nothing for an independent column.
 #macro(dependsOnMeta $property)#if($property.widgetDependsOnProperty && $property.widgetDependsOnControllerUrl), dependsOn: { property: '${property.widgetDependsOnProperty}', #if($property.widgetDependsOnHeader)header: true, #{end}#if($property.widgetDependsOnValueFrom)valueFrom: '${property.widgetDependsOnValueFrom}', #{end}#if($property.widgetDependsOnValueBy)valueBy: { path: '${property.widgetDependsOnValueBy}', header: #if($property.widgetDependsOnValueByHeader)true#{else}false#end, #if($property.widgetDependsOnValueByUrl)url: '${property.widgetDependsOnValueByUrl}', #{end}cases: ${property.widgetDependsOnValueCases}#if($property.widgetDependsOnValueDefault), deflt: '${property.widgetDependsOnValueDefault}'#end }, #end#if($property.widgetDependsOnFilterBy)filterBy: '${property.widgetDependsOnFilterBy}', #{end}url: '${property.widgetDependsOnControllerUrl}' }#end#end
+## Input-format regex (intent field `pattern:`): the item dialog binds it as the input's HTML pattern.
+## Pre-rendered as a JS literal by parameterUtils (a regex's backslashes must survive the string).
+#macro(patternMeta $property)#if($property.widgetPatternJs), pattern: ${property.widgetPatternJs}#end#end
 ## Static option filter (intent `where:`): the item dialog's chooser narrows to matching rows; the
 ## table's label-resolution lookup stays on the full set so historical rows still resolve.
 #macro(optionsFilterMeta $property)#if($property.widgetOptionsFilterBy), filter: { by: '${property.widgetOptionsFilterBy}', value: ${property.widgetOptionsFilterValueJs} }#end#end
@@ -78,7 +81,7 @@ App.registerDetail('${masterEntity}', {
 #if($property.widgetType == "DROPDOWN")
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#hierMeta($property) },
 #else
-    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property) },
+    { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: '${property.widgetType}', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, date: #if($property.isDateType)true#{else}false#end#if($property.isNumberType), number: true#end#if($property.isFloatType), float: true, pattern: '${property.formatPattern}'#end#calcMeta($property)#dependsOnMeta($property)#patternMeta($property) },
 #end
 #end
 #end

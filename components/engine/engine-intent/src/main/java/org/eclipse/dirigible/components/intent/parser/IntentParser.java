@@ -1488,6 +1488,9 @@ public final class IntentParser {
                 if (field.getNumber() != null) {
                     validateNumber(entity, "entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (!isBlank(field.getPattern())) {
+                    validatePattern("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -1626,6 +1629,12 @@ public final class IntentParser {
 
     /** The compiled shape of one {@code immutableWhen} term: {@code <Status> == <seed id>}. */
     private static final java.util.regex.Pattern IMMUTABLE_WHEN_TERM = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*==\\s*(\\d+)\\s*");
+
+    /**
+     * Upper bound for an authored field {@code pattern} - a compile-time guard against pathological
+     * regexes.
+     */
+    private static final int PATTERN_MAX_LENGTH = 512;
 
     /**
      * {@code immutableWhen: "<Status> == <seed id> [|| ...]"} makes the record read-only for USER
@@ -2159,6 +2168,34 @@ public final class IntentParser {
             } else if (!scopeHasYear) {
                 issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
             }
+        }
+    }
+
+    /**
+     * A field's input-format {@code pattern} (#6336): a compilable regex on a string-typed field. The
+     * type restriction is not cosmetic - on a numeric property the emitted {@code widgetPattern} is
+     * read as the DISPLAY format, so a regex there would silently corrupt how the number renders.
+     */
+    private static void validatePattern(String subject, FieldIntent field, List<String> issues) {
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase();
+        if (!"string".equals(type) && !"text".equals(type)) {
+            issues.add(subject + " `pattern` applies to a string/text field - got type [" + field.getType()
+                    + "] (on a numeric field the pattern is the display format, not a regex)");
+            return;
+        }
+        if (field.getPattern()
+                 .length() > PATTERN_MAX_LENGTH) {
+            issues.add(subject + " `pattern` exceeds " + PATTERN_MAX_LENGTH + " characters");
+            return;
+        }
+        try {
+            // Compiled ONLY to validate the developer-authored model source at parse time; the result is
+            // discarded and never matched against runtime input, so there is no injection surface here.
+            java.util.regex.Pattern.compile(field.getPattern()); // lgtm[java/regex-injection]
+        } catch (java.util.regex.PatternSyntaxException ex) {
+            issues.add(subject + " `pattern` is not a valid regular expression: " + ex.getDescription());
         }
     }
 

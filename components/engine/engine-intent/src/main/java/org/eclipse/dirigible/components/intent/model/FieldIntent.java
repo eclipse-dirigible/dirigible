@@ -115,6 +115,19 @@ public class FieldIntent {
     private Integer size;
 
     /**
+     * Optional input-format regex for a {@code string} / {@code text} field (IBAN, VAT number,
+     * postcode, e-mail, ...). Emitted as the property's {@code widgetPattern}: the generated REST
+     * controller rejects a non-matching value with 400, and the form input carries it as an HTML
+     * {@code pattern} so the user is told before submitting.
+     *
+     * <p>
+     * Restricted to string-typed fields on purpose - on a numeric property {@code widgetPattern} is the
+     * DISPLAY format ({@code parameterUtils.js} reads it as {@code formatPattern}), so a regex there
+     * would silently corrupt how the number renders.
+     */
+    private String pattern;
+
+    /**
      * Optional Depends-On declaration: this scalar field is <b>auto-populated</b> from a property of a
      * sibling to-one relation's target when that relation's selection changes (e.g. {@code price}
      * copied from the chosen {@code Product}). Requires {@code valueFrom}; {@code filterBy} is not
@@ -130,6 +143,10 @@ public class FieldIntent {
      * {@link NumberIntent}.
      */
     private NumberIntent number;
+
+    public String getPattern() {
+        return pattern;
+    }
 
     public String getName() {
         return name;

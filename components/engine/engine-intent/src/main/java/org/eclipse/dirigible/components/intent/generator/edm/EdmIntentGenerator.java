@@ -1069,6 +1069,11 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // Whether the field is a column in the entity list table; `major: false` keeps it off the list
         // (still shown in forms + the details pane). Defaults to true when unset.
         p.put("widgetIsMajor", field.isMajor() ? "true" : "false");
+        if (notBlank(field.getPattern())) {
+            // Input-format regex (#6336): the generated controller rejects a non-matching value and the
+            // form input carries it as an HTML pattern. String fields only - see validatePattern.
+            p.put("widgetPattern", field.getPattern());
+        }
         return p;
     }
 

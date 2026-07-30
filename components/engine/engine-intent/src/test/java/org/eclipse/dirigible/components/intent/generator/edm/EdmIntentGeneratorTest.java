@@ -1352,6 +1352,25 @@ class EdmIntentGeneratorTest {
                 "the path must carry no environment detail - only the owner project and its model");
     }
 
+    /** A field's input-format regex (#6336) becomes the property's widgetPattern, XML-escaped. */
+    @org.junit.jupiter.api.Test
+    void fieldPatternEmitsWidgetPattern() {
+        String yaml = """
+                name: banking
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: iban, type: string, length: 34, pattern: '^[A-Z]{2}<[0-9]{2}$' }
+                      - { name: label, type: string }
+                    """;
+        java.util.Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(
+                org.eclipse.dirigible.components.intent.parser.IntentParser.parse(yaml), "banking");
+        java.util.Map<String, Object> account = entityByName(entities(model), "Account");
+        assertEquals("^[A-Z]{2}<[0-9]{2}$", propertyByName(account, "Iban").get("widgetPattern"));
+        assertNull(propertyByName(account, "Label").get("widgetPattern"), "a field without a pattern must not carry the attribute");
+    }
+
     /**
      * The header-mediated trigger (#6358): the trigger property is resolved on the DOCUMENT header, so
      * the runtime watches the header form rather than a sibling of the row.
