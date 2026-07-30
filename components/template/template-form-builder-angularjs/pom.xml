@@ -9,7 +9,7 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - Template - AngularJS Form Generator</name>
+	<name>Components - Template - Form Generator - AngularJS</name>
 	<artifactId>dirigible-components-template-form-builder-angularjs</artifactId>
     <packaging>jar</packaging>
 
