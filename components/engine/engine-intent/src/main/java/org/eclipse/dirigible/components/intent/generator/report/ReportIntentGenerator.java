@@ -99,6 +99,13 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      */
     private static final Pattern DATE_BUCKET = Pattern.compile("\\s*(month|year)\\s*\\(\\s*([^)]+?)\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
 
+    /**
+     * {@code ageing(field, [30, 60, 90])} dimension - the date field in group 1, the comma-separated
+     * day thresholds in group 2.
+     */
+    private static final Pattern AGEING_BUCKET =
+            Pattern.compile("\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", Pattern.CASE_INSENSITIVE);
+
     @Override
     public String name() {
         return "report";
@@ -177,6 +184,32 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                 Map<String, Object> bucketColumn = column(ref.tableAlias, alias, ref.physicalColumn, "INTEGER", "NONE", aggregated);
                 columns.add(bucketColumn);
                 dimensionColumns.put(expressionKey(dimension), new WidgetDimension(bucketColumn, function));
+                selectParts.add(expression + " as \"" + alias + "\"");
+                if (aggregated) {
+                    groupParts.add(expression);
+                }
+                continue;
+            }
+            // An ageing(field, [30, 60, 90]) dimension buckets a date by how long ago it fell, so the
+            // receivables ageing family (0-30 / 31-60 / 61-90 / 90+) is a report definition instead of
+            // hand SQL. Emitted as a CASE over DATE BOUNDARIES (`field > CURRENT_DATE - INTERVAL 'n'
+            // DAY`), deliberately NOT as day-count arithmetic: `CURRENT_DATE - field` yields an integer
+            // on PostgreSQL but an INTERVAL on H2, so comparing it to a number is not portable - and the
+            // .report query is a static string with no dialect to switch on. The interval form is
+            // standard SQL and verified on both CI databases.
+            Matcher ageing = AGEING_BUCKET.matcher(dimension.trim());
+            if (ageing.matches()) {
+                String fieldReference = ageing.group(1)
+                                              .trim();
+                List<Integer> thresholds = ageingThresholds(ageing.group(2));
+                ColumnRef ageingRef = resolve(context, model, source, baseAlias, fieldReference);
+                registerJoin(joins, ageingRef);
+                String expression = ageingExpression(ageingRef.qualified(), thresholds);
+                String alias = humanize("ageing " + fieldReference.replace('.', ' '));
+                Map<String, Object> ageingColumn =
+                        column(ageingRef.tableAlias, alias, ageingRef.physicalColumn, "VARCHAR", "NONE", aggregated);
+                columns.add(ageingColumn);
+                dimensionColumns.put(expressionKey(dimension), new WidgetDimension(ageingColumn, "ageing"));
                 selectParts.add(expression + " as \"" + alias + "\"");
                 if (aggregated) {
                     groupParts.add(expression);
@@ -290,6 +323,58 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
      * ({@code relation.field} joins), the window bounds are the named parameters the generated
      * repository binds from the request (or the all-time defaults).
      */
+    /**
+     * The day thresholds of an {@code ageing(field, [30, 60, 90])} dimension, in the authored order.
+     * The parser has already rejected anything but ascending positive integers, so this stays lenient:
+     * a value that still does not parse is skipped rather than failing the whole generation.
+     *
+     * @param raw the comma-separated threshold list
+     * @return the thresholds
+     */
+    private static List<Integer> ageingThresholds(String raw) {
+        List<Integer> thresholds = new ArrayList<>();
+        for (String token : raw.split(",")) {
+            try {
+                thresholds.add(Integer.valueOf(token.trim()));
+            } catch (NumberFormatException ex) {
+                LOGGER.warn("Skipping non-numeric ageing threshold [{}]", token.trim(), ex);
+            }
+        }
+        return thresholds;
+    }
+
+    /**
+     * The ageing bucket as a portable {@code CASE}: a row falls in the first bucket whose boundary it
+     * is still newer than, so {@code [30, 60, 90]} yields {@code 0-30} / {@code 31-60} / {@code 61-90}
+     * / {@code 90+}. A null date is bucketed as {@code n/a} rather than falling into the oldest bucket,
+     * which would misreport it as maximally overdue.
+     *
+     * @param qualified the qualified date column
+     * @param thresholds the ascending day thresholds
+     * @return the CASE expression
+     */
+    private static String ageingExpression(String qualified, List<Integer> thresholds) {
+        StringBuilder expression = new StringBuilder("CASE WHEN ").append(qualified)
+                                                                  .append(" IS NULL THEN 'n/a'");
+        int previous = 0;
+        for (Integer threshold : thresholds) {
+            expression.append(" WHEN ")
+                      .append(qualified)
+                      .append(" > CURRENT_DATE - INTERVAL '")
+                      .append(threshold)
+                      .append("' DAY THEN '")
+                      .append(previous == 0 ? "0" : String.valueOf(previous + 1))
+                      .append('-')
+                      .append(threshold)
+                      .append('\'');
+            previous = threshold;
+        }
+        return expression.append(" ELSE '")
+                         .append(previous)
+                         .append("+' END")
+                         .toString();
+    }
+
     private static void addBalanceMeasures(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
             ReportIntent report, Map<String, Join> joins, List<Map<String, Object>> columns, List<String> selectParts) {
         ColumnRef date = resolve(context, model, source, baseAlias, report.getDate()

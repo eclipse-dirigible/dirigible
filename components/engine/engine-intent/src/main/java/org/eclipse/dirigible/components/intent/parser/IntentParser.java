@@ -3650,7 +3650,106 @@ public final class IntentParser {
                 issues.add("report [" + report.getName() + "] has unknown chart [" + report.getChart() + "] - expected one of "
                         + REPORT_CHART_KINDS);
             }
+            validateAgeingDimensions(model, report, issues);
             validateBalanceReport(model, report, issues);
+        }
+    }
+
+    /** {@code ageing(field, [30, 60, 90])} - the date field in group 1, the thresholds in group 2. */
+    private static final java.util.regex.Pattern REPORT_AGEING = java.util.regex.Pattern.compile(
+            "\\s*ageing\\s*\\(\\s*([^,\\[]+?)\\s*,\\s*\\[\\s*([^\\]]+?)\\s*\\]\\s*\\)\\s*", java.util.regex.Pattern.CASE_INSENSITIVE);
+
+    /**
+     * An {@code ageing(field, [30, 60, 90])} dimension: the thresholds must be ascending positive day
+     * counts, and the bucketed field must be a {@code date}/{@code timestamp} - the generated SQL
+     * compares it against {@code CURRENT_DATE - INTERVAL 'n' DAY}, so a non-temporal column would fail
+     * at query time instead of at authoring time.
+     */
+    private static void validateAgeingDimensions(IntentModel model, ReportIntent report, List<String> issues) {
+        for (String dimension : report.getDimensions()) {
+            if (dimension == null || dimension.isBlank()) {
+                continue;
+            }
+            java.util.regex.Matcher matcher = REPORT_AGEING.matcher(dimension.trim());
+            if (!matcher.matches()) {
+                continue;
+            }
+            String subject = "report [" + report.getName() + "] ageing dimension [" + dimension.trim() + "]";
+            int previous = 0;
+            for (String token : matcher.group(2)
+                                       .split(",")) {
+                String raw = token.trim();
+                int value;
+                try {
+                    value = Integer.parseInt(raw);
+                } catch (NumberFormatException ex) {
+                    issues.add(subject + " threshold [" + raw + "] is not an integer number of days");
+                    continue;
+                }
+                if (value <= 0) {
+                    issues.add(subject + " thresholds must be positive day counts - got [" + value + "]");
+                } else if (value <= previous) {
+                    issues.add(subject + " thresholds must ascend - got [" + value + "] after [" + previous + "]");
+                } else {
+                    previous = value;
+                }
+            }
+            validateAgeingField(model, report, subject, matcher.group(1)
+                                                               .trim(),
+                    issues);
+        }
+    }
+
+    /**
+     * The bucketed field: an own {@code date}/{@code timestamp} of the source, or a one-hop relation's.
+     */
+    private static void validateAgeingField(IntentModel model, ReportIntent report, String subject, String path, List<String> issues) {
+        EntityIntent source = null;
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null && entity.getName()
+                                                  .equals(report.getSource())) {
+                source = entity;
+            }
+        }
+        if (source == null) {
+            return; // an unknown source is reported separately
+        }
+        String[] segments = path.split("\\.");
+        if (segments.length > 2) {
+            issues.add(subject + " field [" + path + "] may reference the source or ONE relation hop");
+            return;
+        }
+        EntityIntent owner = source;
+        if (segments.length == 2) {
+            RelationIntent hop = toOneRelationByName(source, segments[0]);
+            if (hop == null) {
+                issues.add(subject + " [" + segments[0] + "] is not a to-one relation of [" + source.getName() + "]");
+                return;
+            }
+            if (hop.isCrossModel()) {
+                return; // resolved at generation against the owner model
+            }
+            owner = null;
+            for (EntityIntent entity : model.getEntities()) {
+                if (entity.getName() != null && entity.getName()
+                                                      .equals(hop.getTo())) {
+                    owner = entity;
+                }
+            }
+            if (owner == null) {
+                return; // the dangling relation target is reported separately
+            }
+        }
+        FieldIntent field = fieldByName(owner, segments[segments.length - 1]);
+        if (field == null) {
+            issues.add(subject + " field [" + path + "] is not a field of [" + owner.getName() + "]");
+            return;
+        }
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase();
+        if (!"date".equals(type) && !"timestamp".equals(type)) {
+            issues.add(subject + " buckets by age, so [" + path + "] must be a date/timestamp field - got [" + field.getType() + "]");
         }
     }
 

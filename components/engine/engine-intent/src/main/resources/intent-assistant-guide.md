@@ -184,6 +184,11 @@ composition is opt-in.
   The generated REST controller rejects a non-matching value with 400 and the form input carries it as an HTML
   `pattern`. **String/text only** - on a numeric field the same underlying attribute is the DISPLAY format, so a
   regex there is rejected. The regex must compile.
+- `ageing(<date field>, [30, 60, 90])` (a report **dimension**) - **the receivables-ageing bucket**: groups rows by how
+  long ago the date fell, yielding `0-30` / `31-60` / `61-90` / `90+` (a null date becomes `n/a`).
+  `dimensions: ["ageing(due, [30, 60, 90])"]` with `measures: ["sum(balance)"]` is the standard receivables report.
+  The field may be an own `date`/`timestamp` or a one-hop `relation.field`; thresholds must ascend and be positive.
+  Prefer equal-digit thresholds - the bucket is a text label and sorts lexicographically.
 - `where` (on a user-picked to-one relation) - **a static option filter**: a single
   `<target property>: <literal>` pair that permanently narrows the dropdown's option list to matching
   target rows. Unlike `dependsOn` (which reacts to a sibling selection) the condition is constant.

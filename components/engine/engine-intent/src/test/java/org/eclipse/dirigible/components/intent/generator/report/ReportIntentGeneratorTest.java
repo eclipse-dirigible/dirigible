@@ -367,4 +367,70 @@ class ReportIntentGeneratorTest {
         assertTrue(message.contains("declares date/debit/credit but is not kind: balance"), message);
         assertTrue(message.contains("unknown kind [pivot]"), message);
     }
+
+    private static final String AGEING_INTENT = """
+            name: billing
+            entities:
+              - name: Customer
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Invoice
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: due, type: date }
+                  - { name: balance, type: decimal }
+                relations:
+                  - { name: Customer, kind: manyToOne, to: Customer }
+            reports:
+              - name: Receivables
+                source: Invoice
+                dimensions: ["ageing(due, [30, 60, 90])"]
+                measures: ["sum(balance)"]
+            """;
+
+    /**
+     * The ageing bucket must be emitted as a CASE over DATE BOUNDARIES. Day-count arithmetic
+     * (`CURRENT_DATE - due`) is not portable - PostgreSQL yields an integer, H2 an INTERVAL - and the
+     * .report query is a static string with no dialect to switch on.
+     */
+    @Test
+    void ageingDimensionEmitsPortableDateBoundaryBuckets() {
+        IntentModel model = IntentParser.parse(AGEING_INTENT);
+        Map<String, Object> document = ReportIntentGenerator.buildForTest(TestContexts.context(model), model.getReports()
+                                                                                                            .get(0));
+        String query = (String) document.get("query");
+        assertTrue(query.contains("CASE WHEN Invoice.\"INVOICE_DUE\" IS NULL THEN 'n/a'"),
+                "a null date must bucket as n/a, not as maximally overdue: " + query);
+        assertTrue(query.contains("Invoice.\"INVOICE_DUE\" > CURRENT_DATE - INTERVAL '30' DAY THEN '0-30'"), query);
+        assertTrue(query.contains("Invoice.\"INVOICE_DUE\" > CURRENT_DATE - INTERVAL '60' DAY THEN '31-60'"), query);
+        assertTrue(query.contains("Invoice.\"INVOICE_DUE\" > CURRENT_DATE - INTERVAL '90' DAY THEN '61-90'"), query);
+        assertTrue(query.contains("ELSE '90+' END"), query);
+        // Never day-count arithmetic - that is the non-portable form.
+        assertTrue(!query.contains("CURRENT_DATE - Invoice"), query);
+        // An aggregated report must GROUP BY the whole bucket expression, not the raw column.
+        assertTrue(query.contains("GROUP BY CASE WHEN"), query);
+    }
+
+    @Test
+    void ageingThresholdsMustAscendAndBePositive() {
+        String yaml = AGEING_INTENT.replace("[30, 60, 90]", "[60, 30]");
+        org.eclipse.dirigible.components.intent.parser.IntentValidationException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                org.eclipse.dirigible.components.intent.parser.IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(issue -> issue.contains("thresholds must ascend")),
+                "expected an ascending-thresholds issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void ageingRequiresATemporalField() {
+        String yaml = AGEING_INTENT.replace("ageing(due, [30, 60, 90])", "ageing(balance, [30, 60, 90])");
+        org.eclipse.dirigible.components.intent.parser.IntentValidationException ex = org.junit.jupiter.api.Assertions.assertThrows(
+                org.eclipse.dirigible.components.intent.parser.IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(issue -> issue.contains("must be a date/timestamp field")),
+                "expected a temporal-field issue, got: " + ex.getIssues());
+    }
 }
