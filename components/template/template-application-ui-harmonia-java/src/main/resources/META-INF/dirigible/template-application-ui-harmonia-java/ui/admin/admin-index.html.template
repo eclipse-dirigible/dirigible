@@ -152,6 +152,10 @@
                 // table renders through. Loaded once per selected entity.
                 options: {},
                 labels: {},
+                // Resolves once this entity's relation options are loaded. The select resolves its
+                // DISPLAY TEXT from the option list at the moment the value is set, so opening the
+                // editor before the options exist leaves every combobox blank with the id bound.
+                lookupsReady: Promise.resolve(),
 
                 init() { if (this.config.entities.length) this.select(this.config.entities[0]); },
 
@@ -161,7 +165,8 @@
                     this.editing = false;
                     this.options = {};
                     this.labels = {};
-                    await Promise.all([this.load(), this.loadLookups()]);
+                    this.lookupsReady = this.loadLookups();
+                    await Promise.all([this.load(), this.lookupsReady]);
                 },
 
                 /** Load every relation column's options: the same controller the business dropdowns use.
@@ -189,20 +194,25 @@
 
                 /** Table rendering: a relation shows "Label (id)" when resolvable, the raw id otherwise -
                  *  an administrator needs to see the actual foreign key, not only its label. */
+                /**
+                 * A temporal column arrives as the JSON array the Java serializer emits
+                 * ([y,m,d] / [y,m,d,h,mi,s]). Render it as ISO for BOTH the table and the editor -
+                 * "2025,7,6" in an input is not something an administrator can correct.
+                 */
+                temporal(value) {
+                    if (!Array.isArray(value) || value.length < 3 || !value.every(n => typeof n === 'number')) return null;
+                    const pad = (n) => String(n).padStart(2, '0');
+                    const date = value[0] + '-' + pad(value[1]) + '-' + pad(value[2]);
+                    if (value.length >= 6) return date + ' ' + pad(value[3]) + ':' + pad(value[4]) + ':' + pad(value[5]);
+                    return value.length === 5 ? date + ' ' + pad(value[3]) + ':' + pad(value[4]) : date;
+                },
+
                 display(property, value) {
                     if (value === null || value === undefined) return '';
                     const map = this.labels[property.name];
                     const label = map && map[String(value)];
                     if (label) return label + ' (' + value + ')';
-                    // A temporal column arrives as the JSON array the Java serializer emits
-                    // ([y,m,d] / [y,m,d,h,mi,s]) - render it readably rather than as raw commas.
-                    if (Array.isArray(value) && value.length >= 3 && value.every(n => typeof n === 'number')) {
-                        const pad = (n) => String(n).padStart(2, '0');
-                        const date = value[0] + '-' + pad(value[1]) + '-' + pad(value[2]);
-                        return value.length >= 6 ? date + ' ' + pad(value[3]) + ':' + pad(value[4]) + ':' + pad(value[5])
-                             : (value.length === 5 ? date + ' ' + pad(value[3]) + ':' + pad(value[4]) : date);
-                    }
-                    return String(value);
+                    return this.temporal(value) || String(value);
                 },
 
                 // The REST error body carries the validation reason (server.error.include-message) -
@@ -243,18 +253,32 @@
                 rowKey(row) { return row[this.selected.pk]; },
                 cell(value) { return value === null || value === undefined ? '' : String(value); },
 
-                startCreate() {
+                async startCreate() {
                     this.isNew = true;
                     this.draft = {};
-                    this.editing = true;
                     this.error = '';
+                    await this.lookupsReady;
+                    this.editing = true;
                 },
 
-                startEdit(row) {
+                async startEdit(row) {
                     this.isNew = false;
-                    this.draft = Object.assign({}, row);
-                    this.editing = true;
+                    this.draft = {};
+                    Object.keys(row).forEach(key => { this.draft[key] = this.temporal(row[key]) || row[key]; });
                     this.error = '';
+                    await this.lookupsReady;
+                    this.editing = true;
+                    // The option elements carry String(value); re-assign each relation value AFTER the
+                    // options are rendered so the select finds its option and shows the label instead
+                    // of an empty box over a bound id.
+                    this.$nextTick(() => {
+                        (this.selected.properties || []).filter(p => p.lookup).forEach(p => {
+                            const value = this.draft[p.name];
+                            if (value === null || value === undefined || value === '') return;
+                            this.draft[p.name] = '';
+                            this.$nextTick(() => { this.draft[p.name] = String(value); });
+                        });
+                    });
                 },
 
                 cancel() { this.editing = false; this.draft = {}; this.error = ''; },
@@ -268,6 +292,9 @@
                             if (this.isNew && p.pk) continue;
                             let v = this.draft[p.name];
                             if (v === '' || v === undefined) v = null;
+                            // A relation is bound as the option's string value; send the id as the
+                            // number the API declares.
+                            if (v !== null && p.lookup && /^-?\d+$/.test(String(v))) v = Number(v);
                             payload[p.name] = v;
                         }
                         const id = this.draft[this.selected.pk];
