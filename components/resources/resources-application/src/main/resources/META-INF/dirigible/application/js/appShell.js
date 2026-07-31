@@ -62,6 +62,7 @@ document.addEventListener('alpine:init', () => {
     /** A human-friendly label for a predefined key, derived from its DIRIGIBLE_BRANDING_* name. */
     tenantConfigLabel(key) {
       return key.replace(/^DIRIGIBLE_BRANDING_/, '')
+                .replace(/^DIRIGIBLE_/, '')
                 .toLowerCase()
                 .replace(/_/g, ' ')
                 .replace(/\b\w/g, (c) => c.toUpperCase());
@@ -239,20 +240,25 @@ document.addEventListener('alpine:init', () => {
         if (match && !bases.has(match[1])) bases.set(match[1], '/services/web/' + match[1] + '/' + (match[2] || ''));
       };
       (perspectives || []).forEach(g => Array.isArray(g.items) ? g.items.forEach(collect) : collect(g));
-      const coverage = await Promise.all([...bases].map(async ([app, base]) => {
-        let provided = ['en'];
+      const coverage = (await Promise.all([...bases].map(async ([app, base]) => {
+        // Only generated apps carry a js/config.js. A missing or unreadable config means this
+        // perspective is a platform surface (Inbox, Documents, ...) translated through the shared
+        // platform catalogs - it must not be reported as an untranslated app. A readable config
+        // WITHOUT a languages declaration is a generated app providing only the default language.
         try {
           const res = await fetch(base + 'js/config.js', { credentials: 'same-origin' });
-          if (res.ok) {
-            const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
-            if (match) {
-              const codes = JSON.parse(match[1].replace(/'/g, '"'));
-              if (Array.isArray(codes) && codes.length) provided = codes;
-            }
+          if (!res.ok) return null;
+          const match = (await res.text()).match(/languages:\s*(\[[^\]]*\])/);
+          let provided = ['en'];
+          if (match) {
+            const codes = JSON.parse(match[1].replace(/'/g, '"'));
+            if (Array.isArray(codes) && codes.length) provided = codes;
           }
-        } catch (e) { /* undeclared coverage counts as default-language only */ }
-        return { app, provided };
-      }));
+          return { app, provided };
+        } catch (e) {
+          return null;
+        }
+      }))).filter(Boolean);
       this.appLanguages = coverage;
     },
 

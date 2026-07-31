@@ -31,6 +31,8 @@ class TenantConfigurationKeyPolicyTest {
         assertTrue(policy.isInjectable("DIRIGIBLE_BRANDING_NAME"));
         assertTrue(policy.isInjectable("DIRIGIBLE_BRANDING_THEME"));
         assertTrue(policy.isInjectable("DIRIGIBLE_BRANDING_BRAND_URL"));
+        // The platform language set is tenant-overridable (default "en"; e.g. "en,bg,fr").
+        assertTrue(policy.isInjectable("DIRIGIBLE_APPLICATION_LANGUAGES"));
     }
 
     @Test

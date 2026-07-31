@@ -39,7 +39,12 @@ class TenantConfigurationKeyPolicy {
             "DIRIGIBLE_BRANDING_FAVICON", //
             "DIRIGIBLE_BRANDING_THEME", //
             "DIRIGIBLE_BRANDING_PREFIX", //
-            "DIRIGIBLE_BRANDING_ANALYTICS");
+            "DIRIGIBLE_BRANDING_ANALYTICS", //
+            // The platform language set the Region & Language picker offers (comma-separated codes,
+            // e.g. "en,bg,fr"). Per-tenant: each tenant decides which languages its users see; the
+            // modules themselves carry whatever translations they ship, falling back to the default
+            // (first) language for anything missing.
+            "DIRIGIBLE_APPLICATION_LANGUAGES");
 
     /**
      * The full list of configuration keys a tenant may override, in display order.
