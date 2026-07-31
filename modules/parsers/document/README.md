@@ -71,7 +71,7 @@ switch (node) {
 ## Attributes
 
 `id`, `width`, `height`, `flex`, `align`, `style`, `gap`, `padding`, `margin`, `label`,
-`source`, `src`, `repeatHeader`, `pageBreak` — all stored as plain strings.
+`source`, `src`, `filter`, `match`, `repeatHeader`, `pageBreak` — all stored as plain strings.
 
 - **Alignment** (`align`): `left`, `center`, `right`, `justify`.
 - **Widths/heights**: `100` (px), `100px`, `50%`, `*` (fraction weight 1), `2*`, `3*`;
@@ -158,6 +158,33 @@ Paths walk nested maps (`customer.name`); a `table`/`for` node's `source` list e
 row per element, and inside a row a bare path (`quantity`) resolves against the row first, then
 the enclosing document context; `if` keeps or drops its children by the truthiness of `source`.
 Unresolved placeholders render as **empty strings** — a printout never shows raw braces.
+
+**Row filtering** stays declarative — a value match, not an expression language: a `table`/`for`
+with `filter="kind"` keeps only the elements whose `kind` resolves truthy (in the row's scope),
+and adding `match="CONTRIBUTION | TAX"` narrows that to the listed `|`-separated literals. The
+same `match` on an `if` compares the resolved `source` against the listed values instead of
+testing truthiness. One fed collection can this way render into several purpose-grouped tables —
+a payslip's earnings vs deductions, a journal entry's debit vs credit side — without pre-splitting
+the data feed:
+
+```xml
+<row gap="12">
+    <stack>
+        <text style="subtitle">Earnings</text>
+        <table source="items" filter="kind" match="BASE | ENTRY">
+            <column width="3*">{{name}}</column>
+            <column width="*" align="right">{{amount}}</column>
+        </table>
+    </stack>
+    <stack>
+        <text style="subtitle">Deductions</text>
+        <table source="items" filter="kind" match="CONTRIBUTION | TAX">
+            <column width="3*">{{name}}</column>
+            <column width="*" align="right">{{amount}}</column>
+        </table>
+    </stack>
+</row>
+```
 **Floating-point values** (`Double`/`Float`/`BigDecimal`) print in the generated forms' money
 pattern `### ### ### ##0.00` (space-grouped thousands, two decimals, locale-independent);
 integral numbers print unformatted.

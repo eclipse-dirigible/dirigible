@@ -161,6 +161,91 @@ public class DataBinderTest {
     }
 
     @Test
+    public void tableFilterAloneKeepsTruthyRows() {
+        Node root = parser.parse("""
+                <document>
+                    <table source="items" filter="billable">
+                        <column>{{name}}</column>
+                    </table>
+                </document>
+                """);
+        Node bound = binder.bind(root, Map.of("items",
+                List.of(Map.of("name", "Kept", "billable", true), Map.of("name", "Dropped", "billable", false), Map.of("name", "NoFlag"))));
+        TableNode table = (TableNode) bound.children()
+                                           .get(0);
+        // 1 column definition + only the truthy row
+        assertEquals(2, table.children()
+                             .size());
+        assertEquals("Kept", table.children()
+                                  .get(1)
+                                  .children()
+                                  .get(0)
+                                  .text());
+    }
+
+    @Test
+    public void tableFilterWithMatchKeepsTheListedValues() {
+        Node root = parser.parse("""
+                <document>
+                    <table source="items" filter="kind" match="CONTRIBUTION | TAX">
+                        <column>{{name}}</column>
+                    </table>
+                </document>
+                """);
+        Node bound = binder.bind(root,
+                Map.of("items", List.of(Map.of("kind", "BASE", "name", "Base salary"), Map.of("kind", "CONTRIBUTION", "name", "Pensions"),
+                        Map.of("kind", "TAX", "name", "Income tax"), Map.of("name", "Kindless"))));
+        TableNode table = (TableNode) bound.children()
+                                           .get(0);
+        // 1 column definition + the two matching rows, in source order
+        assertEquals(3, table.children()
+                             .size());
+        assertEquals("Pensions", table.children()
+                                      .get(1)
+                                      .children()
+                                      .get(0)
+                                      .text());
+        assertEquals("Income tax", table.children()
+                                        .get(2)
+                                        .children()
+                                        .get(0)
+                                        .text());
+    }
+
+    @Test
+    public void forFilterWithMatchExpandsOnlyMatchingElements() {
+        Node root = parser.parse("""
+                <document>
+                    <for source="lines" filter="side" match="DEBIT">
+                        <text>{{account}}</text>
+                    </for>
+                </document>
+                """);
+        Node bound = binder.bind(root,
+                Map.of("lines", List.of(Map.of("side", "DEBIT", "account", "601"), Map.of("side", "CREDIT", "account", "401"))));
+        assertEquals(1, bound.children()
+                             .size());
+        assertEquals("601", bound.children()
+                                 .get(0)
+                                 .text());
+    }
+
+    @Test
+    public void ifMatchComparesTheResolvedValueInsteadOfTruthiness() {
+        String template = "<document><if source=\"status\" match=\"POSTED | SENT\"><text>Final</text></if></document>";
+        Node matched = binder.bind(parser.parse(template), Map.of("status", "POSTED"));
+        assertEquals(1, matched.children()
+                               .size());
+        // a truthy-but-unlisted value does not match, and a missing value never matches
+        Node other = binder.bind(parser.parse(template), Map.of("status", "DRAFT"));
+        assertEquals(0, other.children()
+                             .size());
+        Node missing = binder.bind(parser.parse(template), Map.of());
+        assertEquals(0, missing.children()
+                               .size());
+    }
+
+    @Test
     public void nestedStructuresBindRecursively() {
         Node root = parser.parse("<document><section><row><stack><text>{{a.b}}</text></stack></row></section></document>");
         Node bound = binder.bind(root, Map.of("a", Map.of("b", "deep")));

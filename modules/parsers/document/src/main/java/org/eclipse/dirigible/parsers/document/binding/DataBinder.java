@@ -35,6 +35,15 @@ import org.eclipse.dirigible.parsers.document.parser.TagRegistry;
  * the truthiness of its {@code source}.
  *
  * <p>
+ * Rows can be filtered declaratively — no expressions, staying a value match: a {@code table} or
+ * {@code for} node with {@code filter="Kind"} keeps only the elements whose {@code Kind} resolves
+ * truthy, and adding {@code match="CONTRIBUTION | TAX"} narrows that to the listed literal values
+ * ({@code |}-separated, trimmed). The same {@code match} attribute on an {@code if} node compares
+ * its resolved {@code source} against the listed values instead of testing truthiness. One fed
+ * collection can this way render into several purpose-grouped tables (a payslip's earnings vs
+ * deductions, a journal entry's debit vs credit side) without pre-splitting the data.
+ *
+ * <p>
  * The context is plain {@code Map<String, Object>} / {@code List<Object>} data (e.g. a JSON-decoded
  * entity). Paths walk nested maps ({@code customer.name}); inside a row scope a bare path
  * ({@code quantity}) resolves against the row first, then the enclosing document context. An
@@ -80,8 +89,10 @@ public final class DataBinder {
         for (Node child : node.children()) {
             switch (child) {
                 case IfNode ifNode -> {
-                    if (isTruthy(scope.resolve(ifNode.attributes()
-                                                     .get("source")))) {
+                    Object condition = scope.resolve(ifNode.attributes()
+                                                           .get("source"));
+                    if (matches(condition, ifNode.attributes()
+                                                 .get("match"))) {
                         bound.addAll(bindChildren(ifNode, scope));
                     }
                 }
@@ -110,6 +121,9 @@ public final class DataBinder {
         for (Object element : asList(scope.resolve(table.attributes()
                                                         .get("source")))) {
             Scope rowScope = new Scope(asMap(element), scope);
+            if (!keepRow(table, rowScope)) {
+                continue;
+            }
             List<Node> cells = new ArrayList<>();
             for (Node column : columns) {
                 cells.add(rebuild(column, rowScope, bindChildren(column, rowScope)));
@@ -123,8 +137,48 @@ public final class DataBinder {
         for (Object element : asList(scope.resolve(forNode.attributes()
                                                           .get("source")))) {
             Scope rowScope = new Scope(asMap(element), scope);
+            if (!keepRow(forNode, rowScope)) {
+                continue;
+            }
             target.addAll(bindChildren(forNode, rowScope));
         }
+    }
+
+    /**
+     * The row filter of a {@code table}/{@code for} node: no {@code filter} attribute keeps every row;
+     * {@code filter="<path>"} alone keeps the rows where the path resolves truthy (in the row's scope);
+     * {@code filter} plus {@code match="A | B"} keeps the rows whose resolved value equals one of the
+     * listed literals.
+     */
+    private static boolean keepRow(Node node, Scope rowScope) {
+        String filter = node.attributes()
+                            .get("filter");
+        if (filter == null || filter.isBlank()) {
+            return true;
+        }
+        return matches(rowScope.resolve(filter.trim()), node.attributes()
+                                                            .get("match"));
+    }
+
+    /**
+     * No {@code match} list means plain truthiness; otherwise the value's string form must equal one of
+     * the {@code |}-separated, trimmed literals — a null never matches.
+     */
+    private static boolean matches(Object value, String match) {
+        if (match == null || match.isBlank()) {
+            return isTruthy(value);
+        }
+        if (value == null) {
+            return false;
+        }
+        String candidate = String.valueOf(value);
+        for (String literal : match.split("\\|")) {
+            if (literal.trim()
+                       .equals(candidate)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Node rebuild(Node node, Scope scope, List<Node> children) {

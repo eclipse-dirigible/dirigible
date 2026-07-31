@@ -84,6 +84,29 @@ public class XslFoRendererTest {
     }
 
     @Test
+    public void filteredTablesRenderOnlyTheirMatchingRows() {
+        // one fed collection, two purpose-grouped tables (the payslip / journal two-column shape)
+        String fo = renderTemplate("""
+                <document>
+                    <table source="items" filter="kind" match="EARNING">
+                        <column label="Earnings">{{name}}</column>
+                    </table>
+                    <table source="items" filter="kind" match="DEDUCTION | TAX">
+                        <column label="Deductions">{{name}}</column>
+                    </table>
+                </document>
+                """, Map.of("items", List.of(Map.of("kind", "EARNING", "name", "Base pay"),
+                Map.of("kind", "DEDUCTION", "name", "Pension fund"), Map.of("kind", "TAX", "name", "Income tax"))));
+        assertTrue(fo.contains(">Base pay</fo:block>"));
+        assertTrue(fo.contains(">Pension fund</fo:block>"));
+        assertTrue(fo.contains(">Income tax</fo:block>"));
+        // the earnings table precedes the deductions table, and no row leaks across the filters
+        assertTrue(fo.indexOf("Base pay") < fo.indexOf("Pension fund"));
+        assertEquals(1, fo.split("Base pay", -1).length - 1);
+        assertEquals(1, fo.split("Pension fund", -1).length - 1);
+    }
+
+    @Test
     public void wideTableScalesTheFontDownSoContentFits() {
         // Three columns keep the body font size; every column beyond that drops it a point (floor 6),
         // so a nine-column financial table renders at 6pt instead of overflowing its narrow columns.
