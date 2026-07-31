@@ -40,13 +40,42 @@ public class DocumentNumberEndpoint extends BaseEndpoint {
         this.service = service;
     }
 
-    /** The current tenant's counters. */
+    /**
+     * The current tenant's series: every series the running application DECLARED plus any counter that
+     * predates declaration, with the tenant's format override and whether one is expressible at all.
+     */
     @GetMapping
-    public ResponseEntity<List<DocumentNumberStore.Counter>> list() {
+    public ResponseEntity<List<SeriesView>> list() {
         try {
-            return ResponseEntity.ok(service.list());
+            return ResponseEntity.ok(service.listAll()
+                                            .stream()
+                                            .map(counter -> new SeriesView(counter.series(), counter.scope(), counter.counter(),
+                                                    counter.counter() + 1, counter.format(), counter.prefix(), counter.size(),
+                                                    DocumentNumberService.overridable(counter.format())))
+                                            .toList());
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to list document-number counters", ex);
+        }
+    }
+
+    /**
+     * Set (or clear) the tenant's prefix/size override for a series. Clearing both falls back to the
+     * format the application authored.
+     */
+    @PutMapping("/format")
+    public ResponseEntity<Void> setFormat(@RequestBody SetFormatRequest request) {
+        if (request == null || request.series() == null || request.series()
+                                                                  .isBlank()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "series is required");
+        }
+        try {
+            service.setOverride(request.series(), request.scope() == null ? "" : request.scope(), request.prefix(), request.size());
+            return ResponseEntity.noContent()
+                                 .build();
+        } catch (IllegalArgumentException ex) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, ex.getMessage(), ex);
+        } catch (SQLException ex) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to set the document-number format", ex);
         }
     }
 
@@ -74,5 +103,34 @@ public class DocumentNumberEndpoint extends BaseEndpoint {
      * @param next the next value the counter should allocate
      */
     record SetNextRequest(String series, String scope, long next) {
+    }
+
+    /**
+     * Request body for the prefix/size override.
+     *
+     * @param series the series identity
+     * @param scope the scope key ({@code ""}/{@code null} for an unscoped series)
+     * @param prefix the literal prefix - an EMPTY string is meaningful (no prefix at all), null with a
+     *        null size clears the override
+     * @param size the total rendered width
+     */
+    record SetFormatRequest(String series, String scope, String prefix, Integer size) {
+    }
+
+    /**
+     * One series as the settings page sees it.
+     *
+     * @param series the series identity
+     * @param scope the scope key
+     * @param counter the last allocated value
+     * @param next the value the next document will get
+     * @param format the format the application authored
+     * @param prefix the tenant's prefix override, or null
+     * @param size the tenant's width override, or null
+     * @param overridable whether a prefix/size override can express this format at all (false when it
+     *        carries scope tokens the override cannot reproduce)
+     */
+    record SeriesView(String series, String scope, long counter, long next, String format, String prefix, Integer size,
+            boolean overridable) {
     }
 }

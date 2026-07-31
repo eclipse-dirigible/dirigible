@@ -14,6 +14,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 import org.junit.jupiter.api.Test;
 
 class DocumentNumberServiceTest {
@@ -39,5 +41,51 @@ class DocumentNumberServiceTest {
         scope.put("year", "2026");
         assertEquals("1|2026", DocumentNumberService.scopeKey(scope));
         assertEquals("", DocumentNumberService.scopeKey(Map.of()));
+    }
+
+    /**
+     * The tenant's prefix/size override REPLACES the authored format - it can only express a prefix
+     * plus a padded sequence, so merging it into a richer template would be guesswork.
+     */
+    @Test
+    void overrideReplacesTheAuthoredFormatWithPrefixAndWidth() {
+        // The BG case: drop the "SI" prefix entirely, total width 10.
+        assertEquals("{seq:010}", DocumentNumberService.effectiveFormat("SI{seq:08}", "", 10));
+        assertEquals("0000000042", DocumentNumberService.render(DocumentNumberService.effectiveFormat("SI{seq:08}", "", 10),
+                "Sales Invoice", 42, java.util.Map.of()));
+        // A numeric prefix, same total width - the sequence shrinks to fit.
+        assertEquals("00{seq:08}", DocumentNumberService.effectiveFormat("SI{seq:08}", "00", 10));
+        assertEquals("0000000042", DocumentNumberService.render(DocumentNumberService.effectiveFormat("SI{seq:08}", "00", 10),
+                "Sales Invoice", 42, java.util.Map.of()));
+        assertEquals(10,
+                DocumentNumberService.render(DocumentNumberService.effectiveFormat("SI{seq:08}", "00", 10), "Sales Invoice", 42,
+                        java.util.Map.of())
+                                     .length());
+    }
+
+    @Test
+    void noOverrideKeepsTheAuthoredFormat() {
+        assertEquals("SI{seq:08}", DocumentNumberService.effectiveFormat("SI{seq:08}", null, null));
+        // A prefix without a width is not an override - a width is what makes it renderable.
+        assertEquals("SI{seq:08}", DocumentNumberService.effectiveFormat("SI{seq:08}", "X", null));
+    }
+
+    @Test
+    void anUnusableWidthFallsBackInsteadOfMangling() {
+        // The width leaves no room for even one digit: keep the authored format rather than emit "PRE".
+        assertEquals("PRE{seq:04}", DocumentNumberService.effectiveFormat("PRE{seq:04}", "PRE", 3));
+    }
+
+    /**
+     * A format carrying scope tokens cannot be expressed as prefix + width, so the management surface
+     * must not offer the override for it - it would silently drop the tokens.
+     */
+    @Test
+    void onlySequenceOnlyFormatsAreOverridable() {
+        assertTrue(DocumentNumberService.overridable("SI{seq:08}"));
+        assertTrue(DocumentNumberService.overridable("{seq}"));
+        assertTrue(DocumentNumberService.overridable("PLAIN"));
+        assertTrue(!DocumentNumberService.overridable("INV-{year}-{seq:05}"));
+        assertTrue(!DocumentNumberService.overridable("{series}-{seq:06}"));
     }
 }

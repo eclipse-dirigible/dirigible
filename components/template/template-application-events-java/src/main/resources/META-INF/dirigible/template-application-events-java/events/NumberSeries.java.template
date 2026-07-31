@@ -1,0 +1,25 @@
+package gen.events.${javaGenFolderName};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.numbering.DocumentNumbers;
+
+/**
+ * Declares the ${series} document-number series (${entity}.${field}) to the platform.
+ *
+ * Generated from the intent numbering glue - do not edit; it is re-generated with the application.
+ *
+ * Its only job is to exist: the constructor runs when the client bean container starts, so the series
+ * shows up on the application shell's Document Numbering settings page - and its next value, prefix and
+ * width become configurable - BEFORE the first document of this series is ever numbered. Without it a
+ * series is invisible until something allocates a number, which is exactly when it is too late to choose
+ * where the sequence should start.
+ *
+ * Declaring is idempotent and allocates nothing; re-declaring only refreshes the recorded format.
+ */
+@Component("${javaGenFolderName}_${entity}NumberSeries")
+public class ${entity}NumberSeries {
+
+    public ${entity}NumberSeries() {
+        DocumentNumbers.declare("${series}", "${format}");
+    }
+}

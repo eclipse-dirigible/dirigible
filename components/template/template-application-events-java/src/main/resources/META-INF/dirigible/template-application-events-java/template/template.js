@@ -143,6 +143,13 @@ export function getTemplate(parameters) {
                 collection: "numbering"
             },
             {
+                location: "/template-application-events-java/events/NumberSeries.java.template",
+                action: "generate",
+                rename: "gen/events/{{javaGenFolderName}}/{{entity}}NumberSeries.java",
+                engine: "velocity",
+                collection: "numberSeries"
+            },
+            {
                 location: "/template-application-events-java/events/SettlementOnPayment.java.template",
                 action: "generate",
                 rename: "gen/events/{{javaGenFolderName}}/{{name}}OnPayment.java",

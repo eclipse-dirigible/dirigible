@@ -105,12 +105,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
         List<Map<String, Object>> snapshots = SnapshotSupport.buildSnapshots(model, byName, compositionParents);
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
+        List<Map<String, Object>> numberSeries = NumberingSupport.buildNumberSeries(model);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
                 && aborts.isEmpty() && writers.isEmpty() && setters.isEmpty() && notifications.isEmpty() && schedules.isEmpty()
                 && integrations.isEmpty() && inbound.isEmpty() && rollups.isEmpty() && expansions.isEmpty() && settlements.isEmpty()
                 && generates.isEmpty() && transitions.isEmpty() && printFeeders.isEmpty() && postings.isEmpty() && snapshots.isEmpty()
-                && numbering.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()) {
+                && numbering.isEmpty() && numberSeries.isEmpty() && posts.isEmpty() && aggregates.isEmpty() && sends.isEmpty()) {
             // No process glue for this intent - any stale .glue is removed by the post-pass scrub.
             return;
         }
@@ -140,6 +141,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         glue.put("printFeeders", printFeeders);
         glue.put("snapshots", snapshots);
         glue.put("numbering", numbering);
+        glue.put("numberSeries", numberSeries);
         context.writeModelFile(IntentNaming.baseName(context) + ".glue", JsonHelper.toJson(glue));
         LOGGER.debug(
                 "Wrote glue with [{}] trigger(s), [{}] resolver(s), [{}] writer(s), [{}] setter(s),"

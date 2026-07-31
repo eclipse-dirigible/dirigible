@@ -139,6 +139,21 @@ document.addEventListener('alpine:init', () => {
       return row.scope ? row.series + ' [' + row.scope + ']' : row.series;
     },
 
+    /**
+     * What a series currently produces. A tenant override wins over the application's format; a format
+     * carrying scope tokens says so, because prefix/size cannot express it.
+     */
+    numberingFormatHint(row) {
+      if (!row.overridable) {
+        return this.T('application-core:shell.settings.numberingFixed', 'Format set by the application') + ': ' + row.format;
+      }
+      if (row.size) {
+        return this.T('application-core:shell.settings.numberingExample', 'Example') + ': '
+          + (row.prefix || '') + String(row.next || 1).padStart(Math.max(1, parseInt(row.size, 10) - (row.prefix || '').length), '0');
+      }
+      return this.T('application-core:shell.settings.numberingAppFormat', 'Application format') + ': ' + (row.format || '-');
+    },
+
     /** Load the current tenant's document-number counters. */
     async loadNumbering() {
       this.numberingLoading = true;
@@ -155,7 +170,11 @@ document.addEventListener('alpine:init', () => {
         }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        this.numbering = data.map((c) => ({ series: c.series, scope: c.scope || '', counter: c.counter, next: (c.counter || 0) + 1 }));
+        this.numbering = data.map((c) => ({
+          series: c.series, scope: c.scope || '', counter: c.counter, next: c.next != null ? c.next : (c.counter || 0) + 1,
+          format: c.format || '', prefix: c.prefix == null ? '' : c.prefix, size: c.size == null ? '' : c.size,
+          overridable: c.overridable !== false
+        }));
       } catch (e) {
         console.error('document-numbering: failed to load', e);
         this.numbering = [];
@@ -180,6 +199,21 @@ document.addEventListener('alpine:init', () => {
             body: JSON.stringify({ series: row.series, scope: row.scope, next: next })
           });
           if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+          // The prefix/size override is a separate concern from the counter, and only offered when the
+          // application's format is a padded sequence. An empty size CLEARS the override (back to the
+          // application's format); an empty prefix is a real value - no prefix at all.
+          if (!row.overridable) continue;
+          const size = parseInt(row.size, 10);
+          const body = isFinite(size) && size > 0
+            ? { series: row.series, scope: row.scope, prefix: row.prefix || '', size: size }
+            : { series: row.series, scope: row.scope, prefix: null, size: null };
+          const fmt = await fetch('/services/core/numbering/format', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          if (!fmt.ok) throw new Error('PUT format ' + row.series + ' -> HTTP ' + fmt.status);
         }
         await this.loadNumbering();
       } catch (e) {

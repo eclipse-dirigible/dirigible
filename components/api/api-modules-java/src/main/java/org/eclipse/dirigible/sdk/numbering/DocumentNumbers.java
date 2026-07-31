@@ -58,4 +58,18 @@ public final class DocumentNumbers {
     public static String next(String series, String format) {
         return next(series, format, Map.of());
     }
+
+    /**
+     * Declares that a series exists and records its authored format, without allocating a number. The
+     * generated declaring components call this at start-up so an administrator can see and configure a
+     * series - its next value, its prefix and its width - BEFORE the first document is ever numbered.
+     * Idempotent: re-declaring only refreshes the recorded format.
+     *
+     * @param series the series identity
+     * @param format the authored format template (see {@link #next(String, String, Map)})
+     */
+    public static void declare(String series, String format) {
+        Beans.get(DocumentNumberService.class)
+             .declare(series, format);
+    }
 }

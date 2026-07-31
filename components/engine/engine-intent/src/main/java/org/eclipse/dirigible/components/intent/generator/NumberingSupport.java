@@ -69,4 +69,33 @@ final class NumberingSupport {
         }
         return numbering;
     }
+
+    /**
+     * One descriptor per {@code number:} field REGARDLESS of {@code stampOn} - the series the
+     * application declares. The stamp collection above deliberately covers only {@code stampOn: issue}
+     * (a create-time number is stamped by the DAO and needs no process step), but the management
+     * surface must list every series, including those whose first document does not exist yet, so
+     * declaration needs the full set.
+     *
+     * @param model the parsed intent model
+     * @return the {@code numberSeries} collection (possibly empty)
+     */
+    static List<Map<String, Object>> buildNumberSeries(IntentModel model) {
+        List<Map<String, Object>> series = new ArrayList<>();
+        for (EntityIntent entity : model.getEntities()) {
+            for (FieldIntent field : entity.getFields()) {
+                NumberIntent number = field.getNumber();
+                if (number == null) {
+                    continue;
+                }
+                Map<String, Object> descriptor = new LinkedHashMap<>();
+                descriptor.put("entity", entity.getName());
+                descriptor.put("field", IntentNaming.pascalCase(field.getName()));
+                descriptor.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
+                descriptor.put("format", number.getFormat() == null ? "" : number.getFormat());
+                series.add(descriptor);
+            }
+        }
+        return series;
+    }
 }

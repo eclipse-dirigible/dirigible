@@ -1440,6 +1440,29 @@ export function generateFiles(model, parameters, templateSources) {
                         }
                     }
                     break;
+                case "numberSeries":
+                    // Declaring components (intent layer): one tiny @Component per number: field -
+                    // REGARDLESS of stampOn, unlike the stamp delegates above - whose constructor declares
+                    // the series to the platform at client-container start-up, so it is listed and
+                    // configurable before its first document is numbered.
+                    if (model.numberSeries) {
+                        for (let ns = 0; ns < model.numberSeries.length; ns++) {
+                            const ser = model.numberSeries[ns];
+                            const seriesParameters = cleanData({
+                                ...parameters,
+                                entity: ser.entity,
+                                field: ser.field,
+                                series: ser.series,
+                                format: ser.format
+                            });
+                            generatedFiles.push({
+                                location: location,
+                                content: getGenerationEngine(template).generate(location, content, seriesParameters),
+                                path: templateEngines.getMustacheEngine().generate(location, template.rename, seriesParameters)
+                            });
+                        }
+                    }
+                    break;
                 case "numbering":
                     // Document-number stamp delegates (intent layer): one JavaDelegate per number: field
                     // with stampOn:issue, wired as a delegate: service task at the issue step. It stamps

@@ -177,8 +177,27 @@
           <div class="vbox gap-4">
             <template x-for="row in numbering" :key="row.series + '|' + row.scope">
               <div class="vbox gap-1">
-                <span x-h-text.muted class="text-sm" x-text="numberingLabel(row)"></span>
-                <input x-h-input type="number" min="1" x-model="row.next" />
+                <span class="text-sm font-medium" x-text="numberingLabel(row)"></span>
+                <span x-h-text.muted class="text-xs" x-text="numberingFormatHint(row)"></span>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                  <div class="vbox gap-0">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
+                    <input x-h-input type="number" min="1" x-model="row.next" />
+                  </div>
+                  <!-- Prefix/size REPLACE the application's format, so they are offered only when that
+                       format is nothing but a padded sequence: a format carrying {year}/{series} tokens
+                       cannot be expressed this way and the override would silently drop them. -->
+                  <div class="vbox gap-0">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
+                    <input x-h-input type="text" maxlength="16" x-model="row.prefix" :disabled="!row.overridable"
+                           :placeholder="T('application-core:shell.settings.numberingPrefixHint', 'none')" />
+                  </div>
+                  <div class="vbox gap-0">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total size')"></span>
+                    <input x-h-input type="number" min="1" max="40" x-model="row.size" :disabled="!row.overridable"
+                           :placeholder="T('application-core:shell.settings.numberingSizeHint', 'from the app')" />
+                  </div>
+                </div>
               </div>
             </template>
             <div class="hbox gap-2">
