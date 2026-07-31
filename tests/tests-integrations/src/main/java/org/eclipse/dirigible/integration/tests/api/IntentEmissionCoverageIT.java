@@ -54,13 +54,14 @@ import org.springframework.beans.factory.annotation.Autowired;
  * generated token at minimum, the runtime behavior where reachable), never only the parsed model.
  * Covered here: {@code immutableWhen} / {@code immutable} (409 on write/delete), {@code checks}
  * (exactlyOne / itemsMin / itemsSumEqual), {@code hierarchy}/{@code leafOnly}, {@code multilingual}
- * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, {@code transitions}
- * (the guarded on-demand status flip: allowed-status 200, wrong-status/guard 409), {@code postings}
- * with {@code reverses} (post on a transition; red-storno reversal on void - negated amounts,
- * storno link, fail-soft), the {@code notify} block with {@code attach: print} (send the document
- * itself by e-mail - on a transition and on a process step; the fail-soft contract), and the
- * personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}: scoped reads, forced
- * owner, stripped fields).
+ * (read-time overlay), seed rows carrying a RELATION column, aggregate totals, first-class
+ * {@code number:} stamping from an authored {@code .numbers} series declaration,
+ * {@code transitions} (the guarded on-demand status flip: allowed-status 200, wrong-status/guard
+ * 409), {@code postings} with {@code reverses} (post on a transition; red-storno reversal on void -
+ * negated amounts, storno link, fail-soft), the {@code notify} block with {@code attach: print}
+ * (send the document itself by e-mail - on a transition and on a process step; the fail-soft
+ * contract), and the personal (my) surface ({@code identity}/{@code personal}/{@code sensitive}:
+ * scoped reads, forced owner, stripped fields).
  */
 class IntentEmissionCoverageIT extends IntegrationTest {
 
@@ -153,6 +154,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
                   - { name: amount, type: decimal }
+
+              # first-class numbering, stampOn: create - the generated DAO allocates the real number
+              # at insert from the tenant series that the module's AUTHORED .numbers artefact
+              # provisions at publish. The intent references the series by NAME only; the shape
+              # (prefix + total width) lives in .numbers and the per-tenant settings.
+              - name: Receipt
+                fields:
+                  - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: number, type: string, length: 100, number: { series: Emission Receipt, stampOn: create } }
+                  - { name: note,   type: string, length: 200 }
 
               - name: EntryLine
                 checks:
@@ -670,9 +681,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     @Autowired
     private DataSourcesManager dataSourcesManager;
 
+    /**
+     * The module's series declaration - AUTHORED next to app.intent (like .roles), never generated; the
+     * .numbers synchronizer provisions it per tenant at publish. Prefix ER- in a total width of 8 →
+     * {@code ER-00001}.
+     */
+    private static final String NUMBERS_JSON = "{\"series\": [{\"name\": \"Emission Receipt\", \"prefix\": \"ER-\", \"size\": 8}]}";
+
     @Test
     void generated_code_contains_every_feature_enforcement_and_the_published_app_enforces_it() {
         writeIntent(INTENT_YAML);
+        writeProjectFile("emission.numbers", NUMBERS_JSON);
         // Drive model-to-code from the generate response's OWN plan (template + parameters per
         // entry) - the production path. Hardcoding empty parameters silently skips every
         // parameter-gated producer (e.g. javaRuntime gates the leafOnly repository class).
@@ -743,6 +762,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String linePatternRegister = contentOf("gen/emission/js/components/pages/Entry/EntryLine.detail.js");
         assertTrue(linePatternRegister.contains("pattern: '^[A-Z]{3}-[0-9]{4}$'"),
                 "an item field pattern must reach the item-dialog column metadata, got: " + linePatternRegister);
+
+        // number: stampOn: create - the generated DAO must allocate from the DECLARED series by
+        // name (the shape deliberately never appears in generated code - it is tenant data).
+        String receiptRepository = contentOf("gen/emission/data/receipt/ReceiptRepository.java");
+        assertTrue(receiptRepository.contains("DocumentNumbers.next(\"Emission Receipt\")"),
+                "number: stampOn: create must emit the insert-time allocation from the named series into the repository");
 
         String entryRepository = contentOf("gen/emission/data/entry/EntryRepository.java");
         assertTrue(entryRepository.contains("Entry needs at least one line"),
@@ -1262,6 +1287,41 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("[0].Name", equalTo("Брой")));
+
+        // First-class numbering end-to-end: publish provisioned the authored .numbers series for
+        // the tenant, and the generated DAO stamps prefix + zero-padded sequence at insert -
+        // gap-free, in the DECLARED shape (an undeclared series would fail this create with 500,
+        // never invent a shape). Both creates run in one executor pass, so a retry that re-runs
+        // the lambda still yields two consecutive numbers - assert RELATIVELY.
+        AtomicReference<String> firstNumber = new AtomicReference<>();
+        AtomicReference<String> secondNumber = new AtomicReference<>();
+        restAssuredExecutor.execute(() -> {
+            firstNumber.set(given().contentType("application/json")
+                                   .body("{\"Note\":\"first\"}")
+                                   .when()
+                                   .post(API + "/receipt/ReceiptController")
+                                   .then()
+                                   .statusCode(200)
+                                   .extract()
+                                   .path("Number"));
+            secondNumber.set(given().contentType("application/json")
+                                    .body("{\"Note\":\"second\"}")
+                                    .when()
+                                    .post(API + "/receipt/ReceiptController")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .path("Number"));
+        });
+        assertTrue(firstNumber.get()
+                              .matches("ER-\\d{5}"),
+                "the stamped number must render in the DECLARED shape (prefix + zero-padded to the total width): " + firstNumber.get());
+        assertEquals(Integer.parseInt(firstNumber.get()
+                                                 .substring(3))
+                + 1,
+                Integer.parseInt(secondNumber.get()
+                                             .substring(3)),
+                "the series must be gap-free: " + firstNumber.get() + " then " + secondNumber.get());
 
         // The dead-Create family at the outermost layer: creating the document WITHOUT the
         // defaulted status must succeed, and the echo must carry the DB-applied default (the
@@ -1907,12 +1967,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
     }
 
     private void writeIntent(String yaml) {
-        String path = PROJECT_PATH + "/app.intent";
+        writeProjectFile("app.intent", yaml);
+    }
+
+    private void writeProjectFile(String fileName, String content) {
+        String path = PROJECT_PATH + "/" + fileName;
         IResource existing = repository.getResource(path);
         if (existing.exists()) {
-            existing.setContent(yaml.getBytes(StandardCharsets.UTF_8));
+            existing.setContent(content.getBytes(StandardCharsets.UTF_8));
         } else {
-            repository.createResource(path, yaml.getBytes(StandardCharsets.UTF_8));
+            repository.createResource(path, content.getBytes(StandardCharsets.UTF_8));
         }
     }
 

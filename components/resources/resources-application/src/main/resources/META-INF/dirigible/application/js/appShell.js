@@ -126,20 +126,36 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    // Document Numbering: the current tenant's per-series counters (engine-numbering), read from and
+    // Document Numbering: the current tenant's number series (engine-numbering), read from and
     // written to /services/core/numbering (ADMINISTRATOR/OPERATOR - a 403 is surfaced read-only). Each
-    // row is { series, scope, counter }; the editable field is the NEXT value (counter + 1) so an admin
-    // can reset/seed a sequence (e.g. start invoices at 1000).
+    // row is { series, partition, prefix, size, next } - a series declared by a published module's
+    // .numbers artefact, one row per partition (e.g. per company) when the intent partitions it. The
+    // tenant edits the SHAPE (prefix + total width) and the NEXT value here; only what the user
+    // actually changed is written, so a counter that advanced since load is never clobbered. An
+    // annual restart is exactly this page: set the prefix and the next value in January.
     numbering: [],
     numberingLoading: false,
     numberingError: null,
 
-    /** A readable label for a counter row: the series, plus the scope in brackets when scoped. */
+    /** A readable label for a series row: the series, plus the partition in brackets when partitioned. */
     numberingLabel(row) {
-      return row.scope ? row.series + ' [' + row.scope + ']' : row.series;
+      return row.partition ? row.series + ' [' + row.partition + ']' : row.series;
     },
 
-    /** Load the current tenant's document-number counters. */
+    /**
+     * The next number as it will render with the row's CURRENT edits - prefix + sequence zero-padded
+     * to the total width (mirrors the server's rendering, incl. never truncating an overflow).
+     */
+    numberingExample(row) {
+      const prefix = row.prefix || '';
+      const next = parseInt(row.next, 10);
+      const size = parseInt(row.size, 10);
+      if (!isFinite(next) || next < 1 || !isFinite(size)) return '';
+      const digits = Math.max(1, size - prefix.length);
+      return prefix + String(next).padStart(digits, '0');
+    },
+
+    /** Load the current tenant's number series. */
     async loadNumbering() {
       this.numberingLoading = true;
       this.numberingError = null;
@@ -155,7 +171,14 @@ document.addEventListener('alpine:init', () => {
         }
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const data = await res.json();
-        this.numbering = data.map((c) => ({ series: c.series, scope: c.scope || '', counter: c.counter, next: (c.counter || 0) + 1 }));
+        this.numbering = data.map((c) => ({
+          series: c.series,
+          partition: c.partition || '',
+          prefix: c.prefix || '',
+          size: c.size,
+          next: c.next,
+          orig: { prefix: c.prefix || '', size: c.size, next: c.next }
+        }));
       } catch (e) {
         console.error('document-numbering: failed to load', e);
         this.numbering = [];
@@ -166,20 +189,36 @@ document.addEventListener('alpine:init', () => {
       }
     },
 
-    /** Persist each row's edited NEXT value (PUT setNext). */
+    /**
+     * Persist each row's edits: a changed shape via PUT /shape, a changed next via PUT. Untouched
+     * values are not written - setNext rewinds the live counter, so writing an unchanged "next"
+     * would silently undo allocations made since the page loaded.
+     */
     async saveNumbering() {
       this.numberingError = null;
       try {
         for (const row of this.numbering) {
+          const size = parseInt(row.size, 10);
+          const shapeChanged = (row.prefix || '') !== row.orig.prefix || size !== row.orig.size;
+          if (shapeChanged && isFinite(size)) {
+            const res = await fetch('/services/core/numbering/shape', {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ series: row.series, partition: row.partition, prefix: row.prefix || '', size: size })
+            });
+            if (!res.ok) throw new Error('PUT shape ' + row.series + ' -> HTTP ' + res.status);
+          }
           const next = parseInt(row.next, 10);
-          if (!isFinite(next) || next < 1) continue;
-          const res = await fetch('/services/core/numbering', {
-            method: 'PUT',
-            credentials: 'same-origin',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ series: row.series, scope: row.scope, next: next })
-          });
-          if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+          if (isFinite(next) && next >= 1 && next !== row.orig.next) {
+            const res = await fetch('/services/core/numbering', {
+              method: 'PUT',
+              credentials: 'same-origin',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ series: row.series, partition: row.partition, next: next })
+            });
+            if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+          }
         }
         await this.loadNumbering();
       } catch (e) {

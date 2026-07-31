@@ -29,6 +29,13 @@ public interface SynchronizersOrder {
     /** The access. */
     int ACCESS = 40;
 
+    /**
+     * The number-series declaration ({@code .numbers}). Deliberately before every artefact type that
+     * could allocate a document number during synchronization (client Java components, BPMN, CSVIM), so
+     * a declared series is provisioned before the first allocation can ask for it.
+     */
+    int NUMBER_SERIES = 45;
+
     /** The job. */
     int JOB = 50;
 

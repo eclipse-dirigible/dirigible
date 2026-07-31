@@ -10,28 +10,35 @@
 package org.eclipse.dirigible.components.engine.numbering;
 
 import java.sql.SQLException;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import org.springframework.stereotype.Component;
 
 /**
- * First-class document numbering runtime: allocates the next value for a series (partitioned by
- * scope) and renders it through the authored {@code format} template. The gap-free per-tenant
- * counter lives in {@link DocumentNumberStore}; this service adds the scope-key derivation and the
- * format grammar ({@code {seq}} / {@code {seq:0N}} zero-pad, {@code {series}}, and scope tokens
- * {@code {<name>}} such as {@code {year}}).
+ * Document numbering runtime: allocates the next value of a series and renders it.
+ *
+ * <p>
+ * A series is {@code prefix + sequence zero-padded to size}, and nothing else - no token grammar.
+ * The sequence is CONTINUOUS and never reset: jurisdictions that require an annual restart get it
+ * by an administrator setting the prefix and the next value in January, which is visible and
+ * auditable, rather than by a hidden reset rule that could mint a number twice.
+ *
+ * <p>
+ * A series may be PARTITIONED (intent {@code per: Company}): each partition value has its own row,
+ * so its own sequence, prefix and width. Two legal entities in one tenant each owe their own
+ * sequential range and must not share a counter. Identical numbers across partitions are correct -
+ * a number must be unique within a company's book, not across companies.
+ *
+ * <p>
+ * A series must be DECLARED (a {@code .numbers} artefact, synchronized per tenant) before it can be
+ * allocated from. Allocating from an unknown series fails loudly: a document must never carry a
+ * number in a shape nobody chose.
  */
 @Component
 public class DocumentNumberService {
 
-    /** Default format when the field declares none: the series then a 6-digit sequence. */
-    static final String DEFAULT_FORMAT = "{series}-{seq:06}";
-
-    private static final Pattern TOKEN = Pattern.compile("\\{([a-zA-Z][a-zA-Z0-9_]*)(?::0(\\d+))?\\}");
+    /** Widest renderable number; the stored column is VARCHAR(100) and no series needs more. */
+    static final int MAX_SIZE = 40;
 
     private final DocumentNumberStore store;
 
@@ -40,65 +47,113 @@ public class DocumentNumberService {
     }
 
     /**
-     * Allocate and format the next number for a series. The scope map (insertion-ordered
-     * {@code name -> value}) both partitions the counter and feeds the format's scope tokens.
+     * Allocate and render the next number of an unpartitioned series.
      *
-     * @param series the series identity (documents sharing a sequence pass the same series)
-     * @param format the format template, or {@code null}/blank for {@link #DEFAULT_FORMAT}
-     * @param scope the resolved scope values (e.g. {@code {Company=1, year=2026}}); empty for unscoped
-     * @return the formatted document number
+     * @param series the series identity
+     * @return the rendered number
      * @throws SQLException if the allocation fails
      */
-    public String next(String series, String format, Map<String, String> scope) throws SQLException {
-        Map<String, String> safeScope = scope == null ? Map.of() : scope;
-        long seq = store.allocate(series, scopeKey(safeScope));
-        return render(format == null || format.isBlank() ? DEFAULT_FORMAT : format, series, seq, safeScope);
+    public String next(String series) throws SQLException {
+        return next(series, null);
     }
 
-    /** All counter rows of the current tenant (for the management surface). */
-    public List<DocumentNumberStore.Counter> list() throws SQLException {
+    /**
+     * Allocate and render the next number of a series, within a partition.
+     *
+     * @param series the series identity
+     * @param partition the value of the {@code per} relation, or null for an unpartitioned series
+     * @return the rendered number
+     * @throws SQLException if the allocation fails
+     * @throws IllegalStateException if the series is not declared for this tenant
+     */
+    public String next(String series, String partition) throws SQLException {
+        DocumentNumberStore.Allocation allocation = store.allocate(series, partition == null ? "" : partition);
+        return render(allocation.prefix(), allocation.size(), allocation.value());
+    }
+
+    /**
+     * Renders {@code prefix + value} zero-padded so the whole number is {@code size} characters. A
+     * value that outgrows the width is NOT truncated - it renders in full, because a wrong number is
+     * worse than a wide one, and the overflow is visible enough to be corrected.
+     *
+     * @param prefix the literal prefix (may be empty)
+     * @param size the total width
+     * @param value the allocated sequence value
+     * @return the rendered number
+     */
+    static String render(String prefix, int size, long value) {
+        String safePrefix = prefix == null ? "" : prefix;
+        int digits = Math.max(1, size - safePrefix.length());
+        return safePrefix + String.format("%0" + digits + "d", value);
+    }
+
+    /**
+     * Every series row of the current tenant, for the management surface.
+     *
+     * @return the series rows
+     * @throws SQLException if the read fails
+     */
+    public List<DocumentNumberStore.Series> list() throws SQLException {
         return store.list();
     }
 
     /**
-     * Set the <b>next</b> value a (series, scope) counter will allocate (e.g. start invoices at 1000).
+     * Provisions a declared series for this tenant if it has none yet - the synchronizer's write. An
+     * existing row is left untouched: its counter is live and its prefix/width may have been configured
+     * by an administrator, and neither is the artefact's business.
      *
      * @param series the series identity
-     * @param scope the scope key ({@code ""} for unscoped)
-     * @param next the next value to allocate (stored as {@code next - 1})
+     * @param prefix the declared default prefix
+     * @param size the declared default width
      * @throws SQLException if the write fails
      */
-    public void setNext(String series, String scope, long next) throws SQLException {
-        store.setCounter(series, scope, Math.max(0, next - 1));
-    }
-
-    /** The counter partition key: the scope values joined by {@code |}; {@code ""} when unscoped. */
-    static String scopeKey(Map<String, String> scope) {
-        return String.join("|", scope.values());
+    public void provision(String series, String prefix, int size) throws SQLException {
+        store.provision(series, "", prefix, size);
     }
 
     /**
-     * Render a format template. {@code {seq}} / {@code {seq:0N}} expand the sequence (zero-padded to
-     * N); {@code {series}} the series; any other {@code {name}} the scope value for that name (empty
-     * when absent).
+     * Sets the <b>next</b> value a series will allocate (e.g. restart at 1 in January).
+     *
+     * @param series the series identity
+     * @param partition the partition value ({@code ""} for unpartitioned)
+     * @param next the next value to allocate
+     * @throws SQLException if the write fails
      */
-    static String render(String format, String series, long seq, Map<String, String> scope) {
-        Map<String, String> tokens = new LinkedHashMap<>(scope);
-        tokens.put("series", series);
-        Matcher matcher = TOKEN.matcher(format);
-        StringBuilder out = new StringBuilder();
-        while (matcher.find()) {
-            String name = matcher.group(1);
-            String pad = matcher.group(2);
-            String value;
-            if ("seq".equals(name)) {
-                value = pad == null ? Long.toString(seq) : String.format("%0" + pad + "d", seq);
-            } else {
-                value = tokens.getOrDefault(name, "");
-            }
-            matcher.appendReplacement(out, Matcher.quoteReplacement(value));
+    public void setNext(String series, String partition, long next) throws SQLException {
+        store.setCounter(series, partition == null ? "" : partition, Math.max(0, next - 1));
+    }
+
+    /**
+     * Sets the tenant's prefix and width for a series.
+     *
+     * @param series the series identity
+     * @param partition the partition value ({@code ""} for unpartitioned)
+     * @param prefix the literal prefix (empty is meaningful - no prefix at all)
+     * @param size the total width
+     * @throws SQLException if the write fails
+     * @throws IllegalArgumentException if the width cannot hold the prefix plus a digit
+     */
+    public void setShape(String series, String partition, String prefix, int size) throws SQLException {
+        String safePrefix = prefix == null ? "" : prefix;
+        validateShape(safePrefix, size);
+        store.setShape(series, partition == null ? "" : partition, safePrefix, size);
+    }
+
+    /**
+     * Validates a shape - shared by the management surface and the {@code .numbers} declaration parse,
+     * so an artefact cannot declare a shape the settings page would refuse.
+     *
+     * @param prefix the literal prefix (null reads as none)
+     * @param size the total width
+     * @throws IllegalArgumentException if the width cannot hold the prefix plus a digit, or is absurd
+     */
+    static void validateShape(String prefix, int size) {
+        String safePrefix = prefix == null ? "" : prefix;
+        if (size <= safePrefix.length()) {
+            throw new IllegalArgumentException("Size [" + size + "] leaves no room for a sequence after the prefix [" + safePrefix + "]");
         }
-        matcher.appendTail(out);
-        return out.toString();
+        if (size > MAX_SIZE) {
+            throw new IllegalArgumentException("Size [" + size + "] exceeds the maximum of " + MAX_SIZE);
+        }
     }
 }

@@ -49,7 +49,7 @@ class GlueSendDocumentTest {
                   - name: number
                     type: string
                     documentTitle: true
-                    number: { series: Invoice, format: "INV{seq:07}", stampOn: create }
+                    number: { series: Invoice, stampOn: create }
                   - { name: paid, type: decimal }
                 relations:
                   - { name: Customer, kind: manyToOne, to: Customer }

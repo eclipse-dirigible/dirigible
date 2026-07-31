@@ -139,6 +139,7 @@ public final class IntentParser {
         if (tree == null) {
             return new IntentModel();
         }
+        rejectRemovedNumberKeys(tree);
         String json = GSON.toJson(tree);
         IntentModel model;
         try {
@@ -2124,10 +2125,57 @@ public final class IntentParser {
      */
     /**
      * A {@code number:} declaration must sit on a non-key <b>string</b> field, name a {@code series},
-     * use a known {@code stampOn} ({@code create}/{@code issue}), and its {@code scope} entries must be
-     * {@code year} or sibling field/relation names; {@code resetOn} supports only {@code year} and
-     * needs {@code year} in scope.
+     * use a known {@code stampOn} ({@code create}/{@code issue}), and an optional {@code per} must name
+     * a non-status to-one relation of the entity (the series partition, e.g. {@code Company}). The
+     * removed keys ({@code format}/{@code scope}/{@code resetOn}) are rejected on the raw YAML tree in
+     * {@code rejectRemovedNumberKeys} - the typed mapping would silently drop them.
      */
+    /**
+     * Rejects the REMOVED {@code number:} keys ({@code format}, {@code scope}, {@code resetOn}) on the
+     * raw YAML tree, before the typed Gson mapping silently drops them. An intent still carrying
+     * {@code format:} would otherwise "parse fine" and quietly lose the author's shape - the exact
+     * silent failure this feature forbids everywhere else.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     * @throws IntentValidationException naming every removed key found, with the migration target
+     */
+    private static void rejectRemovedNumberKeys(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        if (root.get("entities") instanceof List<?> entities) {
+            for (Object entityNode : entities) {
+                if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                    continue;
+                }
+                for (Object fieldNode : fields) {
+                    if (!(fieldNode instanceof Map<?, ?> field) || !(field.get("number") instanceof Map<?, ?> number)) {
+                        continue;
+                    }
+                    String subject = "entity [" + entity.get("name") + "] field [" + field.get("name") + "]";
+                    if (number.containsKey("format")) {
+                        issues.add(subject + " number declares `format` - removed: a number is prefix + zero-padded sequence, and its"
+                                + " shape (prefix, size) is declared in the module's `.numbers` artefact and configured per tenant in"
+                                + " the Document Numbering settings, never in the model");
+                    }
+                    if (number.containsKey("scope")) {
+                        issues.add(subject + " number declares `scope` - removed: partition a series with `per: <to-one relation>`"
+                                + " (e.g. `per: Company`) instead");
+                    }
+                    if (number.containsKey("resetOn")) {
+                        issues.add(subject + " number declares `resetOn` - removed: sequences are continuous and never auto-reset;"
+                                + " a jurisdiction that restarts numbering is an administrator setting the prefix and the next value"
+                                + " in the Document Numbering settings");
+                    }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
     private static void validateNumber(EntityIntent entity, String subject, FieldIntent field, List<String> issues) {
         NumberIntent number = field.getNumber();
         if (field.isPrimaryKey()) {
@@ -2138,38 +2186,24 @@ public final class IntentParser {
             issues.add(subject + " declares number but only a string field can carry a document number (got [" + field.getType() + "])");
         }
         if (isBlank(number.getSeries())) {
-            issues.add(subject + " number requires `series`: the counter identity (documents sharing a sequence name the same series)");
+            issues.add(subject + " number requires `series`: the series this field draws from (several fields may reference the same"
+                    + " series to share one running sequence). Its prefix and width are defined in the module's `.numbers` artefact.");
         }
         String stampOn = number.getStampOn();
         if (!isBlank(stampOn) && !"create".equals(stampOn) && !"issue".equals(stampOn)) {
             issues.add(subject + " number `stampOn` must be `create` or `issue`, got [" + stampOn + "]");
         }
-        java.util.Set<String> siblings = new java.util.LinkedHashSet<>();
-        for (FieldIntent sibling : entity.getFields()) {
-            if (sibling.getName() != null) {
-                siblings.add(sibling.getName());
-            }
-        }
-        for (RelationIntent relation : entity.getRelations()) {
-            if (relation.getName() != null) {
-                siblings.add(relation.getName());
-            }
-        }
-        boolean scopeHasYear = false;
-        List<String> scope = number.getScope() == null ? List.of() : number.getScope();
-        for (String entry : scope) {
-            if ("year".equalsIgnoreCase(entry)) {
-                scopeHasYear = true;
-            } else if (!siblings.contains(entry)) {
-                issues.add(subject + " number `scope` entry [" + entry + "] must be `year` or a sibling field/relation of ["
-                        + entity.getName() + "]");
-            }
-        }
-        if (!isBlank(number.getResetOn())) {
-            if (!"year".equalsIgnoreCase(number.getResetOn())) {
-                issues.add(subject + " number `resetOn` supports only `year`, got [" + number.getResetOn() + "]");
-            } else if (!scopeHasYear) {
-                issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
+        // `per` partitions the series - each value of the named to-one gets its own sequence. It must be a
+        // relation, not a field: the partition identifies a RECORD (the company that owes the range), and a
+        // scalar would silently change the partition when someone edits it.
+        if (!isBlank(number.getPer())) {
+            RelationIntent partition = toOneRelationByName(entity, number.getPer());
+            if (partition == null) {
+                issues.add(subject + " number `per` [" + number.getPer() + "] is not a to-one relation of [" + entity.getName()
+                        + "] - it names the relation whose value partitions the series (e.g. `per: Company`)");
+            } else if (partition.isEntityStatus()) {
+                issues.add(subject + " number `per` [" + number.getPer() + "] is an EntityStatus - a status must not partition a number"
+                        + " series, or the number would depend on the document's state");
             }
         }
     }

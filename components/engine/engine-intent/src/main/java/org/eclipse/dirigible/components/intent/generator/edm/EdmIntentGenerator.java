@@ -977,17 +977,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // placeholder on create (reusing the uuid auto-fill above) until the generated stamp step runs.
         if (field.getNumber() != null) {
             NumberIntent number = field.getNumber();
-            List<String> numberScope = new ArrayList<>();
-            if (number.getScope() != null) {
-                for (String scopeName : number.getScope()) {
-                    // Scope names index the counter AND read the entity's field on create; PascalCase them
-                    // to match the generated entity property (year stays the literal token).
-                    numberScope.add("year".equalsIgnoreCase(scopeName) ? "year" : IntentNaming.pascalCase(scopeName));
-                }
-            }
             p.put("numberSeries", number.getSeries() == null ? entityName : number.getSeries());
-            p.put("numberFormat", number.getFormat() == null ? "" : number.getFormat());
-            p.put("numberScope", numberScope);
+            // `per` names the to-one whose value partitions the series; the generated code reads that FK
+            // property off the entity. Empty = one sequence for the whole tenant.
+            p.put("numberPer", notBlank(number.getPer()) ? IntentNaming.pascalCase(number.getPer()) : "");
             p.put("isReadOnlyProperty", "true");
             if ("issue".equalsIgnoreCase(number.getStampOn())) {
                 p.put("numberStampOn", "issue");

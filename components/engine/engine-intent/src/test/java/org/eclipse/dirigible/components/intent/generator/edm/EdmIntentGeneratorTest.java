@@ -80,19 +80,18 @@ class EdmIntentGeneratorTest {
 
     @Test
     void numberFieldEmitsStampMarkers() {
-        String yaml =
-                """
-                        name: billing
-                        entities:
-                          - name: SalesInvoice
-                            fields:
-                              - { name: id, type: integer, primaryKey: true, generated: true }
-                              - { name: number, type: string, number: { series: SalesInvoice, format: "SI-{seq:07}", scope: [year], stampOn: issue } }
-                          - name: Proforma
-                            fields:
-                              - { name: id, type: integer, primaryKey: true, generated: true }
-                              - { name: number, type: string, number: { series: Proforma, format: "PF-{seq:05}", stampOn: create } }
-                        """;
+        String yaml = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, number: { series: SalesInvoice, stampOn: issue } }
+                  - name: Proforma
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, number: { series: Proforma, stampOn: create } }
+                """;
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "billing");
         List<Map<String, Object>> entities = entities(model);
 
@@ -107,8 +106,13 @@ class EdmIntentGeneratorTest {
         Map<String, Object> pfNumber = propertyByName(entityByName(entities, "Proforma"), "Number");
         assertEquals("create", pfNumber.get("numberStampOn"));
         assertEquals("true", pfNumber.get("numberStampOnCreate"));
-        assertEquals("PF-{seq:05}", pfNumber.get("numberFormat"));
         assertNull(pfNumber.get("generatedUuid"));
+        // The model carries the series REFERENCE and (optionally) the partition - never the shape. The
+        // prefix and width live in the .numbers artefact and the tenant's settings, so one application
+        // serves jurisdictions with different conventions without being regenerated.
+        assertEquals("Proforma", pfNumber.get("numberSeries"));
+        assertNull(pfNumber.get("numberFormat"), "the model must not carry a number format");
+        assertNull(pfNumber.get("numberScope"), "the model must not carry a scope/token list");
     }
 
     @Test

@@ -1,8 +1,5 @@
 package gen.events.${javaGenFolderName};
 
-import java.util.LinkedHashMap;
-import java.util.Map;
-
 import org.flowable.engine.delegate.DelegateExecution;
 import org.flowable.engine.delegate.JavaDelegate;
 
@@ -37,15 +34,12 @@ public class ${entity}NumberStamp implements JavaDelegate {
         if (entity.${field} != null && !isPlaceholder(entity.${field})) {
             return;
         }
-        Map<String, String> scope = new LinkedHashMap<>();
-#foreach ($scopeName in $scope)
-#if($scopeName == "year")
-        scope.put("year", String.valueOf(java.time.Year.now().getValue()));
+#if($per && $per != "")
+        String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}",
+                entity.${per} == null ? null : String.valueOf(entity.${per}));
 #else
-        scope.put("${scopeName}", entity.${scopeName} == null ? "" : String.valueOf(entity.${scopeName}));
+        String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}");
 #end
-#end
-        String number = org.eclipse.dirigible.sdk.numbering.DocumentNumbers.next("${series}", "${format}", scope);
         repository.updateProperty(id, "${field}", number);
     }
 
