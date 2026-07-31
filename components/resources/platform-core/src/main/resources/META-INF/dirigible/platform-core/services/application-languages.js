@@ -10,7 +10,8 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 /*
- * The PLATFORM's supported language set (DIRIGIBLE_APPLICATION_LANGUAGES, default "en,bg").
+ * The PLATFORM's supported language set (DIRIGIBLE_APPLICATION_LANGUAGES, default "en" -
+ * tenant-overridable through the tenant configuration, e.g. "en,bg,fr").
  * The Region & Language picker in every Harmonia shell offers exactly this set; individual
  * modules never define what languages the stack supports - they only provide translations,
  * falling back to the first (default) language for anything missing.
@@ -18,7 +19,7 @@
 import { configurations } from "@aerokit/sdk/core";
 import { response } from "@aerokit/sdk/http";
 
-const configured = configurations.get("DIRIGIBLE_APPLICATION_LANGUAGES", "en,bg");
+const configured = configurations.get("DIRIGIBLE_APPLICATION_LANGUAGES", "en");
 const languages = configured.split(",")
                             .map(code => code.trim())
                             .filter(code => code.length > 0);

@@ -391,7 +391,7 @@ may carry per-language values in a sibling `<TABLE>_LANG` table (generated autom
 layer: `GUID, Id, <PascalCase translatable columns>, Language`). Every read of the generated Java
 repository overlays the translated values for the caller's `Accept-Language` - the Harmonia shell's
 Region & Language setting sends the user's choice on every call. The languages the STACK supports are
-a platform concern (`DIRIGIBLE_APPLICATION_LANGUAGES`, default `en,bg`) - never defined per module.
+a platform concern (`DIRIGIBLE_APPLICATION_LANGUAGES`, default `en`, tenant-overridable) - never defined per module.
 The top-level `languages:` only declares which languages THIS module provides translations for; the
 application shell warns about modules missing a platform language, and untranslated content falls
 back to the default language. Author translations as seeds with a `language:` code (see seeds).
