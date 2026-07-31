@@ -1073,6 +1073,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // Input-format regex (#6336): the generated controller rejects a non-matching value and the
             // form input carries it as an HTML pattern. String fields only - see validatePattern.
             p.put("widgetPattern", field.getPattern());
+        } else if ("email".equalsIgnoreCase(field.getFormat())) {
+            // format: email (#6463) is a preset over the same attribute - so the server-side check and the
+            // client-side feedback are the ones the pattern machinery already provides, not a second path.
+            p.put("widgetPattern", EMAIL_PATTERN);
         }
         return p;
     }
@@ -2025,7 +2029,19 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
      * {@code VARCHAR}, so they are indistinguishable at the JDBC-type level - their widget is chosen
      * from the logical type (the same reason {@code documentTitle} is special-cased at the call site).
      */
+    /**
+     * The canonical e-mail regex behind {@code format: email} (#6463). Deliberately pragmatic rather
+     * than RFC-complete: one local part, one domain with a dot and a 2+ letter TLD, no whitespace. It
+     * is emitted as {@code widgetPattern}, so it must be valid as a Java regex (the generated
+     * controller's {@code matches()}) AND as an HTML {@code pattern} - both anchor the whole value.
+     */
+    private static final String EMAIL_PATTERN = "^[^@\\s]+@[^@\\s]+\\.[A-Za-z]{2,}$";
+
     private static String widgetForField(FieldIntent field, String dataType) {
+        // A named format selects the widget (an EMAIL field renders as a type="email" control).
+        if ("email".equalsIgnoreCase(field.getFormat())) {
+            return "EMAIL";
+        }
         String type = field.getType() == null ? ""
                 : field.getType()
                        .toLowerCase(Locale.ROOT);

@@ -1491,6 +1491,9 @@ public final class IntentParser {
                 if (!isBlank(field.getPattern())) {
                     validatePattern("entity [" + name + "] field [" + field.getName() + "]", field, issues);
                 }
+                if (!isBlank(field.getFormat())) {
+                    validateFormat("entity [" + name + "] field [" + field.getName() + "]", field, issues);
+                }
                 if (field.isSensitive()) {
                     if (field.isPrimaryKey()) {
                         issues.add("entity [" + name + "] field [" + field.getName()
@@ -2168,6 +2171,35 @@ public final class IntentParser {
             } else if (!scopeHasYear) {
                 issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
             }
+        }
+    }
+
+    /** The named field formats (#6463). A preset over `pattern`, so each maps to a canonical regex. */
+    private static final Set<String> FIELD_FORMATS = Set.of("email");
+
+    /**
+     * A field's named {@code format} (#6463): a preset over {@link FieldIntent#getPattern()}. String
+     * fields only, for the same reason a raw pattern is - on a numeric property the emitted
+     * {@code widgetPattern} is read as the DISPLAY format. Declaring both {@code format} and
+     * {@code pattern} is rejected rather than silently resolved: which one wins would be invisible to
+     * the author, and both land on the same attribute.
+     */
+    private static void validateFormat(String subject, FieldIntent field, List<String> issues) {
+        String format = field.getFormat()
+                             .trim()
+                             .toLowerCase();
+        if (!FIELD_FORMATS.contains(format)) {
+            issues.add(subject + " unknown `format` [" + field.getFormat() + "] - supported: " + FIELD_FORMATS);
+            return;
+        }
+        String type = field.getType() == null ? ""
+                : field.getType()
+                       .toLowerCase();
+        if (!"string".equals(type)) {
+            issues.add(subject + " `format` applies to a string field - got type [" + field.getType() + "]");
+        }
+        if (!isBlank(field.getPattern())) {
+            issues.add(subject + " declares both `format` and `pattern` - they set the same validation, so declare one");
         }
     }
 
