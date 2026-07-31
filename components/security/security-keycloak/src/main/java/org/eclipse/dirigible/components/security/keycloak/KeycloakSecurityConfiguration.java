@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.base.http.access.HttpSecurityURIConfigur
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.base.util.AuthoritiesUtil;
 import org.eclipse.dirigible.components.security.oauth.ScopeRoleJwtAuthoritiesConverter;
+import org.eclipse.dirigible.components.security.oauth2.OAuth2SessionRevalidationFilter;
 import org.eclipse.dirigible.components.tenants.tenant.TenantContextInitFilter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,12 +35,14 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.mapping.GrantedAuthoritiesMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.web.OAuth2LoginAuthenticationFilter;
 import org.springframework.security.oauth2.core.oidc.user.OidcUserAuthority;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 /**
  * The Class KeycloakSecurityConfiguration.
@@ -74,11 +77,14 @@ public class KeycloakSecurityConfiguration {
     @Bean
     SecurityFilterChain configure(HttpSecurity http, TenantContextInitFilter tenantContextInitFilter,
             HttpSecurityURIConfigurator httpSecurityURIConfigurator, ScopeRoleJwtAuthoritiesConverter scopeRoleJwtAuthoritiesConverter,
-            KeycloakLogoutSuccessHandler keycloakLogoutSuccessHandler) throws Exception {
+            KeycloakLogoutSuccessHandler keycloakLogoutSuccessHandler, OAuth2AuthorizedClientService authorizedClientService)
+            throws Exception {
         http.authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
             .addFilterBefore(tenantContextInitFilter, OAuth2LoginAuthenticationFilter.class)
+            .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService, userAuthoritiesMapper()),
+                    AuthorizationFilter.class)
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.sameOrigin()))
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(Customizer.withDefaults())
