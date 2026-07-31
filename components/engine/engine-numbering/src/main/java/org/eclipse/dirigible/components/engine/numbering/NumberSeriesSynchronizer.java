@@ -216,6 +216,7 @@ public class NumberSeriesSynchronizer extends MultitenantBaseSynchronizer<Number
                     callback.registerState(this, wrapper, ArtefactLifecycle.DELETED);
                 }
                 break;
+            case PREPARE:
             case START:
             case STOP:
                 break;

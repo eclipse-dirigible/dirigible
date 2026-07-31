@@ -158,7 +158,14 @@ class DocumentNumberStore {
     List<Series> list() throws SQLException {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection()) {
-            ensureTableExists(connection);
+            // Reads never bootstrap (no DDL on a GET path): the table is created and upgraded by the
+            // WRITERS (the synchronizer's provision, the settings writes, the allocator). Before any
+            // of them ran there is nothing to list; on a pre-upgrade table the not-yet-added shape
+            // columns read as defaults until the first write adds them.
+            if (!SqlFactory.getNative(connection)
+                           .existsTable(connection, TABLE_NAME)) {
+                return List.of();
+            }
             String sql = SqlFactory.getNative(connection)
                                    .select()
                                    .column("*")
@@ -166,13 +173,28 @@ class DocumentNumberStore {
                                    .build();
             List<Series> result = new ArrayList<>();
             try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
+                Set<String> present = presentColumns(resultSet);
+                boolean hasShape = present.contains(COLUMN_PREFIX) && present.contains(COLUMN_SIZE);
                 while (resultSet.next()) {
                     result.add(new Series(resultSet.getString(COLUMN_SERIES), resultSet.getString(COLUMN_PARTITION),
-                            resultSet.getString(COLUMN_PREFIX), resultSet.getInt(COLUMN_SIZE), resultSet.getLong(COLUMN_COUNTER)));
+                            hasShape ? resultSet.getString(COLUMN_PREFIX) : "", hasShape ? resultSet.getInt(COLUMN_SIZE) : 0,
+                            resultSet.getLong(COLUMN_COUNTER)));
                 }
             }
             return result;
         }
+    }
+
+    /** The upper-cased column labels of a result set. */
+    private static Set<String> presentColumns(ResultSet resultSet) throws SQLException {
+        Set<String> present = new HashSet<>();
+        for (int i = 1; i <= resultSet.getMetaData()
+                                      .getColumnCount(); i++) {
+            present.add(resultSet.getMetaData()
+                                 .getColumnLabel(i)
+                                 .toUpperCase(Locale.ROOT));
+        }
+        return present;
     }
 
     /**
