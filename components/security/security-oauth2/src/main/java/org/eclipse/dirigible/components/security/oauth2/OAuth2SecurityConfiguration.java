@@ -17,9 +17,11 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.access.intercept.AuthorizationFilter;
 
 /**
  * The Class OAuth2SecurityConfiguration.
@@ -43,11 +45,13 @@ public class OAuth2SecurityConfiguration {
      * @throws Exception the exception
      */
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, HttpSecurityURIConfigurator httpSecurityURIConfigurator,
+            OAuth2AuthorizedClientService authorizedClientService) throws Exception {
         http//
             .authorizeHttpRequests(authz -> authz.requestMatchers("/oauth2/**", "/login/**")
                                                  .permitAll())
             .csrf(csrf -> csrf.disable())
+            .addFilterBefore(new OAuth2SessionRevalidationFilter(authorizedClientService), AuthorizationFilter.class)
             .headers(headers -> headers.frameOptions(frameOpts -> frameOpts.disable()))
             .oauth2Client(Customizer.withDefaults())
             .oauth2Login(Customizer.withDefaults())
