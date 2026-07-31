@@ -94,30 +94,31 @@ class IntentParserTest {
 
     @Test
     void firstClassNumberingParsesAndValidates() {
-        String ok =
-                """
-                        name: billing
-                        entities:
-                          - name: SalesInvoice
-                            fields:
-                              - { name: id, type: integer, primaryKey: true, generated: true }
-                              - { name: date, type: date }
-                              - { name: number, type: string, number: { series: SalesInvoice, format: "SI-{seq:07}", scope: [year], resetOn: year, stampOn: issue } }
-                            relations:
-                              - { name: Company, kind: manyToOne, to: SalesInvoice }
-                        """;
+        String ok = """
+                name: billing
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: date, type: date }
+                      - { name: number, type: string, number: { series: Sales Invoice, per: Company, stampOn: issue } }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company }
+                """;
         NumberIntent number = IntentParser.parse(ok)
                                           .getEntities()
-                                          .get(0)
+                                          .get(1)
                                           .getFields()
                                           .get(2)
                                           .getNumber();
-        assertEquals("SalesInvoice", number.getSeries());
-        assertEquals("SI-{seq:07}", number.getFormat());
+        // The intent references a series and (optionally) what partitions it - never how it looks.
+        assertEquals("Sales Invoice", number.getSeries());
+        assertEquals("Company", number.getPer());
         assertEquals("issue", number.getStampOn());
-        assertTrue(number.getScope()
-                         .contains("year"));
-        assertEquals("year", number.getResetOn());
 
         // number on a non-string field is rejected.
         String onDate = ok.replace("- { name: number, type: string, number:", "- { name: bad, type: date, number:");
@@ -134,13 +135,14 @@ class IntentParserTest {
                                                                                                     .anyMatch(i -> i.contains("stampOn")),
                 "an unknown stampOn must be rejected");
 
-        // resetOn: year without year in scope is rejected.
-        String badReset = ok.replace("scope: [year], resetOn: year", "scope: [Company], resetOn: year");
-        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(badReset)).getIssues()
-                                                                                                    .stream()
-                                                                                                    .anyMatch(i -> i.contains(
-                                                                                                            "resetOn: year` requires")),
-                "resetOn: year without year in scope must be rejected");
+        // `per` must name a to-one RELATION: the partition identifies the record that owes the range
+        // (typically the company), and a scalar would silently change partition when someone edits it.
+        String badPer = ok.replace("per: Company", "per: date");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(badPer)).getIssues()
+                                                                                                  .stream()
+                                                                                                  .anyMatch(i -> i.contains(
+                                                                                                          "number `per` [date] is not a to-one relation")),
+                "a `per` that is not a to-one relation must be rejected");
     }
 
     @Test

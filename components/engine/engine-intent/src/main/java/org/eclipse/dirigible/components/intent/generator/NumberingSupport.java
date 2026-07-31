@@ -50,20 +50,15 @@ final class NumberingSupport {
                 if (number == null || !"issue".equalsIgnoreCase(number.getStampOn())) {
                     continue; // stampOn:create is handled at insert by the DAO; only issue needs a step
                 }
-                List<String> scope = new ArrayList<>();
-                if (number.getScope() != null) {
-                    for (String scopeName : number.getScope()) {
-                        scope.add("year".equalsIgnoreCase(scopeName) ? "year" : IntentNaming.pascalCase(scopeName));
-                    }
-                }
                 Map<String, Object> descriptor = new LinkedHashMap<>();
                 descriptor.put("entity", entity.getName());
                 descriptor.put("perspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents));
                 descriptor.put("masterPk", IntentEntities.keyFieldName(entity));
                 descriptor.put("field", IntentNaming.pascalCase(field.getName()));
                 descriptor.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
-                descriptor.put("format", number.getFormat() == null ? "" : number.getFormat());
-                descriptor.put("scope", scope);
+                // The partition FK property the stamp reads off the entity ("" = tenant-wide series).
+                descriptor.put("per", number.getPer() == null || number.getPer()
+                                                                       .isBlank() ? "" : IntentNaming.pascalCase(number.getPer()));
                 numbering.add(descriptor);
             }
         }

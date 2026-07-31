@@ -1456,8 +1456,7 @@ export function generateFiles(model, parameters, templateSources) {
                                 masterPk: num.masterPk,
                                 field: num.field,
                                 series: num.series,
-                                format: num.format,
-                                scope: num.scope
+                                per: num.per
                             };
                             const cleanNumberingParameters = cleanData(numberingParameters);
                             generatedFiles.push({

@@ -2138,38 +2138,24 @@ public final class IntentParser {
             issues.add(subject + " declares number but only a string field can carry a document number (got [" + field.getType() + "])");
         }
         if (isBlank(number.getSeries())) {
-            issues.add(subject + " number requires `series`: the counter identity (documents sharing a sequence name the same series)");
+            issues.add(subject + " number requires `series`: the series this field draws from (several fields may reference the same"
+                    + " series to share one running sequence). Its prefix and width are defined in the module's `.numbers` artefact.");
         }
         String stampOn = number.getStampOn();
         if (!isBlank(stampOn) && !"create".equals(stampOn) && !"issue".equals(stampOn)) {
             issues.add(subject + " number `stampOn` must be `create` or `issue`, got [" + stampOn + "]");
         }
-        java.util.Set<String> siblings = new java.util.LinkedHashSet<>();
-        for (FieldIntent sibling : entity.getFields()) {
-            if (sibling.getName() != null) {
-                siblings.add(sibling.getName());
-            }
-        }
-        for (RelationIntent relation : entity.getRelations()) {
-            if (relation.getName() != null) {
-                siblings.add(relation.getName());
-            }
-        }
-        boolean scopeHasYear = false;
-        List<String> scope = number.getScope() == null ? List.of() : number.getScope();
-        for (String entry : scope) {
-            if ("year".equalsIgnoreCase(entry)) {
-                scopeHasYear = true;
-            } else if (!siblings.contains(entry)) {
-                issues.add(subject + " number `scope` entry [" + entry + "] must be `year` or a sibling field/relation of ["
-                        + entity.getName() + "]");
-            }
-        }
-        if (!isBlank(number.getResetOn())) {
-            if (!"year".equalsIgnoreCase(number.getResetOn())) {
-                issues.add(subject + " number `resetOn` supports only `year`, got [" + number.getResetOn() + "]");
-            } else if (!scopeHasYear) {
-                issues.add(subject + " number `resetOn: year` requires `year` in `scope`");
+        // `per` partitions the series - each value of the named to-one gets its own sequence. It must be a
+        // relation, not a field: the partition identifies a RECORD (the company that owes the range), and a
+        // scalar would silently change the partition when someone edits it.
+        if (!isBlank(number.getPer())) {
+            RelationIntent partition = toOneRelationByName(entity, number.getPer());
+            if (partition == null) {
+                issues.add(subject + " number `per` [" + number.getPer() + "] is not a to-one relation of [" + entity.getName()
+                        + "] - it names the relation whose value partitions the series (e.g. `per: Company`)");
+            } else if (partition.isEntityStatus()) {
+                issues.add(subject + " number `per` [" + number.getPer() + "] is an EntityStatus - a status must not partition a number"
+                        + " series, or the number would depend on the document's state");
             }
         }
     }

@@ -10,52 +10,55 @@
 package org.eclipse.dirigible.sdk.numbering;
 
 import java.sql.SQLException;
-import java.util.Map;
 
 import org.eclipse.dirigible.components.engine.numbering.DocumentNumberService;
 import org.eclipse.dirigible.sdk.component.Beans;
 
 /**
- * Client SDK for first-class document numbering: allocate the next gap-free number for a series and
- * render it through the series' format. Backed by the platform's per-tenant counter store (the same
- * store the application shell's Document Numbering settings manage), so hand-written
- * {@code custom/} code and the generated stamping share one engine and one sequence.
+ * Allocates gap-free document numbers from a named series.
  *
  * <p>
- * Example: {@code DocumentNumbers.next("SalesInvoice", "SI-{seq:07}", Map.of("year", "2026"))} →
- * {@code SI-0000001} (then {@code SI-0000002}, …). The scope map both partitions the counter and
- * feeds the format's {@code {year}} / {@code {<Field>}} tokens.
+ * The number's SHAPE is not passed here and is deliberately not knowable from application code: a
+ * series' prefix and total width are declared once in a module's {@code .numbers} artefact and are
+ * configurable per tenant afterwards, so one application serves jurisdictions with different
+ * numbering conventions without being forked or regenerated.
+ *
+ * <p>
+ * A series may be PARTITIONED - typically per company, because two legal entities in one tenant
+ * each owe their own sequential range. Pass the partition value (the {@code per} relation's id) and
+ * that partition's own sequence is used.
+ *
+ * <p>
+ * Example: {@code DocumentNumbers.next("Sales Invoice", String.valueOf(entity.Company))}.
  */
 public final class DocumentNumbers {
 
     private DocumentNumbers() {}
 
     /**
-     * Allocate and format the next number for a series.
+     * Allocate the next number of an unpartitioned series.
      *
-     * @param series the series identity (documents sharing a sequence pass the same series)
-     * @param format the format template ({@code {seq}} / {@code {seq:0N}} / {@code {series}} / scope
-     *        tokens), or {@code null}/blank for the default {@code {series}-{seq:06}}
-     * @param scope the resolved scope values partitioning the counter (empty for an unscoped series)
-     * @return the formatted document number
+     * @param series the series identity
+     * @return the allocated number
      */
-    public static String next(String series, String format, Map<String, String> scope) {
-        try {
-            return Beans.get(DocumentNumberService.class)
-                        .next(series, format, scope);
-        } catch (SQLException e) {
-            throw new IllegalStateException("Failed to allocate a document number for series [" + series + "]", e);
-        }
+    public static String next(String series) {
+        return next(series, null);
     }
 
     /**
-     * Allocate and format the next number for an unscoped series.
+     * Allocate the next number of a series within a partition.
      *
      * @param series the series identity
-     * @param format the format template (see {@link #next(String, String, Map)})
-     * @return the formatted document number
+     * @param partition the partition value (the {@code per} relation's id), or null when the series is
+     *        not partitioned
+     * @return the allocated number
      */
-    public static String next(String series, String format) {
-        return next(series, format, Map.of());
+    public static String next(String series, String partition) {
+        try {
+            return Beans.get(DocumentNumberService.class)
+                        .next(series, partition);
+        } catch (SQLException e) {
+            throw new IllegalStateException("Failed to allocate a document number for series [" + series + "]", e);
+        }
     }
 }
