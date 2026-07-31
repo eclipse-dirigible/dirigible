@@ -135,12 +135,25 @@ public class DocumentNumberService {
      */
     public void setShape(String series, String partition, String prefix, int size) throws SQLException {
         String safePrefix = prefix == null ? "" : prefix;
+        validateShape(safePrefix, size);
+        store.setShape(series, partition == null ? "" : partition, safePrefix, size);
+    }
+
+    /**
+     * Validates a shape - shared by the management surface and the {@code .numbers} declaration parse,
+     * so an artefact cannot declare a shape the settings page would refuse.
+     *
+     * @param prefix the literal prefix (null reads as none)
+     * @param size the total width
+     * @throws IllegalArgumentException if the width cannot hold the prefix plus a digit, or is absurd
+     */
+    static void validateShape(String prefix, int size) {
+        String safePrefix = prefix == null ? "" : prefix;
         if (size <= safePrefix.length()) {
             throw new IllegalArgumentException("Size [" + size + "] leaves no room for a sequence after the prefix [" + safePrefix + "]");
         }
         if (size > MAX_SIZE) {
             throw new IllegalArgumentException("Size [" + size + "] exceeds the maximum of " + MAX_SIZE);
         }
-        store.setShape(series, partition == null ? "" : partition, safePrefix, size);
     }
 }

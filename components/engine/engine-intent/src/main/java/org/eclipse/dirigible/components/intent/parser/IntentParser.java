@@ -139,6 +139,7 @@ public final class IntentParser {
         if (tree == null) {
             return new IntentModel();
         }
+        rejectRemovedNumberKeys(tree);
         String json = GSON.toJson(tree);
         IntentModel model;
         try {
@@ -2124,10 +2125,57 @@ public final class IntentParser {
      */
     /**
      * A {@code number:} declaration must sit on a non-key <b>string</b> field, name a {@code series},
-     * use a known {@code stampOn} ({@code create}/{@code issue}), and its {@code scope} entries must be
-     * {@code year} or sibling field/relation names; {@code resetOn} supports only {@code year} and
-     * needs {@code year} in scope.
+     * use a known {@code stampOn} ({@code create}/{@code issue}), and an optional {@code per} must name
+     * a non-status to-one relation of the entity (the series partition, e.g. {@code Company}). The
+     * removed keys ({@code format}/{@code scope}/{@code resetOn}) are rejected on the raw YAML tree in
+     * {@code rejectRemovedNumberKeys} - the typed mapping would silently drop them.
      */
+    /**
+     * Rejects the REMOVED {@code number:} keys ({@code format}, {@code scope}, {@code resetOn}) on the
+     * raw YAML tree, before the typed Gson mapping silently drops them. An intent still carrying
+     * {@code format:} would otherwise "parse fine" and quietly lose the author's shape - the exact
+     * silent failure this feature forbids everywhere else.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     * @throws IntentValidationException naming every removed key found, with the migration target
+     */
+    private static void rejectRemovedNumberKeys(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) {
+            return;
+        }
+        List<String> issues = new ArrayList<>();
+        if (root.get("entities") instanceof List<?> entities) {
+            for (Object entityNode : entities) {
+                if (!(entityNode instanceof Map<?, ?> entity) || !(entity.get("fields") instanceof List<?> fields)) {
+                    continue;
+                }
+                for (Object fieldNode : fields) {
+                    if (!(fieldNode instanceof Map<?, ?> field) || !(field.get("number") instanceof Map<?, ?> number)) {
+                        continue;
+                    }
+                    String subject = "entity [" + entity.get("name") + "] field [" + field.get("name") + "]";
+                    if (number.containsKey("format")) {
+                        issues.add(subject + " number declares `format` - removed: a number is prefix + zero-padded sequence, and its"
+                                + " shape (prefix, size) is declared in the module's `.numbers` artefact and configured per tenant in"
+                                + " the Document Numbering settings, never in the model");
+                    }
+                    if (number.containsKey("scope")) {
+                        issues.add(subject + " number declares `scope` - removed: partition a series with `per: <to-one relation>`"
+                                + " (e.g. `per: Company`) instead");
+                    }
+                    if (number.containsKey("resetOn")) {
+                        issues.add(subject + " number declares `resetOn` - removed: sequences are continuous and never auto-reset;"
+                                + " a jurisdiction that restarts numbering is an administrator setting the prefix and the next value"
+                                + " in the Document Numbering settings");
+                    }
+                }
+            }
+        }
+        if (!issues.isEmpty()) {
+            throw new IntentValidationException(issues);
+        }
+    }
+
     private static void validateNumber(EntityIntent entity, String subject, FieldIntent field, List<String> issues) {
         NumberIntent number = field.getNumber();
         if (field.isPrimaryKey()) {

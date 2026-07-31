@@ -40,12 +40,17 @@ import org.springframework.stereotype.Component;
  * <li>the {@code .numbers} synchronizer INSERTS a row that does not exist (never updates one - the
  * counter is live and the shape may have been configured);</li>
  * <li>the management surface writes {@code PREFIX} / {@code SIZE} / the counter reset;</li>
- * <li>allocation writes only {@code COUNTER}, via {@code COUNTER = COUNTER + 1}.</li>
+ * <li>allocation writes only {@code COUNTER}, via {@code COUNTER = COUNTER + 1} - with one
+ * deliberate exception: the first allocation for a NEW PARTITION of a declared series materializes
+ * that partition's row, copying the shape from the series' base ({@code ""}-partition) row.
+ * Partition values are data (company ids), so no artefact can pre-provision them; the base row is
+ * the tenant's configured default they inherit. The copy happens once, at row birth - it never
+ * overwrites anything.</li>
  * </ul>
  *
  * <p>
- * Allocating from a row that does not exist FAILS - a series must be declared before a document can
- * carry a number in its shape.
+ * Allocating from an UNDECLARED series (no base row) FAILS - a series must be declared before a
+ * document can carry a number in its shape.
  */
 @Component
 class DocumentNumberStore {
@@ -114,12 +119,20 @@ class DocumentNumberStore {
         try (Connection connection = dataSourcesManager.getDefaultDataSource()
                                                        .getConnection()) {
             ensureTableExists(connection);
+            // Still in autocommit: a new partition of a declared series materializes its row here,
+            // inheriting the tenant's configured shape from the base row. Done OUTSIDE the increment
+            // transaction so a lost duplicate-insert race cannot poison it (PostgreSQL aborts a
+            // transaction on any failed statement); rows are never deleted, so exists-then-increment
+            // cannot un-happen.
+            if (!partition.isEmpty() && !exists(connection, series, partition)) {
+                materializePartition(connection, series, partition);
+            }
             boolean autoCommit = connection.getAutoCommit();
             connection.setAutoCommit(false);
             try {
                 if (increment(connection, series, partition) == 0) {
-                    // No row: the series was never declared (or not for this partition). Refusing is the
-                    // point - inventing a default here would stamp a number in a shape nobody chose.
+                    // No row: the series was never declared. Refusing is the point - inventing a default
+                    // here would stamp a number in a shape nobody chose.
                     throw new IllegalStateException(
                             "Document-number series [" + series + "]" + (partition.isEmpty() ? "" : " partition [" + partition + "]")
                                     + " is not declared for this tenant - declare it in a .numbers artefact");
@@ -180,27 +193,51 @@ class DocumentNumberStore {
             if (exists(connection, series, partition)) {
                 return;
             }
-            String sql = SqlFactory.getNative(connection)
-                                   .insert()
-                                   .into(TABLE_NAME)
-                                   .column(COLUMN_SERIES)
-                                   .column(COLUMN_PARTITION)
-                                   .column(COLUMN_COUNTER)
-                                   .column(COLUMN_PREFIX)
-                                   .column(COLUMN_SIZE)
-                                   .build();
-            try (PreparedStatement statement = connection.prepareStatement(sql)) {
-                statement.setString(1, series);
-                statement.setString(2, partition);
-                statement.setLong(3, 0L);
-                statement.setString(4, prefix == null ? "" : prefix);
-                statement.setInt(5, size);
-                statement.executeUpdate();
-                LOGGER.info("Provisioned document-number series [{}] partition [{}] as prefix [{}] size [{}]", series, partition, prefix,
-                        size);
-            } catch (SQLException duplicate) {
-                LOGGER.debug("Series [{}] partition [{}] was provisioned concurrently", series, partition, duplicate);
-            }
+            insertRow(connection, series, partition, prefix, size);
+        }
+    }
+
+    /**
+     * Materializes a NEW partition row of a declared series, inheriting the shape of the series' base
+     * ({@code ""}-partition) row - the tenant's configured default. Partition values are data, so this
+     * is the only place a partition row can be born.
+     *
+     * @param connection the connection (autocommit)
+     * @param series the series identity
+     * @param partition the new partition value
+     * @throws SQLException if the reads or the insert fail
+     * @throws IllegalStateException if the series has no base row - it was never declared
+     */
+    private void materializePartition(Connection connection, String series, String partition) throws SQLException {
+        if (!exists(connection, series, "")) {
+            throw new IllegalStateException("Document-number series [" + series + "] partition [" + partition
+                    + "] is not declared for this tenant - declare it in a .numbers artefact");
+        }
+        Allocation base = read(connection, series, "");
+        insertRow(connection, series, partition, base.prefix(), base.size());
+    }
+
+    /** Inserts one series row with a zero counter, tolerating a concurrent identical insert. */
+    private void insertRow(Connection connection, String series, String partition, String prefix, int size) throws SQLException {
+        String sql = SqlFactory.getNative(connection)
+                               .insert()
+                               .into(TABLE_NAME)
+                               .column(COLUMN_SERIES)
+                               .column(COLUMN_PARTITION)
+                               .column(COLUMN_COUNTER)
+                               .column(COLUMN_PREFIX)
+                               .column(COLUMN_SIZE)
+                               .build();
+        try (PreparedStatement statement = connection.prepareStatement(sql)) {
+            statement.setString(1, series);
+            statement.setString(2, partition);
+            statement.setLong(3, 0L);
+            statement.setString(4, prefix == null ? "" : prefix);
+            statement.setInt(5, size);
+            statement.executeUpdate();
+            LOGGER.info("Provisioned document-number series [{}] partition [{}] as prefix [{}] size [{}]", series, partition, prefix, size);
+        } catch (SQLException duplicate) {
+            LOGGER.debug("Series [{}] partition [{}] was provisioned concurrently", series, partition, duplicate);
         }
     }
 

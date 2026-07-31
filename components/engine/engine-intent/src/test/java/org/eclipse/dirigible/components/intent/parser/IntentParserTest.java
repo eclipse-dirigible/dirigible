@@ -145,6 +145,45 @@ class IntentParserTest {
                 "a `per` that is not a to-one relation must be rejected");
     }
 
+    /**
+     * The removed number keys must fail LOUDLY on the raw YAML: the typed Gson mapping has no fields
+     * for them, so without the raw-tree check an intent still carrying {@code format:} would parse
+     * "successfully" and silently lose the author's shape.
+     */
+    @Test
+    void removedNumberKeysAreRejectedLoudlyNotSilentlyDropped() {
+        String template = """
+                name: billing
+                entities:
+                  - name: SalesInvoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, number: { series: Sales Invoice%s } }
+                """;
+
+        String withFormat = template.formatted(", format: \"SI{seq:07}\"");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(withFormat)).getIssues()
+                                                                                                      .stream()
+                                                                                                      .anyMatch(i -> i.contains("`format`")
+                                                                                                              && i.contains(".numbers")),
+                "number `format` must be rejected pointing at the .numbers artefact");
+
+        String withScope = template.formatted(", scope: { company: Company }");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(withScope)).getIssues()
+                                                                                                     .stream()
+                                                                                                     .anyMatch(i -> i.contains("`scope`")
+                                                                                                             && i.contains("per:")),
+                "number `scope` must be rejected pointing at `per:`");
+
+        String withResetOn = template.formatted(", resetOn: year");
+        assertTrue(assertThrows(IntentValidationException.class, () -> IntentParser.parse(withResetOn)).getIssues()
+                                                                                                       .stream()
+                                                                                                       .anyMatch(i -> i.contains(
+                                                                                                               "`resetOn`")
+                                                                                                               && i.contains("continuous")),
+                "number `resetOn` must be rejected - sequences are continuous");
+    }
+
     @Test
     void crossModelRelationParsesWhenModelIsDeclaredInUses() {
         String yaml = """

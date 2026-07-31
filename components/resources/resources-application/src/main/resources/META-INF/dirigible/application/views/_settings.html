@@ -152,14 +152,16 @@
         </template>
       </div>
     </div>
-    <!-- Document Numbering detail: rendered locally - the per-tenant counters from
-         /services/core/numbering. Edit a series' Next value to reset/seed the sequence (e.g. start
-         invoices at 1000); the format (prefix, padding) is authored in the model, not here. -->
+    <!-- Document Numbering detail: rendered locally - the tenant's number series from
+         /services/core/numbering. Each series is declared by a published module's .numbers artefact
+         (one row per partition when the intent partitions it, e.g. per company); the tenant edits
+         the SHAPE (prefix + total width) and the NEXT value here. An annual restart is exactly
+         this: set the prefix and the next value in January. -->
     <div x-show="settingsSelected === 'document-numbering'" class="size-full overflow-auto">
       <div class="vbox gap-4 p-4" style="max-width: 40rem;">
         <div class="vbox gap-1">
           <span class="text-lg font-medium" x-text="T('application-core:shell.settings.numbering', 'Document Numbering')"></span>
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingHint', 'The next number each document series will issue. Change a value to reset or seed a sequence; the format (prefix, padding) is set in the model.')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingHint', 'Each document series\' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.')"></span>
         </div>
         <template x-if="numberingError">
           <div x-h-alert data-variant="warning" role="alert">
@@ -171,14 +173,29 @@
           <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.loading', 'Loading...')"></span>
         </template>
         <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length === 0">
-          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingEmpty', 'No document numbers issued yet. A series appears here once its first document is numbered.')"></span>
+          <span x-h-text.muted class="text-sm" x-text="T('application-core:shell.settings.numberingEmpty', 'No number series declared yet. A series appears here once a published application declares it.')"></span>
         </template>
         <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length > 0">
           <div class="vbox gap-4">
-            <template x-for="row in numbering" :key="row.series + '|' + row.scope">
+            <template x-for="row in numbering" :key="row.series + '|' + row.partition">
               <div class="vbox gap-1">
-                <span x-h-text.muted class="text-sm" x-text="numberingLabel(row)"></span>
-                <input x-h-input type="number" min="1" x-model="row.next" />
+                <span class="text-sm font-medium" x-text="numberingLabel(row)"></span>
+                <div class="hbox gap-2">
+                  <div class="vbox gap-0" style="width: 10rem;">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
+                    <input x-h-input x-model="row.prefix" />
+                  </div>
+                  <div class="vbox gap-0" style="width: 7rem;">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total width')"></span>
+                    <input x-h-input type="number" min="1" max="40" x-model="row.size" />
+                  </div>
+                  <div class="vbox gap-0" style="width: 9rem;">
+                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
+                    <input x-h-input type="number" min="1" x-model="row.next" />
+                  </div>
+                </div>
+                <span x-h-text.muted class="text-sm"
+                      x-text="T('application-core:shell.settings.numberingExample', 'Next number:') + ' ' + numberingExample(row)"></span>
               </div>
             </template>
             <div class="hbox gap-2">

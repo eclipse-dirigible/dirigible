@@ -316,6 +316,36 @@ composition is opt-in.
   3. Use an action only when a neutral expression cannot express it; for sums/totals keep the expression
      so the value previews in the UI.
 
+**First-class document numbering (`number:` on a string field):**
+`- { name: number, type: string, function: DocumentTitle, number: { series: Sales Invoice, per: Company, stampOn: issue } }`
+gives the field a platform-allocated, gap-free document number. The intent declares only a
+**reference to a series** - never how the number looks:
+
+- `series` (mandatory) - the series name the field draws from. A number series is a **tenant-level
+  business object**: its shape (a literal prefix + the sequence zero-padded to a total width, e.g.
+  `SI00000042`) is declared once per module in a **`.numbers` artefact** at the project root
+  (authored by hand, not generated - like `.roles`):
+  `{"series": [{"name": "Sales Invoice", "prefix": "SI", "size": 10}]}`. The declaration only
+  provisions a tenant that has no such series yet; each tenant then configures prefix, width and the
+  next value in the application shell's **Document Numbering** settings. Sequences are continuous
+  and never auto-reset - a jurisdiction that restarts numbering each January does it by setting the
+  prefix and the next value there. Several fields may reference the SAME series (a sales invoice,
+  credit note and debit note sharing one legal range); two modules may declare the same series only
+  identically, else that artefact fails at publish.
+- `per` (optional) - a to-one relation of the entity whose value PARTITIONS the series (canonically
+  `per: Company`): each partition value gets its own sequence, so two legal entities in one tenant
+  never share a counter. Identical numbers across partitions are correct. Never an `EntityStatus`
+  relation.
+- `stampOn` - `create` (the generated repository allocates at insert) or `issue` (the document is
+  created with a UUID placeholder and a generated delegate replaces it at the modeled issue step,
+  idempotently - a re-issue after an amend keeps the number). Use `issue` for legal documents whose
+  number must only exist once issued.
+
+The removed keys `format`, `scope` and `resetOn` are REJECTED at parse time - shape lives in
+`.numbers` + settings, partitioning is `per:`, and there is no auto-reset. Prefer `number:` over a
+hand-written `calculatedActionOnCreate` number action or a number-generator `delegate:` step for
+document numbers.
+
 **Audit columns:** `audit: true` on an entity adds the four standard audit columns (`CreatedAt`,
 `CreatedBy`, `UpdatedAt`, `UpdatedBy`), populated by the platform's audit annotations.
 
