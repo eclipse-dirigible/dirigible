@@ -108,7 +108,18 @@
       "numberingPrefix": "Префикс",
       "numberingSize": "Обща ширина",
       "numberingNext": "Следващ",
-      "numberingExample": "Следващ номер:"
+      "numberingExample": "Следващ номер:",
+      "tenantConfigLabels": {
+        "name": "Име",
+        "subtitle": "Подзаглавие",
+        "brand": "Марка",
+        "brandUrl": "URL на марката",
+        "favicon": "Фавикон",
+        "theme": "Тема",
+        "prefix": "Префикс",
+        "analytics": "Анализи",
+        "languages": "Езици на приложението"
+      }
     },
     "apps": {
       "loading": "Зареждане на приложенията...",

@@ -112,7 +112,10 @@
         lng: language,
         fallbackLng: DEFAULT_LOCALE,
         defaultNS: 'common',
-        interpolation: { skipOnVariables: false },
+        // escapeValue:false - every binding renders through Alpine x-text (textContent, already
+        // XSS-safe), so i18next's default HTML-escaping is redundant and corrupts interpolated
+        // values (e.g. a date's "/" became "&#x2F;").
+        interpolation: { skipOnVariables: false, escapeValue: false },
         resources: data.translations || {},
       });
       markReady();

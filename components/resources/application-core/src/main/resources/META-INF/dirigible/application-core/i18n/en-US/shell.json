@@ -108,7 +108,18 @@
       "numberingPrefix": "Prefix",
       "numberingSize": "Total width",
       "numberingNext": "Next",
-      "numberingExample": "Next number:"
+      "numberingExample": "Next number:",
+      "tenantConfigLabels": {
+        "name": "Name",
+        "subtitle": "Subtitle",
+        "brand": "Brand",
+        "brandUrl": "Brand URL",
+        "favicon": "Favicon",
+        "theme": "Theme",
+        "prefix": "Prefix",
+        "analytics": "Analytics",
+        "languages": "Application Languages"
+      }
     },
     "apps": {
       "loading": "Loading applications...",

@@ -59,13 +59,27 @@ document.addEventListener('alpine:init', () => {
     tenantConfigSaving: false,
     tenantConfigError: null,
 
-    /** A human-friendly label for a predefined key, derived from its DIRIGIBLE_BRANDING_* name. */
+    /** A localized label for a predefined key, falling back to a title-cased form of its name. */
     tenantConfigLabel(key) {
-      return key.replace(/^DIRIGIBLE_BRANDING_/, '')
+      const derived = key.replace(/^DIRIGIBLE_BRANDING_/, '')
                 .replace(/^DIRIGIBLE_/, '')
                 .toLowerCase()
                 .replace(/_/g, ' ')
                 .replace(/\b\w/g, (c) => c.toUpperCase());
+      const suffix = {
+        DIRIGIBLE_BRANDING_NAME: 'name',
+        DIRIGIBLE_BRANDING_SUBTITLE: 'subtitle',
+        DIRIGIBLE_BRANDING_BRAND: 'brand',
+        DIRIGIBLE_BRANDING_BRAND_URL: 'brandUrl',
+        DIRIGIBLE_BRANDING_FAVICON: 'favicon',
+        DIRIGIBLE_BRANDING_THEME: 'theme',
+        DIRIGIBLE_BRANDING_PREFIX: 'prefix',
+        DIRIGIBLE_BRANDING_ANALYTICS: 'analytics',
+        DIRIGIBLE_APPLICATION_LANGUAGES: 'languages',
+      }[key];
+      return (suffix && window.T)
+        ? T('application-core:shell.settings.tenantConfigLabels.' + suffix, derived)
+        : derived;
     },
 
     /** Load the predefined properties and the current tenant's value for each. */
