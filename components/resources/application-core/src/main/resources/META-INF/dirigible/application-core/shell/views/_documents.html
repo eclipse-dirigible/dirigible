@@ -85,7 +85,7 @@
             </thead>
             <tbody x-h-table-body>
               <tr x-show="filteredChildren.length === 0" x-h-table-row>
-                <td x-h-table-cell colspan="3" x-text="search.filterBy ? 'No items match your search.' : 'This folder is empty.'"></td>
+                <td x-h-table-cell colspan="3" x-text="search.filterBy ? T('application-core:shell.documents.noMatch', 'No items match your search.') : T('application-core:shell.documents.emptyFolder', 'This folder is empty.')"></td>
               </tr>
               <template x-for="item in filteredChildren" :key="item.path || item.name">
                 <tr x-h-table-row data-hoverable="true" :data-state="selectedFile && selectedFile.name === item.name ? 'selected' : ''">
@@ -145,7 +145,7 @@
           <div x-h-info-page-header>
             <div x-h-info-page-media.icon><i x-h-lucide data-lucide="eye" role="img" aria-label="preview"></i></div>
             <div x-h-info-page-title x-text="T('application-core:shell.documents.filePreview', 'File Preview')"></div>
-            <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? 'This file cannot be previewed.' : 'Click on a file to see its preview.'"></div>
+            <div x-h-info-page-description x-text="(selectedFile && !canPreview) ? T('application-core:shell.documents.cannotPreview', 'This file cannot be previewed.') : T('application-core:shell.documents.previewHint', 'Click on a file to see its preview.')"></div>
           </div>
         </div>
       </div>

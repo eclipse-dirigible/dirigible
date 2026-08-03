@@ -11,7 +11,8 @@
       "entities": "Entities",
       "other": "Other",
       "create": "Create",
-      "edit": "Edit"
+      "edit": "Edit",
+      "home": "Home"
     },
     "user": {
       "user": "User",
@@ -19,7 +20,8 @@
     },
     "notifications": {
       "title": "Notifications",
-      "caughtUp": "You're all caught up."
+      "caughtUp": "You're all caught up.",
+      "newTask": "New task: {{name}}"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -37,7 +39,12 @@
       "selectTaskHint": "Select a task from the list to claim it or open its form.",
       "noForm": "This task has no form.",
       "taskForm": "Task form",
-      "claimHint": "This task is available to your group. Claim it to open and complete its form."
+      "claimHint": "This task is available to your group. Claim it to open and complete its form.",
+      "updated": "Updated {{time}}",
+      "mine": "Mine",
+      "available": "Available",
+      "assignedToMe": "Assigned to me",
+      "ref": "Ref {{key}}"
     },
     "documents": {
       "newFolder": "New folder",
@@ -55,7 +62,11 @@
       "newName": "New name",
       "name": "Name",
       "enterFolderName": "Enter folder name...",
-      "findInFolder": "Find in folder"
+      "findInFolder": "Find in folder",
+      "noMatch": "No items match your search.",
+      "emptyFolder": "This folder is empty.",
+      "cannotPreview": "This file cannot be previewed.",
+      "previewHint": "Click on a file to see its preview."
     },
     "reports": {
       "select": "Select a report",
@@ -105,6 +116,9 @@
     },
     "projections": {
       "title": "Applications"
+    },
+    "related": {
+      "addNew": "Add new"
     }
   }
 }

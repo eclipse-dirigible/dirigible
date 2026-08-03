@@ -19,7 +19,7 @@
     <span x-h-toolbar-title class="text-2xl font-semibold tracking-tight" x-text="T('application-core:shell.nav.inbox', 'Inbox')"></span>
     <span x-h-badge data-variant="information" x-text="tasks.length"></span>
     <div x-h-toolbar-spacer></div>
-    <span x-show="lastUpdated" x-h-text.muted x-text="'Updated ' + fmtTime(lastUpdated)"></span>
+    <span x-show="lastUpdated" x-h-text.muted x-text="T('application-core:shell.inbox.updated', 'Updated {{time}}', { time: fmtTime(lastUpdated) })"></span>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="autoRefresh"
             @click="toggleAuto()" :aria-label="autoRefresh ? 'Pause auto-refresh' : 'Resume auto-refresh'">
       <svg x-h-lucide role="img" data-lucide="pause" x-show="autoRefresh"></svg>
@@ -57,8 +57,8 @@
                     <div class="vbox gap-1">
                       <span class="font-medium" x-text="task.processDefinitionName ? task.processDefinitionName + ' — ' + task.name : task.name"></span>
                       <span x-h-text.muted class="text-xs">
-                        <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? 'Mine' : 'Available'"></span>
-                        <span x-show="task.processInstanceBusinessKey" x-text="' · Ref ' + task.processInstanceBusinessKey"></span>
+                        <span x-h-badge :data-variant="task.mine ? 'positive' : 'outline'" data-size="sm" x-text="task.mine ? T('application-core:shell.inbox.mine', 'Mine') : T('application-core:shell.inbox.available', 'Available')"></span>
+                        <span x-show="task.processInstanceBusinessKey" x-text="' · ' + T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: task.processInstanceBusinessKey })"></span>
                         <span x-show="task.createTime" x-text="' · ' + fmtTime(task.createTime)"></span>
                       </span>
                     </div>
@@ -85,8 +85,8 @@
         <div x-h-toolbar data-variant="transparent">
           <span x-h-toolbar-title x-text="selected ? (selected.processDefinitionName ? selected.processDefinitionName + ' — ' + selected.name : selected.name) : ''"></span>
           <div x-h-toolbar-spacer></div>
-          <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? ('Ref ' + selected.processInstanceBusinessKey) : ''"></span>
-          <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? 'Assigned to me' : 'Available'"></span>
+          <span x-show="selected && selected.processInstanceBusinessKey" x-h-badge data-variant="information" x-text="selected ? T('application-core:shell.inbox.ref', 'Ref {{key}}', { key: selected.processInstanceBusinessKey }) : ''"></span>
+          <span x-h-badge :data-variant="selected && selected.mine ? 'positive' : 'outline'" x-text="selected && selected.mine ? T('application-core:shell.inbox.assignedToMe', 'Assigned to me') : T('application-core:shell.inbox.available', 'Available')"></span>
         </div>
 
         <!-- A candidate (group) task must be claimed before its form can be completed. -->
