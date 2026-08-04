@@ -404,6 +404,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: note,   type: string,  length: 200 }
                   - { name: amount, type: decimal, aggregate: true }
+                  # expression-calculated from the aggregate: the document-totals recompute must
+                  # refresh it on every line change, or it stays stale/null until a header save
+                  # (the unpaid-invoice Balance printed empty).
+                  - { name: balanceDue, type: decimal, calculatedOnCreate: "Amount", calculatedOnUpdate: "Amount" }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person }
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
@@ -814,6 +818,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(billRepository.replaceAll("\\s+", " ")
                                   .contains("recalculate(entity); return super.update(entity);"),
                 "the document-totals recompute must not fall back to the full-row write");
+        // recalculate() also refreshes the header's EXPRESSION-calculated fields (balanceDue derives
+        // from the aggregate amount) and persists them in the same targeted write - actions are
+        // deliberately not run there.
+        String billHeaderRepository = contentOf("gen/emission/data/bill/BillRepository.java");
+        assertTrue(billHeaderRepository.contains("totals.put(\"BalanceDue\", entity.BalanceDue)"),
+                "the totals recompute must persist the refreshed calculated field: " + billHeaderRepository);
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
@@ -1545,6 +1555,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                           .statusCode(200)
                                                           .extract()
                                                           .path("Id")));
+        // A line change must refresh the header's expression-calculated field in the same recompute:
+        // balanceDue (= amount) follows the aggregate the moment the line lands - it must never stay
+        // null/stale until an explicit header save (the unpaid-invoice Balance printed empty).
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":250,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            Object balanceDue = given().when()
+                                       .get(API + "/bill/BillController/" + bill.get())
+                                       .then()
+                                       .statusCode(200)
+                                       .extract()
+                                       .path("BalanceDue");
+            assertTrue(balanceDue instanceof Number && Math.abs(((Number) balanceDue).doubleValue() - 250.0) < 0.001,
+                    "the calculated header field must follow the totals recompute, got: " + balanceDue);
+        });
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + bill.get() + "}")
                                                  .when()
