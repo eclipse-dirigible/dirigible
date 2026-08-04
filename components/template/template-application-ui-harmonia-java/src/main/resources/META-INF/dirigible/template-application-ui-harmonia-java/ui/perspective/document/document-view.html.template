@@ -523,7 +523,9 @@
         <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="draftError"></div></div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <template x-for="col in editColumns" :key="col.name">
-            <div x-h-field>
+            <!-- Text and lookup fields span the whole dialog row (long names must be readable while
+                 typing); only the short paired widgets - numbers, checkboxes, date/time - share one. -->
+            <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
               <label x-h-label x-text="T(col.tkey, col.label)"></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
