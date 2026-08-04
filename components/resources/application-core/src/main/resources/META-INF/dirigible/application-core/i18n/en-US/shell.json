@@ -110,7 +110,7 @@
       "numberingNext": "Next",
       "numberingExample": "Next number:",
       "numberingSaved": "Saved",
-      "numberingShapeTemplate": "Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape.",
+      "numberingShapeTemplate": "Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape and its starting counter.",
       "tenantConfigLabels": {
         "name": "Name",
         "subtitle": "Subtitle",

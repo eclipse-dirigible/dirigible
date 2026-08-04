@@ -268,6 +268,27 @@ class NumberingSdkIT extends IntegrationTest {
     }
 
     @Test
+    void aFreshPartitionInheritsTheBaseRowsSeededCounter() {
+        publishDeclarationAndController();
+
+        restAssuredExecutor.execute(() -> {
+            // On a fresh tenant nothing marks the series partitioned yet, so the base row is the only
+            // thing an operator CAN seed before the first document. Seed it...
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"\", \"next\": 300}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+            // ...and the FIRST allocation of a brand-new partition must render exactly the seed - the
+            // partition materializes inheriting the base row's shape AND counter (a zero-started
+            // partition silently discarded the seed: the first document rendered ...0001).
+            assertEquals("T-0300", allocate("/next/FRESHSEED"), "a fresh partition's first number is the base row's seeded next value");
+            assertEquals("T-0301", allocate("/next/FRESHSEED"), "and it continues from there");
+        }, ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
     void aNewTenantGetsTheDeclaredSeriesWithItsOwnSequence() throws Exception {
         publishDeclarationAndController();
 

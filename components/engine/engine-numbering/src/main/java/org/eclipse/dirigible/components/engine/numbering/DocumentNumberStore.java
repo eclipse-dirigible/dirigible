@@ -42,10 +42,12 @@ import org.springframework.stereotype.Component;
  * <li>the management surface writes {@code PREFIX} / {@code SIZE} / the counter reset;</li>
  * <li>allocation writes only {@code COUNTER}, via {@code COUNTER = COUNTER + 1} - with one
  * deliberate exception: the first allocation for a NEW PARTITION of a declared series materializes
- * that partition's row, copying the shape from the series' base ({@code ""}-partition) row.
- * Partition values are data (company ids), so no artefact can pre-provision them; the base row is
- * the tenant's configured default they inherit. The copy happens once, at row birth - it never
- * overwrites anything.</li>
+ * that partition's row, copying the shape AND the counter from the series' base
+ * ({@code ""}-partition) row. Partition values are data (company ids), so no artefact can
+ * pre-provision them; the base row is the tenant's configured template they inherit - including the
+ * starting point, so seeding the base row's next value BEFORE the first document works (a
+ * zero-started partition silently ignored the seed, observed live). The copy happens once, at row
+ * birth - it never overwrites anything.</li>
  * </ul>
  *
  * <p>
@@ -215,14 +217,18 @@ class DocumentNumberStore {
             if (exists(connection, series, partition)) {
                 return;
             }
-            insertRow(connection, series, partition, prefix, size);
+            insertRow(connection, series, partition, prefix, size, 0L);
         }
     }
 
     /**
-     * Materializes a NEW partition row of a declared series, inheriting the shape of the series' base
-     * ({@code ""}-partition) row - the tenant's configured default. Partition values are data, so this
-     * is the only place a partition row can be born.
+     * Materializes a NEW partition row of a declared series, inheriting the shape AND the counter of
+     * the series' base ({@code ""}-partition) row - the tenant's configured template. The counter is
+     * inherited because the base row is the only thing an operator CAN seed before a partition's first
+     * allocation (on a fresh tenant nothing marks the series partitioned yet, so the settings page
+     * offers the base row's next value): starting the partition at zero instead silently discarded the
+     * seed and the first document rendered ...0001. Partition values are data, so this is the only
+     * place a partition row can be born.
      *
      * @param connection the connection (autocommit)
      * @param series the series identity
@@ -236,11 +242,12 @@ class DocumentNumberStore {
                     + "] is not declared for this tenant - declare it in a .numbers artefact");
         }
         Allocation base = read(connection, series, "");
-        insertRow(connection, series, partition, base.prefix(), base.size());
+        insertRow(connection, series, partition, base.prefix(), base.size(), base.value());
     }
 
-    /** Inserts one series row with a zero counter, tolerating a concurrent identical insert. */
-    private void insertRow(Connection connection, String series, String partition, String prefix, int size) throws SQLException {
+    /** Inserts one series row with the given counter, tolerating a concurrent identical insert. */
+    private void insertRow(Connection connection, String series, String partition, String prefix, int size, long counter)
+            throws SQLException {
         String sql = SqlFactory.getNative(connection)
                                .insert()
                                .into(TABLE_NAME)
@@ -253,7 +260,7 @@ class DocumentNumberStore {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, series);
             statement.setString(2, partition);
-            statement.setLong(3, 0L);
+            statement.setLong(3, counter);
             statement.setString(4, prefix == null ? "" : prefix);
             statement.setInt(5, size);
             statement.executeUpdate();
