@@ -493,6 +493,12 @@ document.addEventListener('alpine:init', () => {
         const payload = this.toPayload();
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
+          // Opened as a detail-panel iframe dialog: report the save to the opener (it closes the
+          // dialog and reloads the panel) instead of navigating this iframe to a list nobody sees.
+          if (this.isDialog) {
+            this.emitSaved(this.id);
+            return;
+          }
         } else {
           const created = await App.services.api.post(this.apiPath, payload);
           // Only when opened as an FK "Add" iframe dialog: report the new record to the opener and stop
@@ -620,8 +626,14 @@ document.addEventListener('alpine:init', () => {
       this.navigateBack('/${name}');
     },
 
-    // Preview -> the editable form for the same record (returnTo carried over).
+    // Preview -> the editable form for the same record (returnTo carried over). Inside a detail
+    // dialog the edit stays IN the dialog (embedded + dialog mode carried), so its save still
+    // reports to the opener instead of navigating the iframe to a list.
     goEdit() {
+      if (this.isDialog) {
+        window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit?embedded=1&dialog=1');
+        return;
+      }
       const ret = this.returnToParam();
       window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit' + (ret ? '?returnTo=' + encodeURIComponent(ret) : ''));
     },

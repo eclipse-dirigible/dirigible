@@ -16,10 +16,11 @@
  * passing the panel definition and the selected master id. The panel lists that detail's
  * rows filtered to the master via the controller's `?<masterEntityId>=<id>` query (which
  * the generated REST controller supports for MANAGE_DETAILS/LIST_DETAILS), supports delete,
- * and routes create/edit to the detail's own generated form page (FK + returnTo preset).
+ * and opens create/edit/preview in the shared related-record iframe dialog (never a main-pane
+ * navigation - the master form may hold unsaved edits).
  *
  * `def` shape (from App.registerDetail): { entity, apiPath, masterEntityId, label,
- *   columns: [{ name }], returnTo }. apiPath is relative to App.config.restBase (the api client
+ *   columns: [{ name }] }. apiPath is relative to App.config.restBase (the api client
  *   prepends it), so detail calls pass no baseUrl override.
  *
  * A def carrying `calendar: { start, end?, title?, color?, view, range }` (a composition child
@@ -137,20 +138,29 @@ function detailPanel(def, masterId) {
       this.refreshIcons();
     },
 
-    // Create/edit route to the detail's own form page, carrying the FK + a returnTo back here.
+    // The detail's own form page, opened in the shared related-record iframe DIALOG - never a
+    // main-pane navigation. The parent form may hold unsaved edits, and navigating away silently
+    // discards them (observed live: fill a record, add a child, come back to empty fields). The
+    // child form runs the same SPA embedded (?embedded=1 hides its chrome) in dialog mode
+    // (dialog=1 - save/cancel post messages to the opener instead of navigating); on save the
+    // panel reloads its rows while the parent form keeps its state.
+    openForm(route, title) {
+      Alpine.store('related').create(window.location.pathname + '?embedded=1#' + route, title, () => this.load());
+    },
     addRow() {
       const q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
-              + '&returnTo=' + encodeURIComponent(this.def.returnTo);
-      window.PineconeRouter.navigate('/' + this.def.entity + '/create' + q);
+              + '&embedded=1&dialog=1';
+      this.openForm('/' + this.def.entity + '/create' + q,
+          (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new'));
     },
     editRow(row) {
-      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
-      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/edit' + q);
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/edit?embedded=1&dialog=1',
+          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
     // Read-only view of the detail record (the routed form page in preview mode).
     previewRow(row) {
-      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
-      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/preview' + q);
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/preview?embedded=1&dialog=1',
+          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
 
     // --- embedded calendar (calendar defs only) -------------------------------------------------
@@ -220,16 +230,17 @@ function detailPanel(def, masterId) {
     },
     // Event click -> edit the child; empty-day click -> create one with the master FK AND the
     // clicked date preset (the shared form presets any create query param whose name matches).
+    // Both open the shared iframe dialog (openForm) so the parent's unsaved edits survive.
     onEventClick(e) {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (!id) return;
-      const q = '?returnTo=' + encodeURIComponent(this.def.returnTo);
-      window.PineconeRouter.navigate('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit' + q);
+      this.openForm('/' + this.def.entity + '/' + encodeURIComponent(id) + '/edit?embedded=1&dialog=1',
+          (window.T ? T(this.def.tkey, this.def.label) : this.def.label));
     },
     onDateClick(e) {
       const cal = this.def.calendar;
       let q = '?' + encodeURIComponent(this.def.masterEntityId) + '=' + encodeURIComponent(this.masterId)
-            + '&returnTo=' + encodeURIComponent(this.def.returnTo);
+            + '&embedded=1&dialog=1';
       const d = e && e.detail ? e.detail.date : null;
       if (d instanceof Date && !isNaN(d.getTime())) {
         const p = n => String(n).padStart(2, '0');
@@ -237,7 +248,8 @@ function detailPanel(def, masterId) {
         if (e.detail.time) val += 'T' + e.detail.time;
         q += '&' + encodeURIComponent(cal.start) + '=' + encodeURIComponent(val);
       }
-      window.PineconeRouter.navigate('/' + this.def.entity + '/create' + q);
+      this.openForm('/' + this.def.entity + '/create' + q,
+          (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new'));
     },
 
     // --- files panel (files defs only) ----------------------------------------------------------

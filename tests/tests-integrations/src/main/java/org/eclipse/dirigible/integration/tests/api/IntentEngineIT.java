@@ -1389,6 +1389,16 @@ class IntentEngineIT extends IntegrationTest {
         String copyRegister = contentOf("gen/orders/js/components/pages/Order/OrderCopy.detail.js");
         assertTrue(copyRegister.contains("files: { readOnly: true }"),
                 "a function: Snapshot child must register as a read-only files def, got: " + copyRegister);
+
+        // Detail-panel children open in the shared iframe DIALOG, never a main-pane navigation - a
+        // navigation would discard the master form's unsaved edits (observed live: fill a record,
+        // add a child, come back to empty fields). The register therefore carries no returnTo
+        // route, and the generated form page reports a dialog-mode EDIT save to the opener.
+        assertFalse(copyRegister.contains("returnTo"),
+                "detail rows open in a dialog - the register must not carry a main-pane return route");
+        String customerFormPage = contentOf("gen/orders/js/components/pages/Customer/CustomerFormPage.js");
+        assertTrue(customerFormPage.contains("this.emitSaved(this.id)"),
+                "a dialog-mode edit save must report to the opener instead of navigating the iframe to a list");
         String documentView = contentOf("gen/orders/views/Order/Order-document.html");
         assertTrue(documentView.contains("openHref(row)"),
                 "the files panel rows must offer the inline Open action for stored snapshot versions");

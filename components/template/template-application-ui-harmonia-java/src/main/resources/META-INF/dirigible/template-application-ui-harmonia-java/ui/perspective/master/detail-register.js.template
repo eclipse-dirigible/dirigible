@@ -34,7 +34,6 @@ App.registerDetail('${masterEntity}', {
   apiPath: '/${javaPerspectiveName}/${name}Controller',
   masterEntityId: '${masterEntityId}',
   primaryKey: '${primaryKeysString}',
-  returnTo: '/${masterEntity}',
 #if($detailCalendar)
   // Rendered as an embedded x-h-calendar panel on the master page (intent view: calendar on a
   // composition child); the shared detailPanel maps the rows to events by these properties.
