@@ -46,7 +46,7 @@ document.addEventListener('alpine:init', () => {
     ...basePage(),
     base: '/services/js/documents/api/documents.js',
     folder: { name: 'root', path: '/', children: [] },
-    breadcrumbs: [{ name: 'Home', path: '' }],
+    breadcrumbs: [{ name: window.T ? T('application-core:shell.nav.home', 'Home') : 'Home', path: '' }],
     state: 'loading',      // loading | error | default
     error: null,
 
@@ -141,7 +141,7 @@ document.addEventListener('alpine:init', () => {
     // ----- breadcrumbs (Home navigates to the no-path root) -----
     parseBreadcrumbs(path) {
       const parts = String(path || '/').split('/').filter(Boolean);
-      const crumbs = [{ name: 'Home', path: '' }];
+      const crumbs = [{ name: window.T ? T('application-core:shell.nav.home', 'Home') : 'Home', path: '' }];
       let acc = '';
       for (const p of parts) { acc += '/' + p; crumbs.push({ name: p, path: acc }); }
       this.breadcrumbs = crumbs;

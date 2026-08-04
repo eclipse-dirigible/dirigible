@@ -59,7 +59,7 @@ document.addEventListener('alpine:init', () => {
             id,
             source: 'task',
             task: t,
-            title: 'New task: ' + (t.name || 'Task'),
+            title: window.T ? T('application-core:shell.notifications.newTask', 'New task: {{name}}', { name: t.name || 'Task' }) : 'New task: ' + (t.name || 'Task'),
             description: t.processDefinitionName || '',
             variant: 'information',
             unread: true,

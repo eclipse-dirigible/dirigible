@@ -29,7 +29,7 @@ document.addEventListener('alpine:init', () => {
     create(createUrl, title, onCreated) {
       if (!createUrl) return;
       this.src = createUrl;
-      this.title = title || 'Add new';
+      this.title = title || (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new');
       this._onCreated = typeof onCreated === 'function' ? onCreated : null;
       this.open = true;
     },
