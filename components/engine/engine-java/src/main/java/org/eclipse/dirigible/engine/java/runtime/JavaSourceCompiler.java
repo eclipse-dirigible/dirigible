@@ -141,7 +141,11 @@ public class JavaSourceCompiler {
             Map<String, String> failures = buckets.failures();
 
             if (failures.isEmpty()) {
-                LOGGER.debug("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
+                // INFO, not DEBUG: the batch runs only when the source set changed, and after a
+                // mid-publish failure this line is the ONLY visible evidence that the next cycle
+                // recovered - at DEBUG the stale failure ERROR stays the log's last word and a
+                // green system diagnoses as dead.
+                LOGGER.info("Compiled batch: [{}] units, [{}] class file(s), no failures", units.size(), bytecode.size());
             } else {
                 LOGGER.error("Compiled batch: [{}] units, [{}] class file(s); [{}] unit(s) failed to compile: {}", units.size(),
                         bytecode.size(), failures.size(), failures.keySet());
