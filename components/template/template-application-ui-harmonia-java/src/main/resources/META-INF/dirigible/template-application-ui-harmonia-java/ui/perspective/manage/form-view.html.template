@@ -297,9 +297,12 @@
                   <template x-for="row in rows" :key="row[def.primaryKey]">
                     <tr x-h-table-row data-hoverable="true">
                       <template x-for="col in def.columns" :key="col.name">
-                        <td x-h-table-cell :class="col.number ? 'text-right' : ''"
-                            :style="col.number ? '' : 'white-space: normal; overflow-wrap: anywhere'"
-                            x-text="cellValue(col, row)"></td>
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                          <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                          <template x-if="!col.number">
+                            <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                          </template>
+                        </td>
                       </template>
                       <td x-h-table-cell data-row-actions x-show="!isPreview">
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
