@@ -52,6 +52,27 @@ public class NumberSeriesDeclaration extends Artefact {
     private int size;
 
     /**
+     * The PARTITION SOURCE of a partitioned series (intent {@code per:}): the physical table whose rows
+     * are the partition values, so the management surface can label a partition row by the entity's
+     * display name and list a (virtual) row for every value BEFORE its first allocation - an operator
+     * seeds a company's starting number before its first document. Authored physical coordinates,
+     * exactly like a {@code .csvim}'s table/columns. Empty for an unpartitioned series.
+     */
+    @Column(name = "DECLARATION_PARTITION_TABLE", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String partitionTable;
+
+    /** The partition-source column holding the partition VALUE (the {@code per} relation's key). */
+    @Column(name = "DECLARATION_PARTITION_KEY", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String partitionKey;
+
+    /** The partition-source column holding the human label the settings page shows. */
+    @Column(name = "DECLARATION_PARTITION_LABEL", columnDefinition = "VARCHAR", nullable = true, length = 255)
+    @Expose
+    private String partitionLabel;
+
+    /**
      * Instantiates a new number series declaration.
      *
      * @param location the location
@@ -124,6 +145,60 @@ public class NumberSeriesDeclaration extends Artefact {
      */
     public void setSize(int size) {
         this.size = size;
+    }
+
+    /**
+     * Gets the partition-source table.
+     *
+     * @return the table, or {@code null} for an unpartitioned series
+     */
+    public String getPartitionTable() {
+        return partitionTable;
+    }
+
+    /**
+     * Sets the partition-source table.
+     *
+     * @param partitionTable the table
+     */
+    public void setPartitionTable(String partitionTable) {
+        this.partitionTable = partitionTable;
+    }
+
+    /**
+     * Gets the partition-source key column.
+     *
+     * @return the column, or {@code null}
+     */
+    public String getPartitionKey() {
+        return partitionKey;
+    }
+
+    /**
+     * Sets the partition-source key column.
+     *
+     * @param partitionKey the column
+     */
+    public void setPartitionKey(String partitionKey) {
+        this.partitionKey = partitionKey;
+    }
+
+    /**
+     * Gets the partition-source label column.
+     *
+     * @return the column, or {@code null}
+     */
+    public String getPartitionLabel() {
+        return partitionLabel;
+    }
+
+    /**
+     * Sets the partition-source label column.
+     *
+     * @param partitionLabel the column
+     */
+    public void setPartitionLabel(String partitionLabel) {
+        this.partitionLabel = partitionLabel;
     }
 
     /**

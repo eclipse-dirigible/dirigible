@@ -114,6 +114,11 @@ public class NumberSeriesSynchronizer extends MultitenantBaseSynchronizer<Number
             validate(location, entry, seen);
             NumberSeriesDeclaration declaration =
                     new NumberSeriesDeclaration(location, entry.name, entry.prefix == null ? "" : entry.prefix, entry.size);
+            if (entry.partitions != null) {
+                declaration.setPartitionTable(entry.partitions.table);
+                declaration.setPartitionKey(entry.partitions.key);
+                declaration.setPartitionLabel(entry.partitions.label);
+            }
             declaration.updateKey();
             try {
                 NumberSeriesDeclaration existing = getService().findByKey(declaration.getKey());
@@ -140,6 +145,23 @@ public class NumberSeriesSynchronizer extends MultitenantBaseSynchronizer<Number
             DocumentNumberService.validateShape(entry.prefix, entry.size);
         } catch (IllegalArgumentException ex) {
             throw new ParseException("Series [" + entry.name + "] in [" + location + "]: " + ex.getMessage(), 0);
+        }
+        if (entry.partitions != null) {
+            validateIdentifier(location, entry.name, "partitions.table", entry.partitions.table);
+            validateIdentifier(location, entry.name, "partitions.key", entry.partitions.key);
+            validateIdentifier(location, entry.name, "partitions.label", entry.partitions.label);
+        }
+    }
+
+    /**
+     * A partition-source coordinate must be a plain SQL identifier: the management surface queries the
+     * declared table with these names quoted verbatim, so anything else is either a typo or an
+     * injection attempt through a published artefact - both are rejected at parse.
+     */
+    private static void validateIdentifier(String location, String series, String attribute, String value) throws ParseException {
+        if (value == null || !value.matches("[A-Za-z_][A-Za-z0-9_]*")) {
+            throw new ParseException("Series [" + series + "] in [" + location + "]: [" + attribute
+                    + "] must be a plain SQL identifier (letters, digits, underscore), got [" + value + "]", 0);
         }
     }
 
@@ -265,7 +287,10 @@ public class NumberSeriesSynchronizer extends MultitenantBaseSynchronizer<Number
 
     private static boolean sameShape(NumberSeriesDeclaration one, NumberSeriesDeclaration two) {
         return one.getSize() == two.getSize() && one.getPrefix()
-                                                    .equals(two.getPrefix());
+                                                    .equals(two.getPrefix())
+                && java.util.Objects.equals(one.getPartitionTable(), two.getPartitionTable())
+                && java.util.Objects.equals(one.getPartitionKey(), two.getPartitionKey())
+                && java.util.Objects.equals(one.getPartitionLabel(), two.getPartitionLabel());
     }
 
     /**
@@ -323,5 +348,17 @@ public class NumberSeriesSynchronizer extends MultitenantBaseSynchronizer<Number
         String name;
         String prefix;
         int size;
+        PartitionsEntry partitions;
+    }
+
+    /**
+     * The optional partition source of a partitioned series: the physical table whose rows are the
+     * partition values ({@code key} column) with their display labels ({@code label} column) - what
+     * lets the settings page label partition rows and list every value before its first allocation.
+     */
+    private static class PartitionsEntry {
+        String table;
+        String key;
+        String label;
     }
 }

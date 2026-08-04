@@ -264,6 +264,80 @@ class DocumentNumberStore {
     }
 
     /**
+     * One partition value with its display label, read from a declared partition source.
+     *
+     * @param value the partition value (the key column, as a string - partition keys are strings)
+     * @param label the display label
+     */
+    record PartitionValue(String value, String label) {
+    }
+
+    /**
+     * Every row of a declared partition source: the partition values a series CAN be partitioned by,
+     * with their display labels - what lets the management surface label the rows it has and list the
+     * values that have not allocated yet. The identifiers were validated to plain SQL identifiers at
+     * artefact parse and are quoted verbatim here; the table lives in the tenant-routed default
+     * datasource like everything else the numbering engine touches.
+     *
+     * @param table the partition-source table
+     * @param key the column holding the partition value
+     * @param label the column holding the display label
+     * @return the values in label order (possibly empty; empty also when the table does not exist yet -
+     *         the owning module may not be deployed to this tenant)
+     * @throws SQLException if the read fails
+     */
+    List<PartitionValue> readPartitionSource(String table, String key, String label) throws SQLException {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            if (!SqlFactory.getNative(connection)
+                           .existsTable(connection, table)) {
+                return List.of();
+            }
+            String sql = SqlFactory.getNative(connection)
+                                   .select()
+                                   .column(key)
+                                   .column(label)
+                                   .from(table)
+                                   .order(label)
+                                   .build();
+            List<PartitionValue> values = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String value = resultSet.getString(1);
+                    if (value != null && !value.isBlank()) {
+                        values.add(new PartitionValue(value, resultSet.getString(2)));
+                    }
+                }
+            }
+            return values;
+        }
+    }
+
+    /**
+     * Materializes the partition's row NOW when it does not exist yet (inheriting the base row's shape,
+     * zero counter) - the management surface's write path for a VIRTUAL row: an operator seeds a
+     * partition's counter BEFORE its first allocation, so the row must be born on save, exactly as the
+     * first allocation would have born it.
+     *
+     * @param series the series identity
+     * @param partition the partition value
+     * @throws SQLException if the write fails
+     * @throws IllegalStateException if the series has no base row - it was never declared
+     */
+    void ensurePartition(String series, String partition) throws SQLException {
+        if (partition.isEmpty()) {
+            return;
+        }
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            ensureTableExists(connection);
+            if (!exists(connection, series, partition)) {
+                materializePartition(connection, series, partition);
+            }
+        }
+    }
+
+    /**
      * Set the last-allocated value (the management surface's "next" minus one).
      *
      * @param series the series identity
