@@ -1403,6 +1403,13 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(documentView.contains("openHref(row)"),
                 "the files panel rows must offer the inline Open action for stored snapshot versions");
 
+        // A detail's form never offers its COMPOSITION-parent FK as an input: the detail is created
+        // from its master's panel, which presets the FK via the create query param - offering the
+        // parent as a dropdown invites re-parenting by accident and is redundant in the dialog.
+        String itemForm = contentOf("gen/orders/views/Order/OrderItem-form.html");
+        assertFalse(itemForm.contains("f_Order\""), "the composition-parent FK must not render as a form input, got a f_Order control");
+        assertTrue(itemForm.contains("f_Quantity\""), "the detail's own fields still render as inputs");
+
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
                 "the item dialog should carry the metadata-driven dependsOn machinery");
