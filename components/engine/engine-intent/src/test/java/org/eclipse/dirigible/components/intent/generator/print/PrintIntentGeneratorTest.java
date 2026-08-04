@@ -94,9 +94,14 @@ class PrintIntentGeneratorTest {
         assertTrue(template.contains("<table source=\"items\">"));
         assertTrue(template.contains("<column width=\"3*\" label=\"Name\">{{Name}}</column>"));
         assertTrue(template.contains("<column width=\"*\" align=\"right\" label=\"Quantity\">{{Quantity}}</column>"));
-        // totals: net as a field, total emphasized
-        assertTrue(template.contains("<field label=\"Net\">{{document.Net}}</field>"));
-        assertTrue(template.contains("<total align=\"right\">{{document.Total}}</total>"));
+        // header data in two columns: plain fields left, relation labels right
+        assertTrue(template.contains("<row gap=\"16\">"));
+        // totals: label/value columns (a weighted row with a 2* spacer) so the figures align under
+        // each other; the total emphasized after the row, carrying its label
+        assertTrue(template.contains("<stack width=\"2*\">"));
+        assertTrue(template.contains("<text align=\"right\">Net:</text>"));
+        assertTrue(template.contains("<text align=\"right\">{{document.Net}}</text>"));
+        assertTrue(template.contains("<total align=\"right\">Total: {{document.Total}}</total>"));
     }
 
     @Test

@@ -177,28 +177,41 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
                 .append("-print\">\n");
         template.append("    <page width=\"595\" height=\"842\" padding=\"40\">\n\n");
 
-        // header: humanized title + the document number (when a documentTitle field exists)
-        template.append("        <header>\n");
-        template.append("            <text align=\"right\" style=\"title\">")
-                .append(escape(label))
-                .append("</text>\n");
+        // Header: the humanized title on the left, the document number (when a documentTitle field
+        // exists) on the right - the classic printed-document header line.
         FieldIntent number = documentTitleField(master);
+        template.append("        <header>\n");
         if (number != null) {
-            template.append("            <text align=\"right\" style=\"subtitle\">{{document.")
+            template.append("            <row>\n");
+            template.append("                <stack width=\"*\">\n");
+            template.append("                    <text style=\"title\">")
+                    .append(escape(label))
+                    .append("</text>\n");
+            template.append("                </stack>\n");
+            template.append("                <stack width=\"*\">\n");
+            template.append("                    <text align=\"right\" style=\"subtitle\">{{document.")
                     .append(IntentNaming.pascalCase(number.getName()))
                     .append("}}</text>\n");
+            template.append("                </stack>\n");
+            template.append("            </row>\n");
+        } else {
+            template.append("            <text style=\"title\">")
+                    .append(escape(label))
+                    .append("</text>\n");
         }
         template.append("            <line/>\n");
         template.append("        </header>\n\n");
 
-        // header fields: plain non-aggregate fields + to-one relations (labels resolved client-side)
-        template.append("        <section>\n");
+        // Header data in two columns: the plain non-aggregate fields on the left, the to-one
+        // relation labels on the right - two weighted stacks instead of one long field list.
+        List<String> plainFields = new ArrayList<>();
         for (FieldIntent field : master.getFields()) {
             if (field.isPrimaryKey() || field.isAggregate() || field == number) {
                 continue;
             }
-            appendField(template, "            ", field.getName());
+            plainFields.add(field.getName());
         }
+        List<String> relationFields = new ArrayList<>();
         for (RelationIntent relation : master.getRelations()) {
             if (!isToOne(relation) || relation.getName() == null) {
                 continue;
@@ -211,10 +224,32 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
                                                                          .isBlank();
             if (crossModel || !IntentEntities.labelFieldOf(byName.get(relation.getTo()))
                                              .isEmpty()) {
-                appendField(template, "            ", relation.getName());
+                relationFields.add(relation.getName());
             }
         }
-        template.append("        </section>\n\n");
+        if (!plainFields.isEmpty() && !relationFields.isEmpty()) {
+            template.append("        <row gap=\"16\">\n");
+            template.append("            <stack width=\"*\">\n");
+            for (String name : plainFields) {
+                appendField(template, "                ", name);
+            }
+            template.append("            </stack>\n");
+            template.append("            <stack width=\"*\">\n");
+            for (String name : relationFields) {
+                appendField(template, "                ", name);
+            }
+            template.append("            </stack>\n");
+            template.append("        </row>\n\n");
+        } else {
+            template.append("        <section>\n");
+            for (String name : plainFields) {
+                appendField(template, "            ", name);
+            }
+            for (String name : relationFields) {
+                appendField(template, "            ", name);
+            }
+            template.append("        </section>\n\n");
+        }
 
         // line items
         template.append("        <table source=\"items\">\n");
@@ -243,18 +278,41 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
             }
         }
         if (!aggregates.isEmpty()) {
-            template.append("        <section align=\"right\">\n");
             FieldIntent total = totalField(aggregates);
-            for (FieldIntent aggregate : aggregates) {
-                if (aggregate == total) {
-                    continue;
+            // Totals as label/value COLUMNS (a row of weighted stacks - 2* spacer, labels, values)
+            // so the figures align under each other; a right-aligned label:value line per total
+            // leaves the values ragged.
+            if (aggregates.size() > 1) {
+                template.append("        <row>\n");
+                template.append("            <stack width=\"2*\">\n");
+                template.append("            </stack>\n");
+                template.append("            <stack width=\"*\">\n");
+                for (FieldIntent aggregate : aggregates) {
+                    if (aggregate == total) {
+                        continue;
+                    }
+                    template.append("                <text align=\"right\">")
+                            .append(escape(IntentNaming.humanize(aggregate.getName())))
+                            .append(":</text>\n");
                 }
-                appendField(template, "            ", aggregate.getName());
+                template.append("            </stack>\n");
+                template.append("            <stack width=\"*\">\n");
+                for (FieldIntent aggregate : aggregates) {
+                    if (aggregate == total) {
+                        continue;
+                    }
+                    template.append("                <text align=\"right\">{{document.")
+                            .append(IntentNaming.pascalCase(aggregate.getName()))
+                            .append("}}</text>\n");
+                }
+                template.append("            </stack>\n");
+                template.append("        </row>\n");
             }
-            template.append("            <total align=\"right\">{{document.")
+            template.append("        <total align=\"right\">")
+                    .append(escape(IntentNaming.humanize(total.getName())))
+                    .append(": {{document.")
                     .append(IntentNaming.pascalCase(total.getName()))
-                    .append("}}</total>\n");
-            template.append("        </section>\n\n");
+                    .append("}}</total>\n\n");
         }
 
         // Footer: the label plus the document number when one exists. NEVER the primary key - the
