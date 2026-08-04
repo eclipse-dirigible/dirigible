@@ -84,7 +84,11 @@
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
 ## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
 ## The EntityStatus FK (DOCUMENT_STATUS) is excluded too - it renders as the title-bar badge above.
-#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.auditType && $property.auditType != "NONE"))
+## The COMPOSITION-parent FK is never an input: a detail is created from its master's panel, which
+## presets the FK via the create query param (and an edit round-trips it) - exactly like every other
+## master-detail surface (items dialog, detail tables). Offering the parent as a dropdown invites
+## re-parenting by accident and is redundant inside the detail dialog.
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.relationshipType != "COMPOSITION" && !($property.auditType && $property.auditType != "NONE"))
 #set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
