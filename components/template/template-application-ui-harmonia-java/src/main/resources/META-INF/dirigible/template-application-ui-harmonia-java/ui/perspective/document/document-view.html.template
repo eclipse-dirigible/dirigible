@@ -232,6 +232,9 @@
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
+      <!-- The container gives an over-wide table its OWN horizontal scrollbar (w-full overflow-x-auto),
+           so it can never grow past the page column and render under the status stepper. -->
+      <div x-h-table-container>
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
@@ -243,7 +246,11 @@
           <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
               <template x-for="col in editColumns" :key="col.name">
-                <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellDisplay(col, row)"></td>
+                <!-- x-h-table-cell bakes whitespace-nowrap; a sentence-long item name is NORMAL
+                     invoice data, so text cells override it and wrap within their column. -->
+                <td x-h-table-cell :class="col.number ? 'text-right' : ''"
+                    :style="col.number ? '' : 'white-space: normal; overflow-wrap: anywhere'"
+                    x-text="cellDisplay(col, row)"></td>
               </template>
               <td x-h-table-cell data-row-actions x-show="!isPreview" @click.stop>
                 <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
@@ -262,6 +269,7 @@
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 #end
 
@@ -366,7 +374,9 @@
                 <template x-for="row in rows" :key="row[def.primaryKey]">
                   <tr x-h-table-row data-hoverable="true">
                     <template x-for="col in def.columns" :key="col.name">
-                      <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                      <td x-h-table-cell :class="col.number ? 'text-right' : ''"
+                          :style="col.number ? '' : 'white-space: normal; overflow-wrap: anywhere'"
+                          x-text="cellValue(col, row)"></td>
                     </template>
                     <td x-h-table-cell data-row-actions x-show="!isPreview">
                       <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
