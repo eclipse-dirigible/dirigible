@@ -109,6 +109,8 @@
       "numberingSize": "Обща ширина",
       "numberingNext": "Следващ",
       "numberingExample": "Следващ номер:",
+      "numberingSaved": "Записано",
+      "numberingShapeTemplate": "Броячите живеят в редовете за отделните партиции по-долу; нова партиция се появява при първата си употреба, наследявайки тази форма.",
       "tenantConfigLabels": {
         "name": "Име",
         "subtitle": "Подзаглавие",

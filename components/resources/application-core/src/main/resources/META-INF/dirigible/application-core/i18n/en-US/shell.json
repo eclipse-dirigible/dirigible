@@ -109,6 +109,8 @@
       "numberingSize": "Total width",
       "numberingNext": "Next",
       "numberingExample": "Next number:",
+      "numberingSaved": "Saved",
+      "numberingShapeTemplate": "Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape.",
       "tenantConfigLabels": {
         "name": "Name",
         "subtitle": "Subtitle",

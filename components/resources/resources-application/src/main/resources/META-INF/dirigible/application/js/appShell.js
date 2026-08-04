@@ -158,6 +158,22 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
+     * The base ("") row of a PARTITIONED series is only the shape template new partitions inherit at
+     * birth - allocation always draws from a partition row - so its counter must not be offered for
+     * editing (editing it looks like seeding the next number and does nothing).
+     */
+    numberingIsShapeTemplate(row) {
+      return !row.partition && row.partitioned;
+    },
+
+    /** Whether the row's edits differ from what was loaded - drives the per-row Save. */
+    numberingDirty(row) {
+      return (row.prefix || '') !== row.orig.prefix
+        || parseInt(row.size, 10) !== row.orig.size
+        || (!this.numberingIsShapeTemplate(row) && parseInt(row.next, 10) !== row.orig.next);
+    },
+
+    /**
      * The next number as it will render with the row's CURRENT edits - prefix + sequence zero-padded
      * to the total width (mirrors the server's rendering, incl. never truncating an overflow).
      */
@@ -192,6 +208,9 @@ document.addEventListener('alpine:init', () => {
           prefix: c.prefix || '',
           size: c.size,
           next: c.next,
+          partitioned: !!c.partitioned,
+          saving: false,
+          saved: false,
           orig: { prefix: c.prefix || '', size: c.size, next: c.next }
         }));
       } catch (e) {
@@ -205,40 +224,49 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
-     * Persist each row's edits: a changed shape via PUT /shape, a changed next via PUT. Untouched
+     * Persist ONE row's edits: a changed shape via PUT /shape, a changed next via PUT. Untouched
      * values are not written - setNext rewinds the live counter, so writing an unchanged "next"
-     * would silently undo allocations made since the page loaded.
+     * would silently undo allocations made since the page loaded. Per-row on purpose: a real suite
+     * has dozens of series, and saving must sit next to what was edited, not below the whole list.
+     * Only the saved row's baseline is refreshed, so other rows' in-progress edits survive.
      */
-    async saveNumbering() {
+    async saveNumberingRow(row) {
       this.numberingError = null;
+      row.saving = true;
+      row.saved = false;
       try {
-        for (const row of this.numbering) {
-          const size = parseInt(row.size, 10);
-          const shapeChanged = (row.prefix || '') !== row.orig.prefix || size !== row.orig.size;
-          if (shapeChanged && isFinite(size)) {
-            const res = await fetch('/services/core/numbering/shape', {
-              method: 'PUT',
-              credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ series: row.series, partition: row.partition, prefix: row.prefix || '', size: size })
-            });
-            if (!res.ok) throw new Error('PUT shape ' + row.series + ' -> HTTP ' + res.status);
-          }
-          const next = parseInt(row.next, 10);
-          if (isFinite(next) && next >= 1 && next !== row.orig.next) {
-            const res = await fetch('/services/core/numbering', {
-              method: 'PUT',
-              credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ series: row.series, partition: row.partition, next: next })
-            });
-            if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
-          }
+        const size = parseInt(row.size, 10);
+        const shapeChanged = (row.prefix || '') !== row.orig.prefix || size !== row.orig.size;
+        if (shapeChanged && isFinite(size)) {
+          const res = await fetch('/services/core/numbering/shape', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series: row.series, partition: row.partition, prefix: row.prefix || '', size: size })
+          });
+          if (!res.ok) throw new Error('PUT shape ' + row.series + ' -> HTTP ' + res.status);
+          row.orig.prefix = row.prefix || '';
+          row.orig.size = size;
         }
-        await this.loadNumbering();
+        const next = parseInt(row.next, 10);
+        if (!this.numberingIsShapeTemplate(row) && isFinite(next) && next >= 1 && next !== row.orig.next) {
+          const res = await fetch('/services/core/numbering', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series: row.series, partition: row.partition, next: next })
+          });
+          if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+          row.orig.next = next;
+        }
+        row.saved = true;
+        setTimeout(() => { row.saved = false; }, 2500);
       } catch (e) {
         console.error('document-numbering: failed to save', e);
         this.numberingError = 'save';
+      } finally {
+        row.saving = false;
+        this.refreshIcons();
       }
     },
 
