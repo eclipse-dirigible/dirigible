@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
@@ -74,7 +75,7 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
             String fileName = "doc/Templates/" + master.getKey()
                                                        .getName()
                     + "/Print/en/standard.print";
-            context.writeModelFileIfAbsent(fileName, buildTemplate(master.getKey(), master.getValue()));
+            context.writeModelFileIfAbsent(fileName, buildTemplate(master.getKey(), master.getValue(), IntentEntities.byName(model)));
             LOGGER.debug("Generated standard print template [{}]", fileName);
         }
     }
@@ -148,13 +149,18 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * Builds the standard template for one document master.
+     * Builds the standard template for one document master. Every placeholder the scaffold emits is a
+     * key the generated print feeder actually puts (the scaffold/feeder contract): the primary key is
+     * never referenced (the feeder deliberately excludes it), and a same-model relation appears only
+     * when its target resolves a label - a dead {@code {{...}}} renders as an empty value that a
+     * template author then hunts through the whole pipeline.
      *
      * @param master the header entity
      * @param items the line-items entity
+     * @param byName all entities by name (to resolve a relation target's label)
      * @return the {@code .print} template source
      */
-    static String buildTemplate(EntityIntent master, EntityIntent items) {
+    public static String buildTemplate(EntityIntent master, EntityIntent items, Map<String, EntityIntent> byName) {
         String label = IntentNaming.humanize(master.getName());
         StringBuilder template = new StringBuilder(4096);
         template.append("<!-- Standard print template for ")
@@ -194,7 +200,17 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
             appendField(template, "            ", field.getName());
         }
         for (RelationIntent relation : master.getRelations()) {
-            if (isToOne(relation)) {
+            if (!isToOne(relation) || relation.getName() == null) {
+                continue;
+            }
+            // The feeder labels a same-model relation only when its target resolves a label property
+            // (name / label: / DocumentTitle); without one, a bare {{document.<Relation>}} would render
+            // an empty value - so the scaffold omits the field instead of emitting a dead placeholder.
+            // A cross-model target is labeled by the owner-model convention and always emitted.
+            boolean crossModel = relation.getModel() != null && !relation.getModel()
+                                                                         .isBlank();
+            if (crossModel || !IntentEntities.labelFieldOf(byName.get(relation.getTo()))
+                                             .isEmpty()) {
                 appendField(template, "            ", relation.getName());
             }
         }
@@ -241,12 +257,17 @@ public class PrintIntentGenerator implements IntentTargetGenerator {
             template.append("        </section>\n\n");
         }
 
+        // Footer: the label plus the document number when one exists. NEVER the primary key - the
+        // feeder deliberately excludes it, so {{document.Id}} would be a dead placeholder.
         template.append("        <footer>\n");
         template.append("            <text align=\"center\">")
-                .append(escape(label))
-                .append(" {{document.")
-                .append(number != null ? IntentNaming.pascalCase(number.getName()) : "Id")
-                .append("}}</text>\n");
+                .append(escape(label));
+        if (number != null) {
+            template.append(" {{document.")
+                    .append(IntentNaming.pascalCase(number.getName()))
+                    .append("}}");
+        }
+        template.append("</text>\n");
         template.append("        </footer>\n\n");
         template.append("    </page>\n");
         template.append("</document>\n");

@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
 
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.parser.IntentParser;
@@ -75,7 +76,7 @@ class PrintIntentGeneratorTest {
         EntityIntent master = masters.keySet()
                                      .iterator()
                                      .next();
-        String template = PrintIntentGenerator.buildTemplate(master, masters.get(master));
+        String template = PrintIntentGenerator.buildTemplate(master, masters.get(master), IntentEntities.byName(model));
 
         // must parse cleanly with the document-template DSL parser
         DocumentNode document = new DocumentParser().parseDocument(template);
@@ -104,8 +105,8 @@ class PrintIntentGeneratorTest {
         EntityIntent master = masters.keySet()
                                      .iterator()
                                      .next();
-        String first = PrintIntentGenerator.buildTemplate(master, masters.get(master));
-        String second = PrintIntentGenerator.buildTemplate(master, masters.get(master));
+        String first = PrintIntentGenerator.buildTemplate(master, masters.get(master), IntentEntities.byName(model));
+        String second = PrintIntentGenerator.buildTemplate(master, masters.get(master), IntentEntities.byName(model));
         assertEquals(first, second);
     }
 }
