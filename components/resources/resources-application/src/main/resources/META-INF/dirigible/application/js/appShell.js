@@ -152,9 +152,15 @@ document.addEventListener('alpine:init', () => {
     numberingLoading: false,
     numberingError: null,
 
-    /** A readable label for a series row: the series, plus the partition in brackets when partitioned. */
+    /**
+     * A readable label for a series row: the series, plus the partition's DISPLAY LABEL when the
+     * declaration names a partition source ("Sales Invoice - ACME Ltd."), falling back to the raw
+     * partition value in brackets when no label resolves.
+     */
     numberingLabel(row) {
-      return row.partition ? row.series + ' [' + row.partition + ']' : row.series;
+      if (!row.partition) return row.series;
+      if (row.partitionLabel) return row.series + ' — ' + row.partitionLabel;
+      return row.series + ' [' + row.partition + ']';
     },
 
     /**
@@ -205,10 +211,14 @@ document.addEventListener('alpine:init', () => {
         this.numbering = data.map((c) => ({
           series: c.series,
           partition: c.partition || '',
+          partitionLabel: c.partitionLabel || '',
           prefix: c.prefix || '',
           size: c.size,
           next: c.next,
           partitioned: !!c.partitioned,
+          // A declared partition value that has never allocated: the row does not exist yet and is
+          // rendered from the base shape; saving it provisions it (seed a counter before first use).
+          virtual: !!c.virtual,
           saving: false,
           saved: false,
           orig: { prefix: c.prefix || '', size: c.size, next: c.next }

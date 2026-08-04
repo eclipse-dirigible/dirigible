@@ -325,7 +325,11 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   business object**: its shape (a literal prefix + the sequence zero-padded to a total width, e.g.
   `SI00000042`) is declared once per module in a **`.numbers` artefact** at the project root
   (authored by hand, not generated - like `.roles`):
-  `{"series": [{"name": "Sales Invoice", "prefix": "SI", "size": 10}]}`. The declaration only
+  `{"series": [{"name": "Sales Invoice", "prefix": "SI", "size": 10}]}` - a partitioned series
+  (`per:`) may add `"partitions": {"table": "<TABLE>", "key": "<KEY_COL>", "label": "<LABEL_COL>"}`
+  naming the physical table its partition values come from, so the tenant's Document Numbering
+  settings can label each partition row ("Sales Invoice - ACME Ltd.") and seed a partition's
+  starting number before its first document. The declaration only
   provisions a tenant that has no such series yet; each tenant then configures prefix, width and the
   next value in the application shell's **Document Numbering** settings. Sequences are continuous
   and never auto-reset - a jurisdiction that restarts numbering each January does it by setting the

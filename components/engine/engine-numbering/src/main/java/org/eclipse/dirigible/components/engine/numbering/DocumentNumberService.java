@@ -120,7 +120,11 @@ public class DocumentNumberService {
      * @throws SQLException if the write fails
      */
     public void setNext(String series, String partition, long next) throws SQLException {
-        store.setCounter(series, partition == null ? "" : partition, Math.max(0, next - 1));
+        String partitionValue = partition == null ? "" : partition;
+        // A partition row an operator seeds BEFORE its first allocation does not exist yet - it is
+        // born here exactly as the first allocation would have born it (base shape, then the edit).
+        store.ensurePartition(series, partitionValue);
+        store.setCounter(series, partitionValue, Math.max(0, next - 1));
     }
 
     /**
@@ -136,7 +140,24 @@ public class DocumentNumberService {
     public void setShape(String series, String partition, String prefix, int size) throws SQLException {
         String safePrefix = prefix == null ? "" : prefix;
         validateShape(safePrefix, size);
-        store.setShape(series, partition == null ? "" : partition, safePrefix, size);
+        String partitionValue = partition == null ? "" : partition;
+        store.ensurePartition(series, partitionValue);
+        store.setShape(series, partitionValue, safePrefix, size);
+    }
+
+    /**
+     * Every value of a declared partition source with its display label, for the management surface:
+     * what lets the settings page label a partition row by the entity's name and list a (virtual) row
+     * for every value that has not allocated yet.
+     *
+     * @param table the partition-source table (a validated plain SQL identifier)
+     * @param key the column holding the partition value
+     * @param label the column holding the display label
+     * @return the values in label order (empty when the table does not exist for this tenant yet)
+     * @throws SQLException if the read fails
+     */
+    public List<DocumentNumberStore.PartitionValue> partitionSource(String table, String key, String label) throws SQLException {
+        return store.readPartitionSource(table, key, label);
     }
 
     /**
