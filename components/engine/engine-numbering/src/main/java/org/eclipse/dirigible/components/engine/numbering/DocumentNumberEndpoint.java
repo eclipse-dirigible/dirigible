@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.engine.numbering;
 
 import java.sql.SQLException;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.springframework.http.HttpStatus;
@@ -50,12 +52,21 @@ public class DocumentNumberEndpoint extends BaseEndpoint {
     @GetMapping
     public ResponseEntity<List<SeriesView>> list() {
         try {
-            return ResponseEntity.ok(service.list()
-                                            .stream()
-                                            .map(row -> new SeriesView(row.series(), row.partition(), row.prefix(), row.size(),
-                                                    row.counter(), row.counter() + 1,
-                                                    DocumentNumberService.render(row.prefix(), row.size(), row.counter() + 1)))
-                                            .toList());
+            List<DocumentNumberStore.Series> rows = service.list();
+            // A series is PARTITIONED once any of its partition rows exists. The base ("") row of a
+            // partitioned series is only the shape template partitions inherit at birth - allocation
+            // never draws from it - so the settings page must not offer its counter for editing.
+            Set<String> partitionedSeries = rows.stream()
+                                                .filter(row -> !row.partition()
+                                                                   .isEmpty())
+                                                .map(DocumentNumberStore.Series::series)
+                                                .collect(Collectors.toSet());
+            return ResponseEntity.ok(rows.stream()
+                                         .map(row -> new SeriesView(row.series(), row.partition(), row.prefix(), row.size(), row.counter(),
+                                                 row.counter() + 1,
+                                                 DocumentNumberService.render(row.prefix(), row.size(), row.counter() + 1),
+                                                 partitionedSeries.contains(row.series())))
+                                         .toList());
         } catch (SQLException ex) {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Failed to list document-number series", ex);
         }
@@ -127,7 +138,10 @@ public class DocumentNumberEndpoint extends BaseEndpoint {
      * @param next the value the next document will get
      * @param example the next number as it will actually render - so an administrator sees the effect
      *        of a prefix or width change without issuing a document
+     * @param partitioned whether the series has partition rows - the base row of a partitioned series
+     *        is only the shape template new partitions inherit, so its counter is not editable
      */
-    record SeriesView(String series, String partition, String prefix, int size, long counter, long next, String example) {
+    record SeriesView(String series, String partition, String prefix, int size, long counter, long next, String example,
+            boolean partitioned) {
     }
 }

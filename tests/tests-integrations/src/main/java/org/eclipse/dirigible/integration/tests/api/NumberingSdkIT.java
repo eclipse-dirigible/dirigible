@@ -10,11 +10,14 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
+
+import io.restassured.http.ContentType;
 
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
@@ -157,6 +160,51 @@ class NumberingSdkIT extends IntegrationTest {
             // range (two legal entities must not share a counter), in the shape inherited from the series.
             assertEquals(a1, b1, "each partition starts its own sequence: " + a1 + " vs " + b1);
             assertEquals(value(a1) + 1, value(a2), "another partition's allocation must not advance this one: " + a1 + " then " + a2);
+        }, ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void theSettingsSurfaceSeedsPartitionCountersAndTheBaseRowIsOnlyTheShapeTemplate() {
+        publishDeclarationAndController();
+
+        restAssuredExecutor.execute(() -> {
+            // Materialize a partition: its first allocation copies the base shape and starts its own
+            // counter (partition values are data - no artefact can pre-provision them).
+            allocate("/next/SEED");
+
+            // The management surface flags the series PARTITIONED - the base ("") row is only the
+            // shape template new partitions inherit, so the settings page offers no counter on it.
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + SERIES + "' && it.partition == '' }.partitioned", equalTo(true))
+                   .body("find { it.series == '" + SERIES + "' && it.partition == 'SEED' }.partitioned", equalTo(true));
+
+            // Editing the BASE row's next must not affect partition allocations (the observed trap:
+            // an operator edits the base Next expecting to seed the next invoice number)...
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"\", \"next\": 500}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+
+            // ...while a PARTITION row's next IS the seed: it round-trips and the next issued number
+            // renders exactly it.
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"SEED\", \"next\": 42}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + SERIES + "' && it.partition == 'SEED' }.next", equalTo(42));
+
+            assertEquals("T-0042", allocate("/next/SEED"), "the partition row's Next is what the next document renders");
         }, ASSERTION_TIMEOUT_SECONDS);
     }
 

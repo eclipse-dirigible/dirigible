@@ -177,10 +177,16 @@
         </template>
         <template x-if="!numberingLoading && numberingError !== 'forbidden' && numbering.length > 0">
           <div class="vbox gap-4">
+            <div class="hbox gap-2">
+              <button x-h-button data-variant="outline" data-size="sm" @click="loadNumbering()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
+            </div>
             <template x-for="row in numbering" :key="row.series + '|' + row.partition">
               <div class="vbox gap-1">
                 <span class="text-sm font-medium" x-text="numberingLabel(row)"></span>
-                <div class="hbox gap-2">
+                <!-- Save sits ON the row (a real suite has dozens of series - one button below the
+                     whole list is off-screen); it lights up only when the row's edits differ from
+                     what was loaded, and only what changed is written. -->
+                <div class="hbox gap-2 items-end">
                   <div class="vbox gap-0" style="width: 10rem;">
                     <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingPrefix', 'Prefix')"></span>
                     <input x-h-input x-model="row.prefix" />
@@ -189,19 +195,32 @@
                     <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingSize', 'Total width')"></span>
                     <input x-h-input type="number" min="1" max="40" x-model="row.size" />
                   </div>
-                  <div class="vbox gap-0" style="width: 9rem;">
-                    <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
-                    <input x-h-input type="number" min="1" x-model="row.next" />
-                  </div>
+                  <!-- The base row of a PARTITIONED series is only the shape template new partitions
+                       inherit - allocation always draws from a partition row - so it offers no Next. -->
+                  <template x-if="!numberingIsShapeTemplate(row)">
+                    <div class="vbox gap-0" style="width: 9rem;">
+                      <span x-h-text.muted class="text-xs" x-text="T('application-core:shell.settings.numberingNext', 'Next')"></span>
+                      <input x-h-input type="number" min="1" x-model="row.next" />
+                    </div>
+                  </template>
+                  <button x-h-button data-variant="emphasized" data-size="sm"
+                          :disabled="row.saving || !numberingDirty(row)"
+                          @click="saveNumberingRow(row)"
+                          x-text="T('application-core:shell.settings.save', 'Save')"></button>
+                  <template x-if="row.saved">
+                    <span class="text-sm" x-text="T('application-core:shell.settings.numberingSaved', 'Saved')"></span>
+                  </template>
                 </div>
-                <span x-h-text.muted class="text-sm"
-                      x-text="T('application-core:shell.settings.numberingExample', 'Next number:') + ' ' + numberingExample(row)"></span>
+                <template x-if="!numberingIsShapeTemplate(row)">
+                  <span x-h-text.muted class="text-sm"
+                        x-text="T('application-core:shell.settings.numberingExample', 'Next number:') + ' ' + numberingExample(row)"></span>
+                </template>
+                <template x-if="numberingIsShapeTemplate(row)">
+                  <span x-h-text.muted class="text-sm"
+                        x-text="T('application-core:shell.settings.numberingShapeTemplate', 'Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape.')"></span>
+                </template>
               </div>
             </template>
-            <div class="hbox gap-2">
-              <button x-h-button data-variant="emphasized" @click="saveNumbering()" x-text="T('application-core:shell.settings.save', 'Save')"></button>
-              <button x-h-button data-variant="outline" @click="loadNumbering()" x-text="T('application-core:shell.settings.reload', 'Reload')"></button>
-            </div>
           </div>
         </template>
       </div>
