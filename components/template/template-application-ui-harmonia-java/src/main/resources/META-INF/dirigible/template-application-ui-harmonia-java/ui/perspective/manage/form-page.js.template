@@ -599,8 +599,21 @@ document.addEventListener('alpine:init', () => {
         }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        // The object URL must outlive the tab that renders it: a timed revoke kills the PDF
+        // viewer's reload/print the moment it fires (observed live - the blob tab worked once,
+        // then "the file was removed"). The URL is released when THIS page unloads, which is the
+        // blob's natural owner lifetime; a print-sized PDF held until then costs nothing.
+        const opened = window.open(url, '_blank');
+        if (!opened) {
+          // Popup blocked - the open runs after async work, outside the click's gesture stack.
+          // Fall back to a download, which the browser always allows.
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = '${name}-' + this.id + '.pdf';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
       } catch (e) {
         console.error('Print failed', e);
         this.printError = 'Print failed';
