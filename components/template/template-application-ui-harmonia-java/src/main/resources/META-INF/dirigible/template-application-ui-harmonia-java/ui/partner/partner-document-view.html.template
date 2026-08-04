@@ -90,7 +90,7 @@
         <table x-h-table data-borders="rows">
           <thead x-h-table-header>
             <tr x-h-table-row>
-              <template x-for="col in itemColumns()" :key="col.name">
+              <template x-for="col in tableColumns()" :key="col.name">
                 <th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th>
               </template>
               <th x-h-table-head scope="col"></th>
@@ -99,7 +99,7 @@
           <tbody x-h-table-body>
             <template x-for="row in items" :key="row[itemsDef.primaryKey]">
               <tr x-h-table-row data-hoverable="true" class="cursor-pointer" @click="openItem(row)">
-                <template x-for="col in itemColumns()" :key="col.name">
+                <template x-for="col in tableColumns()" :key="col.name">
                   <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="displayItem(row, col)"></td>
                 </template>
                 <td x-h-table-cell class="text-right">
@@ -108,7 +108,7 @@
               </tr>
             </template>
             <tr x-show="items.length === 0">
-              <td x-h-table-cell :colspan="itemColumns().length + 1" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
+              <td x-h-table-cell :colspan="tableColumns().length + 1" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
             </tr>
           </tbody>
         </table>

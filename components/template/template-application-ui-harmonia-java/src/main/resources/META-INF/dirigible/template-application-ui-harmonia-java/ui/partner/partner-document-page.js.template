@@ -187,6 +187,14 @@ document.addEventListener('alpine:init', () => {
     },
 
     itemColumns() { const d = this.def(); return (d && d.editColumns) || []; },
+    // The read-only items TABLE shows the display columns (major fields - `major: false` hides a
+    // field/relation from the table) with their full edit metadata; the dialog keeps itemColumns().
+    tableColumns() {
+      const d = this.def();
+      if (!d) return [];
+      const visible = new Set((d.columns || []).map(c => c.name));
+      return (d.editColumns || []).filter(c => visible.has(c.name));
+    },
 
     displayItem(row, col) {
       const v = row[col.name];

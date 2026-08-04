@@ -238,14 +238,14 @@
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
-            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
+            <template x-for="col in tableColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
             <th x-h-table-head scope="col" x-show="!isPreview"></th>
           </tr>
         </thead>
         <tbody x-h-table-body>
           <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
-              <template x-for="col in editColumns" :key="col.name">
+              <template x-for="col in tableColumns" :key="col.name">
                 <!-- x-h-table-cell bakes whitespace-nowrap; a sentence-long item name is NORMAL
                      invoice data, so text cells wrap - AT WORD BOUNDARIES, inside a bounded block.
                      (overflow-wrap:anywhere on the cell let the column collapse to ~one character
@@ -271,7 +271,7 @@
             </tr>
           </template>
           <tr x-show="items.length === 0">
-            <td x-h-table-cell :colspan="editColumns.length + (isPreview ? 0 : 1)" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
+            <td x-h-table-cell :colspan="tableColumns.length + (isPreview ? 0 : 1)" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
           </tr>
         </tbody>
       </table>
