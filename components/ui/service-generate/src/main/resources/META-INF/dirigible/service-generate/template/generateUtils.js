@@ -1630,6 +1630,12 @@ export function generateFiles(model, parameters, templateSources) {
                     }
                 }
             }
+            // Per-record custom action labels (transitions + generates, the .model root
+            // `customActionLabels` map): their descriptors reference <tprefix>.actions.<name>, so a
+            // Void / Save-as-Template button localizes like every other label.
+            if (model.customActionLabels) {
+                translations.actions = { ...model.customActionLabels };
+            }
             generatedFiles.push({
                 content: JSON.stringify({ [parameters['tprefix']]: translations }, null, 2),
                 path: `i18n/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`

@@ -44,6 +44,33 @@ public final class IntentNaming {
      * @param context the generation context
      * @return the base name, never blank
      */
+    /**
+     * A custom action's (transition / generate) display label: the authored {@code label:}, else the
+     * humanized action name. One rule for the descriptor AND the translation catalog, so the catalog
+     * entry always matches what the button falls back to.
+     *
+     * @param name the action name
+     * @param label the authored label, may be {@code null}/blank
+     * @return the display label
+     */
+    public static String customActionLabel(String name, String label) {
+        return label == null || label.isBlank() ? humanize(name) : label;
+    }
+
+    /**
+     * The i18n catalog key of a custom action's label: {@code <project>:<model>-model.actions.<name>} -
+     * the same {@code <model>-model} namespace the generated translation catalog is emitted under
+     * (mirrors the template engine's translation prefix for the {@code .model} file).
+     *
+     * @param project the project name
+     * @param context the generation context (for the model base name)
+     * @param name the action name
+     * @return the translation key
+     */
+    public static String customActionTranslationKey(String project, IntentGenerationContext context, String name) {
+        return project + ":" + baseName(context) + "-model.actions." + name;
+    }
+
     public static String baseName(IntentGenerationContext context) {
         String declaredName = context.getModel()
                                      .getName();

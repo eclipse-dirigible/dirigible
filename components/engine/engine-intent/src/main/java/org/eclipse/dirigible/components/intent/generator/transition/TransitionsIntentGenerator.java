@@ -70,7 +70,8 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
             String fileBase = name + "-transition-action";
             String modulePath = project + "/" + fileBase + ".js";
             context.writeModelFile(fileBase + ".extension", buildExtensionJson(project, modulePath, t));
-            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), t));
+            context.writeModelFile(fileBase + ".js", buildDescriptorModule(project, IntentNaming.javaModule(context), t,
+                    IntentNaming.customActionTranslationKey(project, context, name)));
         }
     }
 
@@ -82,12 +83,13 @@ public class TransitionsIntentGenerator implements IntentTargetGenerator {
         return JsonHelper.toJson(extension);
     }
 
-    private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t) {
+    private static String buildDescriptorModule(String project, String javaModule, TransitionIntent t, String translationKey) {
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("id", project + "-" + t.getForEntity() + "-" + t.getName());
-        String label = t.getLabel() == null || t.getLabel()
-                                                .isBlank() ? IntentNaming.humanize(t.getName()) : t.getLabel();
+        String label = IntentNaming.customActionLabel(t.getName(), t.getLabel());
         view.put("label", label);
+        // The renderer shows T(translation.key, label) - untranslated apps keep the raw label.
+        view.put("translation", Map.of("key", translationKey));
         // The server controller (server half) is served under gen/events; NOT the entity api base.
         view.put("endpoint", "/services/java/" + project + "/gen/events/" + javaModule + "/" + IntentNaming.pascalIdentifier(t.getName())
                 + "Transition/run");
