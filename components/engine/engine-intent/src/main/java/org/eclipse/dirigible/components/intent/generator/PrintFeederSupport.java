@@ -271,19 +271,15 @@ final class PrintFeederSupport {
     }
 
     /**
-     * The same-model to-one target's label property: its {@code name} field (PascalCased), or empty
-     * when the target has none — the template then omits the {@code __label} put rather than emit an
-     * accessor for a field that does not exist (which would fail {@code javac}).
+     * The same-model to-one target's label property, resolved by the shared
+     * {@link IntentEntities#labelFieldOf(EntityIntent)} - an authored {@code name} field, the stored
+     * {@code Name} a {@code label:} generates, or the {@code DocumentTitle} field (so a document
+     * back-reference labels as its number). Empty when nothing resolves - the template then omits the
+     * {@code __label} put rather than emit an accessor for a field that does not exist (which would
+     * fail {@code javac}).
      */
     private static String nameField(EntityIntent target) {
-        if (target != null) {
-            for (FieldIntent field : target.getFields()) {
-                if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
-                    return IntentNaming.pascalCase(field.getName());
-                }
-            }
-        }
-        return "";
+        return IntentEntities.labelFieldOf(target);
     }
 
     private static UsesIntent findUses(IntentModel model, String alias) {

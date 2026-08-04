@@ -82,6 +82,38 @@ public final class IntentEntities {
     }
 
     /** The entity's primary-key field, or null when none is declared. */
+    /**
+     * The property a to-one target's records are LABELED by, resolving broader than the authored
+     * {@code name} field so a document back-reference labels as its number: (1) an authored
+     * {@code name} field; (2) the stored {@code Name} a {@code label:} expression generates; (3) the
+     * {@code function: DocumentTitle} field - a document's human identity (its number). Empty when
+     * nothing resolves - the caller then omits the {@code __label} put / the scaffold field rather than
+     * reference a value that cannot exist.
+     *
+     * @param target the relation's target entity, may be {@code null}
+     * @return the PascalCase label property, or {@code ""}
+     */
+    public static String labelFieldOf(EntityIntent target) {
+        if (target == null) {
+            return "";
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
+                return IntentNaming.pascalCase(field.getName());
+            }
+        }
+        if (target.getLabel() != null && !target.getLabel()
+                                                .isBlank()) {
+            return "Name"; // the stored, repository-recomputed label property the expression generates
+        }
+        for (FieldIntent field : target.getFields()) {
+            if (field.isDocumentTitle() && field.getName() != null) {
+                return IntentNaming.pascalCase(field.getName());
+            }
+        }
+        return "";
+    }
+
     public static FieldIntent primaryKeyOf(EntityIntent entity) {
         if (entity == null) {
             return null;
