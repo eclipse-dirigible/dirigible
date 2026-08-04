@@ -15,6 +15,7 @@ import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -1290,6 +1291,31 @@ class IntentEngineIT extends IntegrationTest {
                                                  .statusCode(200));
         assertTrue(contentOf("custom/NotifyCustomer.java").contains("MY IMPLEMENTATION"),
                 "the developer's service-task handler must be preserved across regeneration");
+    }
+
+    @Test
+    void a_hand_edited_print_template_is_preserved_across_regeneration() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // A fresh project gets the scaffold: the minimal, model-derived starting point.
+        String printPath = "doc/Templates/Order/Print/en/standard.print";
+        String scaffold = contentOf(printPath);
+        assertTrue(scaffold.contains("<document") && scaffold.contains("<table source=\"items\">"),
+                "the first Generate must scaffold the standard print template, got: " + scaffold);
+
+        // The developer hand-improves it. A printed invoice is a formatted/audited artifact - the
+        // scaffold is a customization point (like the CMS seeding, which is create-if-absent), so a
+        // regeneration must leave the authored template BYTE-IDENTICAL, never re-emit over it.
+        String authored = "<document id=\"authored\"><page><section><field label=\"N\">{{document.Id}}</field></section></page></document>";
+        writeProjectFile(printPath, authored);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertEquals(authored, contentOf(printPath), "an authored print template must survive regeneration byte-identical");
     }
 
     @Test
