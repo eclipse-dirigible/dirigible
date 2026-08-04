@@ -20,6 +20,10 @@ import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
 #end
+#if($attachLanguageFkProperty != "")
+import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity;
+import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository;
+#end
 
 /**
  * Runs the ${name} schedule: on each cron tick, query ${entity} and, per matching row, either notify
@@ -129,11 +133,15 @@ public class ${className}Job implements JobHandler {
             // attach: print - render THIS row's own print template to PDF server-side (the generated
             // feeder assembles the { document, items } payload) and attach it, so a periodic notice
             // carries the document itself (a reminder with the invoice, not just about it).
+#if($attachLanguageFkProperty != "")
+            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
             Map document = new HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
                     new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
             parts.add(document);
 #end

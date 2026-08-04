@@ -214,6 +214,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: name,  type: string, required: true, length: 200 }
                   - { name: email, type: string, required: true, unique: true, length: 320 }
+                  # The language this person's documents are rendered in (drives the notify languageFrom).
+                  - { name: locale, type: string, length: 5 }
                   # #6336: an input-format regex must survive Generate and be enforced server-side.
                   # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
@@ -609,6 +611,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note}"
                   body: "Please find the bill attached."
                   attach: print
+                  # languageFrom: the counterparty decides the language the attached print renders in.
+                  languageFrom: Person.locale
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
@@ -1157,8 +1161,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(sendBill.contains("Mail.send("), "a transition's notify must emit the actual send call");
         assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
                 "attach: print must emit a PDF attachment part");
-        assertTrue(sendBill.contains("Print.render(\"Bill\", \"en\"") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
+        assertTrue(sendBill.contains("Print.render(\"Bill\",") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
                 "the attachment must be the generated feeder's payload rendered by the server-side print engine");
+        // The render language is never hardcoded: languageFrom: Person.locale loads the counterparty
+        // and reads it off the record, falling back to the first entry of the tenant-resolved
+        // application language set when the chain is null or blank.
+        assertFalse(sendBill.contains("Print.render(\"Bill\", \"en\""),
+                "the attachment language must come from the languageFrom knob, not a hardcoded literal");
+        assertTrue(sendBill.contains("new gen.emission.data.person.PersonRepository().findById(entity.Person)"),
+                "languageFrom must load the language source off the record's FK");
+        assertTrue(sendBill.contains("attachLanguageSource.Locale"), "the language must be read off the person's locale");
+        assertTrue(sendBill.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
+                "a null/blank locale must fall back to the application language set at send time");
         assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
 
         // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger

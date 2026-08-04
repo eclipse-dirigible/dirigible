@@ -75,6 +75,8 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: active,      type: boolean, defaultValue: "true" }
                   - { name: creditLimit, type: decimal }
                   - { name: orderCount,  type: integer }
+                  # The language this customer's documents are rendered in (drives the snapshot's languageFrom).
+                  - { name: locale,      type: string,  length: 5 }
                 relations:
                   - { name: country, kind: manyToOne, to: Country }
                   - { name: orders,  kind: oneToMany, to: Order }
@@ -101,10 +103,12 @@ class IntentEngineIT extends IntegrationTest {
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
-              # function: Snapshot - the immutable, versioned copy generated at issue. Its mere presence
-              # is what arms the print guardrail: Print must serve the stored copy, never re-render.
+              # function: Snapshot - the immutable, versioned copy generated at issue. Served by the
+              # read-only files panel (per-version Open + Download); Print always renders live.
+              # languageFrom: the customer decides which print-template language the copy is minted in.
               - name: OrderCopy
                 function: Snapshot
+                languageFrom: customer.locale
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
@@ -1309,6 +1313,21 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "generating the glue template must not delete the full-stack gen/orders output");
         assertTrue(resource("gen/events/orders/OrderApprovalTrigger.java").exists(), "the glue template should still produce gen/events");
+
+        // The snapshot delegate resolves its render language per record (OrderCopy declares
+        // languageFrom: customer.locale): it loads the document, follows the Customer FK, reads the
+        // locale, and falls back to the first entry of the tenant-resolved application language set
+        // when the chain is null or blank - the language is never hardcoded into the delegate.
+        String snapshotGenerator = contentOf("gen/events/orders/OrderSnapshotGenerator.java");
+        assertTrue(snapshotGenerator.contains("OrderEntity document = new OrderRepository().findById(id);"),
+                "languageFrom must load the master document, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("new CustomerRepository().findById(document.Customer)"),
+                "languageFrom must follow the master's Customer FK to the language source");
+        assertTrue(snapshotGenerator.contains("languageSource.Locale"), "the language must be read off the customer's locale");
+        assertTrue(snapshotGenerator.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
+                "a null/blank locale must fall back to the application language set at mint time");
+        assertTrue(snapshotGenerator.contains("Print.render(\"Order\", language,"),
+                "the render must use the resolved language, not a literal");
     }
 
     @Test
@@ -1330,21 +1349,23 @@ class IntentEngineIT extends IntegrationTest {
                 "the dropdown refresh should POST the /search EQ filter on the defaulted filterBy");
         assertTrue(documentPage.contains("CustomerController/' + encodeURIComponent(value)"),
                 "the trigger's selected record should be loaded from its own controller URL");
-        // The print guardrail (#6359): a document carrying a generated Snapshot must print the STORED
-        // copy, never re-render from live master data. The page has to (a) recognise its read-only
-        // Snapshot child, (b) look the stored copy up before printing, and (c) refuse to fall back to a
-        // live render when it cannot tell - a silent fallback would defeat the whole guardrail.
-        assertTrue(documentPage.contains("snapshotDef") && documentPage.contains("storedSnapshot"),
-                "the document page must resolve its Snapshot child and look up the stored copy before printing");
-        assertTrue(documentPage.contains("openStoredSnapshot"),
-                "the document page must be able to serve the stored copy instead of rendering");
-        assertTrue(documentPage.contains("failed: true") && documentPage.contains("printing was not attempted"),
-                "an undeterminable snapshot state must abort the print rather than silently re-render");
+        // Print always renders LIVE (the #6359 stored-copy redirect was removed): the Print button
+        // runs the dynamic flow unconditionally - fetch the CMS languages, one prints directly,
+        // several pop the picker. The stored issued copy is served by the read-only Snapshot panel
+        // (per-version Open + Download), not by the Print button.
+        assertFalse(documentPage.contains("storedSnapshot") || documentPage.contains("openStoredSnapshot"),
+                "the Print button must not redirect to a stored copy - it always renders live");
+        assertTrue(documentPage.contains("printLanguages") && documentPage.contains("/services/print/Order/languages"),
+                "the Print button should fetch the CMS languages and ask when there are several");
         // The child is registered as a READ-ONLY files def - that flag is what identifies it as a
-        // Snapshot rather than a user-uploaded Attachment.
+        // Snapshot rather than a user-uploaded Attachment, and what gives its rows the per-version
+        // inline Open action next to Download.
         String copyRegister = contentOf("gen/orders/js/components/pages/Order/OrderCopy.detail.js");
         assertTrue(copyRegister.contains("files: { readOnly: true }"),
                 "a function: Snapshot child must register as a read-only files def, got: " + copyRegister);
+        String documentView = contentOf("gen/orders/views/Order/Order-document.html");
+        assertTrue(documentView.contains("openHref(row)"),
+                "the files panel rows must offer the inline Open action for stored snapshot versions");
 
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),

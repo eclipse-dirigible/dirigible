@@ -526,6 +526,22 @@ existing breaks.
 | `List` | plain searchable list | had no composition children |
 | `Setting` | nomenclature under Settings | `kind: setting` |
 | `Calendar` | records as events on the Harmonia calendar | `view: calendar` (the role alias; the `calendar:` block is required either way) |
+| `Attachment` | uploaded files of the master (a composition child; file metadata columns injected) | - |
+| `Snapshot` | generated, immutable, versioned PDF copies of a document master (minted by the process's `generateSnapshot` delegate; served read-only) | - |
+
+A `function: Snapshot` child may declare the **render language** of its minted copies: a literal
+`language: bg`, or `languageFrom: <relation.field>` - a one-hop path on its document MASTER whose
+string field holds the language code (`languageFrom: customer.language` - the customer decides the
+invoice's language). The two are mutually exclusive; absent both, the mint uses the first entry of the
+tenant's application language set. A null/blank `languageFrom` value falls back the same way.
+
+```yaml
+  - name: SalesInvoiceCopy
+    function: Snapshot
+    languageFrom: customer.language      # the master's relation . a string field of its target
+    relations:
+      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
+```
 
 **Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
 `EntityStatus` (the read-only status badge, valid on any entity).
@@ -1227,7 +1243,8 @@ due date.
       subject: "Invoice {number}"        # {field} / {relation.field} interpolation
       body: "Dear {Customer.name}, please find invoice {number} attached."
       attach: print                      # render this record's .print template to PDF and attach it
-      language: bg                       # optional print-template language (default en)
+      language: bg                       # optional FIXED print-template language
+      # or: languageFrom: Customer.locale  # per-record - a one-hop relation.field holding the code
 ```
 
 **One message per related row: `forEach`.** Some sends are naturally per-row rather than per-record -
@@ -1267,7 +1284,9 @@ Where the block can sit - the three places an intent acts, plus the standalone `
 **Rules:** `attach`'s only value is `print`, and the entity the block is about must be a **document**
 (a header with a line-items child) - that is what has a print template and a generated print feeder to
 assemble its data. Attaching the print of a plain entity is a validation error, not a silent
-plain-text mail. `language` names a print-template language.
+plain-text mail. The render language: `language:` names a FIXED print-template language,
+`languageFrom: <relation.field>` reads it per record off a one-hop to-one path (mutually exclusive);
+absent both, the first entry of the tenant's application language set is used at send time.
 
 **Behavior worth knowing:**
 - **The attachment is the same PDF the Print button produces** - the generated `<Entity>PrintFeeder`

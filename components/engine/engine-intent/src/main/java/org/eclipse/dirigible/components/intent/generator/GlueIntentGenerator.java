@@ -103,7 +103,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
-        List<Map<String, Object>> snapshots = SnapshotSupport.buildSnapshots(model, byName, compositionParents);
+        List<Map<String, Object>> snapshots =
+                SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
@@ -381,8 +382,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + "] is not a resolvable field or relation.field of [" + entity + "] - the notification was NOT generated");
                 continue;
             }
-            NotifySupport.PrintAttachment attachment =
-                    printAttachment(notification, byName.get(entity), model, context, "Notification [" + notification.getName() + "]");
+            NotifySupport.PrintAttachment attachment = printAttachment(notification, byName.get(entity), model, byName, compositionParents,
+                    context, "Notification [" + notification.getName() + "]");
             if (attachment == null && NotifySupport.attachesPrint(notification)) {
                 continue; // asked for the document but it cannot be rendered - reported above
             }
@@ -800,7 +801,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
                     + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
         }
-        NotifySupport.PrintAttachment attachment = plan == null ? null : printAttachment(notify, about, model, context, subject);
+        NotifySupport.PrintAttachment attachment =
+                plan == null ? null : printAttachment(notify, about, model, byName, compositionParents, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
         fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
@@ -1912,8 +1914,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
-                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, context,
-                        "Schedule [" + schedule.getName() + "] notify");
+                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                        compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
@@ -1989,8 +1991,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the attachment, or {@code null} when none was asked for or it cannot be rendered
      */
     private static NotifySupport.PrintAttachment printAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
-            IntentGenerationContext context, String subject) {
-        NotifySupport.PrintAttachment attachment = NotifySupport.printAttachment(notify, entity, model);
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        NotifySupport.PrintAttachment attachment;
+        try {
+            attachment = NotifySupport.printAttachment(notify, entity, model, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            // A declared languageFrom that does not resolve - report the precise reason and drop.
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
         if (attachment == null && NotifySupport.attachesPrint(notify)) {
             reportDroppedGlue(context, subject + " asks to attach the print of [" + (entity == null ? "?" : entity.getName())
                     + "], which is not a document (header + line-items child) and has no print template - NOT generated");

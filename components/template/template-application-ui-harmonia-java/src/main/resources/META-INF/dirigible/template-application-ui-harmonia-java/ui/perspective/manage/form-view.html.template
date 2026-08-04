@@ -269,6 +269,9 @@
                           <span class="text-sm truncate" x-text="row.FileName"></span>
                           <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
                         </div>
+                        <template x-if="filesReadOnly">
+                          <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" aria-label="Print"><i role="img" x-h-lucide data-lucide="printer"></i></a>
+                        </template>
                         <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
                         <template x-if="!isPreview &amp;&amp; !filesReadOnly">
                           <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>

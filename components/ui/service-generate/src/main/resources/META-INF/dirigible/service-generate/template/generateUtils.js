@@ -783,7 +783,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: model.notifications[n].attachKeyProperty,
                                 attach: model.notifications[n].attach,
                                 attachEntity: model.notifications[n].attachEntity,
-                                attachLanguage: model.notifications[n].attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: model.notifications[n].attachLanguageExpression,
+                                attachLanguageFkProperty: model.notifications[n].attachLanguageFkProperty,
+                                attachLanguageTargetEntity: model.notifications[n].attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(model.notifications[n].attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: model.notifications[n].attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(model.notifications[n].attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: model.notifications[n].attachFileNameExpression
                             };
                             const cleanNotificationParameters = cleanData(notificationParameters);
@@ -828,7 +838,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: sc.attachKeyProperty,
                                 attach: sc.attach,
                                 attachEntity: sc.attachEntity,
-                                attachLanguage: sc.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: sc.attachLanguageExpression,
+                                attachLanguageFkProperty: sc.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: sc.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(sc.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: sc.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(sc.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: sc.attachFileNameExpression,
                                 genToEntity: sc.genToEntity,
                                 genToPk: sc.genToPk,
@@ -1138,7 +1158,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 notifyBodyExpression: t.notifyBodyExpression,
                                 attach: t.attach,
                                 attachEntity: t.attachEntity,
-                                attachLanguage: t.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: t.attachLanguageExpression,
+                                attachLanguageFkProperty: t.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: t.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(t.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: t.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(t.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: t.attachFileNameExpression
                             };
                             const cleanTransitionParameters = cleanData(transitionParameters);
@@ -1187,7 +1217,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: s.attachKeyProperty,
                                 attach: s.attach,
                                 attachEntity: s.attachEntity,
-                                attachLanguage: s.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: s.attachLanguageExpression,
+                                attachLanguageFkProperty: s.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: s.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(s.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: s.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(s.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: s.attachFileNameExpression
                             };
                             const cleanSendParameters = cleanData(sendParameters);
@@ -1426,7 +1466,18 @@ export function generateFiles(model, parameters, templateSources) {
                                 ...parameters,
                                 master: snapshot.master,
                                 masterPk: snapshot.masterPk,
-                                language: snapshot.language,
+                                masterJavaPerspective: sanitizeJavaIdentifier(snapshot.masterPerspective || ""),
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the languageSource local, or the
+                                // run-time application-language fallback); the languageTarget*
+                                // coordinates drive the languageFrom load's import/package.
+                                languageExpression: snapshot.languageExpression,
+                                languageFkProperty: snapshot.languageFkProperty,
+                                languageTargetEntity: snapshot.languageTargetEntity,
+                                languageTargetJavaPerspective: sanitizeJavaIdentifier(snapshot.languageTargetPerspective || ""),
+                                languageTargetJavaGenFolder: snapshot.languageTargetModel
+                                    ? sanitizeJavaIdentifier(snapshot.languageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 snapshotEntity: snapshot.snapshotEntity,
                                 snapshotJavaPerspective: sanitizeJavaIdentifier(snapshot.snapshotPerspective),
                                 snapshotMasterFk: snapshot.snapshotMasterFk

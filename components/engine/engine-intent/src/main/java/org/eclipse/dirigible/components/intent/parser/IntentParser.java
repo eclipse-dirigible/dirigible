@@ -239,6 +239,7 @@ public final class IntentParser {
                             + " (or give it a single composition child)");
                 }
             }
+            validateSnapshotLanguage(entity, model, compositionParent, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -1337,7 +1338,14 @@ public final class IntentParser {
             aboutEntity = rows;
         }
         String attach = notify.getAttach();
+        boolean hasLanguage = notify.getLanguage() != null && !notify.getLanguage()
+                                                                     .isBlank();
+        boolean hasLanguageFrom = notify.getLanguageFrom() != null && !notify.getLanguageFrom()
+                                                                             .isBlank();
         if (attach == null || attach.isBlank()) {
+            if (hasLanguage || hasLanguageFrom) {
+                issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
+            }
             return;
         }
         if (!NOTIFY_ATTACHMENTS.contains(attach.trim()
@@ -1346,6 +1354,101 @@ public final class IntentParser {
         } else if (aboutEntity != null && !isPrintableDocument(model, aboutEntity)) {
             issues.add(subject + " attach: print needs [" + aboutEntity
                     + "] to be a document (header + line-items child) - only a document has a print template to render");
+        }
+        if (hasLanguage && hasLanguageFrom) {
+            issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
+        } else if (hasLanguageFrom && aboutEntity != null) {
+            validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * The render-language knob of a {@code function: Snapshot} child: a literal {@code language:} code
+     * or a {@code languageFrom: relation.field} path resolved on the snapshot's composition MASTER (the
+     * document whose copy is minted) - mutually exclusive, meaningless anywhere else. Absent both, the
+     * mint falls back to the first entry of the tenant-resolved application language set at run time.
+     */
+    private static void validateSnapshotLanguage(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
+            List<String> issues) {
+        boolean hasLanguage = entity.getLanguage() != null && !entity.getLanguage()
+                                                                     .isBlank();
+        boolean hasLanguageFrom = entity.getLanguageFrom() != null && !entity.getLanguageFrom()
+                                                                             .isBlank();
+        if (!hasLanguage && !hasLanguageFrom) {
+            return;
+        }
+        String name = entity.getName();
+        if (!entity.isSnapshot()) {
+            issues.add("entity [" + name + "] declares language/languageFrom, which apply to function: Snapshot children only");
+            return;
+        }
+        if (hasLanguage && hasLanguageFrom) {
+            issues.add("entity [" + name + "] declares both language and languageFrom - they are mutually exclusive");
+            return;
+        }
+        if (hasLanguageFrom) {
+            String master = compositionParent.get(name);
+            if (master == null) {
+                issues.add("entity [" + name + "] languageFrom needs a composition master (the document) to resolve against");
+                return;
+            }
+            validateLanguageFromPath(entity.getLanguageFrom(), master, "entity [" + name + "] languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * A {@code languageFrom} path is a one-hop {@code relation.field}: the relation a to-one of the
+     * entity the render is about, the field a string-typed field (a language code) of its target. A
+     * cross-model target's field is validated at generation against the owner's model, like every other
+     * cross-model reference.
+     */
+    private static void validateLanguageFromPath(String path, String aboutEntity, String subject, IntentModel model, List<String> issues) {
+        String trimmed = path.trim();
+        int dot = trimmed.indexOf('.');
+        if (dot <= 0 || dot == trimmed.length() - 1 || trimmed.indexOf('.', dot + 1) >= 0) {
+            issues.add(subject + " [" + path + "] must be a one-hop relation.field path on [" + aboutEntity + "]");
+            return;
+        }
+        String relationName = trimmed.substring(0, dot)
+                                     .trim();
+        String fieldName = trimmed.substring(dot + 1)
+                                  .trim();
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        RelationIntent relation = null;
+        for (RelationIntent candidate : about.getRelations()) {
+            boolean toOne = "manyToOne".equals(candidate.getKind()) || "oneToOne".equals(candidate.getKind());
+            if (toOne && relationName.equals(candidate.getName())) {
+                relation = candidate;
+            }
+        }
+        if (relation == null) {
+            issues.add(subject + " [" + path + "]: [" + relationName + "] is not a to-one relation of [" + aboutEntity + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // cross-model target: field checked at generation against the owner's model
+        }
+        EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+        if (target == null) {
+            return; // the dangling relation target is reported by the relations check
+        }
+        FieldIntent field = null;
+        for (FieldIntent candidate : target.getFields()) {
+            if (fieldName.equals(candidate.getName())) {
+                field = candidate;
+            }
+        }
+        if (field == null) {
+            issues.add(subject + " [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
+            return;
+        }
+        String type = field.getType() == null ? "string" : field.getType();
+        if (!"string".equals(type) && !"text".equals(type) && !"uuid".equals(type)) {
+            issues.add(subject + " [" + path + "]: [" + fieldName + "] must be a string field holding a language code, not [" + type + "]");
         }
     }
 

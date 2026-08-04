@@ -46,8 +46,18 @@ public class NotificationIntent {
      * (through the entity's generated print feeder) and attaches it. Blank = a plain-text message.
      */
     private String attach;
-    /** The print template language for {@link #attach} (a {@code languages:} code); defaults to en. */
+    /**
+     * The fixed print template language for {@link #attach} (a {@code languages:} code). Mutually
+     * exclusive with {@link #languageFrom}; absent both, the render falls back to the first entry of
+     * the tenant-resolved application language set at run time.
+     */
     private String language;
+    /**
+     * A one-hop {@code relation.field} path on the entity the message is about that determines the
+     * {@link #attach} render language per record (e.g. {@code languageFrom: customer.language}).
+     * Mutually exclusive with {@link #language}; a blank resolved value falls back like an absent knob.
+     */
+    private String languageFrom;
     /**
      * Optional <b>fan-out</b>: name a related entity and the block sends ONE message PER ROW of it
      * instead of one about the record - the payroll run that mails every payslip to its own employee,
@@ -76,6 +86,7 @@ public class NotificationIntent {
         notify.setBody(string(map.get("body")));
         notify.setAttach(string(map.get("attach")));
         notify.setLanguage(string(map.get("language")));
+        notify.setLanguageFrom(string(map.get("languageFrom")));
         notify.setForEach(string(map.get("forEach")));
         String channel = string(map.get("channel"));
         if (channel != null) {
@@ -150,6 +161,14 @@ public class NotificationIntent {
 
     public void setLanguage(String language) {
         this.language = language;
+    }
+
+    public String getLanguageFrom() {
+        return languageFrom;
+    }
+
+    public void setLanguageFrom(String languageFrom) {
+        this.languageFrom = languageFrom;
     }
 
     public String getForEach() {
