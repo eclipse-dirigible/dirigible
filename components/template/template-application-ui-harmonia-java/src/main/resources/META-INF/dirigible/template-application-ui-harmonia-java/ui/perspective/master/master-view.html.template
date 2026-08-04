@@ -233,9 +233,12 @@
                     <template x-for="row in rows" :key="row[def.primaryKey]">
                       <tr x-h-table-row data-hoverable="true">
                         <template x-for="col in def.columns" :key="col.name">
-                          <td x-h-table-cell :class="col.number ? 'text-right' : ''"
-                              :style="col.number ? '' : 'white-space: normal; overflow-wrap: anywhere'"
-                              x-text="cellValue(col, row)"></td>
+                          <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                            <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                            <template x-if="!col.number">
+                              <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                            </template>
+                          </td>
                         </template>
                         <!-- Read-only browse pane: children are added/edited/deleted from the record's
                              Edit form (where these same panels are editable), NOT here. Only the
