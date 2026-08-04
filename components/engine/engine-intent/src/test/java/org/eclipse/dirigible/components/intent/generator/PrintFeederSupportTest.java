@@ -46,6 +46,8 @@ class PrintFeederSupportTest {
                   - { name: quantity, type: decimal, required: true }
                 relations:
                   - { name: SalesInvoice, kind: manyToOne, to: SalesInvoice, composition: true, required: true }
+                  - { name: Unit, kind: manyToOne, to: Unit }
+                  - { name: Product, kind: manyToOne, to: Product, model: customers }
               - name: SalesInvoiceStatus
                 kind: setting
                 fields:
@@ -58,6 +60,11 @@ class PrintFeederSupportTest {
                 relations:
                   - { name: Country, kind: manyToOne, to: Country }
               - name: Country
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string }
+              - name: Unit
+                kind: setting
                 fields:
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
@@ -161,6 +168,41 @@ class PrintFeederSupportTest {
         assertFalse(regionScalars.isEmpty(), "a same-model node still names its fields - it is regenerated with them");
 
         assertEquals(Boolean.TRUE, feeder.get("hasCrossModel"), "the reflective copy helper is emitted for this feeder");
+    }
+
+    /**
+     * An items-table column must be able to render a line's to-one relation ({@code {{Unit}}} - "1
+     * month") exactly as the header relations resolve: one node per item to-one, the composition
+     * back-reference to the document excluded, same-model fields named / cross-model copied
+     * reflectively, and the variables prefixed so a header relation of the same name cannot collide.
+     */
+    @Test
+    @SuppressWarnings("unchecked")
+    void itemToOneRelationsAreFedWithLabelAndFields() {
+        Map<String, Object> feeder = feeder();
+        List<Map<String, Object>> itemNodes = (List<Map<String, Object>>) feeder.get("itemNodes");
+        Map<String, Map<String, Object>> byKey = new java.util.LinkedHashMap<>();
+        for (Map<String, Object> node : itemNodes) {
+            byKey.put((String) node.get("keyInParent"), node);
+        }
+
+        assertFalse(byKey.containsKey("SalesInvoice"), "the composition back-reference is the header, not an item lookup");
+
+        Map<String, Object> unit = byKey.get("Unit");
+        assertNotNull(unit, "a same-model item relation is fed");
+        assertEquals(Boolean.FALSE, unit.get("crossModel"));
+        assertEquals("Settings", unit.get("perspective"), "a setting target loads from the shared Settings perspective");
+        assertEquals("Name", unit.get("labelField"));
+        assertEquals("itemUnit", unit.get("entityVar"), "item variables are prefixed so header names cannot collide");
+        List<Map<String, Object>> unitScalars = (List<Map<String, Object>>) unit.get("scalars");
+        assertFalse(unitScalars.isEmpty(), "a same-model item node names its fields - {{Unit.Name}} descends");
+
+        Map<String, Object> product = byKey.get("Product");
+        assertNotNull(product, "a cross-model item relation is fed");
+        assertEquals(Boolean.TRUE, product.get("crossModel"));
+        assertEquals("customers", product.get("model"));
+        assertTrue(((List<Map<String, Object>>) product.get("scalars")).isEmpty(),
+                "a cross-model item node dereferences no named field of the owner (dirigible #6422)");
     }
 
     /** A document whose whole relation graph is local needs no reflective copy helper. */

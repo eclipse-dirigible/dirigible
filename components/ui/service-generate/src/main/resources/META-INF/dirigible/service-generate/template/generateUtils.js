@@ -1425,6 +1425,24 @@ export function generateFiles(model, parameters, templateSources) {
                                 // committed gen/ survives the owner retiring a field. hasCrossModel emits
                                 // that one helper only where it is needed.
                                 hasCrossModel: feeder.hasCrossModel === true,
+                                // Line-item to-one lookups: the same shape as the header nodes, resolved
+                                // per row (label + fields), so an items-table column can render the
+                                // relation ({{Unit}} / {{Unit.Name}}).
+                                itemNodes: (feeder.itemNodes || []).map(function (n) {
+                                    return {
+                                        entityVar: n.entityVar,
+                                        mapVar: n.mapVar,
+                                        fkProperty: n.fkProperty,
+                                        keyInParent: n.keyInParent,
+                                        entity: n.entity,
+                                        crossModel: n.crossModel === true,
+                                        model: n.model,
+                                        genFolder: n.crossModel ? sanitizeJavaIdentifier(n.model) : parameters.javaGenFolderName,
+                                        javaPerspective: sanitizeJavaIdentifier(n.perspective),
+                                        labelField: n.labelField,
+                                        scalars: n.scalars
+                                    };
+                                }),
                                 nodes: (feeder.nodes || []).map(function (n) {
                                     return {
                                         entityVar: n.entityVar,

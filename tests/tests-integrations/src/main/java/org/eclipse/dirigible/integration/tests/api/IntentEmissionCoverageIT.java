@@ -414,6 +414,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                  # an item-level to-one: the print feeder must feed it per row so an items-table
+                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
+                  - { name: Unit, kind: manyToOne, to: Unit }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -1173,6 +1176,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(sendBill.contains("attachLanguageSource.Locale"), "the language must be read off the person's locale");
         assertTrue(sendBill.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
                 "a null/blank locale must fall back to the application language set at send time");
+
+        // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
+        // {{Unit}} (the target's label, through the repository so the translation overlay applies) or
+        // descends into {{Unit.Name}} - with one load per DISTINCT key, not one per row.
+        String billFeeder = contentOf("gen/events/emission/BillPrintFeeder.java");
+        assertTrue(billFeeder.contains("itemUnitCache"), "item relation lookups are cached per distinct key: " + billFeeder);
+        assertTrue(billFeeder.contains("new gen.emission.data.settings.UnitRepository().findById(item.Unit)"),
+                "the item's Unit is loaded through its generated repository");
+        assertTrue(billFeeder.contains("itemUnitMap.put(\"__label\", itemUnit.Name)"),
+                "the item relation map carries the __label the binder renders for a bare {{Unit}}");
+        assertTrue(billFeeder.contains("im.put(\"Unit\", itemUnitMap)"), "the map is hung under the relation's own key on the row");
         assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
 
         // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger
