@@ -121,8 +121,10 @@ public class DocumentNumberEndpoint extends BaseEndpoint {
                     if (materialized.contains(entry.getKey() + "|" + value.getKey())) {
                         continue;
                     }
-                    views.add(new SeriesView(entry.getKey(), value.getKey(), value.getValue(), base.prefix(), base.size(), 0, 1,
-                            DocumentNumberService.render(base.prefix(), base.size(), 1), true, true));
+                    // A virtual row previews exactly what its first allocation will materialize: the
+                    // base row's shape AND counter (the base is the tenant's seedable template).
+                    views.add(new SeriesView(entry.getKey(), value.getKey(), value.getValue(), base.prefix(), base.size(), base.counter(),
+                            base.counter() + 1, DocumentNumberService.render(base.prefix(), base.size(), base.counter() + 1), true, true));
                 }
             }
             return ResponseEntity.ok(views);
