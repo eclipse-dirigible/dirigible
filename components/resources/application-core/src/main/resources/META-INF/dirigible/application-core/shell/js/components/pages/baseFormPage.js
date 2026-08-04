@@ -151,6 +151,16 @@ function baseFormPage() {
       } catch (e) { /* cross-origin / standalone: nothing to notify */ }
     },
 
+    // Tell the hosting dialog an EDIT saved (a detail-panel dialog's update) so it can close and
+    // reload the panel - navigating this iframe to a list nobody sees would strand the dialog open.
+    emitSaved(id) {
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage({ type: 'harmonia.entity.updated', id: id }, '*');
+        }
+      } catch (e) { /* cross-origin / standalone: nothing to notify */ }
+    },
+
     // Ask the hosting dialog to close (embedded Cancel) instead of navigating this iframe to a list.
     emitClose() {
       try {
