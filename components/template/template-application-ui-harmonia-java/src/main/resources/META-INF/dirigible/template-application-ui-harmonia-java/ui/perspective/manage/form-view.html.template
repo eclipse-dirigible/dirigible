@@ -297,7 +297,9 @@
                   <template x-for="row in rows" :key="row[def.primaryKey]">
                     <tr x-h-table-row data-hoverable="true">
                       <template x-for="col in def.columns" :key="col.name">
-                        <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''"
+                            :style="col.number ? '' : 'white-space: normal; overflow-wrap: anywhere'"
+                            x-text="cellValue(col, row)"></td>
                       </template>
                       <td x-h-table-cell data-row-actions x-show="!isPreview">
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
