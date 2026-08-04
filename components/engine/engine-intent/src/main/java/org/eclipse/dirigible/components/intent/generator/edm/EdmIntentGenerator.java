@@ -25,6 +25,8 @@ import java.util.Set;
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
@@ -630,6 +632,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!customWidgets.isEmpty()) {
             body.put("widgets", customWidgets);
         }
+        // Custom per-record action labels (transitions + generates): the descriptors reference
+        // <project>:<model>-model.actions.<name> translation keys, and the template engine's
+        // translate action folds this map into the generated en catalog - so a Void/Save-as-Template
+        // button localizes like every other label instead of staying hardcoded English.
+        Map<String, String> customActionLabels = buildCustomActionLabels(model);
+        if (!customActionLabels.isEmpty()) {
+            body.put("customActionLabels", customActionLabels);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -638,6 +648,29 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         // ProcessId column it adds to a trigger-target entity.
         document.modelJson.put("model", body);
         return document;
+    }
+
+    /**
+     * The display labels of the per-record custom actions ({@code transitions:} + {@code generates:}),
+     * keyed by action name - one derivation shared with the descriptor generators
+     * ({@link IntentNaming#customActionLabel}), so the catalog entry always matches the button's
+     * fallback label.
+     */
+    private static Map<String, String> buildCustomActionLabels(IntentModel model) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (transition.getName() != null && !transition.getName()
+                                                           .isBlank()) {
+                labels.put(transition.getName(), IntentNaming.customActionLabel(transition.getName(), transition.getLabel()));
+            }
+        }
+        for (GeneratesIntent generates : model.getGenerates()) {
+            if (generates.getName() != null && !generates.getName()
+                                                         .isBlank()) {
+                labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
+            }
+        }
+        return labels;
     }
 
     /** Names of entities declared as settings / nomenclature ({@code kind: setting}). */

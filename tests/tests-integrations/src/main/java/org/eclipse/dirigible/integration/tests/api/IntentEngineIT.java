@@ -1729,6 +1729,18 @@ class IntentEngineIT extends IntegrationTest {
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+
+        // The custom-action BUTTON localizes like every other label: the descriptor carries the
+        // model-catalog translation key (the renderer shows T(translation.key, label)), and the
+        // label lands in the generated en catalog's actions section - hardcoded-English Void /
+        // Save-as-Template buttons on an otherwise translated app were the reported defect.
+        String descriptor = contentOf("invoice-from-proforma-generate-action.js");
+        assertTrue(descriptor.contains("\"translation\"") && descriptor.contains(PROJECT + ":proforma-model.actions.invoice-from-proforma"),
+                "the action descriptor must carry the model-catalog translation key, got: " + descriptor);
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "proforma.model");
+        String actionCatalog = contentOf("i18n/en-US/proforma.model.json");
+        assertTrue(actionCatalog.contains("\"actions\"") && actionCatalog.contains("\"invoice-from-proforma\""),
+                "the action label must land in the en catalog's actions section, got: " + actionCatalog);
     }
 
     @Test
