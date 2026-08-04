@@ -166,15 +166,18 @@ public class ${name}Controller {
 #end
 
     @Get("/{id}/download")
-    @Documentation("Download the ${name} attachment file")
-    public void download(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+    @Documentation("Download the ${name} attachment file (disposition=inline opens it in the browser instead)")
+    public void download(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id,
+            @org.eclipse.dirigible.sdk.http.QueryParam("disposition") String disposition) {
 #if($needsRoles)
         checkPermissions("read");
 #end
         ${name}Entity entity = repository.findOne(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "${name} not found"));
         org.eclipse.dirigible.sdk.http.Response.setContentType(entity.ContentType != null ? entity.ContentType : "application/octet-stream");
-        org.eclipse.dirigible.sdk.http.Response.setHeader("Content-Disposition", "attachment; filename=\"" + entity.FileName + "\"");
+        // inline lets a stored PDF open (and print) in a browser tab; anything else stays a download
+        String dispositionType = "inline".equals(disposition) ? "inline" : "attachment";
+        org.eclipse.dirigible.sdk.http.Response.setHeader("Content-Disposition", dispositionType + "; filename=\"" + entity.FileName + "\"");
         try (java.io.InputStream in = org.eclipse.dirigible.sdk.cms.Attachments.open(entity.StoragePath);
                 java.io.OutputStream out = org.eclipse.dirigible.sdk.http.Response.getOutputStream()) {
             in.transferTo(out);

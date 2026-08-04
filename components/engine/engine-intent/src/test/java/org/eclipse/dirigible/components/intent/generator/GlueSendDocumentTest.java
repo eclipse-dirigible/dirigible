@@ -42,6 +42,7 @@ class GlueSendDocumentTest {
                   - { name: id, type: integer, primaryKey: true, generated: true }
                   - { name: name, type: string }
                   - { name: email, type: string }
+                  - { name: locale, type: string }
               - name: Invoice
                 function: Document
                 fields:
@@ -124,7 +125,7 @@ class GlueSendDocumentTest {
                          .contains("(Customer == null ? null : Customer.Name)"),
                 "a body placeholder must resolve through the same one-hop load");
         assertEquals(1, ((List<?>) send.get("notifyRelationLoads")).size());
-        assertPrintAttachment(send, "en");
+        assertPrintAttachment(send, "org.eclipse.dirigible.sdk.print.Print.defaultLanguage()");
     }
 
     @Test
@@ -164,7 +165,7 @@ class GlueSendDocumentTest {
 
         assertEquals("notify", schedule.get("action"));
         assertEquals("Id", schedule.get("attachKeyProperty"));
-        assertPrintAttachment(schedule, "bg");
+        assertPrintAttachment(schedule, "\"bg\"");
     }
 
     @Test
@@ -184,7 +185,33 @@ class GlueSendDocumentTest {
 
         assertEquals("Id", notification.get("attachKeyProperty"));
         assertEquals("-updated", notification.get("topicSuffix"));
-        assertPrintAttachment(notification, "en");
+        assertPrintAttachment(notification, "org.eclipse.dirigible.sdk.print.Print.defaultLanguage()");
+    }
+
+    @Test
+    void aNotificationLanguageFromLoadsTheSourceAndFallsBack() {
+        String yaml = YAML + """
+
+                notifications:
+                  - name: invoiceIssued
+                    event: { onUpdate: Invoice }
+                    to: Customer.email
+                    subject: "Invoice {number}"
+                    body: "Attached."
+                    attach: print
+                    languageFrom: Customer.locale
+                """;
+        Map<String, Object> notification = GlueIntentGenerator.buildNotificationsForTest(IntentParser.parse(yaml))
+                                                              .get(0);
+
+        // The delegate loads the language source off the record's FK into attachLanguageSource...
+        assertEquals("Customer", notification.get("attachLanguageFkProperty"));
+        assertEquals("Customer", notification.get("attachLanguageTargetEntity"));
+        assertEquals("Customer", notification.get("attachLanguageTargetPerspective"));
+        // ...and reads the language off it, falling back to the application language set when blank.
+        String expression = String.valueOf(notification.get("attachLanguageExpression"));
+        assertTrue(expression.contains("attachLanguageSource.Locale"), expression);
+        assertTrue(expression.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"), expression);
     }
 
     @Test
@@ -376,11 +403,14 @@ class GlueSendDocumentTest {
                 "a send step's work IS the message - it must stand alone: " + failure.getMessage());
     }
 
-    /** The four keys the templates render the attachment from. */
-    private static void assertPrintAttachment(Map<String, Object> entry, String language) {
+    /** The keys the templates render the attachment from. */
+    private static void assertPrintAttachment(Map<String, Object> entry, String languageExpression) {
         assertEquals("print", entry.get("attach"));
         assertEquals("Invoice", entry.get("attachEntity"), "the print template + feeder are the document entity's");
-        assertEquals(language, entry.get("attachLanguage"));
+        // The render language is a pre-rendered Java expression: a quoted literal (language:), a read
+        // off the attachLanguageSource local (languageFrom:), or the run-time application-language
+        // fallback - never a hardcoded "en".
+        assertEquals(languageExpression, entry.get("attachLanguageExpression"));
         // A document with a number: field names the attachment after it - the customer receives
         // INV0000042.pdf, not "Invoice 42.pdf" (which is only the fallback).
         assertTrue(String.valueOf(entry.get("attachFileNameExpression"))

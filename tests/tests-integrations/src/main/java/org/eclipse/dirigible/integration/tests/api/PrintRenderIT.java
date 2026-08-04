@@ -14,6 +14,7 @@ import static org.hamcrest.Matchers.containsString;
 
 import java.nio.charset.StandardCharsets;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.repository.api.IRepository;
 import org.eclipse.dirigible.repository.api.IRepositoryStructure;
@@ -38,11 +39,14 @@ class PrintRenderIT extends IntegrationTest {
 
     /** Registry-relative locations: the seeded template and the client-Java controller source. */
     private static final String TEMPLATE_LOCATION = "/" + PROJECT + "/doc/Templates/TestDoc/Print/en/standard.print";
+    private static final String BG_TEMPLATE_LOCATION = "/" + PROJECT + "/doc/Templates/LangDoc/Print/bg/standard.print";
     private static final String CONTROLLER_LOCATION = "/" + PROJECT + "/api/PrintTestController.java";
     private static final String TEMPLATE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + TEMPLATE_LOCATION;
+    private static final String BG_TEMPLATE_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + BG_TEMPLATE_LOCATION;
     private static final String CONTROLLER_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + CONTROLLER_LOCATION;
 
     private static final String ENDPOINT = "/services/java/" + PROJECT + "/api/PrintTestController/render";
+    private static final String LANGUAGE_ENDPOINT = "/services/java/" + PROJECT + "/api/PrintTestController/renderDefaultLanguage";
 
     private static final long ASSERTION_TIMEOUT_SECONDS = 30;
 
@@ -72,16 +76,40 @@ class PrintRenderIT extends IntegrationTest {
                 ASSERTION_TIMEOUT_SECONDS);
     }
 
+    /**
+     * The mint-time language fallback: with the application language set configured to bg-first (the
+     * tenant's primary language), a render through {@code Print.defaultLanguage()} must pick the bg
+     * template. The proof is loud by construction - ONLY a bg template is seeded, so resolving to
+     * anything else fails the render (no such template) instead of returning a wrong-language PDF.
+     */
+    @Test
+    void defaultLanguageRenderPicksTheConfiguredLanguage() {
+        Configuration.set("DIRIGIBLE_APPLICATION_LANGUAGES", "bg,en");
+        try {
+            repository.createResource(BG_TEMPLATE_PATH, TEMPLATE.getBytes(StandardCharsets.UTF_8), false, "text/plain", true);
+            repository.createResource(CONTROLLER_PATH, controllerSource().getBytes(StandardCharsets.UTF_8), false, "text/x-java", true);
+            synchronizationProcessor.forceProcessSynchronizers();
+
+            restAssuredExecutor.execute(() -> given().when()
+                                                     .get(LANGUAGE_ENDPOINT)
+                                                     .then()
+                                                     .statusCode(200)
+                                                     .body(containsString("\"language\": \"bg\""))
+                                                     .body(containsString("\"head\": \"%PDF")),
+                    ASSERTION_TIMEOUT_SECONDS);
+        } finally {
+            Configuration.remove("DIRIGIBLE_APPLICATION_LANGUAGES");
+        }
+    }
+
     @AfterEach
     void cleanup() {
         boolean any = false;
-        if (repository.hasResource(TEMPLATE_PATH)) {
-            repository.removeResource(TEMPLATE_PATH);
-            any = true;
-        }
-        if (repository.hasResource(CONTROLLER_PATH)) {
-            repository.removeResource(CONTROLLER_PATH);
-            any = true;
+        for (String path : new String[] {TEMPLATE_PATH, BG_TEMPLATE_PATH, CONTROLLER_PATH}) {
+            if (repository.hasResource(path)) {
+                repository.removeResource(path);
+                any = true;
+            }
         }
         if (any) {
             synchronizationProcessor.forceProcessSynchronizers();
@@ -124,6 +152,16 @@ class PrintRenderIT extends IntegrationTest {
                         int n = Math.min(5, pdf.length);
                         String head = new String(pdf, 0, n, StandardCharsets.ISO_8859_1);
                         return "{\\"size\\": " + pdf.length + ", \\"head\\": \\"" + head + "\\"}";
+                    }
+
+                    @Get("/renderDefaultLanguage")
+                    public String renderDefaultLanguage() {
+                        String data = "{\\"document\\":{\\"number\\":\\"INV-002\\",\\"customer\\":\\"ACME Ltd.\\",\\"total\\":\\"1.00\\"},\\"items\\":[{\\"name\\":\\"Widget\\",\\"amount\\":\\"1.00\\"}]}";
+                        String language = Print.defaultLanguage();
+                        byte[] pdf = Print.render("LangDoc", language, data);
+                        int n = Math.min(5, pdf.length);
+                        String head = new String(pdf, 0, n, StandardCharsets.ISO_8859_1);
+                        return "{\\"language\\": \\"" + language + "\\", \\"head\\": \\"" + head + "\\"}";
                     }
                 }
                 """;

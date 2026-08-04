@@ -55,8 +55,12 @@ public final class NotifySupport {
     /** The only {@code attach} value today: the record's own rendered print template. */
     public static final String ATTACH_PRINT = "print";
 
-    /** The print-template language an {@code attach} defaults to. */
-    private static final String DEFAULT_LANGUAGE = "en";
+    /**
+     * The run-time language fallback a render defaults to when the notify block declares neither
+     * {@code language:} nor {@code languageFrom:} - the first entry of the tenant-resolved application
+     * language set, read at send time. Shared with {@link SnapshotSupport}.
+     */
+    static final String DEFAULT_LANGUAGE_EXPRESSION = "org.eclipse.dirigible.sdk.print.Print.defaultLanguage()";
 
     private NotifySupport() {}
 
@@ -145,11 +149,28 @@ public final class NotifySupport {
      * A resolved print attachment: everything the generated code needs to render and name the PDF.
      *
      * @param entity the document entity whose print template is rendered
-     * @param language the template language code
+     * @param languageExpression a Java expression yielding the template language code - a quoted
+     *        literal ({@code language:}), a null-safe read off the {@link #languageLoad} local
+     *        ({@code languageFrom:}), or the run-time application-language fallback
      * @param fileNameExpression a Java expression for the attachment file name, evaluated against the
      *        loaded record (the document number when the entity has one, else the entity name + id)
+     * @param languageLoad the {@code languageFrom} relation load backing the expression, or
+     *        {@code null} when the language needs no related record
      */
-    public record PrintAttachment(String entity, String language, String fileNameExpression) {
+    public record PrintAttachment(String entity, String languageExpression, String fileNameExpression, LanguageLoad languageLoad) {
+    }
+
+    /**
+     * The related record a {@code languageFrom: relation.field} language is read from - loaded by the
+     * generated code into an {@code attachLanguageSource} local off the record's FK.
+     *
+     * @param fkProperty the record's to-one FK property (PascalCase)
+     * @param targetEntity the relation's target entity
+     * @param targetPerspective the target's perspective (its generated data subfolder)
+     * @param crossModel whether the target is owned by another model
+     * @param targetModel the owner model's alias when {@link #crossModel}, else empty
+     */
+    public record LanguageLoad(String fkProperty, String targetEntity, String targetPerspective, boolean crossModel, String targetModel) {
     }
 
     /**
@@ -240,10 +261,16 @@ public final class NotifySupport {
      * @param notify the notify block
      * @param entity the entity the message is about
      * @param model the parsed intent model (to test the entity is a document master)
+     * @param byName all LOCAL entities by name (to resolve a same-model {@code languageFrom} target)
+     * @param compositionParents composition-parent map (to resolve a target's perspective)
+     * @param crossModel resolver for a cross-model {@code languageFrom} relation, or {@code null}
      * @return the attachment, or {@code null} when none was asked for or the entity has no printable
      *         document shape (no line-items child, so no generated feeder and no print template)
+     * @throws IllegalArgumentException when a declared {@code languageFrom} path does not resolve - the
+     *         caller reports the drop with the precise reason instead of mailing wrong-language copies
      */
-    public static PrintAttachment printAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model) {
+    public static PrintAttachment printAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
         if (!attachesPrint(notify) || entity == null) {
             return null;
         }
@@ -256,11 +283,79 @@ public final class NotifySupport {
         if (!printable) {
             return null;
         }
-        String language = notify.getLanguage() == null || notify.getLanguage()
-                                                                .isBlank() ? DEFAULT_LANGUAGE
-                                                                        : notify.getLanguage()
-                                                                                .trim();
-        return new PrintAttachment(entity.getName(), language, fileNameExpression(entity));
+        String literal = notify.getLanguage();
+        if (literal != null && !literal.isBlank()) {
+            return new PrintAttachment(entity.getName(), "\"" + literal.trim() + "\"", fileNameExpression(entity), null);
+        }
+        String path = notify.getLanguageFrom();
+        if (path == null || path.isBlank()) {
+            return new PrintAttachment(entity.getName(), DEFAULT_LANGUAGE_EXPRESSION, fileNameExpression(entity), null);
+        }
+        return languageFromAttachment(path.trim(), entity, byName, compositionParents, crossModel);
+    }
+
+    /**
+     * The {@code languageFrom: relation.field} shape: the generated code loads the related record into
+     * an {@code attachLanguageSource} local and reads the language off it, falling back to the
+     * application language set when the chain is null/blank.
+     */
+    private static PrintAttachment languageFromAttachment(String path, EntityIntent entity, Map<String, EntityIntent> byName,
+            Map<String, String> compositionParents, NotificationSupport.CrossModelLookup crossModel) {
+        int dot = path.indexOf('.');
+        if (dot < 0) {
+            throw new IllegalArgumentException(
+                    "languageFrom [" + path + "] must be a one-hop relation.field path on [" + entity.getName() + "]");
+        }
+        String relationName = path.substring(0, dot)
+                                  .trim();
+        String fieldName = path.substring(dot + 1)
+                               .trim();
+        RelationIntent relation = null;
+        for (RelationIntent candidate : entity.getRelations()) {
+            boolean toOne = "manyToOne".equals(candidate.getKind()) || "oneToOne".equals(candidate.getKind());
+            if (toOne && relationName.equals(candidate.getName()) && candidate.getTo() != null) {
+                relation = candidate;
+            }
+        }
+        if (relation == null) {
+            throw new IllegalArgumentException(
+                    "languageFrom [" + path + "]: [" + relationName + "] is not a to-one relation of [" + entity.getName() + "]");
+        }
+        String pascalField = IntentNaming.pascalCase(fieldName);
+        LanguageLoad load;
+        boolean isCrossModel = relation.getModel() != null && !relation.getModel()
+                                                                       .isBlank();
+        if (isCrossModel) {
+            NotificationSupport.CrossModelTarget target = crossModel == null ? null : crossModel.resolve(relation);
+            if (target == null || (target.propertyNames() != null && !target.propertyNames()
+                                                                            .contains(pascalField))) {
+                throw new IllegalArgumentException(
+                        "languageFrom [" + path + "]: [" + fieldName + "] could not be resolved on the cross-model target ["
+                                + relation.getTo() + "] of model [" + relation.getModel() + "]");
+            }
+            load = new LanguageLoad(IntentNaming.pascalCase(relationName), relation.getTo(), target.perspectiveName(), true,
+                    target.modelAlias());
+        } else {
+            EntityIntent target = byName.get(relation.getTo());
+            if (target == null || fieldOf(target, fieldName) == null) {
+                throw new IllegalArgumentException(
+                        "languageFrom [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
+            }
+            load = new LanguageLoad(IntentNaming.pascalCase(relationName), relation.getTo(),
+                    target.isSetting() ? "Settings" : IntentEntities.resolvePerspective(relation.getTo(), compositionParents), false, "");
+        }
+        String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
+                + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
+        return new PrintAttachment(entity.getName(), expression, fileNameExpression(entity), load);
+    }
+
+    private static FieldIntent fieldOf(EntityIntent entity, String name) {
+        for (FieldIntent field : entity.getFields()) {
+            if (name.equals(field.getName())) {
+                return field;
+            }
+        }
+        return null;
     }
 
     /**
@@ -288,15 +383,21 @@ public final class NotifySupport {
      * must never depend on a key being absent.
      *
      * @param attachment the resolved attachment, or {@code null} for a plain-text message
-     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguage} /
-     *         {@code attachFileNameExpression} keys
+     * @return the {@code attach} / {@code attachEntity} / {@code attachLanguageExpression} /
+     *         {@code attachFileNameExpression} keys plus the {@code attachLanguage*} load coordinates
      */
     public static Map<String, Object> attachmentFields(PrintAttachment attachment) {
         Map<String, Object> fields = new LinkedHashMap<>();
         fields.put("attach", attachment == null ? "" : ATTACH_PRINT);
         fields.put("attachEntity", attachment == null ? "" : attachment.entity());
-        fields.put("attachLanguage", attachment == null ? "" : attachment.language());
+        fields.put("attachLanguageExpression", attachment == null ? "" : attachment.languageExpression());
         fields.put("attachFileNameExpression", attachment == null ? "" : attachment.fileNameExpression());
+        LanguageLoad load = attachment == null ? null : attachment.languageLoad();
+        fields.put("attachLanguageFkProperty", load == null ? "" : load.fkProperty());
+        fields.put("attachLanguageTargetEntity", load == null ? "" : load.targetEntity());
+        fields.put("attachLanguageTargetPerspective", load == null ? "" : load.targetPerspective());
+        fields.put("attachLanguageCrossModel", load != null && load.crossModel());
+        fields.put("attachLanguageTargetModel", load == null ? "" : load.targetModel());
         return fields;
     }
 

@@ -32,7 +32,8 @@
  * `function: Snapshot`) renders as a Files panel instead of the table: the master-filtered rows are
  * uploaded files, each downloadable via the controller's `/{id}/download` route. Editable (Attachment):
  * an Upload control adds files (multipart POST to `/upload`) and each row can be removed. Read-only
- * (Snapshot): download only — no upload, no delete (copies are generated server-side, e.g. on issue).
+ * (Snapshot): per-version Open (inline, view/print) + Download — no upload, no delete (copies are
+ * generated server-side, e.g. on issue).
  * Like a calendar, a files panel always renders (its empty state is meaningful), never the shared
  * "no records" line.
  */
@@ -240,7 +241,7 @@ function detailPanel(def, masterId) {
     },
 
     // --- files panel (files defs only) ----------------------------------------------------------
-    // Read-only (Snapshot): download only. Editable (Attachment): upload + remove.
+    // Read-only (Snapshot): per-version Open + Download. Editable (Attachment): upload + remove.
     get filesReadOnly() { return !!(this.def.files && this.def.files.readOnly); },
 
     // Absolute URL of the controller's download route (a plain browser GET, not the fetch client):
@@ -248,6 +249,13 @@ function detailPanel(def, masterId) {
     downloadHref(row) {
       const base = (App.config && App.config.restBase) || '';
       return base + this.def.apiPath + '/' + encodeURIComponent(row[this.def.primaryKey]) + '/download';
+    },
+
+    // The same route with inline disposition: the file opens in a new tab (view/print) instead of
+    // downloading. This is how a stored Snapshot version is opened/printed - the bytes ARE the
+    // record, nothing is re-rendered.
+    openHref(row) {
+      return this.downloadHref(row) + '?disposition=inline';
     },
 
     // Human-readable size from the injected FileSize column (bytes).

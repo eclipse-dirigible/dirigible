@@ -6,6 +6,12 @@ import org.flowable.engine.delegate.JavaDelegate;
 
 import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Entity;
 import gen.${javaGenFolderName}.data.${snapshotJavaPerspective}.${snapshotEntity}Repository;
+#if($languageFkProperty != "")
+import gen.${javaGenFolderName}.data.${masterJavaPerspective}.${master}Entity;
+import gen.${javaGenFolderName}.data.${masterJavaPerspective}.${master}Repository;
+import gen.${languageTargetJavaGenFolder}.data.${languageTargetJavaPerspective}.${languageTargetEntity}Entity;
+import gen.${languageTargetJavaGenFolder}.data.${languageTargetJavaPerspective}.${languageTargetEntity}Repository;
+#end
 
 /**
  * Snapshot generator for ${master}: on the service task it is wired to (e.g. right after Issue),
@@ -28,9 +34,19 @@ public class ${master}SnapshotGenerator implements JavaDelegate {
         }
         int id = ((Number) key).intValue();
 
+#if($languageFkProperty != "")
+        // The render language comes off the document's ${languageFkProperty} (the intent's languageFrom
+        // knob): load the related record and read it, falling back to the first entry of the
+        // tenant-resolved application language set when the chain is null or blank.
+        ${master}Entity document = new ${master}Repository().findById(id);
+        ${languageTargetEntity}Entity languageSource = document == null || document.${languageFkProperty} == null ? null
+                : new ${languageTargetEntity}Repository().findById(document.${languageFkProperty});
+#end
+        String language = ${languageExpression};
+
         // Assemble the { document, items } payload the print template binds, then render server-side.
         String payload = new ${master}PrintFeeder().feed(id);
-        byte[] pdf = org.eclipse.dirigible.sdk.print.Print.render("${master}", "${language}", payload);
+        byte[] pdf = org.eclipse.dirigible.sdk.print.Print.render("${master}", language, payload);
 
         ${snapshotEntity}Repository repository = new ${snapshotEntity}Repository();
         // Next version = max existing + 1. Snapshots are immutable (never deleted), so this is gap-free;

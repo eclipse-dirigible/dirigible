@@ -130,11 +130,16 @@ public class ${className}Transition {
 #if($attach == "print")
             // attach: print - the record's own print template rendered to PDF server-side, so the
             // counterparty receives the document (the voided invoice itself), not just a notice.
+#if($attachLanguageFkProperty != "")
+            gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity attachLanguageSource =
+                    entity.${attachLanguageFkProperty} == null ? null
+                            : new gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
             java.util.Map document = new java.util.HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
                     new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
             parts.add(document);
 #end

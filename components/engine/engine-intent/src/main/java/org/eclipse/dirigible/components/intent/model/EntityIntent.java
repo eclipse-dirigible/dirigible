@@ -175,6 +175,22 @@ public class EntityIntent {
      */
     private List<CheckIntent> checks;
 
+    /**
+     * On a {@code function: Snapshot} child only: the fixed print-template language its generated
+     * copies are rendered in (a {@code languages:} code, e.g. {@code bg}). Mutually exclusive with
+     * {@link #languageFrom}; absent both, the mint falls back to the first entry of the tenant-resolved
+     * application language set at run time.
+     */
+    private String language;
+    /**
+     * On a {@code function: Snapshot} child only: a {@code relation.field} path on the snapshot's
+     * DOCUMENT MASTER that determines the render language per record (e.g.
+     * {@code languageFrom: customer.language} - the customer decides the invoice's language). The
+     * relation is a to-one of the master; the field a string field of its target. Mutually exclusive
+     * with {@link #language}; a blank resolved value falls back like an absent knob.
+     */
+    private String languageFrom;
+
 
     public String getName() {
         return name;
@@ -480,5 +496,21 @@ public class EntityIntent {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public String getLanguageFrom() {
+        return languageFrom;
+    }
+
+    public void setLanguageFrom(String languageFrom) {
+        this.languageFrom = languageFrom;
     }
 }
