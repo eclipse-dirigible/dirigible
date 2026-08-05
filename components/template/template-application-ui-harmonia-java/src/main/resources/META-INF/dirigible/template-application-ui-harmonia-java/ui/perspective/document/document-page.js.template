@@ -593,6 +593,16 @@ document.addEventListener('alpine:init', () => {
     // ----- Items (read-only table + add/edit dialog, server-side) --------------------------------
     get editColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
 
+    // The columns the read-only items TABLE shows: the display columns (major fields - `major:
+    // false` hides a field/relation from the table), carried with their full edit metadata so
+    // lookup labels, dates and number patterns still render. The add/edit DIALOG keeps the full
+    // editColumns (a hidden trigger like Product must stay editable there).
+    get tableColumns() {
+      if (!this.itemsDef) return [];
+      const visible = new Set((this.itemsDef.columns || []).map(c => c.name));
+      return this.editColumns.filter(c => visible.has(c.name));
+    },
+
     async loadItems() {
       if (!this.itemsDef || this.id == null) { this.items = []; this.itemsState = 'empty'; return; }
       this.itemsState = 'loading';
