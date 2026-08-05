@@ -190,7 +190,47 @@ document.addEventListener('alpine:init', () => {
       return locale.languages().map(code => ({ value: code, text: locale.displayName(code) }));
     },
 
+    // ---- Act as (delegated entry) ---------------------------------------------------------
+    // An entitled user (ADMINISTRATOR) arms an acting identity; while armed, the personal
+    // surfaces and the Inbox serve THAT person's world - the manager-does-the-entry mode. The
+    // state is server-side session; arming/exiting reloads so every page and hosted app
+    // re-resolves under the new identity. Entitlement + audit live server-side.
+    actAs: { entitled: false, acting: null },
+    actAsDialog: false,
+    actAsInput: '',
+    async loadActAs() {
+      try {
+        const res = await fetch('/services/core/actas', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+        if (res.ok) {
+          const s = await res.json();
+          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null };
+        }
+      } catch (e) {
+        console.error('Failed to load the act-as state', e);
+      }
+    },
+    async armActAs() {
+      const username = (this.actAsInput || '').trim();
+      if (!username) return;
+      const res = await fetch('/services/core/actas', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username }),
+      });
+      if (res.ok) {
+        window.location.reload();
+      } else {
+        console.error('Failed to arm act-as', res.status);
+      }
+    },
+    async disarmActAs() {
+      const res = await fetch('/services/core/actas', { method: 'DELETE', credentials: 'same-origin' });
+      if (res.ok) window.location.reload();
+    },
+
     async init() {
+      this.loadActAs(); // fire-and-forget: the banner/menu appear when the state arrives
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });
