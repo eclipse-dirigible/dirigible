@@ -24,23 +24,23 @@
     <div class="vbox size-full">
       <!-- Hidden in preview mode (the dashboard tile): no title/badge/toolbar, just the data. -->
       <div x-show="!preview" x-h-toolbar data-variant="transparent">
-        <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="displayName"></span>
-        <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="count + ' rows'"></span>
+        <span x-h-toolbar-title class="shrink-0 text-2xl font-semibold tracking-tight" x-text="T('$projectName:${tprefix}.t.${tId}', displayName)"></span>
+        <span x-show="state === 'default'" x-h-badge data-variant="information" x-text="T('application-core:shell.report.rows', '{{count}} rows', { count: count })"></span>
         <div x-h-toolbar-spacer></div>
 #if($chart)
         <button x-h-button data-variant="outline" data-size="sm" @click="toggleView()">
           <svg x-h-lucide role="img" data-lucide="table-2" x-show="view === 'chart'"></svg>
           <svg x-h-lucide role="img" data-lucide="bar-chart-3" x-show="view !== 'chart'"></svg>
-          <span x-text="view === 'chart' ? 'Table' : 'Chart'"></span>
+          <span x-text="view === 'chart' ? T('application-core:shell.report.table', 'Table') : T('application-core:shell.report.chart', 'Chart')"></span>
         </button>
 #end
         <button x-h-button data-variant="outline" data-size="sm" @click="showFilters = !showFilters; refreshIcons()">
-          <i role="img" x-h-lucide data-lucide="filter"></i><span>Filters</span>
+          <i role="img" x-h-lucide data-lucide="filter"></i><span x-text="T('application-core:shell.report.filters', 'Filters')"></span>
           <span x-show="activeFilterCount > 0" x-h-badge data-variant="information" x-text="activeFilterCount"></span>
         </button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span>Refresh</span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" x-h-lucide data-lucide="download"></i><span>Export</span></button>
-        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" x-h-lucide data-lucide="printer"></i><span>Print</span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="load()"><i role="img" x-h-lucide data-lucide="refresh-cw"></i><span x-text="T('application-core:shell.report.refresh', 'Refresh')"></span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="exportCsv()"><i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('application-core:shell.report.export', 'Export')"></span></button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="printReport()"><i role="img" x-h-lucide data-lucide="printer"></i><span x-text="T('application-core:shell.report.print', 'Print')"></span></button>
       </div>
 
       <!-- Declared report parameters (the .report `parameters` block - e.g. the balance report's
@@ -65,7 +65,7 @@
             </template>
           </div>
         </template>
-        <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span>Apply</span></button>
+        <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
       </div>
 
       <!-- Per-column filters, typed from the report metadata: date -> range, number -> range,
@@ -94,30 +94,30 @@
                 </template>
                 <template x-if="col.kind === 'number'">
                   <div class="hbox gap-1 items-center">
-                    <div x-h-input-number><input type="number" step="any" placeholder="min" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
+                    <div x-h-input-number><input type="number" step="any" :placeholder="T('application-core:shell.report.min', 'min')" x-model.number="filters[col.key].min" @keydown.enter="applyFilters()" /></div>
                     <span x-h-text.muted>&ndash;</span>
-                    <div x-h-input-number><input type="number" step="any" placeholder="max" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
+                    <div x-h-input-number><input type="number" step="any" :placeholder="T('application-core:shell.report.max', 'max')" x-model.number="filters[col.key].max" @keydown.enter="applyFilters()" /></div>
                   </div>
                 </template>
                 <template x-if="col.kind === 'boolean'">
                   <div x-h-select>
-                    <input x-h-select-input x-model="filters[col.key].equals" placeholder="any" />
+                    <input x-h-select-input x-model="filters[col.key].equals" :placeholder="T('application-core:shell.report.any', 'any')" />
                     <div x-h-select-content>
-                      <div x-h-select-option="'any'" data-value=""></div>
-                      <div x-h-select-option="'yes'" data-value="true"></div>
-                      <div x-h-select-option="'no'" data-value="false"></div>
+                      <div x-h-select-option="T('application-core:shell.report.any', 'any')" data-value=""></div>
+                      <div x-h-select-option="T('application-core:shell.report.yes', 'yes')" data-value="true"></div>
+                      <div x-h-select-option="T('application-core:shell.report.no', 'no')" data-value="false"></div>
                     </div>
                   </div>
                 </template>
                 <template x-if="col.kind === 'text'">
-                  <input x-h-input type="text" placeholder="contains..." x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
+                  <input x-h-input type="text" :placeholder="T('application-core:shell.report.contains', 'contains...')" x-model="filters[col.key].contains" @keydown.enter="applyFilters()" />
                 </template>
               </div>
             </template>
           </div>
           <div class="hbox gap-2">
-            <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span>Apply</span></button>
-            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><i role="img" x-h-lucide data-lucide="x"></i><span>Clear</span></button>
+            <button x-h-button data-size="sm" @click="applyFilters()"><i role="img" x-h-lucide data-lucide="check"></i><span x-text="T('application-core:shell.report.apply', 'Apply')"></span></button>
+            <button x-h-button data-variant="outline" data-size="sm" @click="clearFilters()"><i role="img" x-h-lucide data-lucide="x"></i><span x-text="T('application-core:shell.report.clear', 'Clear')"></span></button>
           </div>
         </div>
       </div>
@@ -127,8 +127,8 @@
       <div x-show="state === 'empty'" x-h-info-page class="p-4">
         <div x-h-info-page-header>
           <div x-h-info-page-media.icon><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></div>
-          <div x-h-info-page-title>No data</div>
-          <div x-h-info-page-description>The ${name} report returned no rows.</div>
+          <div x-h-info-page-title x-text="T('application-core:shell.report.noData', 'No data')"></div>
+          <div x-h-info-page-description x-text="T('application-core:shell.report.noRows', 'The ${name} report returned no rows.', { name: '${name}' })"></div>
         </div>
       </div>
 
@@ -162,7 +162,7 @@
             <tfoot x-show="showTotals">
               <tr x-h-table-row>
                 <template x-for="(col, ci) in columns" :key="ci">
-                  <td x-h-table-cell class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? 'Total' : totalText(col)"></td>
+                  <td x-h-table-cell class="font-semibold" :class="alignClass(col)" x-text="ci === 0 ? T('application-core:shell.report.total', 'Total') : totalText(col)"></td>
                 </template>
               </tr>
             </tfoot>
@@ -171,9 +171,9 @@
         </div>
 
         <div x-show="!preview" class="hbox items-center gap-2">
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="prev()"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span>Prev</span></button>
-          <span x-h-text.muted x-text="'Page ' + page + ' / ' + totalPages"></span>
-          <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span>Next</span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="prev()"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('application-core:shell.report.prev', 'Prev')"></span></button>
+          <span x-h-text.muted x-text="T('application-core:shell.report.pageOf', 'Page {{page}} / {{total}}', { page: page, total: totalPages })"></span>
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= totalPages" @click="next()"><span x-text="T('application-core:shell.report.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
 #if($chart)
         </div>
@@ -183,6 +183,11 @@
 
     <!-- Value formatter (window.HarmoniaFormat): report.js formats numeric cells through it; must load before Alpine inits. -->
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- i18n: the shared shell translator (window.T + the Alpine i18n store). This page is standalone
+         (no SPA shell / app.js), so the catalog namespace is bootstrapped inline: i18n.js reads
+         App.config.projectName at load to fetch the project's catalogs next to 'application-core'. -->
+    <script>window.App = window.App || { config: {} }; App.config = App.config || {}; App.config.projectName = '$projectName';</script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js"></script>
     <script src="./report.js"></script>
     <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
     <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>

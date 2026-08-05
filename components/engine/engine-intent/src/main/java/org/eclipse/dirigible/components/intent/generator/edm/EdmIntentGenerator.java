@@ -38,6 +38,8 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
@@ -640,6 +642,17 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!customActionLabels.isEmpty()) {
             body.put("customActionLabels", customActionLabels);
         }
+        // BPM user-task labels (the processes' userTask steps), keyed by the authored step name -
+        // the same convention as customActionLabels. The translate action folds this map into the
+        // generated en catalog's processes section, and the Harmonia template bakes the reverse
+        // (runtime task name -> step-name key) map into config.js, so an Approve/Issue/Send button
+        // localizes instead of always showing the English BPMN task name. Everything is known at
+        // generation time (the task names are part of the process definition) - no runtime key
+        // derivation anywhere.
+        Map<String, String> processTaskLabels = buildProcessTaskLabels(model);
+        if (!processTaskLabels.isEmpty()) {
+            body.put("processTaskLabels", processTaskLabels);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -668,6 +681,26 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (generates.getName() != null && !generates.getName()
                                                          .isBlank()) {
                 labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
+            }
+        }
+        return labels;
+    }
+
+    /**
+     * The display labels of the processes' BPM user tasks, keyed by the authored step name (the
+     * {@code customActionLabels} convention). The value is the humanized task name - the exact
+     * {@code name} {@code BpmnIntentGenerator} emits into the BPMN and Flowable serves at runtime, so
+     * the reverse map baked into the generated app resolves an inbox task's {@code name} to its catalog
+     * key by exact match.
+     */
+    private static Map<String, String> buildProcessTaskLabels(IntentModel model) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            for (StepIntent step : process.getSteps()) {
+                if ("userTask".equals(step.getKind()) && step.getName() != null && !step.getName()
+                                                                                        .isBlank()) {
+                    labels.put(step.getName(), IntentNaming.humanize(step.getName()));
+                }
             }
         }
         return labels;

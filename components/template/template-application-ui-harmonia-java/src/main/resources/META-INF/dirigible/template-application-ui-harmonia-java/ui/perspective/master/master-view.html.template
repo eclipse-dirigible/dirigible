@@ -96,7 +96,7 @@
       </div>
       <div class="hbox items-center gap-2 p-2" x-show="(state === 'default' || state === 'empty') && pageCount > 1">
         <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="goPage(page - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-        <span x-h-text.muted x-text="'Page ' + page + ' / ' + pageCount"></span>
+        <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: page, total: pageCount })"></span>
         <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= pageCount" @click="goPage(page + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
       </div>
     </div>
@@ -131,7 +131,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
             </button>
           </template>
         </div>
@@ -261,7 +261,7 @@
                         <td x-h-table-cell data-row-actions>
                           <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
                             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
                             </button>
                           </template>
                           <button x-h-button data-variant="transparent" data-size="sm" aria-label="Preview" @click="previewRow(row)"><i role="img" x-h-lucide data-lucide="eye"></i></button>
@@ -283,10 +283,10 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete ${name}</h2>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${name}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></h2>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
-      <div x-h-dialog-content><p>Are you sure you want to delete this ${name}? This cannot be undone.</p></div>
+      <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this ${name}? This cannot be undone.', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></p></div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>

@@ -1471,6 +1471,17 @@ class IntentEngineIT extends IntegrationTest {
         String modelCatalog = contentOf("i18n/en-US/orders.model.json");
         assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
                 "the custom widget's label should land in the model catalog");
+        // BPM user-task labels land in the catalog's processes section, keyed by the authored step
+        // name, and config.js carries the baked reverse (runtime task name -> key) map: the views
+        // translate the in-record task buttons as
+        // T('<project>:<model>-model.processes.' + processTaskKeys[task.name], task.name), so an
+        // Approve / Issue / Send button follows the locale instead of always showing the English
+        // BPMN name. Everything is known at generation time - no runtime key derivation.
+        assertTrue(modelCatalog.contains("\"processes\"") && modelCatalog.contains("\"managerReview\": \"Manager Review\""),
+                "the BPM user-task labels should land in the en catalog's processes section, got: " + modelCatalog);
+        String appConfig = contentOf("gen/orders/js/config.js");
+        assertTrue(appConfig.contains("\"Manager Review\":\"managerReview\""),
+                "config.js should carry the baked task-name -> catalog-key map, got: " + appConfig);
 
         // The report-file template also emits the report's label catalog (report + columns + the
         // widget's tile label) under the '<Name>-report' translation prefix.

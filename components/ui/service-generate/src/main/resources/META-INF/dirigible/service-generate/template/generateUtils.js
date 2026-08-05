@@ -1636,6 +1636,13 @@ export function generateFiles(model, parameters, templateSources) {
             if (model.customActionLabels) {
                 translations.actions = { ...model.customActionLabels };
             }
+            // BPM user-task labels (the .model root `processTaskLabels` map, authored step name ->
+            // humanized task name): the views render each in-record task button through
+            // <tprefix>.processes.<step name> (resolved from the baked config.js reverse map), so
+            // an Approve/Issue/Send button localizes instead of always showing the English BPMN name.
+            if (model.processTaskLabels) {
+                translations.processes = { ...model.processTaskLabels };
+            }
             generatedFiles.push({
                 content: JSON.stringify({ [parameters['tprefix']]: translations }, null, 2),
                 path: `i18n/en-US/${parameters.filePath.substring(parameters.filePath.lastIndexOf('/') + 1)}.json`

@@ -38,6 +38,11 @@
         "noDataYet": "No {{name}} yet",
         "getStarted": "Get started by creating the first record.",
         "deleteConfirm": "Are you sure you want to delete {{name}}? This action cannot be undone.",
+        "deleteItemsRecalc": "Are you sure? This cannot be undone. The document totals will be recalculated.",
+        "deleteLineConfirm": "Delete this line item? This cannot be undone.",
+        "printLanguage": "Choose the template language.",
+        "noDataTitle": "No data",
+        "reportNoRows": "The {{name}} report returned no rows.",
         "detailSelectRecord": "Select a record to get a list of it's details.",
         "immutable": "This record is read-only in its current status - corrections go through the workflow."
     },
@@ -91,6 +96,9 @@
         "reportFilter": "Report Filter",
         "viewDetails": "View Details",
         "deleteTitle": "Delete {{name}}?",
+        "pageOf": "Page {{page}} / {{total}}",
+        "newTitle": "New {{name}}",
+        "deleteLine": "Delete line",
         "loadMore": "Load More..."
     },
     "extName": "{{content}}",
