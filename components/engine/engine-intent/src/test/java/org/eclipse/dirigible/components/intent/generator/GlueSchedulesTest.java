@@ -158,6 +158,100 @@ class GlueSchedulesTest {
     }
 
     @Test
+    void localSourceScheduleMarksSourceAsNotCrossModel() {
+        // Backward-compatibility: a local-source schedule carries the new source keys with the
+        // not-cross-model values, so the template's ${sourceGenFolder} stays this project's folder.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
+                                                   .get(0);
+        assertEquals(false, s.get("sourceCrossModel"));
+        assertEquals("", s.get("sourceModel"));
+        assertEquals("Employee", s.get("perspective"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void crossModelSourceScheduleEmitsSourceKeysAndCrossModelForEach() {
+        // The source Project lives in the projects model (a declared uses: alias); with no repository
+        // (null context) CrossModelSupport falls back to naming-convention defaults, enough to assert
+        // the emitted cross-model source + forEach keys and the criteria against the source row.
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: date }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet }
+                schedules:
+                  - name: monthly-project-timesheets
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    model: projects
+                    where:
+                      - { field: status, op: eq, value: 2 }
+                    generate:
+                      to: ProjectTimesheet
+                      map:
+                        Period: now
+                      children:
+                        - to: EmployeeTimesheet
+                          parent: ProjectTimesheet
+                          forEach:
+                            entity: EmployeeProjectAssignment
+                            model: projects
+                            match: { Project: id }
+                          map: { Employee: Employee }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
+                                                   .get(0);
+        assertEquals("generate", s.get("action"));
+        assertEquals(true, s.get("sourceCrossModel"));
+        assertEquals("projects", s.get("sourceModel"));
+        // Convention fallback (no repository): the owner perspective + key default to the entity name / Id.
+        assertEquals("Project", s.get("perspective"));
+        assertEquals("Id", s.get("attachKeyProperty"));
+        assertTrue(((String) s.get("criteriaExpression")).contains(".eq(\"Status\", 2)"), "criteria: " + s.get("criteriaExpression"));
+
+        List<Map<String, Object>> children = (List<Map<String, Object>>) s.get("genChildren");
+        assertEquals(1, children.size());
+        Map<String, Object> child = children.get(0);
+        assertEquals(true, child.get("forEachCrossModel"));
+        assertEquals("projects", child.get("forEachModel"));
+        assertEquals("EmployeeProjectAssignment", child.get("forEachEntity"));
+        // Convention fallback: the cross-model collection's perspective defaults to the entity name.
+        assertEquals("EmployeeProjectAssignment", child.get("forEachPerspective"));
+    }
+
+    @Test
     void notifyScheduleStillEmitsMailPlan() {
         String yaml = """
                 name: hr

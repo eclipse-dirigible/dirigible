@@ -823,6 +823,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 entity: sc.entity,
                                 perspective: sc.perspective,
                                 javaPerspective: sanitizeJavaIdentifier(sc.perspective),
+                                // The source entity's gen folder: the sanitized OWNER model when the
+                                // source is cross-model (the job imports the owner's gen classes - the
+                                // leafOnly precedent), else this project's own folder. Always supplied,
+                                // so a local-source schedule stays byte-identical.
+                                sourceGenFolder: sc.sourceCrossModel ? sanitizeJavaIdentifier(sc.sourceModel) : parameters.javaGenFolderName,
                                 criteriaExpression: sc.criteriaExpression,
                                 action: sc.action || "notify",
                                 relationLoads: (sc.relationLoads || []).map(load => ({
@@ -860,19 +865,22 @@ export function generateFiles(model, parameters, templateSources) {
                                 // Collection-driven children: fully-qualified classes resolved here
                                 // (the template engine knows the path layout; the glue carried only
                                 // logical names). The child target lives in the generation target's
-                                // model; the forEach collection is always LOCAL.
+                                // model; the forEach collection is LOCAL by default, or in the owner
+                                // model when the child's forEach carried a model: alias.
                                 genChildren: (sc.genChildren || []).map(function resolveChild(c) {
                                     const childGenFolder = c.toCrossModel ? sanitizeJavaIdentifier(c.toModel) : parameters.javaGenFolderName;
                                     const childPkg = 'gen.' + childGenFolder + '.data.' + sanitizeJavaIdentifier(c.toPerspective) + '.';
+                                    const forEachGenFolder = c.forEachCrossModel ? sanitizeJavaIdentifier(c.forEachModel) : parameters.javaGenFolderName;
+                                    const forEachPkg = 'gen.' + forEachGenFolder + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.';
                                     return {
                                         ...c,
                                         toEntityClass: childPkg + c.toEntity + 'Entity',
                                         toRepositoryClass: childPkg + c.toEntity + 'Repository',
                                         forEachEntityClass: c.forEachEntity
-                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Entity'
+                                            ? forEachPkg + c.forEachEntity + 'Entity'
                                             : undefined,
                                         forEachRepositoryClass: c.forEachEntity
-                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Repository'
+                                            ? forEachPkg + c.forEachEntity + 'Repository'
                                             : undefined,
                                         children: (c.children || []).map(resolveChild)
                                     };
