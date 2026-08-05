@@ -23,6 +23,11 @@
 #if($statusProp != "")
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- Immutability pre-check: the record refuses user edits/deletes in its current status, so the
+         page renders read-only and says so (the controller's 409 stays authoritative). -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="transparent" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>
@@ -31,6 +36,11 @@
   <div x-show="error" class="px-4" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="error"></div></div>
 
   <div x-show="state === 'default'" class="p-4 vbox gap-4 overflow-auto">
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- One switch makes every control read-only when the record is immutable (display:contents
+         keeps the grid layout intact - the same trick the manage form's preview mode uses). -->
+    <fieldset :disabled="!mutable" style="display: contents;">
+#end
     <div class="grid grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
@@ -78,6 +88,9 @@
 #end
 #end
     </div>
+#if($immutableStatusProperty || $immutableAlways)
+    </fieldset>
+#end
 
 #set($hasReadOnly = false)
 #foreach($property in $properties)
@@ -160,12 +173,12 @@
       <button x-h-button data-variant="transparent" @click="goBack()"
               x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
 #else
-      <button x-h-button data-variant="negative" x-show="mode === 'edit'" @click="deleteOpen = true"
+      <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="grow"></div>
       <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
               x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary" @click="save()" :disabled="saving">
+      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="save()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
       </button>

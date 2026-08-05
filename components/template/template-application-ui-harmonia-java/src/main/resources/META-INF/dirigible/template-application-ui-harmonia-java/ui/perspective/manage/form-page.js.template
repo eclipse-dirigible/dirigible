@@ -173,6 +173,14 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
+    // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
+    // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
+    // (an outage must not lock the UI - the server still refuses the write).
+    mutable: true,
+#end
 #if($hasPrint == "true")
 
     // Print (document master rendered through this shared form): renders the CMS-seeded .print
@@ -227,6 +235,17 @@ document.addEventListener('alpine:init', () => {
           // which keeps the full set for label resolution alongside the filtered chooser set).
           await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
+#end
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}FormPage] mutable pre-check failed', e);
+          }
+          // An immutable record opened on the /edit route renders as preview - the whole form is
+          // read-only, exactly as if Preview had been chosen (or the URL typed said /preview).
+          if (!this.mutable && this.isEdit) this.mode = 'preview';
 #end
           this.state = 'ready';
         } catch (e) {

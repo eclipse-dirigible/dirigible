@@ -29,6 +29,11 @@
          status resolves (edit/preview - a new record has no status until the DB default applies). -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
 #end
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- Immutability pre-check: the record refuses user edits/deletes in its current status, so the
+         page renders read-only and says so (the controller's 409 stays authoritative). -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
     <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
@@ -368,7 +373,7 @@
 #end
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-      <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
+      <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="goEdit()">
         <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>

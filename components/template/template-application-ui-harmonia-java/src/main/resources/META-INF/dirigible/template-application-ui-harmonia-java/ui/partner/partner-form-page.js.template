@@ -41,6 +41,14 @@ document.addEventListener('alpine:init', () => {
     options: {},
 
     apiPath: '/${javaPerspectiveName}/${name}PartnerController',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
+    // controller's GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed
+    // directly opens read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check
+    // fails OPEN (an outage must not lock the UI - the server still refuses the write).
+    mutable: true,
+#end
 
     async init() {
       const params = (window.PineconeRouter.context && window.PineconeRouter.context.params) || {};
@@ -50,6 +58,14 @@ document.addEventListener('alpine:init', () => {
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}PartnerFormPage] mutable pre-check failed', e);
+          }
+#end
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined && record[key] !== null) this.form[key] = record[key];
           }

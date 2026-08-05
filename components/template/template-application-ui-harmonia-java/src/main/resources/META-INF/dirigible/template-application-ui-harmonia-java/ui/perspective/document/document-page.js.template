@@ -197,6 +197,14 @@ document.addEventListener('alpine:init', () => {
     printError: null,
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
+    // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
+    // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
+    // (an outage must not lock the UI - the server still refuses the write).
+    mutable: true,
+#end
 
     // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
     // at this document. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
@@ -327,6 +335,17 @@ document.addEventListener('alpine:init', () => {
         this.state = 'loading';
         try {
           await this.loadHeader();
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}DocumentPage] mutable pre-check failed', e);
+          }
+          // An immutable document opened on the /edit route renders as preview - header, items and
+          // panels all read-only, exactly as if Preview had been chosen (or the URL said /preview).
+          if (!this.mutable && this.isEdit) this.mode = 'preview';
+#end
           this.state = 'ready';
           await this.loadItems();
         } catch (e) {

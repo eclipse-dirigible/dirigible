@@ -38,6 +38,14 @@ document.addEventListener('alpine:init', () => {
     apiPath: '/${javaPerspectiveName}/${name}MyController',
     // The personal items controller (composition child inherits the personal scope one hop).
     itemsApiPath: '/${javaPerspectiveName}/${documentItemsEntity}MyController',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the scoped
+    // controller's GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed
+    // directly opens read-only (header AND item actions). The controller's PUT/DELETE 409 stays
+    // authoritative; the pre-check fails OPEN (an outage must not lock the UI).
+    mutable: true,
+#end
 
     // Items state (the ${documentItemsEntity} line items, rendered inline).
     itemsDef: null,        // column metadata reused from detail-register (App.detailsFor)
@@ -77,6 +85,14 @@ document.addEventListener('alpine:init', () => {
       if (this.id) {
         try {
           const record = await App.services.api.get(this.apiPath + '/' + this.id);
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + this.id + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}MyDocumentPage] mutable pre-check failed', e);
+          }
+#end
           for (const key of Object.keys(this.form)) {
             if (record[key] !== undefined && record[key] !== null) this.form[key] = record[key];
           }
