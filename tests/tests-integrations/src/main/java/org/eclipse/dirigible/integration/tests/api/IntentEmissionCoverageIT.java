@@ -759,6 +759,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
         assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
+        // The immutability UI pre-check (GET /{id}/mutable): the controller exposes it and the
+        // generated pages gate their Edit affordances on it - the form/document pages ask the
+        // endpoint (so a directly typed /edit URL opens read-only), while the browse tables use
+        // the baked status check per row (no per-row API call). The PUT/DELETE 409 stays the
+        // authoritative guard.
+        assertTrue(entryController.contains("/{id}/mutable") && entryController.contains("isMutable("),
+                "immutableWhen must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
+        assertTrue(snapshotController.contains("/{id}/mutable"),
+                "immutable: true must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
+        String entryFormPage = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
+        assertTrue(entryFormPage.contains("/mutable"),
+                "the edit form page must ask the mutable pre-check so a direct /edit URL opens read-only");
+        String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
+        assertTrue(entryMasterPage.contains("isRowImmutable"),
+                "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
@@ -1471,6 +1486,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/entry/EntryController/" + entryId)
                                                  .then()
                                                  .statusCode(409));
+        // ...and the UI pre-check endpoint reports it, so the generated pages disable Edit up front.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + entryId + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
 
         // immutable: true (append-only): a snapshot can be created, then never edited or deleted.
         AtomicInteger snapshot = new AtomicInteger();
@@ -1492,6 +1513,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
                                                  .statusCode(409));
+        // An append-only record reports immutable from the moment it exists.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/snapshot/SnapshotController/" + snapshot.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
 
         // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
         String transitionRun = "/services/java/" + PROJECT + "/gen/events/emission/CancelEntryTransition/run";
@@ -1504,6 +1531,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                  .statusCode(200)
                                                                  .extract()
                                                                  .path("Id")));
+        // While DRAFT the pre-check reports the record editable (the Edit affordances stay live).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + cancellable.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(true)));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + cancellable.get() + "}")
                                                  .when()

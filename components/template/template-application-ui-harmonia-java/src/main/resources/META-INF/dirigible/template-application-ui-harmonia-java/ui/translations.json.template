@@ -38,7 +38,8 @@
         "noDataYet": "No {{name}} yet",
         "getStarted": "Get started by creating the first record.",
         "deleteConfirm": "Are you sure you want to delete {{name}}? This action cannot be undone.",
-        "detailSelectRecord": "Select a record to get a list of it's details."
+        "detailSelectRecord": "Select a record to get a list of it's details.",
+        "immutable": "This record is read-only in its current status - corrections go through the workflow."
     },
     "defaults": {
         "yes": "Yes",
@@ -75,6 +76,7 @@
         "create": "Create",
         "edit": "Edit",
         "preview": "Preview",
+        "readOnly": "Read-only",
         "update": "Update",
         "delete": "Delete",
         "cancel": "Cancel",

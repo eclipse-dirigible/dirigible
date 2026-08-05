@@ -76,9 +76,17 @@
                   <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                   <ul x-h-menu data-align="bottom-end">
                     <li x-h-menu-item @click="previewMaster(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+#if($immutableStatusProperty || $immutableAlways)
+                    <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
+                         Preview stays - the record remains readable. -->
+                    <li x-h-menu-item x-show="!isRowImmutable(row)" @click="editMaster(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                    <li x-h-menu-separator x-show="!isRowImmutable(row)"></li>
+                    <li x-h-menu-item x-show="!isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#else
                     <li x-h-menu-item @click="editMaster(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
                     <li x-h-menu-separator></li>
                     <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#end
                   </ul>
                 </td>
               </tr>
@@ -108,8 +116,14 @@
           <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
           <button x-h-button data-variant="outline" data-size="sm" @click="previewMaster(selected)"><i role="img" x-h-lucide data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
+#if($immutableStatusProperty || $immutableAlways)
+          <!-- Edit/Delete are disabled for an immutable record (the controller would 409). -->
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="isRowImmutable(selected)" :title="isRowImmutable(selected) ? T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.') : null" @click="editMaster(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" :disabled="isRowImmutable(selected)" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#else
           <button x-h-button data-variant="outline" data-size="sm" @click="editMaster(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#end
         </div>
 
 #if($hasProcess)
