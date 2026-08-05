@@ -220,11 +220,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
 
+              # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
+              # writable surface (power + my), a |format label token rendering "2026 July", and
+              # the schedule's `Period: now` below emitting the string shape (not LocalDate).
               - name: Claim
-                label: "{note} ({Person.name})"
+                label: "{note} ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+                  - { name: period, type: month }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
                 relations:
@@ -512,7 +516,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 generate:
                   to: Claim
                   map: { Person: id }
-                  defaults: { note: monthly }
+                  defaults: { note: monthly, Period: now }
                   children:
                     - to: ClaimLine
                       parent: Claim
@@ -1076,6 +1080,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
+        // type-aware now: a month field is a String on the generated entity, so the default must
+        // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
+        assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
+                "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+
+        // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
+        // surfaces - the power form and the personal form (my-shell parity).
+        assertTrue(contentOf("gen/emission/views/Claim/Claim-form.html").contains("x-h-month-picker"),
+                "a month field must render the Harmonia month picker on the power form");
+        assertTrue(contentOf("gen/emission/views/my/Claim-form.html").contains("x-h-month-picker"),
+                "a month field must render the Harmonia month picker on the personal form too");
 
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
@@ -1261,6 +1276,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
         assertTrue(claimRepository.contains("related.Name"),
                 "a one-hop label token must load the related record and read its display property");
+        // A month field is a YYYY-MM String (not a TemporalAccessor), so a |format label token
+        // must parse it back to a temporal - otherwise the label degrades to the raw "2026-07".
+        assertTrue(claimRepository.contains("YearMonth.parse"),
+                "a |format token on a month field must parse the YYYY-MM string back to a temporal");
         // A workflow setter/writer targeted write keeps the stored display Name current: the label
         // repository OVERRIDES updateProperties to recompute it on that path too.
         assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
@@ -1690,15 +1709,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // Writes force the owner and ignore the sensitive field, whatever the client sends.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999}")
+                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
                                                  .when()
                                                  .post(API + "/claim/ClaimMyController")
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Person", equalTo(1))
                                                  .body("Rate", nullValue())
-                                                 // label: the stored display name computed on write - "{note} ({Person.name})".
-                                                 .body("Name", equalTo("spoofed (Admin)")));
+                                                 // label: the stored display name computed on write -
+                                                 // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
+                                                 // value formats through the pattern, never the raw 2026-07.
+                                                 .body("Name", equalTo("spoofed (Admin) 2026 July")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
                                                  .when()

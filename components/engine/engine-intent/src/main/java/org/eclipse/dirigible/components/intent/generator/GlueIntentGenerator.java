@@ -226,7 +226,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (days != null) {
                 entry.put("kind", "days");
                 entry.put("dayField", IntentNaming.pascalCase(child.getDayField()));
-                entry.put("fieldAssignments", childAssignments(java.util.Map.of(), child.getDefaults(), rowVar));
+                entry.put("fieldAssignments", childAssignments(java.util.Map.of(), child.getDefaults(), rowVar,
+                        temporalKinds(crossModel ? null : byName.get(child.getTo()), target)));
             } else {
                 entry.put("kind", "entity");
                 String collection = String.valueOf(child.getForEach()
@@ -241,7 +242,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                            .next();
                 entry.put("matchProperty", IntentNaming.pascalCase(condition.getKey()));
                 entry.put("matchSourceExpression", "entity." + IntentNaming.pascalCase(String.valueOf(condition.getValue())));
-                entry.put("fieldAssignments", childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar));
+                entry.put("fieldAssignments", childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar,
+                        temporalKinds(crossModel ? null : byName.get(child.getTo()), target)));
             }
             entry.put("rowVar", rowVar);
             if (child.getChildren() != null && !child.getChildren()
@@ -642,7 +644,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
-            e.put("fieldAssignments", assignments(g.getMap(), g.getDefaults(), "source"));
+            e.put("fieldAssignments",
+                    assignments(g.getMap(), g.getDefaults(), "source", temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
             // is created (empty = no hook). Pre-resolved to the PascalCase FK property.
             String sourceStatusProperty = "";
@@ -679,8 +682,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 // childAssignments (not assignments) so a numeric item default renders as BigDecimal -
                 // line-item columns (quantity/price/amount) are decimal, and a bare int literal does
-                // not convert to the generated BigDecimal field.
-                e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem"));
+                // not convert to the generated BigDecimal field. The item target lives in the SAME
+                // model as the header target, so a cross-model header implies a resolvable item.
+                CrossModelSupport.TargetInfo itemTarget = uses == null ? null : CrossModelSupport.resolve(context, uses, items.getTo());
+                e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem",
+                        temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget)));
             } else {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
@@ -1468,10 +1474,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * Pre-render the target field assignments for a generate mapping: a {@code map} entry copies a
      * source property ({@code <sourceVar>.<Prop>}); a {@code defaults} entry sets {@code now} (today's
-     * date) or a literal. The expression is rendered here (in Java, testable) so the Velocity template
-     * only emits {@code target.<prop> = <expr>;} - no expression logic in the template.
+     * date, in the target field's own shape - see {@code literalExpression}) or a literal. The
+     * expression is rendered here (in Java, testable) so the Velocity template only emits
+     * {@code target.<prop> = <expr>;} - no expression logic in the template.
      */
-    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (map != null) {
             for (Map.Entry<String, String> entry : map.entrySet()) {
@@ -1488,7 +1496,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
                     continue;
                 }
-                list.add(assignment(entry.getKey(), literalExpression(entry.getValue())));
+                list.add(assignment(entry.getKey(),
+                        literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())))));
             }
         }
         return list;
@@ -1499,24 +1508,60 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * child shapes (hours, amounts) are decimal columns, and a bare int literal does not convert to the
      * generated {@code BigDecimal} field.
      */
-    private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+    private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds) {
         Map<String, String> typedDefaults = new LinkedHashMap<>();
         if (defaults != null) {
             typedDefaults.putAll(defaults);
         }
-        List<Map<String, Object>> list = assignments(map, java.util.Map.of(), sourceVar);
+        List<Map<String, Object>> list = assignments(map, java.util.Map.of(), sourceVar, temporalKinds);
         for (Map.Entry<String, String> entry : typedDefaults.entrySet()) {
             if (entry.getValue() == null || entry.getValue()
                                                  .isBlank()) {
                 continue;
             }
-            String expression = literalExpression(entry.getValue());
+            String expression = literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())));
             if (expression.matches("-?\\d+(\\.\\d+)?")) {
                 expression = "new java.math.BigDecimal(\"" + expression + "\")";
             }
             list.add(assignment(entry.getKey(), expression));
         }
         return list;
+    }
+
+    /**
+     * The logical temporal kind of the TARGET entity's fields, for the type-aware {@code now} default:
+     * PascalCase property name -> {@code month} / {@code week}; anything else absent (null). A
+     * same-model target reads its intent fields directly; a cross-model target reads the owner model's
+     * widget types through {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model}
+     * is the only cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the
+     * JDBC level. An unresolved target (unit test / convention fallback) keeps the untyped behavior.
+     */
+    private static java.util.function.Function<String, String> temporalKinds(EntityIntent local, CrossModelSupport.TargetInfo target) {
+        Map<String, String> kinds = new LinkedHashMap<>();
+        if (local != null && local.getFields() != null) {
+            for (FieldIntent field : local.getFields()) {
+                if (field.getName() == null || field.getType() == null) {
+                    continue;
+                }
+                String type = field.getType()
+                                   .toLowerCase(java.util.Locale.ROOT);
+                if ("month".equals(type) || "week".equals(type)) {
+                    kinds.put(IntentNaming.pascalCase(field.getName()), type);
+                }
+            }
+        }
+        if (target != null && target.propertyWidgets() != null) {
+            for (Map.Entry<String, String> widget : target.propertyWidgets()
+                                                          .entrySet()) {
+                if ("MONTH".equals(widget.getValue())) {
+                    kinds.put(widget.getKey(), "month");
+                } else if ("WEEK".equals(widget.getValue())) {
+                    kinds.put(widget.getKey(), "week");
+                }
+            }
+        }
+        return kinds::get;
     }
 
     private static Map<String, Object> assignment(String targetProperty, String expression) {
@@ -1527,12 +1572,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * A Java expression for a {@code defaults} value: {@code now} -> today's {@code LocalDate}; an
-     * integer / decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
+     * A Java expression for a {@code defaults} value: {@code now} -> today's value in the TARGET
+     * field's own shape - a {@code month} field gets the {@code YYYY-MM} string, a {@code week} field
+     * the {@code YYYY-Www} ISO-week string, anything else today's {@code LocalDate} (month/week are
+     * plain {@code String} properties on the generated entity, so the untyped {@code LocalDate.now()}
+     * would not even compile against them); an integer / decimal / boolean literal -> its Java form;
+     * anything else -> a quoted Java string.
      */
-    private static String literalExpression(String value) {
+    private static String literalExpression(String value, String temporalKind) {
         String v = value.trim();
         if ("now".equals(v)) {
+            if ("month".equals(temporalKind)) {
+                return "java.time.YearMonth.now().toString()";
+            }
+            if ("week".equals(temporalKind)) {
+                return "String.format(\"%04d-W%02d\", java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_BASED_YEAR), "
+                        + "java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR))";
+            }
             return "java.time.LocalDate.now()";
         }
         if ("true".equals(v) || "false".equals(v)) {
@@ -1896,7 +1952,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("genToModel", crossModel ? g.getUses() : "");
                 entry.put("genToPerspective", toPerspective);
                 entry.put("genToPk", toPk);
-                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity"));
+                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity",
+                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved

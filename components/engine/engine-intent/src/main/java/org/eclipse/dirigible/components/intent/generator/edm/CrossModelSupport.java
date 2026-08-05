@@ -69,9 +69,14 @@ public final class CrossModelSupport {
      * @param propertyNames the target's property names (PascalCase), for validating references to its
      *        properties (a {@code dependsOn} {@code valueFrom}/{@code filterBy}); {@code null} when the
      *        model was not resolved (convention fallback) - callers then skip the check
+     * @param propertyWidgets the target's property name → widget type (e.g. {@code Period} →
+     *        {@code MONTH}) - the only place a consumer can learn a cross-model field's LOGICAL type
+     *        ({@code month}/{@code week} are VARCHAR at the JDBC level); {@code null} when the model
+     *        was not resolved - callers then fall back to the untyped behavior
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
-            String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty) {
+            String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
+            java.util.Map<String, String> propertyWidgets) {
     }
 
     @SuppressWarnings("unchecked")
@@ -146,8 +151,10 @@ public final class CrossModelSupport {
                 String fkType = "INTEGER";
                 String labelField = "Name";
                 java.util.Set<String> propertyNames = null;
+                java.util.Map<String, String> propertyWidgets = null;
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
+                    propertyWidgets = new java.util.LinkedHashMap<>();
                     for (Map<String, Object> p : properties) {
                         if ("true".equals(String.valueOf(p.get("dataPrimaryKey")))) {
                             keyField = str(p.get("name"), keyField);
@@ -157,6 +164,10 @@ public final class CrossModelSupport {
                         String propertyName = str(p.get("name"), null);
                         if (propertyName != null) {
                             propertyNames.add(propertyName);
+                            String widget = str(p.get("widgetType"), null);
+                            if (widget != null) {
+                                propertyWidgets.put(propertyName, widget);
+                            }
                         }
                     }
                     labelField = labelField(properties, keyField);
@@ -164,7 +175,7 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty);
+                        hierarchyProperty, identityProperty, propertyWidgets);
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
@@ -199,7 +210,7 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null);
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null);
     }
 
     /**

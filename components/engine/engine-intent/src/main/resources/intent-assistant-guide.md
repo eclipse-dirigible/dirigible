@@ -381,8 +381,9 @@ the entity.
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
 then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a
-date pattern for temporal values; deeper paths are rejected - compose by referencing the related
-entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
+date pattern for temporal values - a `month` field's `YYYY-MM` string formats through it too
+(`{period|yyyy MMMM}` renders "2026 July"); deeper paths are rejected - compose by referencing the
+related entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
 a token must never reference a `sensitive` field. Prefer a label for every document-ish entity a
 user will pick in a dropdown (a raw id is what renders otherwise).
 
@@ -1007,7 +1008,9 @@ generates:
 entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared
 entity; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
 to-one relation** of the source entity - one-hop `relation.field` paths are not yet supported. `map`
-copies a source value; `defaults` sets a constant (`now` = today's date, or a literal). Do **not** map
+copies a source value; `defaults` sets a constant (`now` = today, rendered in the target field's own
+shape - a `date` field gets today's date, a `month` field the current `YYYY-MM`, a `week` field the
+current `YYYY-Www` - or a literal). Do **not** map
 the target's identity, document number, status or the item->master foreign key: they are left for the
 target to mint - the clone is saved through the **target's** generated repository, so its create-time
 logic (numbering, status init, calculated fields) fires naturally. `sourceStatus` (optional) flips the
@@ -1351,7 +1354,8 @@ EmployeeTimesheet for each active employee". Per matching row, a new target reco
 saved through the target's generated repository, so its create-time logic (document numbering, status
 init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
 `entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
-`now` or a literal. The target may live in another model via `uses:` (same as `generates`).
+`now` (rendered in the target field's own shape - date / `YYYY-MM` month / `YYYY-Www` week) or a
+literal. The target may live in another model via `uses:` (same as `generates`).
 
 ```yaml
 schedules:

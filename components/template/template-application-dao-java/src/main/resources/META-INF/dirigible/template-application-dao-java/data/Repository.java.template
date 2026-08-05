@@ -593,6 +593,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
                                     .format(temporal);
         }
+        // A month field stores the picker's YYYY-MM string - parse it back to a temporal so a
+        // |format token renders "2026 July" instead of the raw string. Fail-soft: a value that is
+        // not a real month, or a pattern demanding fields a month lacks (dd), keeps the raw string.
+        if (pattern != null && value instanceof String string && string.matches("\\d{4}-\\d{2}")) {
+            try {
+                return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
+                                        .format(java.time.YearMonth.parse(string));
+            } catch (RuntimeException e) {
+                return string;
+            }
+        }
         return String.valueOf(value);
     }
 #end
