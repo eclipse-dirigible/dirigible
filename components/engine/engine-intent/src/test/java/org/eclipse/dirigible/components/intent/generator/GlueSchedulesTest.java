@@ -79,6 +79,53 @@ class GlueSchedulesTest {
         assertTrue(fields.contains(Map.of("targetProp", "Period", "expr", "java.time.LocalDate.now()")), "fields: " + fields);
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void generateScheduleRendersNowInTheTargetFieldsOwnShape() {
+        // A month/week field is a plain String on the generated entity (VARCHAR at the JDBC
+        // level), so the untyped LocalDate.now() would not even compile against it - `now` must
+        // render the target field's own value shape.
+        String yaml = """
+                name: hr
+                entities:
+                  - name: Employee
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: status, type: string }
+                  - name: EmployeeTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: month }
+                      - { name: slot, type: week }
+                      - { name: bookedOn, type: date }
+                    relations:
+                      - { name: Employee, kind: manyToOne, to: Employee }
+                schedules:
+                  - name: monthly-timesheets
+                    cron: "0 0 1 1 * ?"
+                    entity: Employee
+                    generate:
+                      to: EmployeeTimesheet
+                      map:
+                        Employee: id
+                      defaults:
+                        Period: now
+                        Slot: now
+                        BookedOn: now
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        Map<String, Object> s = GlueIntentGenerator.buildSchedulesForTest(model)
+                                                   .get(0);
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) s.get("genFieldAssignments");
+        assertTrue(fields.contains(Map.of("targetProp", "Period", "expr", "java.time.YearMonth.now().toString()")),
+                "a month field's now must be the YYYY-MM string: " + fields);
+        assertTrue(fields.stream()
+                         .anyMatch(f -> "Slot".equals(f.get("targetProp")) && ((String) f.get("expr")).contains("WEEK_BASED_YEAR")),
+                "a week field's now must be the YYYY-Www ISO-week string: " + fields);
+        assertTrue(fields.contains(Map.of("targetProp", "BookedOn", "expr", "java.time.LocalDate.now()")),
+                "a date field keeps today's LocalDate: " + fields);
+    }
+
     @Test
     void generateScheduleResolvesCrossModelTarget() {
         String yaml = """
