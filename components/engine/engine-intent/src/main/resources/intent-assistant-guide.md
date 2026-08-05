@@ -222,7 +222,7 @@ composition is opt-in.
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
   synthetic one). The target entity must declare `hierarchy`. Canonical pair:
-    `- { name: Account, kind: manyToOne, to: Account, model: kf-accounts, required: true, leafOnly: true }`
+    `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
@@ -242,7 +242,7 @@ composition is opt-in.
   ```yaml
   postings:
     - name: salesInvoicePosting
-      event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+      event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
       creates: JournalEntry            # a LOCAL document entity owning a composition items child
       backReference: SalesInvoice      # creates' to-one back to the source = the at-most-once guard
       map: { entryDate: date, customer: Customer, reason: "Sales invoice {number}" }
@@ -283,7 +283,7 @@ composition is opt-in.
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
     - name: invoiceStorno
-      event: { onTransition: SalesInvoice, model: kf-billing, when: "Status == 8" }   # the void status
+      event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 8" }   # the void status
       reverses: salesInvoicePosting     # sibling posting in this block
       storno: Storno                    # the created entity's to-one SELF-relation to the original
   ```

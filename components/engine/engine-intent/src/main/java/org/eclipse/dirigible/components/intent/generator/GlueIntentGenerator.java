@@ -925,8 +925,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.PostIntent}). Each descriptor drives a
      * generated event handler that, on the source document's {@code event:} event, emits mapped rows
      * into the {@code into:} target (per {@code forEach:} line item), idempotently by
-     * {@code idempotentBy}. See kf-catalog PROPOSAL_EVENT_POSTING.md. This is the structural glue; the
-     * handler template + BPMN/listener wiring is the next stage.
+     * {@code idempotentBy}. This is the structural glue; the handler template + BPMN/listener wiring is
+     * the next stage.
      */
     private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
@@ -1080,7 +1080,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.AggregateIntent}). Each drives a generated
      * handler that maintains a running sum/count of a source entity's field, grouped by its to-one
      * relations, upserted into a separate target entity keyed by that group. Structural glue; the
-     * keyed-upsert handler template is the next stage. See kf-catalog PROPOSAL_AGGREGATE_CHECKS.md.
+     * keyed-upsert handler template is the next stage.
      */
     private static List<Map<String, Object>> buildAggregates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
