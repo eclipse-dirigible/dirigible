@@ -115,6 +115,39 @@ class EdmIntentGeneratorTest {
         assertNull(pfNumber.get("numberScope"), "the model must not carry a scope/token list");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void processUserTasksEmitTheirLabelCatalogMap() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                processes:
+                  - name: OrderApproval
+                    trigger: { onCreate: Order }
+                    steps:
+                      - name: managerReview
+                        kind: userTask
+                        args: { assignee: manager, form: ApproveOrder }
+                forms:
+                  - name: ApproveOrder
+                    forEntity: Order
+                    fields: [total]
+                    actions: [approve]
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "orders");
+        Map<String, Object> body = (Map<String, Object>) model.get("model");
+        // Keyed by the authored step name (the customActionLabels convention); the value is the
+        // humanized runtime task name, so the reverse map baked into config.js lets a view resolve
+        // an inbox task's name to <project>:<model>-model.processes.<step name> by exact match.
+        Map<String, String> labels = (Map<String, String>) body.get("processTaskLabels");
+        assertNotNull(labels, "a process with user tasks must put processTaskLabels on the .model root");
+        assertEquals("Manager Review", labels.get("managerReview"));
+    }
+
     @Test
     void crossModelProjectionCellIsMarkedProjectionInTheEdmDiagram() {
         IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));

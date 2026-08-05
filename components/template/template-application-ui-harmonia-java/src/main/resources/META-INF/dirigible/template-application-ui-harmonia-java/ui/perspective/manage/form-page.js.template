@@ -400,7 +400,7 @@ document.addEventListener('alpine:init', () => {
     // on save, reload that field's options and select the new id. appUrl is the target app's raw
     // web index.html (the generator resolves the correct - unsanitized - gen folder).
     addRelated(field, appUrl, entity) {
-      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), 'New ' + entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
         await this.loadOptions();
         if (id != null) this.form[field] = String(id);
       });

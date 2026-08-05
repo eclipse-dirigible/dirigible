@@ -31,6 +31,16 @@
 
   let catalogsReady = false;
 
+  // Interpolate {{name}}-style placeholders into a baked fallback. The fallback path (default
+  // language, catalogs not loaded, or an untranslated key) returns the authored English literal,
+  // which for runtime values ("Updated {{time}}", "Page {{page}} / {{total}}") carries the same
+  // placeholders the catalogs use - without this they rendered as literal braces in English.
+  const interpolate = (text, options) => {
+    if (!options) return text;
+    return String(text).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) =>
+      options[name] !== undefined && options[name] !== null ? options[name] : match);
+  };
+
   const markReady = () => {
     catalogsReady = true;
     if (window.Alpine && Alpine.store('i18n')) Alpine.store('i18n').ready = true;
@@ -48,12 +58,12 @@
       // so an untranslated key degrades to the pretty English literal - never to a raw name.
       t(key, fallback, options) {
         this.version; // reactive dependency - see above
-        if (!key) return fallback !== undefined ? fallback : '';
+        if (!key) return fallback !== undefined ? interpolate(fallback, options) : '';
         if (this.ready && window.i18next
             && i18next.exists(key, Object.assign({ fallbackLng: false }, options))) {
           return i18next.t(key, options);
         }
-        return fallback !== undefined ? fallback : key;
+        return interpolate(fallback !== undefined ? fallback : key, options);
       },
     });
   }, { once: true });
@@ -62,7 +72,7 @@
   window.T = (key, fallback, options) => {
     const store = window.Alpine && Alpine.store('i18n');
     if (store) return store.t(key, fallback, options);
-    return fallback !== undefined ? fallback : key;
+    return interpolate(fallback !== undefined ? fallback : key, options);
   };
 
   const loadScript = (src) => new Promise((resolve, reject) => {

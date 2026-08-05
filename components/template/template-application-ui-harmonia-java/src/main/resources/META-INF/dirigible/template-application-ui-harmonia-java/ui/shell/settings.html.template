@@ -23,7 +23,7 @@
         <div class="vbox gap-1" x-show="languageOptions().length > 1">
           <span x-h-text.muted x-text="T('application-core:shell.settings.regionLanguage', 'Region & Language')"></span>
           <div x-h-select>
-            <input x-h-select-input x-model="language" placeholder="Language" />
+            <input x-h-select-input x-model="language" :placeholder="T('application-core:shell.settings.language', 'Language')" />
             <div x-h-select-content>
               <template x-for="opt in languageOptions()" :key="opt.value">
                 <div x-h-select-option="opt.text" :data-value="String(opt.value)"></div>

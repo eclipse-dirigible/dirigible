@@ -11,8 +11,14 @@
  */
 // Safety net for apps generated before label i18n existed: their index.html does not load
 // services/i18n.js, but the SHARED views (inbox/documents/reports) now bind labels through T().
-// The stub returns the English fallback; i18n.js overwrites it with the real translator when loaded.
-window.T = window.T || ((key, fallback) => fallback !== undefined ? fallback : key);
+// The stub returns the English fallback (with {{name}}-style placeholders interpolated, matching
+// the real translator's fallback path); i18n.js overwrites it with the real translator when loaded.
+window.T = window.T || ((key, fallback, options) => {
+  const text = fallback !== undefined ? fallback : key;
+  if (!options) return text;
+  return String(text).replace(/\{\{\s*(\w+)\s*\}\}/g, (match, name) =>
+    options[name] !== undefined && options[name] !== null ? options[name] : match);
+});
 
 window.App = {
   services: {},

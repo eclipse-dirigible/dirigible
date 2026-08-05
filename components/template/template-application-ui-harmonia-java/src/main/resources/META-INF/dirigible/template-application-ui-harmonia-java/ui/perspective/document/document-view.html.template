@@ -413,7 +413,7 @@
               <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
               <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
             </div>
-            <div x-h-dialog-content><p>Are you sure? This cannot be undone. The document totals will be recalculated.</p></div>
+            <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteItemsRecalc', 'Are you sure? This cannot be undone. The document totals will be recalculated.')"></p></div>
             <div x-h-dialog-footer>
               <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
               <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
@@ -429,7 +429,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
         </button>
       </template>
 #end
@@ -555,7 +555,7 @@
                   </div>
                   <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
                   <div class="hbox gap-1 mt-1" x-show="col.lookup && col.lookup.creatable && !col.readonly">
-                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="'New ' + (col.lookup && col.lookup.entity)"></span></button>
+                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup && col.lookup.entity })"></span></button>
                     <button type="button" x-h-button data-variant="transparent" aria-label="Refresh" @click="refreshItemOptions(col)"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
                   </div>
                 </div>
@@ -606,13 +606,13 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog role="alertdialog">
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete line</h2>
-        <p x-h-dialog-description>Delete this line item? This cannot be undone.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteLine', 'Delete line')"></h2>
+        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.deleteLineConfirm', 'Delete this line item? This cannot be undone.')"></p>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="transparent" @click="deleteOpen = false">Cancel</button>
-        <button x-h-button data-variant="negative" @click="confirmDeleteRow()">Delete</button>
+        <button x-h-button data-variant="transparent" @click="deleteOpen = false" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" @click="confirmDeleteRow()" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       </div>
     </div>
   </div>
@@ -622,8 +622,8 @@
   <div x-h-dialog-overlay :data-open="printLangOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Print</h2>
-        <p x-h-dialog-description>Choose the template language.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></h2>
+        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.')"></p>
         <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>

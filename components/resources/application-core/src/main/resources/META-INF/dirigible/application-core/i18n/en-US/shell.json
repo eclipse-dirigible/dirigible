@@ -72,6 +72,29 @@
       "select": "Select a report",
       "selectHint": "Choose a report from the sidebar to view it here."
     },
+    "report": {
+      "rows": "{{count}} rows",
+      "table": "Table",
+      "chart": "Chart",
+      "filters": "Filters",
+      "refresh": "Refresh",
+      "export": "Export",
+      "print": "Print",
+      "apply": "Apply",
+      "clear": "Clear",
+      "noData": "No data",
+      "noRows": "The {{name}} report returned no rows.",
+      "total": "Total",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {{page}} / {{total}}",
+      "any": "any",
+      "yes": "yes",
+      "no": "no",
+      "min": "min",
+      "max": "max",
+      "contains": "contains..."
+    },
     "notfound": {
       "title": "Page not found",
       "hint": "The page you are looking for does not exist."

@@ -443,7 +443,7 @@ document.addEventListener('alpine:init', () => {
     // "Add new <related>" from a header FK combobox: open the target's own create page in the shared
     // related-create iframe dialog; on save, reload that field's options and select the new record.
     addRelated(field, controllerUrl, entity) {
-      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), 'New ' + entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
         await this.loadOptions();
         if (id != null) this.form[field] = String(id);
       });
@@ -828,7 +828,7 @@ document.addEventListener('alpine:init', () => {
     // "Add new <related>" from an item-dialog FK combobox.
     addRelatedItem(col) {
       if (!col.lookup) return;
-      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), 'New ' + col.lookup.entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup.entity }), async (id) => {
         delete this.itemOptions[col.name];
         // Drop a Depends-On-filtered set so the just-created record is selectable even off-filter.
         delete this.draftOptions[col.name];
