@@ -329,7 +329,41 @@ document.addEventListener('alpine:init', () => {
       return locale.languages().map(code => ({ value: code, text: locale.displayName(code) }));
     },
 
+    // ---- Act as (delegated entry) - the Applications-shell entry point -------------------
+    // An entitled user (ADMINISTRATOR) arms an acting identity here and lands in the My shell
+    // as that person - the manager-does-the-entry mode. Server-side session + entitlement.
+    actAs: { entitled: false, acting: null },
+    actAsDialog: false,
+    actAsInput: '',
+    async loadActAs() {
+      try {
+        const res = await fetch('/services/core/actas', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+        if (res.ok) {
+          const s = await res.json();
+          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null };
+        }
+      } catch (e) {
+        console.error('Failed to load the act-as state', e);
+      }
+    },
+    async armActAs() {
+      const username = (this.actAsInput || '').trim();
+      if (!username) return;
+      const res = await fetch('/services/core/actas', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username }),
+      });
+      if (res.ok) {
+        window.location.href = '/services/web/my/';
+      } else {
+        console.error('Failed to arm act-as', res.status);
+      }
+    },
+
     async init() {
+      this.loadActAs(); // fire-and-forget: the menu entry appears when the state arrives
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });

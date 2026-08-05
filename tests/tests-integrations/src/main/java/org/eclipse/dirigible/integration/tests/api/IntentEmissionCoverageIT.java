@@ -223,7 +223,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
               # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
               # writable surface (power + my), a |format label token rendering "2026 July", and
               # the schedule's `Period: now` below emitting the string shape (not LocalDate).
+              # audit: the act-as assertions below prove a delegated write carries the ACTING
+              # owner while CreatedBy keeps the REAL user.
               - name: Claim
+                audit: true
                 label: "{note} ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
@@ -936,6 +939,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimMy.contains("eq(\"Email\", username)"), "personal must emit the identity match against the logged-in username");
         assertTrue(claimMy.contains("entity.Rate = null"), "sensitive must emit the response scrub in the personal controller");
         assertTrue(claimMy.contains("entity.Person = me"), "personal must force the owner FK server-side on create");
+        // act-as (delegated entry): the identity resolution reads the EFFECTIVE user, so an armed
+        // acting identity redirects the personal surface while audit stamping stays on getName().
+        assertTrue(claimMy.contains("User.getEffectiveName()"),
+                "the personal identity resolution must read the effective (act-as aware) user");
         // Auto-sensitive derivation (U5 class): totalCost is NOT authored sensitive, but it sums the
         // sensitive ClaimLine.cost into the personal-rooted Claim - the parser must propagate the
         // flag so the total is scrubbed from the personal wire exactly like the leaf value.
@@ -1800,6 +1807,94 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
+
+        // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
+        // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.
+        // The override lives in the server-side session, so the sequence pins one session.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.filter.session.SessionFilter session = new io.restassured.filter.session.SessionFilter();
+            given().filter(session)
+                   .when()
+                   .get("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("entitled", equalTo(true))
+                   .body("actingAs", nullValue());
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"username\":\"other@example.com\"}")
+                   .when()
+                   .put("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("actingAs", equalTo("other@example.com"));
+            // The my list now serves the ACTING person's rows - and the sensitive strip still holds.
+            given().filter(session)
+                   .when()
+                   .get(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.Person != 2 }.size()", equalTo(0))
+                   .body("findAll { it.Note == 'foreign' }.size()", equalTo(1))
+                   .body("[0].Rate", nullValue());
+            // A write goes under the ACTING identity, while the audit column keeps the REAL user -
+            // the record shows whose it is AND who really entered it.
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"Note\":\"delegated\",\"Rate\":123}")
+                   .when()
+                   .post(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("Person", equalTo(2))
+                   .body("Rate", nullValue())
+                   .body("CreatedBy", equalTo("admin"));
+            // personalReadOnly still refuses writes - acting as the owner does not grant authoring.
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"Days\":5}")
+                   .when()
+                   .post(API + "/balance/BalanceMyController")
+                   .then()
+                   .statusCode(403);
+            // Disarm restores self - the my list is the real user's again.
+            given().filter(session)
+                   .when()
+                   .delete("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("actingAs", nullValue());
+            given().filter(session)
+                   .when()
+                   .get(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.Person != 1 }.size()", equalTo(0));
+        });
+        // While armed, the Inbox's assignee query serves the ACTING person's personal-assigned
+        // tasks - the delegated claim's confirm task, which the real user could never see before.
+        // Retried (the task spawns off the create event); every step here is idempotent.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.filter.session.SessionFilter session = new io.restassured.filter.session.SessionFilter();
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"username\":\"other@example.com\"}")
+                   .when()
+                   .put("/services/core/actas")
+                   .then()
+                   .statusCode(200);
+            given().filter(session)
+                   .when()
+                   .get("/services/inbox/tasks?type=assigned")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.assignee == 'other@example.com' }.size()", greaterThanOrEqualTo(1));
+            given().filter(session)
+                   .when()
+                   .delete("/services/core/actas")
+                   .then()
+                   .statusCode(200);
+        }, 30);
 
         // My Shell (phase C): the shell page is served and aggregates the published personal
         // perspective through the application-personal-perspectives extension point.

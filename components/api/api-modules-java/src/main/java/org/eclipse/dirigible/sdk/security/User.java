@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.sdk.security;
 
 import java.util.Collection;
+import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 
 /**
@@ -30,6 +31,19 @@ public final class User {
 
     public static String getName() {
         return UserFacade.getName();
+    }
+
+    /**
+     * The identity PERSONAL surfaces resolve against: the acting identity when an entitled user armed
+     * "act as" (delegated entry - a manager filling a timesheet in a worker's name), else the real
+     * login. Use it ONLY where the question is "whose records/whose tasks" - roles, security checks and
+     * audit stamping stay on {@link #getName()}, so a record entered on behalf of someone always shows
+     * whose it is AND who really entered it.
+     *
+     * @return the effective username for personal-identity resolution
+     */
+    public static String getEffectiveName() {
+        return ActAsFacade.effectiveUser();
     }
 
     public static boolean isInRole(String role) {

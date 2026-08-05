@@ -211,10 +211,39 @@
                 </div>
               </div>
               <div x-h-menu-separator></div>
+              <!-- Act as (delegated entry): entitled users arm an acting identity; while armed the
+                   personal surfaces and the Inbox serve that person's world (the banner rules). -->
+              <template x-if="actAs.entitled && !actAs.acting">
+                <li x-h-menu-item @click="actAsDialog = true">
+                  <i role="img" x-h-lucide data-lucide="user-round-cog"></i> <span x-text="T('application-core:shell.actAs.start', 'Act as...')"></span>
+                </li>
+              </template>
+              <template x-if="actAs.acting">
+                <li x-h-menu-item @click="disarmActAs()">
+                  <i role="img" x-h-lucide data-lucide="user-round-x"></i> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
+                </li>
+              </template>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
                 <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
             </ul>
+          </div>
+
+          <!-- Act-as (delegated entry) banner: loud and persistent while armed - every entry below
+               is recorded in the acting person's name (the audit log keeps the real user). -->
+          <div x-show="actAs.acting" x-cloak class="hbox items-center gap-2 px-3 py-1.5 text-sm"
+               style="background: var(--color-warning, #b45309); color: #fff;">
+            <i role="img" x-h-lucide data-lucide="user-round-cog"></i>
+            <span>
+              <span x-text="T('application-core:shell.actAs.bannerActing', 'Acting as')"></span>
+              <b x-text="actAs.acting"></b>
+              <span x-text="' - ' + T('application-core:shell.actAs.bannerNote', 'entries are recorded in this person\'s name; the log keeps yours')"></span>
+            </span>
+            <div class="flex-1"></div>
+            <button x-h-button data-size="sm" data-variant="outline" @click="disarmActAs()"
+                    style="border-color:#fff; color:#fff; background:transparent;">
+              <span x-text="T('application-core:shell.actAs.exit', 'Exit')"></span>
+            </button>
           </div>
 
           <!-- Built-in pages (incl. the Settings master-detail) render here via Pinecone; a hosted
@@ -258,6 +287,29 @@
         <div x-h-dialog-content>
           <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
                   title="Action" style="width:100%; height:70vh; border:0;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- Act-as (delegated entry) dialog: pick whose name the entries go under. The identity value
+         is the person's mapped username (their e-mail); entitlement is enforced server-side. -->
+    <div x-h-dialog-overlay :data-open="actAsDialog">
+      <div x-h-dialog style="max-width: 460px;">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="T('application-core:shell.actAs.title', 'Act as another person')"></h2>
+          <button x-h-dialog-close @click="actAsDialog = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        </div>
+        <div x-h-dialog-content class="vbox gap-2">
+          <p class="text-sm" x-h-text.muted
+             x-text="T('application-core:shell.actAs.hint', 'Their timesheets, requests and inbox tasks open as their own; every entry is recorded in their name, and the audit log keeps yours.')"></p>
+          <div x-h-field>
+            <label x-h-label for="actas-username" x-text="T('application-core:shell.actAs.username', 'Person\'s login e-mail')"></label>
+            <input x-h-input type="text" id="actas-username" x-model="actAsInput" @keydown.enter="armActAs()" />
+          </div>
+        </div>
+        <div x-h-dialog-footer>
+          <button x-h-button data-variant="transparent" @click="actAsDialog = false" x-text="T('application-core:shell.defaults.cancel', 'Cancel')"></button>
+          <button x-h-button data-variant="primary" @click="armActAs()" x-text="T('application-core:shell.actAs.startShort', 'Start')"></button>
         </div>
       </div>
     </div>

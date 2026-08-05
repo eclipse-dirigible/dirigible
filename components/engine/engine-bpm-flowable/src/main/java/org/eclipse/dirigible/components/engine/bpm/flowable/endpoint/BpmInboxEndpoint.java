@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 
+import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
@@ -123,7 +124,9 @@ public class BpmInboxEndpoint extends BaseEndpoint {
 
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
-            bpmService.claimTask(taskId, UserFacade.getName());
+            // under act-as (delegated entry) a claim assigns the task to the ACTING identity, so
+            // the flow's record of who owns the step matches whose work it is
+            bpmService.claimTask(taskId, ActAsFacade.effectiveUser());
         } else if (UNCLAIM.getActionName()
                           .equals(actionData.getAction())) {
             bpmService.unclaimTask(taskId);

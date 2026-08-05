@@ -18,6 +18,18 @@
       "user": "User",
       "logout": "Log out"
     },
+    "actAs": {
+      "start": "Act as...",
+      "enter": "Enter data as...",
+      "stop": "Stop acting as",
+      "title": "Act as another person",
+      "hint": "Their timesheets, requests and inbox tasks open as their own; every entry is recorded in their name, and the audit log keeps yours.",
+      "username": "Person's login e-mail",
+      "startShort": "Start",
+      "bannerActing": "Acting as",
+      "bannerNote": "entries are recorded in this person's name; the log keeps yours",
+      "exit": "Exit"
+    },
     "notifications": {
       "title": "Notifications",
       "caughtUp": "You're all caught up.",
