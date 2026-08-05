@@ -144,7 +144,7 @@
         <!-- Spring -->
         <spring.boot.version>4.1.0</spring.boot.version>
         <spring.admin.version>4.1.2</spring.admin.version>
-        <springdoc.version>3.0.3</springdoc.version>
+        <springdoc.version>3.1.0</springdoc.version>
 
         <!-- Webjars -->
         <webjars.locator.version>0.52</webjars.locator.version>
