@@ -687,7 +687,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                                  .isBlank()
                     && items.getTo() != null && !items.getTo()
                                                       .isBlank();
+            List<Map<String, String>> lineRows = g.getItemLines();
+            // Computed-line form (issue #6555). Mutually exclusive with the mirror form - the parser
+            // rejects declaring both; here the mirror wins defensively if both slipped through.
+            boolean hasItemLines = !hasItems && lineRows != null && !lineRows.isEmpty();
             e.put("hasItems", hasItems);
+            e.put("hasItemLines", hasItemLines);
             if (hasItems) {
                 e.put("fromItemEntity", items.getFrom());
                 e.put("toItemEntity", items.getTo());
@@ -709,6 +714,43 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 CrossModelSupport.TargetInfo itemTarget = uses == null ? null : CrossModelSupport.resolve(context, uses, items.getTo());
                 e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem",
                         temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget)));
+                e.put("itemLines", new ArrayList<>());
+            } else if (hasItemLines) {
+                // The synthetic lines write into the TARGET document's composition line-items child,
+                // resolved automatically (never named in the intent): same-model from this model,
+                // cross-model from the owner .model. Its perspective == the header target's (a document
+                // renders its items there), so toJavaPerspective/toGenFolder/toPk carry over unchanged;
+                // only the item ENTITY name and its per-cell field TYPES are new. Cells are expressions
+                // over the loaded `source` master (Calc arithmetic / {} string interpolation / FK copy),
+                // the postings item-cell conventions applied to a create-from.
+                String itemEntityName;
+                Map<String, CellMeta> itemMetas;
+                if (crossModel) {
+                    CrossModelSupport.ItemsChildInfo child = CrossModelSupport.resolveItemsChild(context, uses, g.getTo());
+                    if (!child.resolved()) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                                List.of("generates [" + g.getName() + "] declares computed item lines but the cross-model target ["
+                                        + g.getTo() + "] (model [" + g.getUses() + "]) has no composition line-items child"));
+                    }
+                    itemEntityName = child.childEntity();
+                    itemMetas = crossModelCellMetas(child);
+                } else {
+                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), byName);
+                    if (itemEntity == null) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                                List.of("generates [" + g.getName() + "] declares computed item lines but the target [" + g.getTo()
+                                        + "] has no composition line-items child"));
+                    }
+                    itemEntityName = itemEntity.getName();
+                    itemMetas = localCellMetas(itemEntity);
+                }
+                e.put("fromItemEntity", "");
+                e.put("toItemEntity", itemEntityName);
+                e.put("fromItemPerspective", "");
+                e.put("srcFkProperty", "");
+                e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
+                e.put("itemFieldAssignments", new ArrayList<>());
+                e.put("itemLines", computedItemLines(lineRows, itemMetas, sourceProperties(source)));
             } else {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
@@ -716,6 +758,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
+                e.put("itemLines", new ArrayList<>());
             }
             out.add(e);
         }
@@ -1595,6 +1638,288 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             list.add(assignment(entry.getKey(), expression));
         }
         return list;
+    }
+
+    /**
+     * The rendering-relevant type of a target line-items cell: its logical {@code kind} ({@code string}
+     * / {@code decimal} / {@code double} / {@code integer} / {@code long} / {@code boolean} /
+     * {@code date} / {@code timestamp} / {@code month} / {@code week} / {@code unknown}), the decimal
+     * {@code scale} (for the {@code Calc} rounding of a numeric cell) and whether the cell is a to-one
+     * {@code relation} (a foreign-key copy, not an arithmetic value).
+     */
+    private record CellMeta(String kind, int scale, boolean relation) {
+    }
+
+    /**
+     * The cell metas of a SAME-model target items child, read from its intent fields / to-one
+     * relations.
+     */
+    private static Map<String, CellMeta> localCellMetas(EntityIntent itemEntity) {
+        Map<String, CellMeta> metas = new LinkedHashMap<>();
+        if (itemEntity.getRelations() != null) {
+            for (RelationIntent relation : itemEntity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null) {
+                    metas.put(IntentNaming.pascalCase(relation.getName()), new CellMeta("relation", 0, true));
+                }
+            }
+        }
+        if (itemEntity.getFields() != null) {
+            for (FieldIntent field : itemEntity.getFields()) {
+                if (field.getName() == null || field.getType() == null) {
+                    continue;
+                }
+                int scale = field.getScale() != null ? field.getScale() : 2;
+                metas.put(IntentNaming.pascalCase(field.getName()), new CellMeta(kindOfIntentType(field.getType()), scale, false));
+            }
+        }
+        return metas;
+    }
+
+    /** The cell metas of a CROSS-model target items child, read from the owner {@code .model}. */
+    private static Map<String, CellMeta> crossModelCellMetas(CrossModelSupport.ItemsChildInfo child) {
+        Map<String, CellMeta> metas = new LinkedHashMap<>();
+        for (Map.Entry<String, String> property : child.propertyTypes()
+                                                       .entrySet()) {
+            String name = property.getKey(); // owner .model property names are already PascalCase
+            if (child.relationProperties()
+                     .contains(name)) {
+                metas.put(name, new CellMeta("relation", 0, true));
+                continue;
+            }
+            String widget = child.propertyWidgets()
+                                 .get(name);
+            String kind;
+            if ("MONTH".equals(widget)) {
+                kind = "month";
+            } else if ("WEEK".equals(widget)) {
+                kind = "week";
+            } else {
+                kind = kindOfJdbcType(property.getValue());
+            }
+            int scale = child.propertyScales()
+                             .getOrDefault(name, 2);
+            metas.put(name, new CellMeta(kind, scale, false));
+        }
+        return metas;
+    }
+
+    /** Logical cell kind for an intent field type (same-model target). */
+    private static String kindOfIntentType(String type) {
+        return switch (type.toLowerCase(java.util.Locale.ROOT)) {
+            case "string", "text", "uuid" -> "string";
+            case "integer", "int" -> "integer";
+            case "long" -> "long";
+            case "decimal" -> "decimal";
+            case "double" -> "double";
+            case "boolean" -> "boolean";
+            case "date" -> "date";
+            case "timestamp" -> "timestamp";
+            case "month" -> "month";
+            case "week" -> "week";
+            default -> "unknown";
+        };
+    }
+
+    /**
+     * Logical cell kind for a JDBC {@code dataType} (cross-model target, read from the owner .model).
+     */
+    private static String kindOfJdbcType(String dataType) {
+        return switch (dataType == null ? "" : dataType.toUpperCase(java.util.Locale.ROOT)) {
+            case "VARCHAR", "CHAR", "CLOB", "LONGVARCHAR", "NVARCHAR" -> "string";
+            case "DECIMAL", "NUMERIC" -> "decimal";
+            case "DOUBLE", "REAL", "FLOAT" -> "double";
+            case "INTEGER", "SMALLINT", "TINYINT" -> "integer";
+            case "BIGINT" -> "long";
+            case "BOOLEAN", "BIT" -> "boolean";
+            case "DATE" -> "date";
+            case "TIMESTAMP", "TIME" -> "timestamp";
+            default -> "unknown";
+        };
+    }
+
+    /**
+     * PascalCase names of the source entity's fields + to-one relations (drives string-cell
+     * copy/interpolation).
+     */
+    private static java.util.Set<String> sourceProperties(EntityIntent source) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        if (source == null) {
+            return names;
+        }
+        if (source.getFields() != null) {
+            for (FieldIntent field : source.getFields()) {
+                if (field.getName() != null) {
+                    names.add(IntentNaming.pascalCase(field.getName()));
+                }
+            }
+        }
+        if (source.getRelations() != null) {
+            for (RelationIntent relation : source.getRelations()) {
+                if (relation.getName() != null) {
+                    names.add(IntentNaming.pascalCase(relation.getName()));
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Render the computed line-items ({@code itemLines}, issue #6555): one entry per synthetic line,
+     * each {@code {guard, assigns:[{targetProp, expr}]}} - the same pre-rendered shape a posting item
+     * row uses, so the template stays logic-free. Every {@code expr} runs over the loaded
+     * {@code source} master. A {@code when} cell becomes the row guard.
+     */
+    private static List<Map<String, Object>> computedItemLines(List<Map<String, String>> rows, Map<String, CellMeta> metas,
+            java.util.Set<String> sourceProps) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        for (Map<String, String> row : rows) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            List<Map<String, Object>> assigns = new ArrayList<>();
+            String guard = "";
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                if ("when".equalsIgnoreCase(cell.getKey())) {
+                    guard = computedGuard(value);
+                    continue;
+                }
+                CellMeta meta = metas.get(IntentNaming.pascalCase(cell.getKey()));
+                assigns.add(assignment(cell.getKey(), computedCellExpression(value, meta, sourceProps)));
+            }
+            rendered.put("guard", guard);
+            rendered.put("assigns", assigns);
+            out.add(rendered);
+        }
+        return out;
+    }
+
+    /**
+     * A single computed-line cell as a Java expression over {@code source}: a to-one relation copies
+     * the source foreign key ({@code source.<Prop>}, issue #6533 parity); a numeric field is a
+     * {@code Calc} arithmetic expression rounded to its scale (integer/long narrowed off the
+     * {@code BigDecimal}); a string field is a {@code {field}}-interpolated concatenation, a bare
+     * source-property copy, or a quoted literal; a {@code month}/{@code week}/date/boolean field takes
+     * {@code now} / a literal.
+     */
+    private static String computedCellExpression(String value, CellMeta meta, java.util.Set<String> sourceProps) {
+        String v = value == null ? "" : value.trim();
+        if (meta != null && meta.relation()) {
+            return "source." + IntentNaming.pascalCase(v);
+        }
+        String kind = meta == null ? "unknown" : meta.kind();
+        int scale = meta == null ? 2 : meta.scale();
+        switch (kind) {
+            case "decimal":
+                return calcExpression(v, scale);
+            case "double":
+                return calcExpression(v, scale) + ".doubleValue()";
+            case "integer":
+                return calcExpression(v, 0) + ".intValue()";
+            case "long":
+                return calcExpression(v, 0) + ".longValue()";
+            case "boolean":
+            case "date":
+            case "timestamp":
+            case "month":
+            case "week": {
+                // A bare source property copies it (e.g. a date carried over from the source); otherwise
+                // `now` / a literal in the field's own shape (month -> YYYY-MM, week -> YYYY-Www, else
+                // LocalDate / boolean / quoted string).
+                String copy = bareSourceCopy(v, sourceProps);
+                String temporalKind = "month".equals(kind) || "week".equals(kind) ? kind : null;
+                return copy != null ? copy : literalExpression(v, temporalKind);
+            }
+            case "string":
+                return stringCellExpression(v, sourceProps);
+            default:
+                // unknown: only when a cross-model item child is unresolved (null-context unit tests);
+                // best effort - an arithmetic-looking value is numeric, otherwise a string.
+                return v.matches("[\\w.]*[-+*/()][\\w.+\\-*/() ]*") ? calcExpression(v, scale) : stringCellExpression(v, sourceProps);
+        }
+    }
+
+    /**
+     * {@code Calc.eval("<expr>", source, <scale>)} - the calculated-field / posting-amount convention.
+     */
+    private static String calcExpression(String expr, int scale) {
+        return "Calc.eval(\"" + expr.replace("\\", "\\\\")
+                                    .replace("\"", "\\\"")
+                + "\", source, " + scale + ")";
+    }
+
+    /**
+     * A string cell: {@code {field}} placeholders become a Java concatenation over {@code source}; a
+     * bare identifier that IS a source property copies it ({@code source.<Prop>}); anything else is a
+     * quoted literal (so a plain caption like {@code "Consulting services"} is NOT read as a field).
+     */
+    private static String stringCellExpression(String v, java.util.Set<String> sourceProps) {
+        if (v.contains("{")) {
+            StringBuilder expr = new StringBuilder();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                               .matcher(v);
+            int last = 0;
+            while (m.find()) {
+                if (m.start() > last) {
+                    appendConcat(expr, '"' + v.substring(last, m.start())
+                                              .replace("\"", "\\\"")
+                            + '"');
+                }
+                appendConcat(expr, "String.valueOf(source." + IntentNaming.pascalCase(m.group(1)) + ")");
+                last = m.end();
+            }
+            if (last < v.length()) {
+                appendConcat(expr, '"' + v.substring(last)
+                                          .replace("\"", "\\\"")
+                        + '"');
+            }
+            return expr.length() == 0 ? "\"\"" : expr.toString();
+        }
+        String copy = bareSourceCopy(v, sourceProps);
+        if (copy != null) {
+            return copy;
+        }
+        return "\"" + v.replace("\\", "\\\\")
+                       .replace("\"", "\\\"")
+                       .replace("\n", "\\n")
+                       .replace("\r", "\\r")
+                + "\"";
+    }
+
+    /**
+     * {@code source.<Prop>} when {@code v} is a bare identifier naming a source property, else null.
+     */
+    private static String bareSourceCopy(String v, java.util.Set<String> sourceProps) {
+        if (v.matches("[A-Za-z_]\\w*") && sourceProps.contains(IntentNaming.pascalCase(v))) {
+            return "source." + IntentNaming.pascalCase(v);
+        }
+        return null;
+    }
+
+    private static void appendConcat(StringBuilder expr, String term) {
+        if (expr.length() > 0) {
+            expr.append(" + ");
+        }
+        expr.append(term);
+    }
+
+    /**
+     * A computed-line {@code when} guard as a null-safe {@code Calc} comparison over {@code source} -
+     * the postings item-row guard convention ({@code <field> ==|!= <n>}); an unparseable guard yields
+     * no guard (the line is always created).
+     */
+    private static String computedGuard(String value) {
+        java.util.regex.Matcher guard = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*([!=]=)\\s*(\\d+(?:\\.\\d+)?)\\s*")
+                                                               .matcher(value);
+        if (guard.matches()) {
+            return "Calc.eval(\"" + IntentNaming.pascalCase(guard.group(1)) + "\", source, 6).compareTo(new java.math.BigDecimal(\""
+                    + guard.group(3) + "\")) " + ("==".equals(guard.group(2)) ? "==" : "!=") + " 0";
+        }
+        return "";
     }
 
     /**

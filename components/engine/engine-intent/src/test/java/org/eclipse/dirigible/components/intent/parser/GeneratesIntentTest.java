@@ -209,6 +209,164 @@ class GeneratesIntentTest {
     }
 
     @Test
+    void parsesComputedItemLinesAsAList() {
+        // A list-valued `items:` is the computed form (issue #6555): it lands in itemLines, NOT items.
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order, composition: true, required: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      - { name: "Total for the period", price: Total }
+                """);
+        GeneratesIntent g = model.getGenerates()
+                                 .get(0);
+        assertEquals(null, g.getItems());
+        assertEquals(1, g.getItemLines()
+                         .size());
+        assertEquals("Total", g.getItemLines()
+                               .get(0)
+                               .get("price"));
+    }
+
+    @Test
+    void rejectsComputedItemLineCellNotOnTheTargetItemsChild() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order, composition: true, required: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      - { nope: 1 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("item line cell [nope] is not a field or to-one relation")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsComputedItemLineWhenTargetHasNoItemsChild() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      - { anything: 1 }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("has no composition line-items child")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsComputedItemLineBadWhenGuard() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: price, type: decimal }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order, composition: true, required: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      - { price: Total, when: "Total > 0" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("item line when") && i.contains("==|!=")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
+    void rejectsComputedItemLineUnknownInterpolationSource() {
+        String yaml = """
+                name: sales
+                entities:
+                  - name: Quote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: OrderItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Order, kind: manyToOne, to: Order, composition: true, required: true }
+                generates:
+                  - name: order-from-quote
+                    from: Quote
+                    to: Order
+                    items:
+                      - { name: "Line {missing}" }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("interpolates {missing}")),
+                "got: " + ex.getIssues());
+    }
+
+    @Test
     void rejectsOneHopRelationFieldMapping() {
         String yaml = """
                 name: sales

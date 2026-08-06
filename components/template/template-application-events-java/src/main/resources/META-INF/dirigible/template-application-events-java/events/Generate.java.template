@@ -6,6 +6,9 @@ import org.eclipse.dirigible.sdk.component.Component;
 import org.eclipse.dirigible.sdk.http.Controller;
 import org.eclipse.dirigible.sdk.http.Post;
 import org.eclipse.dirigible.sdk.utils.Json;
+#if($hasItemLines)
+import org.eclipse.dirigible.sdk.utils.Calc;
+#end
 
 /**
  * Create-from ${name}: builds a new ${toEntity} from an existing ${fromEntity} (loaded by the id in
@@ -55,6 +58,26 @@ public class ${className}Generate {
             item.${toFkProperty} = saved.${toPk};
             new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
         }
+#end
+#if($hasItemLines)
+        // Computed line-items (intent `items:` list form - issue #6555): a fixed set of synthetic lines
+        // whose cells are expressions over the loaded `source` master (Calc arithmetic / {} string
+        // interpolation / source foreign-key copy), each optionally guarded by a `when` condition. Saved
+        // through the target item repository so the target document's own line logic fires.
+#foreach($row in $itemLines)
+#if($row.guard != "")
+        if (${row.guard})
+#end
+        {
+            gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
+                    new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity();
+#foreach($a in $row.assigns)
+            item.${a.targetProp} = ${a.expr};
+#end
+            item.${toFkProperty} = saved.${toPk};
+            new gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Repository().save(item);
+        }
+#end
 #end
 #if($sourceStatusValue != "")
         // Completion hook (intent `sourceStatus:`): the source document reaches its post-generation
