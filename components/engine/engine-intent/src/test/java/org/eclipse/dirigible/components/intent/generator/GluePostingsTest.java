@@ -54,6 +54,7 @@ class GluePostingsTest {
                 relations:
                   - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
                   - { name: Account, kind: manyToOne, to: Account, required: true }
+                  - { name: Customer, kind: manyToOne, to: Customer, model: sales-invoices }
             postings:
               - name: salesInvoicePosting
                 event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
@@ -62,7 +63,7 @@ class GluePostingsTest {
                 map: { entryDate: date, reason: "Sales invoice {number}" }
                 rule: { entity: PostingRule, match: { documentType: "Sales Invoice" } }
                 items:
-                  - { Account: rule(receivableAccount), debit: "Net + Vat" }
+                  - { Account: rule(receivableAccount), debit: "Net + Vat", Customer: Customer }
                   - { Account: rule(revenueAccount), credit: "Net" }
                   - { Account: rule(vatAccount), credit: "Vat", when: "Vat != 0" }
             """;
@@ -106,6 +107,10 @@ class GluePostingsTest {
         assertTrue(firstAssigns.stream()
                                .anyMatch(a -> "Debit".equals(a.get("targetProp"))
                                        && "Calc.eval(\"Net + Vat\", source, 2)".equals(a.get("expr"))));
+        // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim - no Calc.
+        assertTrue(firstAssigns.stream()
+                               .anyMatch(a -> "Customer".equals(a.get("targetProp")) && "source.Customer".equals(a.get("expr"))),
+                "a to-one relation item cell must pre-render as a source-FK copy");
         // the third row carries a null-safe Calc guard
         assertEquals("Calc.eval(\"Vat\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", rows.get(2)
                                                                                                           .get("guard"));

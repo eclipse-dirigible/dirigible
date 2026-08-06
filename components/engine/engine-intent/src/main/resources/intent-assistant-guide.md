@@ -248,10 +248,15 @@ composition is opt-in.
       map: { entryDate: date, customer: Customer, reason: "Sales invoice {number}" }
       rule: { entity: PostingRule, match: { documentType: "Sales Invoice" } }
       items:
-        - { Account: rule(receivableAccount), debit: "Net + Vat" }
+        - { Account: rule(receivableAccount), debit: "Net + Vat", Customer: Customer }  # copy the source FK
         - { Account: rule(revenueAccount),    credit: "Net" }
         - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
   ```
+  A to-one relation item cell whose value is a bare SOURCE relation name copies that FK id onto the
+  line (`Customer: Customer` above, or a rename `Counterparty: Supplier`) - the counterparty
+  dimension that makes an auto-posted line appear in the subledger balances (by customer/supplier).
+  The item relation and the copied source relation must be to-one to the same entity; a null source
+  FK copies null.
   The trigger is `onTransition` (a status write; the `when` status guard is mandatory) or
   `onCreate` (the source's INSERT - the trigger for a source with no status lifecycle at all, e.g.
   a booked payment whose only event is being created; `when` stays optional there as a plain
@@ -275,7 +280,8 @@ composition is opt-in.
   generateNumber -> markIssued): "the transition is final" then also means "the document is
   complete"; `map` values are a source
   property (copy), a literal, or a `{sourceProperty}` template; item values are `rule(<column>)`
-  references or arithmetic over the SOURCE's fields; a row `when` is `<SourceField> ==|!= <number>`.
+  references, arithmetic over the SOURCE's fields, or - for a to-one relation cell - a bare SOURCE
+  relation name whose FK is copied onto the line; a row `when` is `<SourceField> ==|!= <number>`.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
   documents with no back-referencing target), never throws. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
@@ -290,8 +296,9 @@ composition is opt-in.
   `creates`/`backReference`/`rule`/`map`/`items` are inherited from the sibling and must not be
   declared. Semantics: locate the ORIGINAL (back-reference = this source, storno link empty) - none
   -> skip fail-soft; create the negated copy (every item amount expression negated on the SAME
-  debit/credit side - never swapped) with the `storno` link stamped; idempotent (rows carrying the
-  link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
+  debit/credit side - never swapped; a copied source-FK dimension carries through UNCHANGED, so the
+  reversal nets the same counterparty's balance) with the `storno` link stamped; idempotent (rows
+  carrying the link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
   reversal lands as a normal new document (DRAFT status init, numbering, checks), dated by its own
   `map`-inherited header - corrections post into the open period.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
