@@ -76,6 +76,8 @@ document.addEventListener('alpine:init', () => {
         DIRIGIBLE_BRANDING_PREFIX: 'prefix',
         DIRIGIBLE_BRANDING_ANALYTICS: 'analytics',
         DIRIGIBLE_APPLICATION_LANGUAGES: 'languages',
+        DIRIGIBLE_CMS_ROLES_ENABLED: 'cmsRoles',
+        DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED: 'msOfficeContentTypes',
       }[key];
       return (suffix && window.T)
         ? T('application-core:shell.settings.tenantConfigLabels.' + suffix, derived)

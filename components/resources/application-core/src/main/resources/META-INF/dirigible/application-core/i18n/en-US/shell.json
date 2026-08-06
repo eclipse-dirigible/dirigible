@@ -167,7 +167,9 @@
         "theme": "Theme",
         "prefix": "Prefix",
         "analytics": "Analytics",
-        "languages": "Application Languages"
+        "languages": "Application Languages",
+        "cmsRoles": "Document access rules enforced",
+        "msOfficeContentTypes": "Legacy Microsoft Office file types"
       }
     },
     "apps": {

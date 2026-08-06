@@ -167,7 +167,9 @@
         "theme": "Тема",
         "prefix": "Префикс",
         "analytics": "Анализи",
-        "languages": "Езици на приложението"
+        "languages": "Езици на приложението",
+        "cmsRoles": "Прилагане на правилата за достъп до документи",
+        "msOfficeContentTypes": "Стари типове файлове на Microsoft Office"
       }
     },
     "apps": {
