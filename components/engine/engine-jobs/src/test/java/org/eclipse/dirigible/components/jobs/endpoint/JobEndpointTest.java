@@ -49,7 +49,7 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * The Class JobEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

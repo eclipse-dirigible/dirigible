@@ -36,7 +36,7 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * The Class WorkspaceSearchEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc(addFilters = false)

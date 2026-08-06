@@ -38,7 +38,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * The Class AccessEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = {AccessRepository.class})
 @AutoConfigureMockMvc

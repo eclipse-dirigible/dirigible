@@ -45,7 +45,7 @@ import jakarta.persistence.EntityManager;
 /**
  * The Class TaskStateEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

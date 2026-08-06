@@ -27,12 +27,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import io.swagger.v3.oas.annotations.Parameter;
+import jakarta.annotation.security.RolesAllowed;
 
 /**
  * The Class ExtensionPointEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_CORE + "extensionpoints")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class ExtensionPointEndpoint extends BaseEndpoint {
 
     /** The extension point service. */

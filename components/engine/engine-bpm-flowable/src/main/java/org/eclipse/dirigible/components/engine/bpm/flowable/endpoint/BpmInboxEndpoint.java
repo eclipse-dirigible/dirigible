@@ -106,6 +106,10 @@ public class BpmInboxEndpoint extends BaseEndpoint {
 
     @GetMapping(value = "/tasks/{taskId}/variables")
     public ResponseEntity<?> getTaskVariables(@PathVariable("taskId") String taskId) {
+        // A task's variables carry its business payload (the record id and the locators a task form
+        // resolves), so reading them is gated exactly like acting on the task - the inbox is scoped
+        // to the tasks the caller is assigned to or a candidate for, never addressable by bare id.
+        verifyCurrentUserHasPermissionForTask(taskId);
         try {
             Map<String, Object> variables = bpmService.getTaskVariables(taskId);
             TaskVariablesDTO taskVariables = new TaskVariablesDTO(variables);
