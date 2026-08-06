@@ -690,11 +690,30 @@ processes:
       - { name: managerReview, kind: userTask, args: { assignee: manager, form: ApproveLoan } }
 ```
 
-**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` / `end`.
-A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name a declared step or
-the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared entity -
-`onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
-guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` /
+`parallel` / `end`. A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name
+a declared step or the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared
+entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
+when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+
+**Parallel branches (`kind: parallel`).** When two steps should run **concurrently** and rejoin before
+the next step - e.g. a technical and a commercial review of the same order - use a `parallel` step. It
+lists its `branches` (declared steps run at the same time) and the `next` step to continue at once every
+branch is done; it emits a BPMN parallel-gateway fork/join.
+
+```yaml
+    steps:
+      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }
+      - { name: techReview,       kind: userTask, args: { assignee: engineer, form: ReviewOrder } }
+      - { name: commercialReview, kind: userTask, args: { assignee: sales,    form: ReviewOrder } }
+      - { name: consolidate,      kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+      - { name: done, kind: end }
+```
+
+Rules: at least two `branches`, each a **single** declared task step (a `userTask` / `serviceTask` /
+`script`) that joins directly; `next` names a declared step or `end`. v1 does not support a branch that
+chains onward (its own `next`/`then`/boundary timer) or a branch that is itself `parallel` - multi-step
+branch chains and nested parallels are a planned follow-up.
 
 **Business key on the trigger.** By default a started process instance's BPM business key is the
 record's primary key (a bare number in the Processes admin view). Name a more readable trigger-entity

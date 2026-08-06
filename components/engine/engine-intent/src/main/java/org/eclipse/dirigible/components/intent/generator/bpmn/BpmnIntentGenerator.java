@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.TimerLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
@@ -315,8 +316,24 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             steps.removeIf(step -> abortThenName.equals(step.getName()));
         }
+        // parallel (fork/join): a `kind: parallel` step fans to its branch steps and joins before
+        // `next`. Synthesize the converging join gateway as a step (so it is emitted + laid out), and
+        // treat the branch steps + the join as OFF the linear chain (like decision branches) - the
+        // fork/branch/join flows are wired explicitly in buildSequenceFlows.
+        List<ProcessParallelSupport.Fork> forks = ProcessParallelSupport.forks(steps);
+        for (ProcessParallelSupport.Fork fork : forks) {
+            StepIntent join = new StepIntent();
+            join.setName(fork.joinId());
+            join.setKind("parallelJoin");
+            steps.add(join);
+        }
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
-        List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
+        Set<String> parallelOffLinear = new HashSet<>(ProcessParallelSupport.branchNames(forks));
+        parallelOffLinear.addAll(ProcessParallelSupport.joinIds(forks));
+        List<String> linearSteps = effectiveSteps.stream()
+                                                 .filter(id -> !parallelOffLinear.contains(id))
+                                                 .collect(java.util.stream.Collectors.toList());
+        List<SequenceFlow> flows = buildSequenceFlows(steps, linearSteps, forks);
         // Boundary timers on user tasks (timeout: non-cancelling reminder; expire: cancelling,
         // date-field-driven). Their outgoing flow to `then` joins the sequence flows; the branch steps
         // are declared steps the author routes around with `next`, like decision branches.
@@ -693,6 +710,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             case "wait":
                 appendWaitCatchEvent(sb, step, processName);
                 break;
+            case "parallel":
+            case "parallelJoin":
+                appendParallelGateway(sb, step);
+                break;
             case "end":
                 break;
             default:
@@ -909,6 +930,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    </intermediateCatchEvent>\n");
     }
 
+    /**
+     * A {@code parallelGateway} - the diverging fork (a {@code parallel} step) or the synthesized
+     * converging join ({@code parallelJoin}). Unlike an exclusive gateway it carries no {@code default}
+     * flow: every outgoing branch fires, and every incoming branch must arrive before the join
+     * proceeds.
+     */
+    private static void appendParallelGateway(StringBuilder sb, StepIntent step) {
+        sb.append("    <parallelGateway id=\"")
+          .append(escapeXmlAttribute(step.getName()))
+          .append("\" name=\"")
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
+          .append("\"></parallelGateway>\n");
+    }
+
     private static void appendExclusiveGateway(StringBuilder sb, StepIntent step) {
         sb.append("    <exclusiveGateway id=\"")
           .append(escapeXmlAttribute(step.getName()))
@@ -933,11 +968,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * (e.g. {@code activate} and {@code reject} both flowing to {@code done}) without the first
      * silently falling through into the second.
      */
-    private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds) {
+    private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds,
+            List<ProcessParallelSupport.Fork> forks) {
         List<SequenceFlow> flows = new ArrayList<>();
         for (int i = 0; i < effectiveIds.size() - 1; i++) {
             String source = effectiveIds.get(i);
             String target = effectiveIds.get(i + 1);
+            // A parallel fork does not fall through linearly - it fans to its branches (wired below).
+            if ("parallel".equalsIgnoreCase(kindOf(source, steps))) {
+                continue;
+            }
             String flowId;
             StepIntent decision = decisionOf(source, steps);
             if (decision != null) {
@@ -968,7 +1008,25 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), effectiveTarget(thenTarget, steps), condition));
         }
+        // parallel fork/join: the fork fans an unconditioned flow to each branch, each branch flows to
+        // the synthesized join, and the join flows once to `next` (or the end). All flows are
+        // unconditioned - every branch runs, and the join waits for all of them.
+        for (ProcessParallelSupport.Fork fork : forks) {
+            for (String branch : fork.branches()) {
+                String branchTarget = effectiveTarget(branch, steps);
+                flows.add(new SequenceFlow("flow_" + fork.forkId() + "_" + branch, fork.forkId(), branchTarget, null));
+                flows.add(new SequenceFlow("flow_" + branch + "_" + fork.joinId(), branchTarget, fork.joinId(), null));
+            }
+            String joinTarget = fork.next() == null ? END_ID : effectiveTarget(fork.next(), steps);
+            flows.add(new SequenceFlow("flow_" + fork.joinId() + "_" + joinTarget, fork.joinId(), joinTarget, null));
+        }
         return flows;
+    }
+
+    /** The kind of the step with the given id, or {@code null} when the id is not a declared step. */
+    private static String kindOf(String stepId, List<StepIntent> steps) {
+        StepIntent step = stepByName(stepId, steps);
+        return step == null ? null : step.getKind();
     }
 
     private static void writeSequenceFlows(StringBuilder sb, List<SequenceFlow> flows) {
@@ -1327,7 +1385,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         StepIntent step = stepByName(id, steps);
         String kind = step == null ? "userTask" : step.getKind();
-        if ("decision".equalsIgnoreCase(kind)) {
+        if ("decision".equalsIgnoreCase(kind) || "parallel".equalsIgnoreCase(kind) || "parallelJoin".equalsIgnoreCase(kind)) {
             return new int[] {40, 40};
         }
         if ("wait".equalsIgnoreCase(kind)) {
