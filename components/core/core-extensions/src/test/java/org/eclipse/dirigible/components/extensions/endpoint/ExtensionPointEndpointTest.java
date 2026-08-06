@@ -45,7 +45,7 @@ import jakarta.persistence.EntityManager;
 /**
  * The Class ExtensionPointEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"DEVELOPER"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

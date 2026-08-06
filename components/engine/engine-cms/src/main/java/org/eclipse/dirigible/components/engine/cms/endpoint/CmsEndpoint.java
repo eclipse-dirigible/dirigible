@@ -18,6 +18,7 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.components.engine.cms.CmisObject;
 import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
@@ -40,9 +41,13 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * The Class CmsEndpoint.
+ * <p>
+ * Secured path only. The CMS holds tenant BUSINESS content - record attachments, generated document
+ * snapshots and the database export dumps - so it must never be served from the unauthenticated
+ * {@code /public/**} space, where a known or guessable path is readable with no credentials at all.
  */
 @RestController
-@RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "cms", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "cms"})
+@RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURED + "cms")
 public class CmsEndpoint extends BaseEndpoint {
 
     /** The Constant logger. */
@@ -50,6 +55,12 @@ public class CmsEndpoint extends BaseEndpoint {
 
     /** The Constant INDEX_HTML. */
     private static final String INDEX_HTML = "index.html";
+
+    /**
+     * The CMS folder the asynchronous database export writes its dumps into. Mirrors
+     * {@code DataAsyncExportService.EXPORTS_FOLDER_NAME}, which this module cannot depend on.
+     */
+    private static final String EXPORTS_FOLDER_NAME = "__EXPORTS";
 
     /** The cms service. */
     private final CmsService cmsService;
@@ -83,8 +94,10 @@ public class CmsEndpoint extends BaseEndpoint {
         if (path.trim()
                 .isEmpty()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
-        } else if (path.trim()
-                       .endsWith("/")) {
+        }
+        assertExportsAccess(path);
+        if (path.trim()
+                .endsWith("/")) {
             return getDocumentByPath(path + INDEX_HTML);
         }
         ResponseEntity resourceResponse = getDocumentByPath(path);
@@ -93,6 +106,28 @@ public class CmsEndpoint extends BaseEndpoint {
                             .add("X-Frame-Options", "Deny");
         }
         return resourceResponse;
+    }
+
+    /**
+     * A database export dump is readable only by the roles entitled to produce one. Attachments and
+     * document snapshots stay readable by any authenticated user - the applications that own them
+     * govern their own access - but a full schema dump is an administrative artefact and must not be
+     * reachable just because its file name is known.
+     *
+     * @param path the requested CMS path
+     */
+    private void assertExportsAccess(String path) {
+        String normalized = path.trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (!normalized.equals(EXPORTS_FOLDER_NAME) && !normalized.startsWith(EXPORTS_FOLDER_NAME + "/")) {
+            return; // the folder itself or anything under it - not merely a name starting with it
+        }
+        if (!request.isUserInRole(Roles.ADMINISTRATOR.getRoleName()) && !request.isUserInRole(Roles.OPERATOR.getRoleName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access to the database exports requires the "
+                    + Roles.ADMINISTRATOR.getRoleName() + " or " + Roles.OPERATOR.getRoleName() + " role.");
+        }
     }
 
     /**
