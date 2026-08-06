@@ -99,7 +99,7 @@ public final class IntentParser {
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
     /** Implemented relation {@code function} values (lower-cased). */
     private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus");
-    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "end");
+    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "parallel", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
@@ -2739,6 +2739,7 @@ public final class IntentParser {
             validateWaitSteps(process, triggerEntity, byName, issues);
             validateUserTaskTimers(process, triggerEntity, byName, issues);
             validateAbortOn(process, triggerEntity, byName, issues);
+            validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
         }
     }
@@ -2752,6 +2753,65 @@ public final class IntentParser {
      * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
      * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
      */
+    /**
+     * A {@code kind: parallel} step forks over {@code args.branches} (declared steps run concurrently)
+     * and joins before {@code args.next}. v1 scope: at least two branches; each is a SINGLE declared
+     * task step that joins directly - no own {@code next}/{@code then}, no boundary timer, no nested
+     * parallel; {@code next} is a declared step or {@code end}. Multi-step branch chains and nested
+     * forks are a documented follow-up.
+     */
+    private static void validateParallelSteps(ProcessIntent process, List<String> issues) {
+        Map<String, StepIntent> byName = new HashMap<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                byName.put(step.getName(), step);
+            }
+        }
+        Set<String> usedBranches = new HashSet<>();
+        for (StepIntent step : process.getSteps()) {
+            if (!"parallel".equals(step.getKind())) {
+                continue;
+            }
+            String subject = "process [" + process.getName() + "] parallel [" + step.getName() + "]";
+            Map<String, Object> args = step.getArgs() == null ? Map.of() : step.getArgs();
+            List<?> branches = args.get("branches") instanceof List<?> list ? list : List.of();
+            if (branches.size() < 2) {
+                issues.add(subject + " needs a `branches` list of at least two step names");
+            }
+            Object next = args.get("next");
+            String nextStep = next == null ? null
+                    : next.toString()
+                          .trim();
+            if (nextStep == null || nextStep.isEmpty()) {
+                issues.add(subject + " needs a `next` step to join into");
+            } else if (!"end".equalsIgnoreCase(nextStep) && !byName.containsKey(nextStep)) {
+                issues.add(subject + " next [" + nextStep + "] is not a declared step or `end`");
+            }
+            for (Object branchRaw : branches) {
+                String branch = String.valueOf(branchRaw);
+                StepIntent branchStep = byName.get(branch);
+                if (branchStep == null) {
+                    issues.add(subject + " branch [" + branch + "] is not a declared step");
+                    continue;
+                }
+                if (!usedBranches.add(branch)) {
+                    issues.add(subject + " branch [" + branch + "] is a branch of more than one parallel");
+                }
+                String branchKind = branchStep.getKind() == null ? "userTask" : branchStep.getKind();
+                if (!"userTask".equals(branchKind) && !"serviceTask".equals(branchKind) && !"script".equals(branchKind)) {
+                    issues.add(subject + " branch [" + branch + "] must be a userTask/serviceTask/script step, not [" + branchKind
+                            + "] (nested parallels are not yet supported)");
+                }
+                Map<String, Object> branchArgs = branchStep.getArgs() == null ? Map.of() : branchStep.getArgs();
+                if (branchArgs.get("next") != null || branchArgs.get("then") != null || branchArgs.get("timeout") != null
+                        || branchArgs.get("expire") != null) {
+                    issues.add(subject + " branch [" + branch + "] declares next/then/timeout/expire - a v1 parallel branch is a single"
+                            + " step that joins directly (multi-step branch chains and boundary timers on a branch are not yet supported)");
+                }
+            }
+        }
+    }
+
     /** The entity a process trigger starts on (onCreate/onUpdate/onDelete target), or null. */
     private static String triggerEntityName(ProcessIntent process) {
         if (process.getTrigger() == null) {

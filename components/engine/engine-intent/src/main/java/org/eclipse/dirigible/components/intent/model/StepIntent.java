@@ -14,10 +14,11 @@ import java.util.Map;
 
 /**
  * Single step in a {@link ProcessIntent}. {@link #kind} is one of {@code userTask},
- * {@code serviceTask}, {@code decision}, {@code script}, {@code wait}, {@code end}. {@link #args}
- * carries kind-specific configuration ({@code assignee}, {@code form}, {@code if}, {@code then},
- * {@code call}, a wait's {@code onCreate}/{@code onUpdate}/{@code via}, a user task's
- * {@code timeout}/{@code expire} boundary timers); the process generator validates per kind.
+ * {@code serviceTask}, {@code decision}, {@code script}, {@code wait}, {@code parallel},
+ * {@code end}. {@link #args} carries kind-specific configuration ({@code assignee}, {@code form},
+ * {@code if}, {@code then}, {@code call}, a wait's {@code onCreate}/{@code onUpdate}/{@code via}, a
+ * user task's {@code timeout}/{@code expire} boundary timers, a parallel's
+ * {@code branches}/{@code next} fork/join); the process generator validates per kind.
  */
 public class StepIntent {
 

@@ -912,6 +912,68 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void parallel_step_emits_a_fork_join_parallel_gateway_pair() {
+        // #6556: a `kind: parallel` step runs its branch steps concurrently and joins before `next`.
+        // Two reviews run at once; both must complete before consolidate. Emitted as a diverging
+        // parallelGateway (the fork) + a synthesized converging one (<fork>Join); the branch steps and
+        // the join are off the linear chain (the fork never falls through to consolidate directly).
+        String yaml = """
+                name: orders3
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: OrderReview
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }
+                      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: REVIEWED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String bpmn = contentOf("OrderReview.bpmn");
+        assertTrue(bpmn.contains("<parallelGateway id=\"reviews\""), "the fork is a diverging parallelGateway");
+        assertTrue(bpmn.contains("<parallelGateway id=\"reviewsJoin\""), "a converging join parallelGateway is synthesized");
+        // The fork fans an unconditioned flow to each branch, each branch flows to the join, and the
+        // join flows once to `next`.
+        assertTrue(bpmn.contains("sourceRef=\"reviews\" targetRef=\"techReview\"")
+                && bpmn.contains("sourceRef=\"reviews\" targetRef=\"commercialReview\""), "the fork flows to both branches");
+        assertTrue(bpmn.contains("sourceRef=\"techReview\" targetRef=\"reviewsJoin\"")
+                && bpmn.contains("sourceRef=\"commercialReview\" targetRef=\"reviewsJoin\""), "both branches flow into the join");
+        assertTrue(bpmn.contains("sourceRef=\"reviewsJoin\" targetRef=\"consolidate\""), "the join flows on to `next`");
+        // The fork must NOT fall through the linear chain into the branches' successor.
+        assertFalse(bpmn.contains("sourceRef=\"reviews\" targetRef=\"consolidate\""),
+                "the fork must fan to branches, not fall through linearly to consolidate");
+        assertTrue(bpmn.contains("<userTask id=\"techReview\"") && bpmn.contains("<userTask id=\"commercialReview\""),
+                "the branch user tasks are emitted");
+        assertTrue(bpmn.contains("BPMNShape_reviewsJoin") && bpmn.contains("BPMNShape_reviews"),
+                "the fork and join gateways get DI shapes");
+    }
+
+    @Test
     void field_major_false_is_kept_off_the_list_via_widget_is_major() {
         // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
         // omits that column (the field is still shown in forms + the details pane). Default is true.

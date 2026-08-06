@@ -2077,4 +2077,92 @@ class IntentParserTest {
                      .anyMatch(i -> i.contains("declares both `format` and `pattern`")),
                 "expected a both-declared issue, got: " + ex.getIssues());
     }
+
+    /**
+     * A process with a parallel step (#6556), assembled by concatenation so each per-test {@code steps}
+     * fragment keeps exact six-space indentation - a multi-line value interpolated into a text block is
+     * not re-indented and breaks the YAML.
+     */
+    private static String parallelProcess(String steps) {
+        return "name: pp\n" //
+                + "entities:\n" //
+                + "  - name: OrderStatus\n" //
+                + "    function: Setting\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string }\n" //
+                + "  - name: SalesOrder\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "    relations:\n" //
+                + "      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }\n" //
+                + "processes:\n" //
+                + "  - name: Review\n" //
+                + "    trigger: { onCreate: SalesOrder }\n" //
+                + "    steps:\n" //
+                + steps //
+                + "forms:\n" //
+                + "  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }\n";
+    }
+
+    private static final String P_FORK =
+            "      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }\n";
+    private static final String P_TECH = "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n";
+    private static final String P_COMMERCIAL =
+            "      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n";
+    private static final String P_CONSOLIDATE =
+            "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n";
+
+    @Test
+    void parallelStepParses() {
+        IntentParser.parse(parallelProcess(P_FORK + P_TECH + P_COMMERCIAL + P_CONSOLIDATE + "      - { name: done, kind: end }\n"));
+    }
+
+    @Test
+    void parallelWithFewerThanTwoBranchesIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(
+                        parallelProcess("      - { name: reviews, kind: parallel, args: { branches: [techReview], next: consolidate } }\n"
+                                + P_TECH + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("needs a `branches` list of at least two")),
+                "expected a too-few-branches issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelUnknownBranchIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        "      - { name: reviews, kind: parallel, args: { branches: [techReview, nope], next: consolidate } }\n" + P_TECH
+                                + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("branch [nope] is not a declared step")),
+                "expected an unknown-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelBranchWithItsOwnNextIsRejected() {
+        // A branch that chains onward is the multi-step follow-up, not v1.
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(
+                P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: consolidate } }\n"
+                        + P_COMMERCIAL + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("branch [techReview] declares next/then/timeout/expire")),
+                "expected a multi-step-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelUnknownNextIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        "      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: nowhere } }\n"
+                                + P_TECH + P_COMMERCIAL)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("next [nowhere] is not a declared step or `end`")),
+                "expected an unknown-next issue, got: " + ex.getIssues());
+    }
 }
