@@ -358,11 +358,6 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-ui-menu-bpm</artifactId>
         </dependency>
         <dependency>

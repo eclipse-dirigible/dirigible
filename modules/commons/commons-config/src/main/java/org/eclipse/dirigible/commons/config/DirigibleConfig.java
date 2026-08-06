@@ -93,6 +93,9 @@ public enum DirigibleConfig {
     /** The cms internal root folder. */
     CMS_INTERNAL_ROOT_FOLDER("DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER", "target/dirigible/cms"),
 
+    /** Serve and store Office documents with the legacy Microsoft mime types. */
+    DOCUMENTS_CONTENT_TYPE_MS_ENABLED("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", "false"),
+
     /** The default data source name. */
     DEFAULT_DATA_SOURCE_NAME("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB"),
 
