@@ -189,7 +189,7 @@
           <template x-for="col in itemColumns()" :key="col.name">
             <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''">
               <label x-h-label x-text="T(col.tkey, col.label)"></label>
-              <template x-if="col.lookup">
+              <template x-if="!col.readonly && col.lookup">
                 <div x-h-select data-filter="contains">
                   <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select {{name}}...', { name: T(col.tkey, col.label) })" />
                   <div x-h-select-content>
@@ -200,14 +200,19 @@
                   </div>
                 </div>
               </template>
-              <template x-if="!col.lookup && col.number">
+              <template x-if="!col.readonly && !col.lookup && col.number">
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
               </template>
-              <template x-if="!col.lookup && col.date">
+              <template x-if="!col.readonly && !col.lookup && col.date">
                 <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
               </template>
-              <template x-if="!col.lookup && !col.date && !col.number">
+              <template x-if="!col.readonly && !col.lookup && !col.date && !col.number">
                 <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
+              </template>
+              <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
+                   server recomputes it on save, so rendering an input only faked editability. -->
+              <template x-if="col.readonly">
+                <div class="text-sm py-2 text-secondary-foreground" x-text="displayItem(draft, col)"></div>
               </template>
             </div>
           </template>
