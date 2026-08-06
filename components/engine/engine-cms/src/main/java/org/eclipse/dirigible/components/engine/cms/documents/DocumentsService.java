@@ -67,6 +67,7 @@ public class DocumentsService {
     public FolderDto list(String path, HttpServletRequest request) throws IOException {
         // Deny on the REQUESTED path before resolving it: a hidden folder must answer the same whether
         // or not it happens to exist, otherwise its existence leaks through the status code.
+        requireCleanPath(path);
         assertNotHidden(path);
         CmisFolder folder = folderOrRoot(path);
         String folderPath = folder.getPath();
@@ -100,6 +101,7 @@ public class DocumentsService {
      * @throws IOException when the CMS cannot be read
      */
     public DocumentContent read(String path, HttpServletRequest request) throws IOException {
+        requireCleanPath(path);
         assertReadable(path, request);
         CmisObject object = cmsService.getObjectByPath(path);
         if (!(object instanceof CmisDocument document)) {
@@ -129,6 +131,8 @@ public class DocumentsService {
      */
     public String upload(String folderPath, String name, String contentType, int size, InputStream content, boolean overwrite,
             HttpServletRequest request) throws IOException {
+        requireCleanPath(folderPath);
+        requireCleanPath(name);
         CmisFolder folder = folderOrRoot(folderPath);
         assertWritable(folder.getPath(), request);
         String resolvedType = contentTypeResolver.beforeUpload(name, contentType);
@@ -154,6 +158,8 @@ public class DocumentsService {
      * @throws IOException when the CMS cannot be written
      */
     public FolderDto createFolder(String parentPath, String name, HttpServletRequest request) throws IOException {
+        requireCleanPath(parentPath);
+        requireCleanPath(name);
         CmisFolder parent = folderOrRoot(parentPath);
         assertWritable(parent.getPath(), request);
         assertNotHidden(childPath(parent.getPath(), name));
@@ -170,6 +176,8 @@ public class DocumentsService {
      * @throws IOException when the CMS cannot be written
      */
     public void rename(String path, String name, HttpServletRequest request) throws IOException {
+        requireCleanPath(path);
+        requireCleanPath(name);
         assertNotHidden(path);
         assertWritable(path, request);
         cmsService.getObjectByPath(path)
@@ -186,6 +194,7 @@ public class DocumentsService {
      */
     public void delete(List<String> paths, boolean forceDelete, HttpServletRequest request) throws IOException {
         for (String path : paths) {
+            requireCleanPath(path);
             assertNotHidden(path);
             assertWritable(path, request);
             CmisObject object = cmsService.getObjectByPath(path);
@@ -236,6 +245,7 @@ public class DocumentsService {
      * @throws IOException when the CMS cannot be read
      */
     CmisFolder folderOrRoot(String path) throws IOException {
+        requireCleanPath(path);
         if (path == null || path.isBlank() || "/".equals(path.trim())) {
             return cmsService.getRootFolder();
         }
@@ -249,6 +259,30 @@ public class DocumentsService {
     /** The child's absolute path, without doubling the root's separator. */
     static String childPath(String folderPath, String name) {
         return folderPath.endsWith("/") ? folderPath + name : folderPath + "/" + name;
+    }
+
+    /**
+     * Rejects a path that carries characters a CMS path can never legitimately contain.
+     * <p>
+     * A caller-supplied path reaches logging, the CMIS query layer and the tenant path resolver, so a
+     * control character in it could forge a log record or split a query. No document or folder name can
+     * hold one, which makes rejecting them at the boundary both safe and the only place this has to be
+     * done.
+     *
+     * @param path the requested path, may be null
+     * @return the same path
+     */
+    static String requireCleanPath(String path) {
+        if (path == null) {
+            return null;
+        }
+        for (int index = 0; index < path.length(); index++) {
+            char character = path.charAt(index);
+            if (character == '\n' || character == '\r' || character == '\0' || Character.isISOControl(character)) {
+                throw new DocumentInvalidPathException();
+            }
+        }
+        return path;
     }
 
     /** Whether the path is one the Documents surface never exposes. */

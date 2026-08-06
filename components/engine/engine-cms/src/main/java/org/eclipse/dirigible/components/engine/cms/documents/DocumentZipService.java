@@ -13,6 +13,8 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -71,8 +73,9 @@ public class DocumentZipService {
                 continue;
             }
             if (DocumentsService.isFolder(child)) {
-                zip.putNextEntry(new ZipEntry(entryName + "/"));
-                zip.closeEntry();
+                // No explicit directory entry: it would carry no content, and every reader recreates
+                // the tree from the file paths. A folder with no files anywhere under it is therefore
+                // absent from the archive - the documented trade-off for not writing empty entries.
                 packFolder((CmisFolder) child, entryName + "/", zip);
             } else {
                 zip.putNextEntry(new ZipEntry(entryName));
@@ -100,16 +103,16 @@ public class DocumentZipService {
         try (ZipInputStream zip = new ZipInputStream(archive)) {
             ZipEntry entry;
             while ((entry = zip.getNextEntry()) != null) {
-                String name = entry.getName();
+                String name = safeEntryName(entry.getName());
                 if (name.isBlank()) {
                     continue;
                 }
                 if (entry.isDirectory()) {
-                    resolveFolder(target, trimTrailingSeparator(name), request);
+                    resolveFolder(target, name);
                     continue;
                 }
                 int separator = name.lastIndexOf('/');
-                CmisFolder parent = separator < 0 ? target : resolveFolder(target, name.substring(0, separator), request);
+                CmisFolder parent = separator < 0 ? target : resolveFolder(target, name.substring(0, separator));
                 String fileName = separator < 0 ? name : name.substring(separator + 1);
                 byte[] content = IOUtils.toByteArray(zip);
                 documentsService.upload(parent.getPath(), fileName, null, content.length, new ByteArrayInputStream(content), true, request);
@@ -117,8 +120,40 @@ public class DocumentZipService {
         }
     }
 
+    /**
+     * The name an archive entry may be unpacked under: relative, separator-normalized, and with no
+     * traversal segment.
+     * <p>
+     * An archive is untrusted input, so an entry named {@code ../../elsewhere} must never be able to
+     * write outside the folder it is unpacked into - the target here is a CMS path, but the internal
+     * provider maps it onto real storage, so the escape would be real.
+     *
+     * @param name the entry name as the archive declares it
+     * @return the name to use, empty when the entry must be skipped
+     */
+    static String safeEntryName(String name) {
+        if (name == null) {
+            return "";
+        }
+        Deque<String> segments = new ArrayDeque<>();
+        for (String segment : name.replace('\\', '/')
+                                  .split("/")) {
+            if (segment.isBlank() || ".".equals(segment)) {
+                continue;
+            }
+            if ("..".equals(segment)) {
+                // Resolve it rather than drop it, so a legitimate but unnormalized entry still lands
+                // where its author meant - and clamp at the root, which is what keeps it contained.
+                segments.pollLast();
+                continue;
+            }
+            segments.addLast(segment);
+        }
+        return String.join("/", segments);
+    }
+
     /** The folder for a relative archive path, created segment by segment when missing. */
-    private CmisFolder resolveFolder(CmisFolder root, String relativePath, HttpServletRequest request) throws IOException {
+    private CmisFolder resolveFolder(CmisFolder root, String relativePath) throws IOException {
         CmisFolder current = root;
         for (String segment : relativePath.split("/")) {
             if (segment.isBlank()) {
@@ -128,9 +163,5 @@ public class DocumentZipService {
             current = existing != null ? existing : cmsService.createFolder(current, segment);
         }
         return current;
-    }
-
-    private static String trimTrailingSeparator(String name) {
-        return name.endsWith("/") ? name.substring(0, name.length() - 1) : name;
     }
 }

@@ -250,6 +250,9 @@ public class DocumentsEndpoint extends BaseEndpoint {
         } catch (DocumentConflictException e) {
             LOGGER.debug("Conflict", e);
             throw new ResponseStatusException(HttpStatus.CONFLICT, e.getMessage());
+        } catch (DocumentInvalidPathException e) {
+            LOGGER.debug("Invalid path", e);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
         } catch (IOException | RuntimeException e) {
             LOGGER.error("Documents operation failed", e);
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
