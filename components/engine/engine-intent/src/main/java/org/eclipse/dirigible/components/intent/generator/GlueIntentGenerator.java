@@ -1378,6 +1378,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         String column = IntentNaming.pascalCase(ruleRef.group(1));
                         usedRuleColumns.add(column);
                         assign.put("expr", "ruleRow." + column);
+                    } else if (toOneRelation(itemsEntity, cell.getKey()) != null) {
+                        // Source-FK copy (issue #6533): the item cell's key is a to-one relation of the
+                        // items entity, so the value names a source relation whose FK id is copied
+                        // verbatim onto the line - the counterparty dimension (Customer/Supplier) that
+                        // makes an auto-posted line show up in the subledger balances. The raw Long FK is
+                        // copied (no re-resolution); a null source FK copies null (the line simply carries
+                        // no dimension). NOT negated under reversal: a red-storno line must carry the SAME
+                        // dimension as the original, or it would not net the counterparty's balance.
+                        assign.put("expr", "source." + IntentNaming.pascalCase(value));
                     } else {
                         FieldIntent target = fieldOf(itemsEntity, cell.getKey());
                         int scale = target != null && target.getScale() != null ? target.getScale() : 2;

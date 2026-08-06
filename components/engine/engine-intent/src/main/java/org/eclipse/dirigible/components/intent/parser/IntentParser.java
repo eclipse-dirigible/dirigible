@@ -3486,6 +3486,15 @@ public final class IntentParser {
                 issues.add(subject + " requires at least one items row");
                 continue;
             }
+            // The event source entity - resolvable here only for a LOCAL source; a cross-model source
+            // (event.model alias) is resolved at generation time via CrossModelSupport, so its relations
+            // cannot be deep-checked at parse time. The FK-copy item cell (issue #6533) is therefore
+            // shape-validated always, and target-entity-matched only when the source is local.
+            Object eventAlias = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get("model");
+            EntityIntent postingSource =
+                    eventAlias == null ? byName.get(String.valueOf(onTransition != null ? onTransition : onCreate)) : null;
             for (java.util.Map<String, String> row : posting.getItems()) {
                 for (java.util.Map.Entry<String, String> cell : row.entrySet()) {
                     String key = cell.getKey();
@@ -3528,6 +3537,28 @@ public final class IntentParser {
                             if (!known) {
                                 issues.add(subject + " rule(" + column + ") is not a field or to-one relation of [" + ruleEntity.getName()
                                         + "]");
+                            }
+                        }
+                    } else if (toOneRelationByName(itemsEntity, key) != null) {
+                        // Source-FK copy (issue #6533): a to-one relation item cell copies a source
+                        // to-one FK onto the line (the counterparty dimension). Its value must be a bare
+                        // source relation name, not a Calc expression - you cannot arithmetic-evaluate a
+                        // FK. When the source is local, the copied relation must exist on it and be
+                        // to-one to the SAME entity as the item relation.
+                        String rhs = value.trim();
+                        if (!rhs.matches("\\w+")) {
+                            issues.add(subject + " item [" + key + "] is a to-one relation - its value must copy a source"
+                                    + " to-one relation (a bare source relation name), not an expression [" + value + "]");
+                        } else if (postingSource != null) {
+                            RelationIntent itemRelation = toOneRelationByName(itemsEntity, key);
+                            RelationIntent sourceRelation = toOneRelationByName(postingSource, rhs);
+                            if (sourceRelation == null) {
+                                issues.add(subject + " item [" + key + "] copies [" + rhs + "] which is not a to-one relation of the"
+                                        + " source entity [" + postingSource.getName() + "]");
+                            } else if (!java.util.Objects.equals(itemRelation.getTo(), sourceRelation.getTo())
+                                    || !java.util.Objects.equals(itemRelation.getModel(), sourceRelation.getModel())) {
+                                issues.add(subject + " item [" + key + "] and its copied source [" + rhs + "] must be to-one to the same"
+                                        + " entity (item -> [" + itemRelation.getTo() + "], source -> [" + sourceRelation.getTo() + "])");
                             }
                         }
                     }

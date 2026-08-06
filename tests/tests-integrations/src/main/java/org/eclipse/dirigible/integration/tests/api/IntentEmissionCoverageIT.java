@@ -146,6 +146,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # postings source-FK copy (#6533): this counterparty FK is copied onto the posted
+                  # line, so an auto-posted Entry line carries the subledger dimension.
+                  - { name: Party,  kind: manyToOne, to: Party }
 
               # postings onCreate source (#6421): a booked payment has NO status lifecycle -
               # its INSERT is the posting event.
@@ -154,6 +157,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
                   - { name: amount, type: decimal }
+
+              # postings source-FK-copy counterparty (#6533): a plain nomenclature copied by FK id.
+              - name: Party
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
 
               # first-class numbering, stampOn: create - the generated DAO allocates the real number
               # at insert from the tenant series that the module's AUTHORED .numbers artefact
@@ -187,6 +196,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
+                  # copied from Doc.Party by docPosting, and carried UNCHANGED onto the storno line (#6533).
+                  - { name: Party, kind: manyToOne, to: Party }
 
               # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
               # layout must resolve the status FK to a label lookup and render it as a badge in
@@ -638,7 +649,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 backReference: Doc
                 map: { date: date }
                 items:
-                  - { debit: "Amount" }
+                  # Party: source-FK copy (#6533) - the debit line carries Doc.Party as its dimension.
+                  - { debit: "Amount", Party: Party }
                   - { credit: "Amount" }
               - name: docStorno
                 event: { onTransition: Doc, when: "Status == 3" }
@@ -665,6 +677,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, note: mine,    rate: 50, Person: 1 }
                   - { id: 2, note: foreign, rate: 70, Person: 2 }
+              - name: parties
+                entity: Party
+                rows:
+                  - { id: 1, name: Acme }
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
@@ -1270,6 +1286,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
+        // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
+        // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.
+        assertTrue(basePosting.contains("item.Party = source.Party;"),
+                "a to-one relation item cell must copy the source FK onto the posted line");
+        assertTrue(!basePosting.contains("Calc.eval(\"Party\""), "the FK copy must not go through Calc");
+        assertTrue(stornoPosting.contains("item.Party = source.Party;"),
+                "the reversal must carry the copied source FK dimension UNCHANGED (not negated)");
 
         // postings onCreate (#6421): a source with no status lifecycle posts on its INSERT - the
         // handler binds the source's bare create topic (creates publish unsuffixed) and carries no
@@ -1644,7 +1667,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();
         restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
-                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250}")
+                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250,\"Party\":1}")
                                                          .when()
                                                          .post(API + "/doc/DocController")
                                                          .then()
@@ -1667,6 +1690,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                    .extract()
                                                                    .path("find { it.Doc == " + doc.get() + " && it.Storno == null }.Id")),
                 30);
+        // source-FK copy (#6533): the debit line copied Doc.Party as its dimension; the credit line
+        // (no Party cell) carries none.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + originalEntry.get() + " && it.Party == 1 }.size()",
+                                                         equalTo(1))
+                                                 .body("findAll { it.Entry == " + originalEntry.get() + " && it.Party == null }.size()",
+                                                         equalTo(1)));
         // ...and reverses: voiding the Doc creates the red storno - the SAME lines negated on the
         // SAME sides, linked to the original through the storno self-relation.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -1693,7 +1726,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
                                                          + " && it.Debit != null && it.Debit < 0 }.size()", equalTo(1))
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
-                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
+                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1))
+                                                 // storno carry-through (#6533): the reversal's debit line
+                                                 // carries the SAME Party dimension, unnegated.
+                                                 .body("findAll { it.Entry == " + reversalEntry.get() + " && it.Party == 1 }.size()",
+                                                         equalTo(1)));
 
         // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
         // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.
