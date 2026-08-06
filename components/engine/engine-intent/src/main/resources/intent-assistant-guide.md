@@ -1396,11 +1396,54 @@ schedules:
           dayField: day
 ```
 
-**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and
-**exactly one** of `notify` (valid recipient) / `generate` (a declared/cross-model `to`, a `map` over
-the row's fields/to-one relations, optional `children`). Composition-item cloning via `items:` is
-**not** available on a schedule (it needs a selected document) - use an on-demand `generates` action
-for document-to-document cloning, or `generate.children` for the fan-out shape above.
+**Cross-model source (`model:`).** By default the `entity` is a **local** entity of this model. When
+the module that owns the CREATED rows is not where the source entity lives, add `model: <uses alias>`
+to read the source from another model - so the schedule can live with the consumer (the module it
+generates into) instead of being forced into the source's module with a back-reference. The source is
+**read-only** (a schedule never writes it). A `forEach` collection may likewise be cross-model with its
+own `model:` alias. Both aliases must be declared under the model's `uses:`.
+
+```yaml
+# lives in the module that owns the created rows (e.g. timesheets), which already uses: projects
+uses:
+  - { model: projects }
+
+schedules:
+  - name: monthlyProjectTimesheets
+    cron: "0 0 2 1 * ?"
+    entity: Project
+    model: projects                       # the source Project lives in the projects model
+    where:
+      - { field: Status, op: eq, value: 2 }
+    generate:
+      to: ProjectTimesheet                # now LOCAL (no uses: needed)
+      map: { Project: id, Customer: Customer }
+      defaults: { Period: now }
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach:
+            entity: EmployeeProjectAssignment
+            model: projects               # the forEach collection is also cross-model
+            match: { Project: id }
+          map: { Employee: Employee }
+```
+
+- **v1 scope: `generate` only.** A cross-model source with a `notify` action is rejected at parse
+  (notify needs the source's relation metadata, which only a local entity carries) - keep such a
+  schedule in the source's model, or drop `model:`.
+- **Validation split** (the same one relations use): that `model:` names a declared `uses:` alias is
+  checked at parse; the source entity's existence and the `where` / `map` / `match` field references
+  are checked at **generation** against the owner's `.model` (generate the owner model first, or
+  install/publish its prebuilt module). A missing owner or a mistyped field drops that schedule with a
+  warning in the generate response - it never emits a job that cannot compile.
+
+**Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
+`where` operators from the allowed list, and **exactly one** of `notify` (valid recipient; local source
+only) / `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
+optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
+a selected document) - use an on-demand `generates` action for document-to-document cloning, or
+`generate.children` for the fan-out shape above.
 
 ### integrations - outbound HTTP on a data change
 

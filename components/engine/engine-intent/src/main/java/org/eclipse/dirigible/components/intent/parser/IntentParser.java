@@ -667,8 +667,23 @@ public final class IntentParser {
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
             }
+            // A cross-model source (model: <uses alias>) lives in another model; its existence and its
+            // where/map/match field references are validated at GENERATION time against the owner's
+            // .model (the same design-time split relations / dependsOn / leafOnly already use), so the
+            // local entity/field checks are skipped and source stays null.
+            boolean crossModelSource = schedule.getModel() != null && !schedule.getModel()
+                                                                               .isBlank();
             EntityIntent source = null;
-            if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
+            if (crossModelSource) {
+                if (!usesAliases.contains(schedule.getModel())) {
+                    issues.add("schedule [" + name + "] source model [" + schedule.getModel()
+                            + "] is not a declared uses: alias (declare it under the model's uses:)");
+                }
+                if (schedule.getEntity() == null || schedule.getEntity()
+                                                            .isBlank()) {
+                    issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+                }
+            } else if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
                 issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
             } else {
                 source = byName.get(schedule.getEntity());
@@ -691,7 +706,16 @@ public final class IntentParser {
             } else if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
             } else if (hasNotify) {
-                validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
+                // v1 scope: the notify machinery resolves recipients/placeholders/relation loads against a
+                // LOCAL EntityIntent; a cross-model source has only TargetInfo metadata, so notify is not
+                // yet supported there. Keep the schedule in the source's model, or drop model:.
+                if (crossModelSource) {
+                    issues.add("schedule [" + name + "] uses a cross-model source with notify - a cross-model schedule source"
+                            + " supports the generate action; notify needs the source's relation metadata - keep the schedule in the"
+                            + " source's model or drop model:");
+                } else {
+                    validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
+                }
             } else {
                 validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
             }
@@ -732,7 +756,7 @@ public final class IntentParser {
                     + " use an on-demand generates action for document-to-document cloning");
         }
         if (g.getChildren() != null) {
-            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, issues);
+            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
         }
     }
 
@@ -745,7 +769,7 @@ public final class IntentParser {
      * (resolved in the target's model at generation). Depth is capped at two levels.
      */
     private static void validateGenerateChildren(String name, List<GenerateChildIntent> children, int depth, EntityIntent source,
-            Set<String> entityNames, List<String> issues) {
+            Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         if (depth > 2) {
             issues.add("schedule [" + name + "] generate children nest deeper than two levels - flatten the shape");
             return;
@@ -783,7 +807,18 @@ public final class IntentParser {
                 }
             } else {
                 String collection = String.valueOf(forEachEntity);
-                if (!entityNames.contains(collection)) {
+                // The forEach collection may itself live in another model (forEach.model: <uses alias>);
+                // its existence and match-key field are then validated at generation time.
+                Object forEachModel = child.getForEach()
+                                           .get("model");
+                boolean forEachCrossModel = forEachModel != null && !String.valueOf(forEachModel)
+                                                                           .isBlank();
+                if (forEachCrossModel) {
+                    if (!usesAliases.contains(String.valueOf(forEachModel))) {
+                        issues.add(subject + " forEach model [" + forEachModel
+                                + "] is not a declared uses: alias (declare it under the model's uses:)");
+                    }
+                } else if (!entityNames.contains(collection)) {
                     issues.add(subject + " forEach entity [" + collection + "] is not a local entity of this model");
                 }
                 Object match = child.getForEach()
@@ -793,7 +828,7 @@ public final class IntentParser {
                 }
             }
             if (child.getChildren() != null) {
-                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, issues);
+                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, usesAliases, issues);
             }
         }
     }

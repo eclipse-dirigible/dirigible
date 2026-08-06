@@ -34,9 +34,11 @@ import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -203,10 +205,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The template-ready child blocks of a scheduled generation, up to two levels. A child target
      * resolves in the SAME model as the generation target (the {@code uses} alias, or locally); the
-     * {@code forEach} collection entity is always LOCAL. The row variable is {@code r<depth>}; field
-     * assignments are pre-rendered against it, defaults against literals.
+     * {@code forEach} collection entity is LOCAL by default, or cross-model when the child's
+     * {@code forEach} carries a {@code model:} alias (resolved through {@link CrossModelSupport}). The
+     * row variable is {@code r<depth>}; field assignments are pre-rendered against it, defaults against
+     * literals.
      */
-    private static List<Map<String, Object>> buildGenerateChildren(List<GenerateChildIntent> children, UsesIntent uses,
+    private static List<Map<String, Object>> buildGenerateChildren(List<GenerateChildIntent> children, UsesIntent uses, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, int depth) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (GenerateChildIntent child : children) {
@@ -232,8 +236,24 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("kind", "entity");
                 String collection = String.valueOf(child.getForEach()
                                                         .get("entity"));
+                Object forEachModelObj = child.getForEach()
+                                              .get("model");
+                boolean forEachCrossModel = forEachModelObj != null && !String.valueOf(forEachModelObj)
+                                                                              .isBlank();
                 entry.put("forEachEntity", collection);
-                entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents));
+                entry.put("forEachCrossModel", forEachCrossModel);
+                entry.put("forEachModel", forEachCrossModel ? String.valueOf(forEachModelObj) : "");
+                if (forEachCrossModel) {
+                    // The collection lives in another model; its perspective comes from the owner's
+                    // .model (already validated resolvable in firstUnresolvableScheduleRef, so this
+                    // resolve does not fail for a schedule that reached here).
+                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModelObj));
+                    CrossModelSupport.TargetInfo collectionTarget =
+                            collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
+                    entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
+                } else {
+                    entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents));
+                }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
                                                                        .get("match");
@@ -248,7 +268,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("rowVar", rowVar);
             if (child.getChildren() != null && !child.getChildren()
                                                      .isEmpty()) {
-                entry.put("children", buildGenerateChildren(child.getChildren(), uses, byName, compositionParents, context, depth + 1));
+                entry.put("children",
+                        buildGenerateChildren(child.getChildren(), uses, model, byName, compositionParents, context, depth + 1));
             }
             result.add(entry);
         }
@@ -1905,7 +1926,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             String entity = schedule.getEntity();
-            if (entity == null || !byName.containsKey(entity)) {
+            // The source entity may live in another model (model: <uses alias>). It is resolved against
+            // the owner's .model through CrossModelSupport (workspace first, registry fallback) - the
+            // same two-tier, order-independent resolution relations / dependsOn / leafOnly use. A null
+            // context (unit test) yields the naming-convention defaults so the shape can be asserted
+            // without a repository.
+            boolean sourceCrossModel = schedule.getModel() != null && !schedule.getModel()
+                                                                               .isBlank();
+            CrossModelSupport.TargetInfo sourceTarget = null;
+            if (sourceCrossModel) {
+                UsesIntent sourceUses = findUses(model, schedule.getModel());
+                if (sourceUses == null) {
+                    continue; // parser already reported the undeclared alias
+                }
+                try {
+                    sourceTarget = CrossModelSupport.resolve(context, sourceUses, entity);
+                } catch (IntentValidationException ex) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] source entity [" + entity + "] in model ["
+                            + schedule.getModel() + "] cannot be resolved: " + ex.getMessage() + " - the schedule was NOT generated");
+                    continue;
+                }
+            } else if (entity == null || !byName.containsKey(entity)) {
                 continue;
             }
             boolean generates = schedule.getGenerate() != null;
@@ -1916,6 +1957,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
                 continue;
             }
+            // Never emit a job that cannot compile: for a cross-model source, validate every reference
+            // that resolves against the source row (where fields, generate.map sources, child match
+            // sources) - and, for a cross-model forEach collection, its own match/map references -
+            // against the owner's properties, dropping the schedule loudly on a miss. Skipped when the
+            // owner model was not resolved (convention fallback), the same rule dependsOn uses.
+            if (sourceCrossModel) {
+                String missingRef = firstUnresolvableScheduleRef(model, schedule, sourceTarget, context);
+                if (missingRef != null) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] " + missingRef + " does not resolve against the ["
+                            + schedule.getModel() + "] source - the schedule was NOT generated");
+                    continue;
+                }
+            }
 
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", schedule.getName());
@@ -1923,11 +1977,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("className", IntentNaming.pascalIdentifier(schedule.getName()));
             entry.put("cron", schedule.getCron());
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            // A cross-model source's generated job imports the OWNER's gen classes (the leafOnly
+            // precedent); sourceModel drives the sanitized gen folder in the template, and the
+            // perspective / key come from the owner's .model.
+            entry.put("sourceCrossModel", sourceCrossModel);
+            entry.put("sourceModel", sourceCrossModel ? schedule.getModel() : "");
+            entry.put("perspective",
+                    sourceCrossModel ? sourceTarget.perspectiveName() : IntentEntities.resolvePerspective(entity, compositionParents));
             // The PK property an `attach: print` hands to the generated print feeder. Deliberately
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
-            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            entry.put("attachKeyProperty", sourceCrossModel ? sourceTarget.keyField() : IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
             // The attachment keys are always present (empty for a generate schedule): an undefined
             // Velocity variable renders as its own name, so a template must never rely on absence.
@@ -1959,7 +2019,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                     // Collection-driven children: one row per element of a source collection, saved
                     // under the just-generated parent. Everything is pre-rendered here (the
                     // expansions convention) - the job template stays shape-only.
-                    entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, byName, compositionParents, context, 1));
+                    entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, model, byName, compositionParents, context, 1));
                 }
             } else {
                 // The per-row action reuses the notification machinery against the queried row entity.
@@ -1996,6 +2056,108 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
         return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /**
+     * The first cross-model schedule reference that does not resolve against its owner model, or
+     * {@code null} when every reference resolves. Validates the references that read the source row
+     * (each {@code where} field, each {@code generate.map} source, and recursively each child
+     * {@code forEach.match} source) against the source's properties, and - for a cross-model
+     * {@code forEach} collection - its own match-key + child-map references against the collection
+     * owner's properties. Skips a source/collection whose owner model was not resolved
+     * ({@code propertyNames() == null}, the convention fallback), the same tolerance {@code dependsOn}
+     * uses.
+     */
+    private static String firstUnresolvableScheduleRef(IntentModel model, ScheduleIntent schedule,
+            CrossModelSupport.TargetInfo sourceTarget, IntentGenerationContext context) {
+        java.util.Set<String> sourceProps = sourceTarget == null ? null : sourceTarget.propertyNames();
+        if (sourceProps != null) {
+            for (ScheduleConditionIntent condition : schedule.getWhere()) {
+                if (isMissing(sourceProps, condition.getField())) {
+                    return "where field [" + condition.getField() + "]";
+                }
+            }
+            for (Map.Entry<String, String> mapping : schedule.getGenerate()
+                                                             .getMap()
+                                                             .entrySet()) {
+                if (isMissing(sourceProps, mapping.getValue())) {
+                    return "generate map source [" + mapping.getValue() + "]";
+                }
+            }
+        }
+        return firstUnresolvableChildRef(model, schedule.getGenerate()
+                                                        .getChildren(),
+                sourceProps, context);
+    }
+
+    /**
+     * Recursive helper for {@link #firstUnresolvableScheduleRef}: validates every child's
+     * {@code forEach.match} source against the (cross-model) source row, and - for a cross-model
+     * {@code forEach} collection - its match-key + this child's {@code map} sources against the
+     * collection owner's properties.
+     */
+    private static String firstUnresolvableChildRef(IntentModel model, List<GenerateChildIntent> children,
+            java.util.Set<String> sourceProps, IntentGenerationContext context) {
+        if (children == null) {
+            return null;
+        }
+        for (GenerateChildIntent child : children) {
+            Object matchObject = child.getForEach()
+                                      .get("match");
+            if (matchObject instanceof Map) {
+                Map<?, ?> match = (Map<?, ?>) matchObject;
+                if (sourceProps != null) {
+                    for (Map.Entry<?, ?> condition : match.entrySet()) {
+                        if (isMissing(sourceProps, String.valueOf(condition.getValue()))) {
+                            return "generate child forEach match source [" + condition.getValue() + "]";
+                        }
+                    }
+                }
+                Object forEachModel = child.getForEach()
+                                           .get("model");
+                if (forEachModel != null && !String.valueOf(forEachModel)
+                                                   .isBlank()) {
+                    String collection = String.valueOf(child.getForEach()
+                                                            .get("entity"));
+                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModel));
+                    if (collectionUses != null) {
+                        CrossModelSupport.TargetInfo collectionTarget;
+                        try {
+                            collectionTarget = CrossModelSupport.resolve(context, collectionUses, collection);
+                        } catch (IntentValidationException ex) {
+                            return "forEach collection [" + collection + "] in model [" + forEachModel + "] (" + ex.getMessage() + ")";
+                        }
+                        java.util.Set<String> collectionProps = collectionTarget.propertyNames();
+                        if (collectionProps != null) {
+                            for (Map.Entry<?, ?> condition : match.entrySet()) {
+                                if (isMissing(collectionProps, String.valueOf(condition.getKey()))) {
+                                    return "generate child forEach match field [" + condition.getKey() + "]";
+                                }
+                            }
+                            for (String mapSource : child.getMap()
+                                                         .values()) {
+                                if (isMissing(collectionProps, mapSource)) {
+                                    return "generate child map source [" + mapSource + "]";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            String nested = firstUnresolvableChildRef(model, child.getChildren(), sourceProps, context);
+            if (nested != null) {
+                return nested;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether an authored field reference is absent from a set of (PascalCase) owner property names,
+     * applying the same PascalCase mapping the criteria / assignment renderers use.
+     */
+    private static boolean isMissing(java.util.Set<String> properties, String authoredName) {
+        return authoredName != null && !authoredName.isBlank() && !properties.contains(IntentNaming.pascalCase(authoredName));
     }
 
     /**

@@ -1376,6 +1376,127 @@ class IntentParserTest {
                 "expected a bad-map-source issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A consumer model that owns the created rows and reaches a source entity ({@code Project}) in a
+     * declared {@code uses:} model. The generate block is appended per test.
+     */
+    private static final String CROSS_SCHEDULE_HEAD = """
+            name: timesheets
+            uses:
+              - { model: projects }
+            entities:
+              - name: ProjectTimesheet
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: period, type: date }
+              - name: EmployeeTimesheet
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet }
+            schedules:
+              - name: monthly-project-timesheets
+                cron: "0 0 2 1 * ?"
+                entity: Project
+                model: projects
+                where:
+                  - { field: Status, op: eq, value: 2 }
+            """;
+
+    @Test
+    void crossModelScheduleSourceParsesWhenModelIsDeclared() {
+        // The source Project is not a local entity, but its model is a declared uses: alias - so the
+        // local entity check is skipped and its where/map fields validate at generation time, not here.
+        String yaml = CROSS_SCHEDULE_HEAD + """
+                    generate:
+                      to: ProjectTimesheet
+                      map:
+                        Period: now
+                      children:
+                        - to: EmployeeTimesheet
+                          parent: ProjectTimesheet
+                          forEach:
+                            entity: EmployeeProjectAssignment
+                            model: projects
+                            match: { Project: id }
+                          map: { Employee: Employee }
+                """;
+        IntentParser.parse(yaml);
+    }
+
+    @Test
+    void crossModelScheduleSourceToUndeclaredModelIsRejected() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: date }
+                schedules:
+                  - name: monthly-project-timesheets
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    model: projects
+                    generate:
+                      to: ProjectTimesheet
+                      map: { Period: now }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("source model [projects] is not a declared uses: alias")),
+                "expected an undeclared-source-model issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void crossModelScheduleSourceWithNotifyIsRejected() {
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                schedules:
+                  - name: nudge
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    model: projects
+                    notify:
+                      to: contactEmail
+                      subject: "x"
+                      body: "y"
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("notify needs the source's relation metadata")),
+                "expected a cross-model-notify-unsupported issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void crossModelForEachToUndeclaredModelIsRejected() {
+        String yaml = CROSS_SCHEDULE_HEAD + """
+                    generate:
+                      to: ProjectTimesheet
+                      map: { Period: now }
+                      children:
+                        - to: EmployeeTimesheet
+                          parent: ProjectTimesheet
+                          forEach:
+                            entity: EmployeeProjectAssignment
+                            model: staffing
+                            match: { Project: id }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("forEach model [staffing] is not a declared uses: alias")),
+                "expected an undeclared-forEach-model issue, got: " + ex.getIssues());
+    }
+
     /** A complete personalized model built line by line - no text-block margin surprises. */
     private static String personalYaml(String employeeExtra, String requestFields, String requestRelations) {
         return "name: hr\n" //

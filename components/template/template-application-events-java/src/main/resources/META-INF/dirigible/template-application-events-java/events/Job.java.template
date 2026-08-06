@@ -14,8 +14,8 @@ import org.eclipse.dirigible.sdk.mail.Mail;
 #end
 import org.eclipse.dirigible.sdk.job.JobHandler;
 
-import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
-import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Entity;
+import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Repository;
 #foreach($load in $relationLoads)
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
