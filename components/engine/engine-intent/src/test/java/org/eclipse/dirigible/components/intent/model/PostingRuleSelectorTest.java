@@ -11,8 +11,10 @@ package org.eclipse.dirigible.components.intent.model;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 
@@ -54,5 +56,17 @@ class PostingRuleSelectorTest {
                                        .isPresent());
         assertFalse(PostingRuleSelector.parse(null)
                                        .isPresent());
+    }
+
+    /**
+     * ReDoS guard (CodeQL): the cases-body match must be linear. The witness is a crafted prefix with a
+     * long run of spaces and no closing brace - the old {@code \s*([^}]*?)\s*\}} backtracked
+     * catastrophically on it; the current single greedy {@code [^}]*} returns effectively instantly.
+     */
+    @Test
+    void doesNotBacktrackCatastrophicallyOnAMaliciousCasesBody() {
+        String malicious = "rule(by:0,cases:{{" + " ".repeat(50_000);
+        assertTimeoutPreemptively(Duration.ofSeconds(2), () -> assertFalse(PostingRuleSelector.parse(malicious)
+                                                                                              .isPresent()));
     }
 }

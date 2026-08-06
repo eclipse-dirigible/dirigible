@@ -42,11 +42,19 @@ public record PostingRuleSelector(String by, Map<String, String> cases, String d
 
     /**
      * Matches {@code rule(by: <field>, cases: { <k>: <col>, ... }, default: <col> )} with an optional
-     * {@code default}. The cases body is captured raw (it never contains a nested brace) and split
-     * downstream. The whole value must be this form - a plain {@code rule(<column>)} does not match.
+     * {@code default}. The cases body is captured raw (it never contains a nested brace) and split +
+     * trimmed downstream. The whole value must be this form - a plain {@code rule(<column>)} does not
+     * match.
+     * <p>
+     * The cases body is captured with a single greedy {@code [^}]*} - NOT {@code \s*([^}]*?)\s*} - on
+     * purpose: {@code \s} is a subset of {@code [^}]}, so wrapping the body in
+     * {@code \s*}...{@code \s*} makes the space runs ambiguous between three quantifiers and backtracks
+     * catastrophically on a crafted {@code cases:{ } with many spaces and no closing brace (a ReDoS -
+     * CodeQL flagged it). Edge whitespace is harmless here because every split fragment is trimmed in
+     * {@link #parse}.
      */
-    private static final Pattern PATTERN = Pattern.compile(
-            "\\s*rule\\(\\s*by:\\s*(\\w+)\\s*,\\s*cases:\\s*\\{\\s*([^}]*?)\\s*\\}\\s*(?:,\\s*default:\\s*(\\w+)\\s*)?\\)\\s*");
+    private static final Pattern PATTERN =
+            Pattern.compile("\\s*rule\\(\\s*by:\\s*(\\w+)\\s*,\\s*cases:\\s*\\{([^}]*)\\}\\s*(?:,\\s*default:\\s*(\\w+)\\s*)?\\)\\s*");
 
     /**
      * Parse the conditional {@code rule(by: ..., cases: ..., default: ...)} form.
