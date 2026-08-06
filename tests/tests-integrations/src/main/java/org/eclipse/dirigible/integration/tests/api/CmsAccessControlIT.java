@@ -14,6 +14,8 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.not;
 
+import java.nio.charset.StandardCharsets;
+
 import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.tests.base.IntegrationTest;
 import org.eclipse.dirigible.tests.framework.restassured.RestAssuredExecutor;
@@ -38,8 +40,12 @@ class CmsAccessControlIT extends IntegrationTest {
     private static final String DOCUMENTS = "/services/documents";
     private static final String ACCESS = DOCUMENTS + "/access";
 
+    /** The raw content path - the same tenant content, served by file path. */
+    private static final String CMS = "/services/cms";
+
     private static final String FOLDER = "cms-access-it";
     private static final String FOLDER_PATH = "/" + FOLDER;
+    private static final String FILE_NAME = "secret.txt";
     private static final String GRANTED_ROLE = "cms-access-it-role";
 
     private static final String ADMIN = "cms-access-it-admin";
@@ -149,6 +155,41 @@ class CmsAccessControlIT extends IntegrationTest {
         }, PLAIN, PASSWORD);
     }
 
+    /**
+     * A grant must govern every way the content can be read, not only the Documents API. The raw
+     * content path serves the same tenant files by path, so if it ignored the grants, restricting a
+     * folder would hide it from the user interface while leaving every file under it downloadable by
+     * any authenticated caller who knows - or guesses - the path.
+     */
+    @Test
+    void a_read_grant_also_blocks_the_raw_cms_content_path() {
+        restAssuredExecutor.execute(() -> {
+            createFolder();
+            upload();
+        }, ADMIN, PASSWORD);
+
+        // open by default: both surfaces serve the file while no rule exists
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(CMS + FOLDER_PATH + "/" + FILE_NAME)
+                                                 .then()
+                                                 .statusCode(200),
+                PLAIN, PASSWORD);
+
+        restAssuredExecutor.execute(() -> grant(FOLDER_PATH, "READ", GRANTED_ROLE), ADMIN, PASSWORD);
+
+        restAssuredExecutor.execute(() -> {
+            given().when()
+                   .get(DOCUMENTS + "/download?path=" + FOLDER_PATH + "/" + FILE_NAME)
+                   .then()
+                   .statusCode(403);
+
+            given().when()
+                   .get(CMS + FOLDER_PATH + "/" + FILE_NAME)
+                   .then()
+                   .statusCode(403);
+        }, PLAIN, PASSWORD);
+    }
+
     @Test
     void the_internal_folders_are_not_grantable() {
         restAssuredExecutor.execute(() -> given().contentType(ContentType.JSON)
@@ -165,6 +206,14 @@ class CmsAccessControlIT extends IntegrationTest {
                .body("{\"parentFolder\":\"/\",\"name\":\"" + FOLDER + "\"}")
                .when()
                .post(DOCUMENTS + "/folder");
+    }
+
+    private static void upload() {
+        given().multiPart("file", FILE_NAME, "secret".getBytes(StandardCharsets.UTF_8))
+               .when()
+               .post(DOCUMENTS + "?path=" + FOLDER_PATH)
+               .then()
+               .statusCode(200);
     }
 
     private static void grant(String path, String method, String role) {
