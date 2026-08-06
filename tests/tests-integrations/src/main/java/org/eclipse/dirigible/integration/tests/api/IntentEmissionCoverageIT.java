@@ -1500,32 +1500,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                             .statusCode(200)
                                                             .extract()
                                                             .path("Id")));
-        AtomicInteger generatedVoucherId = new AtomicInteger();
-        restAssuredExecutor.execute(() -> generatedVoucherId.set(given().contentType("application/json")
-                                                                        .body("{\"id\":" + slipId.get() + "}")
-                                                                        .when()
-                                                                        .post("/services/java/" + PROJECT
-                                                                                + "/gen/events/emission/VoucherFromSlipGenerate/run")
-                                                                        .then()
-                                                                        .statusCode(200)
-                                                                        .extract()
-                                                                        .path("Id")));
+        // The custom-action endpoint returns its JSON body as text/plain, so assert only the status
+        // here and read the outcome from the line table below (RestAssured cannot path-parse text/plain).
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"id\":" + slipId.get() + "}")
+                                                 .when()
+                                                 .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                                 .then()
+                                                 .statusCode(200));
+        // The fixture creates exactly ONE VoucherLine (this computed create-from), so assert it directly.
         restAssuredExecutor.execute(() -> {
-            int voucherId = generatedVoucherId.get();
-            String matching = "findAll { it.Voucher == " + voucherId + " }";
             io.restassured.path.json.JsonPath lines = given().when()
                                                              .get(API + "/voucher/VoucherLineController")
                                                              .then()
                                                              .statusCode(200)
                                                              .extract()
                                                              .jsonPath();
-            assertEquals(1, lines.getList(matching)
+            assertEquals(1, lines.getList("Note")
                                  .size(),
                     "the computed create-from must produce exactly one synthetic line");
             // amount = Total(21) * 2, computed by Calc over the source (not a copied literal).
-            assertEquals(42.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
+            assertEquals(42.0f, lines.getFloat("Amount[0]"), 0.001f);
             // note = "Slip " + the source's label, via {} interpolation.
-            assertEquals("Slip March", lines.getString(matching + ".Note[0]"));
+            assertEquals("Slip March", lines.getString("Note[0]"));
         });
 
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a
