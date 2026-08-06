@@ -38,6 +38,7 @@
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :aria-pressed="search.show" @click="toggleSearch()" aria-label="Find item"><i role="img" x-h-lucide data-lucide="search"></i></button>
     <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askNewFolder()" aria-label="New folder"><i role="img" x-h-lucide data-lucide="folder-plus"></i></button>
+    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="askAccess(null)" :aria-label="T('application-core:shell.documents.manageAccess', 'Manage access')" :title="T('application-core:shell.documents.manageAccess', 'Manage access')"><i role="img" x-h-lucide data-lucide="shield"></i></button>
     <button x-h-button data-variant="transparent" data-size="icon-sm" :disabled="!anySelected()" @click="askDeleteSelected()" aria-label="Delete selected"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
     <a x-h-button data-variant="transparent" data-size="icon-sm" :href="zipUrl()" target="_blank" aria-label="Download folder as zip"><i role="img" x-h-lucide data-lucide="folder-down"></i></a>
     <button x-h-menu-trigger.dropdown x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Upload"><i role="img" x-h-lucide data-lucide="upload"></i></button>
@@ -166,6 +167,75 @@
       <div x-h-dialog-footer>
         <button x-h-button data-variant="outline" @click="newFolderOpen = false" :disabled="busy" x-text="T('application-core:shell.documents.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="primary" @click="createFolder()" :disabled="busy" x-text="T('application-core:shell.documents.create', 'Create')"></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manage access dialog: per-path role grants. An empty list means the path is open to anyone
+       with access to Documents - the CMS is not deny-by-default. -->
+  <div x-h-dialog-overlay :data-open="accessOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="T('application-core:shell.documents.manageAccess', 'Manage access')"></h2>
+        <button x-h-dialog-close @click="accessOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+      </div>
+      <div x-h-dialog-content>
+        <p class="text-sm text-muted-foreground mb-3">
+          <span x-text="T('application-core:shell.documents.accessFor', 'Rules for')"></span>
+          <strong x-text="access.path"></strong>
+        </p>
+
+        <template x-if="!access.own.length && !access.inherited.length">
+          <div x-h-alert data-variant="information" role="status" class="mb-3">
+            <div x-h-alert-description x-text="T('application-core:shell.documents.accessOpen', 'No rules: open to everyone who can use Documents.')"></div>
+          </div>
+        </template>
+
+        <template x-if="access.own.length">
+          <div class="mb-3">
+            <div class="text-xs text-muted-foreground mb-1" x-text="T('application-core:shell.documents.accessOwn', 'On this folder')"></div>
+            <template x-for="g in access.own" :key="g.method + ':' + g.role">
+              <div class="hbox items-center gap-2 py-1">
+                <span x-h-badge data-variant="outline" x-text="g.method"></span>
+                <span class="text-sm grow" x-text="g.role"></span>
+                <button x-h-button data-variant="transparent" data-size="icon-sm" @click="removeGrant(g)" :disabled="busy" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <template x-if="access.inherited.length">
+          <div class="mb-3">
+            <div class="text-xs text-muted-foreground mb-1" x-text="T('application-core:shell.documents.accessInherited', 'Inherited from a parent folder')"></div>
+            <template x-for="g in access.inherited" :key="'i' + g.path + g.method + g.role">
+              <div class="hbox items-center gap-2 py-1 opacity-60">
+                <span x-h-badge data-variant="outline" x-text="g.method"></span>
+                <span class="text-sm grow" x-text="g.role"></span>
+                <span class="text-xs text-muted-foreground" x-text="g.path"></span>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div class="hbox items-end gap-2">
+          <div x-h-field class="grow">
+            <label x-h-label for="acr" x-text="T('application-core:shell.documents.accessRole', 'Role')"></label>
+            <input x-h-input id="acr" type="text" x-model="accessDraft.role" @keydown.enter="addGrant()" :placeholder="T('application-core:shell.documents.accessRolePlaceholder', 'Role name...')" />
+          </div>
+          <div x-h-field>
+            <label x-h-label for="acm" x-text="T('application-core:shell.documents.accessMethod', 'Permission')"></label>
+            <select x-h-input id="acm" x-model="accessDraft.method">
+              <option value="READ" x-text="T('application-core:shell.documents.accessRead', 'Read')"></option>
+              <option value="WRITE" x-text="T('application-core:shell.documents.accessWrite', 'Write')"></option>
+            </select>
+          </div>
+          <button x-h-button data-variant="primary" @click="addGrant()" :disabled="busy" x-text="T('application-core:shell.documents.accessAdd', 'Add')"></button>
+        </div>
+
+        <div x-show="accessError" x-h-alert data-variant="negative" role="alert" class="mt-2"><div x-h-alert-description x-text="accessError"></div></div>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" @click="accessOpen = false" x-text="T('application-core:shell.documents.close', 'Close')"></button>
       </div>
     </div>
   </div>

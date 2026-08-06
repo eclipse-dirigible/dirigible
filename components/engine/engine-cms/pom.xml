@@ -27,6 +27,12 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-security</artifactId>
 		</dependency>
+
+    	<!-- Data - the per-tenant CMS access grants live in a tenant-routed table -->
+    	<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-data-sources</artifactId>
+		</dependency>
     	
     	<!-- Libraries -->
 		<dependency>
