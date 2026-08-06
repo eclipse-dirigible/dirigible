@@ -118,6 +118,79 @@ class GluePostingsTest {
     }
 
     /**
+     * Conditional rule column (#6534): {@code rule(by: Method, cases: {...}, default: ...)} pre-renders
+     * a null-safe classifier ternary over the rule row's columns - NOT static usedRuleColumns - and
+     * registers the whole expression as a null guard so an undetermined account skips the posting.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void conditionalRuleColumnEmitsAClassifierTernaryAndAGuard() {
+        String yaml =
+                """
+                        name: ledger
+                        entities:
+                          - name: Account
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: number, type: string }
+                          - name: PaymentMethodType
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                          - name: PostingRule
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: documentType, type: string }
+                            relations:
+                              - { name: BankAccount, kind: manyToOne, to: Account }
+                              - { name: CashAccount, kind: manyToOne, to: Account }
+                              - { name: SuspenseAccount, kind: manyToOne, to: Account }
+                          - name: Payment
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: amount, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: Method, kind: manyToOne, to: PaymentMethodType, required: true }
+                          - name: JournalEntry
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                            relations:
+                              - { name: Payment, kind: manyToOne, to: Payment }
+                          - name: JournalEntryItem
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: debit, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                              - { name: Account, kind: manyToOne, to: Account, required: true }
+                        postings:
+                          - name: paymentPosting
+                            event: { onCreate: Payment }
+                            creates: JournalEntry
+                            backReference: Payment
+                            rule: { entity: PostingRule, match: { documentType: "Payment" } }
+                            items:
+                              - { Account: "rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)", debit: "Amount" }
+                        """;
+        Map<String, Object> p = GlueIntentGenerator.buildPostingsForTest(IntentParser.parse(yaml))
+                                                   .get(0);
+        String ternary = "(Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"1\")) == 0 ? ruleRow.BankAccount"
+                + " : Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"2\")) == 0 ? ruleRow.CashAccount"
+                + " : ruleRow.SuspenseAccount)";
+
+        List<Map<String, Object>> assigns = (List<Map<String, Object>>) ((List<Map<String, Object>>) p.get("itemRows")).get(0)
+                                                                                                                       .get("assigns");
+        assertTrue(assigns.stream()
+                          .anyMatch(a -> "Account".equals(a.get("targetProp")) && ternary.equals(a.get("expr"))),
+                "the Account cell must be the classifier ternary: " + assigns);
+        // the whole expression is a runtime null guard, NOT a static rule column
+        assertEquals(List.of(ternary), p.get("conditionalRuleGuards"));
+        assertEquals(List.of(), p.get("usedRuleColumns"));
+    }
+
+    /**
      * The onCreate trigger (#6421): a source with no status lifecycle - a booked payment - posts on its
      * INSERT. The glue flags the create event and carries no status guard.
      */

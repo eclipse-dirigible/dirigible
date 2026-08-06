@@ -794,6 +794,107 @@ class IntentParserTest {
                              .size());
     }
 
+    /**
+     * A payment posting whose account column is chosen by a source classifier - #6534. The single
+     * {@code items} row is supplied per test.
+     */
+    private static String conditionalRulePosting(String itemRow) {
+        return """
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: PaymentMethodType
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: BankAccount, kind: manyToOne, to: Account }
+                      - { name: CashAccount, kind: manyToOne, to: Account }
+                      - { name: SuspenseAccount, kind: manyToOne, to: Account }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Method, kind: manyToOne, to: PaymentMethodType, required: true }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                      - { name: Account, kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: paymentPosting
+                    event: { onCreate: Payment }
+                    creates: JournalEntry
+                    backReference: Payment
+                    rule: { entity: PostingRule, match: { documentType: "Payment" } }
+                    items:
+                      - %s
+                """.formatted(itemRow);
+    }
+
+    @Test
+    void conditionalRuleColumnParses() {
+        IntentParser.parse(conditionalRulePosting(
+                "{ Account: \"rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)\", debit: \"Amount\" }"));
+    }
+
+    @Test
+    void conditionalRuleUnknownCaseColumnIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Method, cases: { 1: Nonsuch })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("case column [Nonsuch] is not a field or to-one relation of [PostingRule]")),
+                "expected an unknown case-column issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleWithAWhenGuardIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(conditionalRulePosting(
+                "{ Account: \"rule(by: Method, cases: { 1: BankAccount })\", debit: \"Amount\", when: \"Amount == 0\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("combines a conditional rule(by: ...) with a when: guard")),
+                "expected a conditional+when issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleNonNumericCaseKeyIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Method, cases: { bank: BankAccount })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("case key [bank] must be a number")),
+                "expected a non-numeric case-key issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleUnknownClassifierIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Nonsuch, cases: { 1: BankAccount })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("rule(by: Nonsuch) is not a field or to-one relation of the source [Payment]")),
+                "expected an unknown-classifier issue, got: " + ex.getIssues());
+    }
+
     /** The event declares exactly one trigger - onTransition XOR onCreate. */
     @Test
     void postingEventDeclaresExactlyOneTrigger() {

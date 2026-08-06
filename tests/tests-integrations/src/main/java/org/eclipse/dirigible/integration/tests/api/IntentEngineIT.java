@@ -1700,6 +1700,79 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void conditional_rule_column_emits_a_classifier_ternary_and_a_runtime_guard() {
+        // #6534: the account column is chosen by a source classifier - rule(by: Method, cases: {...}) -
+        // so ONE item row replaces the when:-gated row pair. The generated handler reads the rule row's
+        // column selected at runtime and null-guards the whole selection (an undetermined account skips
+        // the posting fail-soft), instead of statically null-checking every case column.
+        String yaml =
+                """
+                        name: condposting
+                        entities:
+                          - name: Account
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: number, type: string }
+                          - name: PaymentMethodType
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 100 }
+                          - name: PostingRule
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: documentType, type: string }
+                            relations:
+                              - { name: BankAccount, kind: manyToOne, to: Account }
+                              - { name: CashAccount, kind: manyToOne, to: Account }
+                              - { name: SuspenseAccount, kind: manyToOne, to: Account }
+                          - name: Payment
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: amount, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: Method, kind: manyToOne, to: PaymentMethodType, required: true }
+                          - name: Ledger
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: memo, type: string, length: 400 }
+                            relations:
+                              - { name: Payment, kind: manyToOne, to: Payment }
+                          - name: LedgerLine
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: debit, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
+                              - { name: Account, kind: manyToOne, to: Account, required: true }
+                        postings:
+                          - name: paymentLedger
+                            event: { onCreate: Payment }
+                            creates: Ledger
+                            backReference: Payment
+                            rule: { entity: PostingRule, match: { documentType: "Payment" } }
+                            items:
+                              - { Account: "rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)", debit: "Amount" }
+                        """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "condposting.glue");
+        String posting = contentOf("gen/events/condposting/PaymentLedgerPosting.java");
+        assertTrue(
+                posting.contains("Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"1\")) == 0 ? ruleRow.BankAccount"),
+                "the account is a classifier ternary over the rule row's columns");
+        assertTrue(posting.contains("ruleRow.CashAccount") && posting.contains("ruleRow.SuspenseAccount"),
+                "every case column + the default is reachable from the ternary");
+        assertTrue(posting.contains("selected no account"), "the whole selection is null-guarded at runtime (fail-soft skip)");
+        assertFalse(posting.contains("if (ruleRow.BankAccount == null)"),
+                "a conditional case column must NOT be a static usedRuleColumns skip");
+    }
+
+    @Test
     void generates_completion_hook_flips_the_source_via_targeted_update() {
         // A create-from with a sourceStatus completion hook: after the Invoice is created, the Proforma
         // flips to status 3 - via a TARGETED single-column write (updateProperty), never a full-row

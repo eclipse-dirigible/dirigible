@@ -79,6 +79,11 @@ public class ${className}Posting implements MessageHandler {
             return; // incomplete determination -> unposted worklist
         }
 #end
+#foreach($guard in $conditionalRuleGuards)
+        if (${guard} == null) {
+            return; // conditional rule(by: ...) selected no account (unmatched or null) -> unposted worklist
+        }
+#end
 #end
         // Idempotent + resumable posting (cloud-native: no cross-step transaction). The back-reference
         // identifies an existing post: a fresh source posts a new target + items; a redelivery of a

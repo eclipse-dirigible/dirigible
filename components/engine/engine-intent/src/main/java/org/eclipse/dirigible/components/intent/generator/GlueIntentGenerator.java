@@ -30,6 +30,7 @@ import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
@@ -1324,6 +1325,11 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                       .get("entity") != null;
             e.put("hasRule", hasRule);
             java.util.Set<String> usedRuleColumns = new java.util.LinkedHashSet<>();
+            // Conditional rule(by:...) cells (#6534): the selected column is a RUNTIME choice, so it
+            // cannot join the static usedRuleColumns null-skip (that would skip whenever ANY case column
+            // is null). Each collected expression is instead null-checked as a whole after the rule row
+            // is resolved - an unmatched/undetermined account skips the posting fail-soft.
+            List<String> conditionalRuleGuards = new ArrayList<>();
             if (hasRule) {
                 String ruleEntityName = String.valueOf(effective.getRule()
                                                                 .get("entity"));
@@ -1370,11 +1376,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         }
                         continue;
                     }
-                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
-                                                                             .matcher(value);
                     Map<String, Object> assign = new LinkedHashMap<>();
                     assign.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
-                    if (ruleRef.matches()) {
+                    java.util.Optional<PostingRuleSelector> ruleSelector = PostingRuleSelector.parse(value);
+                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
+                                                                             .matcher(value);
+                    if (ruleSelector.isPresent()) {
+                        // Conditional rule column (#6534): a null-safe classifier ternary that reads the
+                        // rule row's column chosen by the source's `by` value. Not a static usedRuleColumn
+                        // (the choice is per-row at runtime); its resolved value is null-guarded below.
+                        String ternary = conditionalRuleExpression(ruleSelector.get());
+                        conditionalRuleGuards.add(ternary);
+                        assign.put("expr", ternary);
+                    } else if (ruleRef.matches()) {
                         String column = IntentNaming.pascalCase(ruleRef.group(1));
                         usedRuleColumns.add(column);
                         assign.put("expr", "ruleRow." + column);
@@ -1402,6 +1416,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             e.put("itemRows", itemRows);
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
+            e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
@@ -1448,6 +1463,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * A posting header assignment: a bare source property name copies it; a value containing
      * {@code {prop}} placeholders becomes a Java string concatenation; anything else is a literal.
      */
+    /**
+     * The Java expression for a conditional {@code rule(by: ..., cases: ..., default: ...)} account
+     * reference (#6534): a null-safe classifier ternary that reads the resolved {@code ruleRow}'s
+     * column chosen by the source's {@code by} value. The classifier is read through the SDK
+     * {@code Calc} evaluator (null-safe, the same reader the {@code when} guard uses), each case key
+     * compared as a {@code BigDecimal}; an unmatched value falls to the {@code default} column, or to
+     * {@code null} (which the generated handler null-guards → the posting skips to the unposted
+     * worklist).
+     */
+    private static String conditionalRuleExpression(PostingRuleSelector selector) {
+        String classifier = IntentNaming.pascalCase(selector.by());
+        String expr = selector.defaultColumn() != null ? "ruleRow." + IntentNaming.pascalCase(selector.defaultColumn()) : "null";
+        List<Map.Entry<String, String>> entries = new ArrayList<>(selector.cases()
+                                                                          .entrySet());
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            Map.Entry<String, String> caseEntry = entries.get(i);
+            String condition =
+                    "Calc.eval(\"" + classifier + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + caseEntry.getKey() + "\")) == 0";
+            expr = condition + " ? ruleRow." + IntentNaming.pascalCase(caseEntry.getValue()) + " : " + expr;
+        }
+        return "(" + expr + ")";
+    }
+
     private static Map<String, Object> postingAssignment(String targetProperty, String value) {
         Map<String, Object> a = new LinkedHashMap<>();
         a.put("targetProp", IntentNaming.pascalCase(targetProperty));

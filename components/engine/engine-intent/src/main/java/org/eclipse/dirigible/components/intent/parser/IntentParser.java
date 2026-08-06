@@ -37,6 +37,7 @@ import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
@@ -2192,6 +2193,31 @@ public final class IntentParser {
         return false;
     }
 
+    /**
+     * Whether a posting {@code rule(<column>)} reference names a field or a relation of the rule entity
+     * (authored lower-camel matched case-insensitively against the PascalCase property).
+     */
+    private static boolean isRuleColumn(EntityIntent ruleEntity, String column) {
+        if (column == null || column.isBlank()) {
+            return false;
+        }
+        if (ruleEntity.getFields() != null) {
+            for (FieldIntent field : ruleEntity.getFields()) {
+                if (column.equalsIgnoreCase(field.getName())) {
+                    return true;
+                }
+            }
+        }
+        if (ruleEntity.getRelations() != null) {
+            for (RelationIntent relation : ruleEntity.getRelations()) {
+                if (column.equalsIgnoreCase(relation.getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** The entity's composition child (the first entity declaring a composition to-one back to it). */
     private static EntityIntent compositionChildOf(EntityIntent entity, java.util.Map<String, EntityIntent> byName) {
         for (EntityIntent candidate : byName.values()) {
@@ -3508,36 +3534,56 @@ public final class IntentParser {
                     if (!hasPropertyIgnoreCase(itemsEntity, key)) {
                         issues.add(subject + " item [" + key + "] is not a field or to-one relation of [" + itemsEntity.getName() + "]");
                     }
+                    // Conditional rule column (#6534): the rule-row column is chosen by a source
+                    // classifier - `rule(by: <field>, cases: { <id>: <column>, ... }, default: <column>? )`.
+                    // The by/cases selector already branches the account, so it replaces the when:-gated
+                    // row pair; a when: on the same row is redundant and rejected.
+                    java.util.Optional<PostingRuleSelector> selector = PostingRuleSelector.parse(value);
+                    if (selector.isPresent()) {
+                        PostingRuleSelector sel = selector.get();
+                        if (ruleEntity == null) {
+                            issues.add(subject + " item [" + key + "] references rule(by: ...) but the posting declares no rule");
+                        }
+                        if (row.containsKey("when")) {
+                            issues.add(subject + " item [" + key + "] combines a conditional rule(by: ...) with a when: guard"
+                                    + " - the by/cases selector already branches the account; drop the when:");
+                        }
+                        if (sel.cases()
+                               .isEmpty()) {
+                            issues.add(subject + " item [" + key + "] rule(by: ...) declares no cases");
+                        }
+                        // `by` reads the source at runtime (Calc, as a number); deep-check it only for a
+                        // LOCAL source - a cross-model source is resolved at generation time.
+                        if (postingSource != null && !hasPropertyIgnoreCase(postingSource, sel.by())) {
+                            issues.add(subject + " rule(by: " + sel.by() + ") is not a field or to-one relation of the source ["
+                                    + postingSource.getName() + "]");
+                        }
+                        for (java.util.Map.Entry<String, String> caseEntry : sel.cases()
+                                                                                .entrySet()) {
+                            if (!caseEntry.getKey()
+                                          .matches("-?\\d+(\\.\\d+)?")) {
+                                issues.add(subject + " rule(by: ...) case key [" + caseEntry.getKey()
+                                        + "] must be a number (the classifier's seed id)");
+                            }
+                            if (ruleEntity != null && !isRuleColumn(ruleEntity, caseEntry.getValue())) {
+                                issues.add(subject + " rule(by: ...) case column [" + caseEntry.getValue()
+                                        + "] is not a field or to-one relation of [" + ruleEntity.getName() + "]");
+                            }
+                        }
+                        if (sel.defaultColumn() != null && ruleEntity != null && !isRuleColumn(ruleEntity, sel.defaultColumn())) {
+                            issues.add(subject + " rule(by: ...) default column [" + sel.defaultColumn()
+                                    + "] is not a field or to-one relation of [" + ruleEntity.getName() + "]");
+                        }
+                        continue;
+                    }
                     java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("\\s*rule\\((\\w+)\\)\\s*")
                                                                              .matcher(value);
                     if (ruleRef.matches()) {
                         if (ruleEntity == null) {
                             issues.add(subject + " item [" + key + "] references rule(...) but the posting declares no rule");
-                        } else {
-                            String column = ruleRef.group(1);
-                            // Authored lower-camel matches a PascalCase relation (rule(receivableAccount)
-                            // -> ReceivableAccount) - compare case-insensitively.
-                            boolean known = false;
-                            if (ruleEntity.getFields() != null) {
-                                for (FieldIntent f : ruleEntity.getFields()) {
-                                    if (column.equalsIgnoreCase(f.getName())) {
-                                        known = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!known && ruleEntity.getRelations() != null) {
-                                for (RelationIntent r : ruleEntity.getRelations()) {
-                                    if (column.equalsIgnoreCase(r.getName())) {
-                                        known = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!known) {
-                                issues.add(subject + " rule(" + column + ") is not a field or to-one relation of [" + ruleEntity.getName()
-                                        + "]");
-                            }
+                        } else if (!isRuleColumn(ruleEntity, ruleRef.group(1))) {
+                            issues.add(subject + " rule(" + ruleRef.group(1) + ") is not a field or to-one relation of ["
+                                    + ruleEntity.getName() + "]");
                         }
                     } else if (toOneRelationByName(itemsEntity, key) != null) {
                         // Source-FK copy (issue #6533): a to-one relation item cell copies a source

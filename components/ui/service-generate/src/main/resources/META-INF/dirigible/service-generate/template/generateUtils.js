@@ -1395,6 +1395,10 @@ export function generateFiles(model, parameters, templateSources) {
                                 ruleMatchProperty: po.ruleMatchProperty,
                                 ruleMatchValueJava: po.ruleMatchValueJava,
                                 usedRuleColumns: po.usedRuleColumns,
+                                // Conditional rule(by:...) selectors (#6534): whole-expression null
+                                // guards, checked after the rule row resolves (the selected column is a
+                                // runtime choice, so it cannot be a static usedRuleColumn).
+                                conditionalRuleGuards: po.conditionalRuleGuards,
                                 headerAssignments: po.headerAssignments,
                                 itemRows: po.itemRows
                             };
