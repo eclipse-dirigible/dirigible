@@ -69,7 +69,11 @@ public interface SynchronizersOrder {
     /** The bpmn. */
     int BPMN = 300;
 
-    /** The odata. */
+    /**
+     * The odata. Reserved for the externalized OData engine (moved to a separate project); its
+     * synchronizer still references this constant via {@code @Order(SynchronizersOrder.ODATA)}, so the
+     * value is kept here to preserve the global synchronizer ordering.
+     */
     int ODATA = 310;
 
     /** The csvim. */

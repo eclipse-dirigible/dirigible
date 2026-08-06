@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.base.http.access;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.components.base.http.uri.HostedEngineUris;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * The Class HttpSecurityURIConfigurator.
@@ -68,7 +71,6 @@ public class HttpSecurityURIConfigurator {
             "/websockets/**", //
             "/api-docs/swagger-config", //
             "/api-docs/**", //
-            "/odata/**", //
             "/swagger-ui/**"};
 
     /** The Constant DEVELOPER_PATTERNS. */
@@ -132,12 +134,27 @@ public class HttpSecurityURIConfigurator {
              .hasAnyRole(Roles.DEVELOPER.getRoleName(), Roles.ADMINISTRATOR.getRoleName(), Roles.OPERATOR.getRoleName())
 
              // Authenticated
-             .requestMatchers(AUTHENTICATED_PATTERNS)
+             .requestMatchers(authenticatedPatterns())
              .authenticated()
 
              // Deny all other requests
              .anyRequest()
              .denyAll());
+    }
+
+    /**
+     * Builds the authenticated patterns, merging the static ones with any Ant patterns contributed by
+     * hosted engines (e.g. the externalized OData engine) via {@link HostedEngineUris}. When no such
+     * engine is on the classpath the result is just the static patterns.
+     *
+     * @return the authenticated request matcher patterns
+     */
+    private String[] authenticatedPatterns() {
+        List<String> patterns = new ArrayList<>(List.of(AUTHENTICATED_PATTERNS));
+        for (HostedEngineUris hostedEngineUris : BeanProvider.getBeans(HostedEngineUris.class)) {
+            patterns.addAll(hostedEngineUris.securedAntPatterns());
+        }
+        return patterns.toArray(String[]::new);
     }
 
     private void applyCustomConfigurations(HttpSecurity http) throws Exception {

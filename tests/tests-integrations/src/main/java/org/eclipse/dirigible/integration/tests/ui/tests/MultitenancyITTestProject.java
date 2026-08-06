@@ -27,8 +27,6 @@ import org.eclipse.dirigible.tests.framework.tenant.DirigibleTestTenant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Lazy;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import java.util.concurrent.TimeUnit;
@@ -50,7 +48,6 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
     private static final String READERS_VIEW_SERVICE_PATH = TS_BASE_PATH + "views/ReaderViewService.ts";
     private static final String DOCUMENTS_SERVICE_PATH = TS_BASE_PATH + "cmis/DocumentService.ts/documents";
     private static final String BOOKS_SERVICE_PATH = TS_BASE_PATH + "gen/edm/api/Books/BookService.ts";
-    private static final String READERS_ODATA_ENTITY_PATH = "/odata/v2/Readers";
 
     private final BrowserFactory browserFactory;
     private final RestAssuredExecutor restAssuredExecutor;
@@ -84,7 +81,6 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
         wrapVerification(this::verifyHomePageAccessibleByTenant, tenant, "verifyHomePageAccessibleByTenant");
         wrapVerification(this::verifyView, tenant, "verifyView");
         wrapVerification(this::verifyEdmGeneratedResources, tenant, "verifyEdmGeneratedResources");
-        wrapVerification(this::verifyOData, tenant, "verifyOData");
         wrapVerification(this::verifyDocumentsAPI, tenant, "verifyDocumentsAPI");
 
         LOGGER.info("Test project for tenant [{}] has been verified successfully!", tenant);
@@ -212,65 +208,6 @@ class MultitenancyITTestProject extends BaseMultitenantTestProject {
                    .statusCode(200)
                    .body(equalTo(JsonHelper.toJson(documentContent)));
         });
-    }
-
-    /**
-     * Verifies indirectly:<br>
-     * - MultitenancyIT/tables/reader.table is created<br>
-     * - MultitenancyIT/csvim/data.csvim is imported <br>
-     * - MultitenancyIT/odata/readers.odata is configured <br>
-     * - OData is working<br>
-     * - default DB datasource is resolved correctly
-     */
-    private void verifyOData(DirigibleTestTenant tenant) {
-        restAssuredExecutor.execute(tenant, () -> {
-            verifyCSVIMIsImported();
-            verifyAddingNewReader(tenant);
-        });
-    }
-
-    private void verifyCSVIMIsImported() {
-        given().header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-               .when()
-               .get(READERS_ODATA_ENTITY_PATH)
-               .then()
-               .statusCode(200)
-               .body("d.results", hasSize(2))
-               .body("d.results[0].ReaderId", equalTo(1))
-               .body("d.results[0].ReaderFirstName", equalTo("Ivan"))
-               .body("d.results[0].ReaderLastName", equalTo("Ivanov"))
-               .body("d.results[1].ReaderId", equalTo(2))
-               .body("d.results[1].ReaderFirstName", equalTo("Maria"))
-               .body("d.results[1].ReaderLastName", equalTo("Petrova"));
-    }
-
-    private void verifyAddingNewReader(DirigibleTestTenant tenant) {
-        String firstName = "FirstName[" + tenant.getName() + "]";
-        String lastName = "LastName[" + tenant.getName() + "]";
-        String jsonPayload = String.format("""
-                {
-                    "ReaderId": 3,
-                    "ReaderFirstName": "%s",
-                    "ReaderLastName": "%s"
-                }
-                """, firstName, lastName);
-
-        given().contentType(ContentType.JSON)
-               .body(jsonPayload)
-               .when()
-               .post(READERS_ODATA_ENTITY_PATH)
-               .then()
-               .statusCode(201);
-
-        given().header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
-               .when()
-               .get(READERS_ODATA_ENTITY_PATH)
-               .then()
-               .statusCode(200)
-               .body("d.results", hasSize(3))
-               .body("d.results[2].ReaderId", equalTo(3))
-               .body("d.results[2].ReaderFirstName", equalTo(firstName))
-               .body("d.results[2].ReaderLastName", equalTo(lastName));
     }
 
 }

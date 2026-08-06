@@ -173,9 +173,6 @@
         <!-- Chemistry -->
         <chemistry.version>1.1.0</chemistry.version>
 
-        <!-- Olingo -->
-        <olingo.version>3.1.4</olingo.version>
-
         <!-- FTP -->
         <mina-core.version>2.2.9</mina-core.version>
         <sshd-core.version>2.19.0</sshd-core.version>

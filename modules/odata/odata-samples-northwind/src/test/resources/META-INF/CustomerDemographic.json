@@ -1,9 +1,0 @@
-{
-  "edmType": "CustomerDemographic",
-  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.northwind.CustomerDemographic",
-  "sqlTable": "CUSTOMER_DEMOGRAPHIC",
-  "sqlSchema": "PUBLIC",
-  "customerTypeId": "CUSTOMER_TYPE_ID",
-  "customerDesc": "CUSTOMER_DESC",
-  "_pk_": "CUSTOMER_TYPE_ID"
-}
