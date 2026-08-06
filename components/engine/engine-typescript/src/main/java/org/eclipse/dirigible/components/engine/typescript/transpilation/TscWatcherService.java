@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
@@ -49,6 +50,9 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
     // \u001B[H - move cursor to home position (top-left)
     // These are stripped from tsc output to prevent log lines from disappearing or refreshing.
     private static final Pattern CONTROL_CHARS = Pattern.compile("[\\r\\u0007\\u001B\\[2J\\u001B\\[H]");
+
+    /** How many times to re-attempt the registry folder creation when it races a concurrent change. */
+    private static final int CREATE_FOLDER_ATTEMPTS = 3;
 
     private static final String TS_CONFIG_CONTENT = """
             {
@@ -134,7 +138,7 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
         LOGGER.info("Creating tsconfig.json file with path [{}]", tsConfigPath);
         LOGGER.debug("tsconfig.json content:\n{}", TS_CONFIG_CONTENT);
         try {
-            Files.createDirectories(registryFolderPath);
+            createRegistryFolder(registryFolderPath);
             Files.writeString(tsConfigPath, TS_CONFIG_CONTENT, StandardCharsets.UTF_8, StandardOpenOption.CREATE,
                     StandardOpenOption.TRUNCATE_EXISTING);
         } catch (IOException ex) {
@@ -203,10 +207,44 @@ public class TscWatcherService implements ApplicationListener<ApplicationReadyEv
 
     private void createDir(Path path) {
         try {
-            Files.createDirectories(path);
+            createRegistryFolder(path);
         } catch (IOException ex) {
             throw new IllegalStateException("Failed to create directory " + path, ex);
         }
+    }
+
+    /**
+     * Creates the registry folder, tolerating another party mutating the same tree.
+     * <p>
+     * {@link Files#createDirectories} is not atomic: it calls {@code mkdir}, and when that reports the
+     * directory already exists it re-checks with {@link Files#isDirectory}. That check returns
+     * {@code false} on <em>any</em> I/O error - including the path being removed in between - so a
+     * concurrent delete of an ancestor turns "the directory is already there" into a fatal
+     * {@link FileAlreadyExistsException}. That killed whole application contexts in CI, because this
+     * runs from the {@code ApplicationReadyEvent} listener and any exception fails the startup.
+     * <p>
+     * Retrying is what makes this correct rather than merely quieter: a genuinely broken path (a
+     * regular file where the folder belongs) still fails every attempt and is reported, while a
+     * transient overlap resolves on the next one.
+     *
+     * @param path the registry folder
+     * @throws IOException if the folder still cannot be created after the retries
+     */
+    static void createRegistryFolder(Path path) throws IOException {
+        IOException lastFailure = null;
+        for (int attempt = 1; attempt <= CREATE_FOLDER_ATTEMPTS; attempt++) {
+            try {
+                Files.createDirectories(path);
+                return;
+            } catch (FileAlreadyExistsException ex) {
+                if (Files.isDirectory(path)) {
+                    return; // it exists after all - another party won the race, which is fine
+                }
+                lastFailure = ex;
+                LOGGER.debug("Attempt [{}] to create [{}] lost a race with a concurrent change; retrying", attempt, path, ex);
+            }
+        }
+        throw lastFailure;
     }
 
     @Override
