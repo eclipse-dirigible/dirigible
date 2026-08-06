@@ -283,7 +283,19 @@ composition is opt-in.
   references, arithmetic over the SOURCE's fields, or - for a to-one relation cell - a bare SOURCE
   relation name whose FK is copied onto the line; a row `when` is `<SourceField> ==|!= <number>`.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
-  documents with no back-referencing target), never throws. All writes go through the generated
+  documents with no back-referencing target), never throws.
+  **Conditional rule column** - when the account must be chosen by a source value (a payment posts to
+  the bank account for a transfer, the cash account for cash), a single row selects the rule column by
+  a classifier instead of duplicating the row per case (the `by`/`cases`/`default` shape the
+  conditional `dependsOn` `valueFrom` uses). Quote it - it carries colons and braces:
+  ```yaml
+    items:
+      - { Account: "rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)", debit: "Amount" }
+  ```
+  `by` is a source field/relation (compared as a number, like `when`); `cases` keys are the classifier's
+  seed ids, values are columns of the rule entity; `default` (optional) is the fallback column. No match
+  and no default - or a null selected column - skips the posting to the unposted worklist. A conditional
+  cell already branches the account, so it cannot also carry a row `when`. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
