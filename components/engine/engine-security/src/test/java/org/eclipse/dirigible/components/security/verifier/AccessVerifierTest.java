@@ -113,4 +113,59 @@ class AccessVerifierTest {
                                                 .next();
         assertThat(access.getRole()).isEqualTo("somerole");
     }
+
+    /** The most specific matching Ant pattern (the longest path string) wins over a shorter one. */
+    @Test
+    void mostSpecificAntPatternWins() {
+        securityAccessRepository.save(createSecurityAccess("/m/broad.access", "broad", "description", "HTTP", "/m/**", "GET", "broadRole"));
+        securityAccessRepository.save(
+                createSecurityAccess("/m/narrow.access", "narrow", "description", "HTTP", "/m/a/**", "GET", "narrowRole"));
+        securityAccessVerifier.refreshCache(true);
+
+        List<Access> matches = securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/m/a/b", "GET");
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0)
+                          .getRole()).isEqualTo("narrowRole");
+    }
+
+    /** An exact definition is matched (via the O(1) index) and outranks a shorter Ant pattern. */
+    @Test
+    void exactMatchOutranksAShorterAntPattern() {
+        securityAccessRepository.save(
+                createSecurityAccess("/e/exact.access", "exact", "description", "HTTP", "/aa/bb/cc", "GET", "exactRole"));
+        securityAccessRepository.save(
+                createSecurityAccess("/e/pattern.access", "pattern", "description", "HTTP", "/aa/*/cc", "GET", "patternRole"));
+        securityAccessVerifier.refreshCache(true);
+
+        List<Access> matches = securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/aa/bb/cc", "GET");
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0)
+                          .getRole()).isEqualTo("exactRole");
+    }
+
+    /** A longer Ant pattern still out-specifies an exact definition of the same path (longest wins). */
+    @Test
+    void longerAntPatternOutranksAnExactMatch() {
+        securityAccessRepository.save(
+                createSecurityAccess("/o/exact.access", "exact", "description", "HTTP", "/a/b/c", "GET", "exactRole"));
+        securityAccessRepository.save(
+                createSecurityAccess("/o/pattern.access", "pattern", "description", "HTTP", "/{seg}/b/c", "GET", "varRole"));
+        securityAccessVerifier.refreshCache(true);
+
+        List<Access> matches = securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/a/b/c", "GET");
+        assertThat(matches).hasSize(1);
+        assertThat(matches.get(0)
+                          .getRole()).isEqualTo("varRole");
+    }
+
+    /** The wildcard HTTP method bucket (*) contributes alongside the specific method. */
+    @Test
+    void wildcardMethodBucketIsIncluded() {
+        securityAccessRepository.save(
+                createSecurityAccess("/w/any.access", "any", "description", "HTTP", "/w/resource", "*", "anyMethodRole"));
+        securityAccessVerifier.refreshCache(true);
+
+        assertThat(securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/w/resource", "GET")).hasSize(1);
+        assertThat(securityAccessVerifier.getMatchingSecurityAccesses("HTTP", "/w/resource", "DELETE")).hasSize(1);
+    }
 }
