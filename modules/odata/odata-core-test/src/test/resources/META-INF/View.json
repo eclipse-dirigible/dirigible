@@ -1,9 +1,0 @@
-{
-  "edmType": "View",
-  "edmTypeFqn": "org.eclipse.dirigible.engine.odata2.sql.entities.View",
-  "sqlTable": "VIEW",
-  "Name": "NAME",
-  "_pk_" : "",
-  "keyGenerated" : "ID",
-  "Id" : "ID"
-}

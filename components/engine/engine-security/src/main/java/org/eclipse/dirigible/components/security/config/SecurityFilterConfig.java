@@ -9,10 +9,13 @@
  */
 package org.eclipse.dirigible.components.security.config;
 
+import org.eclipse.dirigible.components.base.http.uri.HostedEngineUris;
 import org.eclipse.dirigible.components.security.filter.SecurityFilter;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 /**
  * The Class SecurityFilterConfig.
@@ -21,13 +24,16 @@ import org.springframework.context.annotation.Configuration;
 public class SecurityFilterConfig {
 
     /**
-     * Security filter registration bean.
+     * Security filter registration bean. The base patterns are extended with any URL patterns
+     * contributed by hosted engines (e.g. the externalized OData engine) via {@link HostedEngineUris}.
      *
      * @param securityFilter the security filter
+     * @param hostedEngineUris the hosted engine URI contributions
      * @return the filter registration bean
      */
     @Bean
-    public FilterRegistrationBean<SecurityFilter> securityFilterRegistrationBean(SecurityFilter securityFilter) {
+    public FilterRegistrationBean<SecurityFilter> securityFilterRegistrationBean(SecurityFilter securityFilter,
+            List<HostedEngineUris> hostedEngineUris) {
         FilterRegistrationBean<SecurityFilter> filterRegistrationBean = new FilterRegistrationBean<>(securityFilter);
 
         filterRegistrationBean.setFilter(securityFilter);
@@ -45,9 +51,12 @@ public class SecurityFilterConfig {
                 "/public/public/*", //
                 "/public/web/*", //
                 "/public/wiki/*", //
-                "/public/command/*", //
-                "/odata/v2/*" //
+                "/public/command/*" //
         );
+        for (HostedEngineUris engineUris : hostedEngineUris) {
+            engineUris.filterUrlPatterns()
+                      .forEach(filterRegistrationBean::addUrlPatterns);
+        }
 
         return filterRegistrationBean;
     }

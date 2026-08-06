@@ -1,9 +1,0 @@
-CATEGORY_ID;CATEGORY_NAME;DESCRIPTION;PICTURE
-1;Beverages;Soft drinks, coffees, teas, beers, and ales;../data/picture.clob
-2;Condiments;Sweet and savory sauces, relishes, spreads, and seasonings;../data/picture.clob
-3;Confections;Desserts, candies, and sweet breads;../data/picture.clob
-4;Dairy Products;Cheeses;../data/picture.clob
-5;Grains/Cereals;Breads, crackers, pasta, and cereal;../data/picture.clob
-6;Meat/Poultry;Prepared meats;../data/picture.clob
-7;Produce;Dried fruit and bean curd;../data/picture.clob
-8;Seafood;Seaweed and fish;../data/picture.clob
