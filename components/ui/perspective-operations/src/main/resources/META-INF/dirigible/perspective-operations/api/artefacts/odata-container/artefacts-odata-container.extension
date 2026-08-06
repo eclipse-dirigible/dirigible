@@ -1,5 +1,0 @@
-{
-    "module": "perspective-operations/api/artefacts/odata-container/artefacts-odata-container.mjs",
-    "extensionPoint": "platform-operations-artefacts",
-    "description": "OData Container Artefacts Extension"
-}
