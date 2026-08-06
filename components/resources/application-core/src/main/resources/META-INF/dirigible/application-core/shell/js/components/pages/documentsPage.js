@@ -12,7 +12,7 @@
 /**
  * documentsPage — the built-in Documents view: a full Document Storage browser (the Harmonia
  * counterpart of the dashboard's AngularJS documents perspective), over the CMS REST API
- * /services/js/documents/api/documents.js. Outlook-style master-detail: a file/folder list on the
+ * /services/documents. Outlook-style master-detail: a file/folder list on the
  * left and a File Preview pane on the right (CSV → table via PapaParse, other types → an <iframe>
  * over /preview). Features: back/forward history, breadcrumbs, search-in-folder, new folder,
  * rename, single + multi-select delete, download (file + folder zip), copy link, file-type icons,
@@ -44,7 +44,7 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('documentsPage', () => ({
     ...basePage(),
-    base: '/services/js/documents/api/documents.js',
+    base: '/services/documents',
     folder: { name: 'root', path: '/', children: [] },
     breadcrumbs: [{ name: window.T ? T('application-core:shell.nav.home', 'Home') : 'Home', path: '' }],
     state: 'loading',      // loading | error | default

@@ -54,9 +54,9 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     const dialogHub = new DialogHub();
     const notificationHub = new NotificationHub();
     const statusBarHub = new StatusBarHub();
-    const documentsApi = '/services/js/documents/api/documents.js';
-    const folderApi = '/services/js/documents/api/documents.js/folder';
-    const zipApi = '/services/js/documents/api/documents.js/zip';
+    const documentsApi = '/services/documents';
+    const folderApi = '/services/documents/folder';
+    const zipApi = '/services/documents/zip';
     const unknownFileTypeIcon = 'sap-icon--document';
     const knownFileTypesIcons = {
         'sap-icon--syntax': ['js', 'mjs', 'xsjs', 'ts', 'json'],
@@ -123,8 +123,8 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
             });
         }
     };
-    $scope.downloadPath = '/services/js/documents/api/documents.js/download';
-    $scope.previewPath = '/services/js/documents/api/documents.js/preview';
+    $scope.downloadPath = '/services/documents/download';
+    $scope.previewPath = '/services/documents/preview';
     $scope.downloadZipPath = zipApi;
     $scope.selection = {
         allSelected: false
