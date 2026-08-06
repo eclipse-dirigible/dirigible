@@ -76,10 +76,14 @@ class MethodSecurityConfigTest {
                 files.filter(Files::isRegularFile)
                      .filter(path -> path.toString()
                                          .endsWith(".java"))
-                     .filter(path -> !path.toString()
-                                          .contains("/target/"))
-                     .filter(path -> !path.toString()
-                                          .contains("/src/test/"))
+                     // Normalize separators before matching: on Windows path.toString() uses '\', so a
+                     // hardcoded "/target/" / "/src/test/" never matched and the scan counted the test's
+                     // OWN source (which carries the @EnableMethodSecurity token) - 2 found, not 1.
+                     .filter(path -> {
+                         String normalized = path.toString()
+                                                 .replace('\\', '/');
+                         return !normalized.contains("/target/") && !normalized.contains("/src/test/");
+                     })
                      .filter(MethodSecurityConfigTest::declaresMethodSecurity)
                      .forEach(declarations::add);
             }
