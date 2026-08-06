@@ -338,6 +338,21 @@ generates:
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
 ```
 
+`items:` has two mutually-exclusive shapes. As an OBJECT (above) it MIRRORS each source child row
+1:1. As a LIST (below, #6555) it builds COMPUTED synthetic lines whose cells are expressions over the
+SOURCE record - the target's line-items child is resolved automatically:
+
+```yaml
+    items:                            # computed synthetic lines over the SOURCE record
+      - name: "Services for {period}"   # string: {field} interpolation (or a source-field copy / literal)
+        quantity: 1                     # numeric: a Calc arithmetic expression (PascalCase source idents)
+        price: BillableAmount           #   rounded to the target field's scale (a literal is trivial)
+        when: "BillableAmount != 0"     # optional guard: `<SourceField> ==|!= <number>` (Calc, null-safe)
+```
+
+A numeric cell is `Calc.eval(...)` (like posting item amounts); a to-one relation cell copies the raw
+source FK (#6533 parity); a string cell interpolates / copies / literals.
+
 Adds a button on the source view; the clone saves through the target's repository so numbering,
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus
 seed id once the target exists (proforma -> INVOICED) - a system write: no `-updated` re-fire, but
