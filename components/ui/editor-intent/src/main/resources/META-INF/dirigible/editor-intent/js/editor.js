@@ -469,7 +469,20 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 // A wait parks the process on an entity event (a message catch event in the BPMN) - an
                 // ellipse like the terminals, but glue-rust so the event-driven resume stands out.
                 else if (step.kind === 'wait') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 130, 44, shapeStyle('ellipse', COLOR.glue));
+                // A parallel fork is a gateway (diamond) that fans to its branches and joins before `next`.
+                else if (step.kind === 'parallel') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 90, 60, shapeStyle('rhombus', COLOR.decision));
                 else byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.entity));
+            }
+            // Parallel fork/join (mirrors BpmnIntentGenerator): the branch steps + a synthesized join
+            // gateway are OFF the linear chain; the fork wires fork -> branch -> join -> next.
+            const forks = steps.filter(s => s.kind === 'parallel').map(s => ({
+                id: s.name, branches: ((s.args || {}).branches) || [], next: (s.args || {}).next, joinId: s.name + 'Join'
+            }));
+            const branchNames = new Set();
+            const joinVertex = {};
+            for (const f of forks) {
+                (f.branches || []).forEach(b => branchNames.add(b));
+                joinVertex[f.joinId] = graph.insertVertex(parent, null, '', 0, 0, 50, 50, shapeStyle('rhombus', COLOR.decision));
             }
             const vertexFor = (name) => {
                 if (String(name).toLowerCase() === 'end') return end;
@@ -478,6 +491,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
 
             const chain = [start];
             for (const step of steps) {
+                if (branchNames.has(step.name)) continue; // branches are off the linear chain
                 const v = String(step.kind).toLowerCase() === 'end' ? end : byName[step.name];
                 if (chain[chain.length - 1] !== v) chain.push(v);
             }
@@ -486,6 +500,17 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
             for (let i = 0; i < chain.length - 1; i++) {
                 const source = chain[i];
                 let target = chain[i + 1];
+                // A parallel fork fans to its branches and joins before `next` - no linear fall-through.
+                const fork = forks.find(f => byName[f.id] === source);
+                if (fork) {
+                    const join = joinVertex[fork.joinId];
+                    for (const b of (fork.branches || [])) {
+                        graph.insertEdge(parent, null, '', source, vertexFor(b), edgeStyle(false));
+                        graph.insertEdge(parent, null, '', vertexFor(b), join, edgeStyle(false));
+                    }
+                    graph.insertEdge(parent, null, '', join, fork.next ? vertexFor(fork.next) : end, edgeStyle(false));
+                    continue;
+                }
                 const decision = steps.find(s => byName[s.name] === source && s.kind === 'decision');
                 if (decision) {
                     const args = decision.args || {};
