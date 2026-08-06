@@ -33,7 +33,7 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * The Class RegistryEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

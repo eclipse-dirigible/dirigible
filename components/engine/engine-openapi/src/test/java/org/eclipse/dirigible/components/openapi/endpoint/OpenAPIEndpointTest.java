@@ -45,7 +45,7 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * The Class OpenAPIEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest(classes = {OpenAPIRepository.class, RepositoryConfig.class})
 @AutoConfigureMockMvc

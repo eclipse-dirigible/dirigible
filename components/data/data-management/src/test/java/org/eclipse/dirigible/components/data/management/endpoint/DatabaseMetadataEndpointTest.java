@@ -37,7 +37,7 @@ import java.util.Base64;
 /**
  * The Class DatabaseMetadataEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc
