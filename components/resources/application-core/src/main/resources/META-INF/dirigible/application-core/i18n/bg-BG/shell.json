@@ -78,7 +78,19 @@
       "noMatch": "Няма елементи, отговарящи на търсенето.",
       "emptyFolder": "Тази папка е празна.",
       "cannotPreview": "Този файл не може да бъде прегледан.",
-      "previewHint": "Кликнете върху файл, за да видите преглед."
+      "previewHint": "Кликнете върху файл, за да видите преглед.",
+      "manageAccess": "Управление на достъпа",
+      "accessFor": "Правила за",
+      "accessOpen": "Няма правила: достъпно за всички с достъп до Документи.",
+      "accessOwn": "За тази папка",
+      "accessInherited": "Наследено от родителска папка",
+      "accessRole": "Роля",
+      "accessRolePlaceholder": "Име на роля...",
+      "accessMethod": "Право",
+      "accessRead": "Четене",
+      "accessWrite": "Запис",
+      "accessAdd": "Добавяне",
+      "close": "Затваряне"
     },
     "reports": {
       "select": "Изберете справка",
@@ -155,7 +167,9 @@
         "theme": "Тема",
         "prefix": "Префикс",
         "analytics": "Анализи",
-        "languages": "Езици на приложението"
+        "languages": "Езици на приложението",
+        "cmsRoles": "Прилагане на правилата за достъп до документи",
+        "msOfficeContentTypes": "Стари типове файлове на Microsoft Office"
       }
     },
     "apps": {

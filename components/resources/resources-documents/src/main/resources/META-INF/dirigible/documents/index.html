@@ -49,6 +49,8 @@
             </bk-button>
             <bk-button ng-if="!params.readOnly" glyph="sap-icon--delete" aria-label="{{'documents:delSelected' | t:'Delete selected'}}" title="{{'documents:delSelected' | t:'Delete selected'}}" state="transparent"
                 ng-click="showDeleteItemsDialog($event)" ng-disabled="!isDeleteItemsButtonEnabled()"></bk-button>
+            <bk-button ng-if="!params.readOnly" glyph="sap-icon--shield" aria-label="{{'documents:manageAccess' | t:'Manage access'}}" title="{{'documents:manageAccess' | t:'Manage access'}}" state="transparent"
+                ng-click="showAccessDialog()"></bk-button>
             <bk-toolbar-separator ng-if="!params.readOnly"></bk-toolbar-separator>
             <a ng-if="params.container !== 'window'" bk-button glyph="sap-icon--download-from-cloud" state="transparent" aria-label="{{'documents:downloadZip' | t:'Download zip'}}" title="{{'documents:downloadZip' | t:'Download zip'}}"
                 ng-href="{{ downloadZipPath }}?path={{ folder.path }}"></a>
@@ -170,6 +172,62 @@
                 </bk-bar-element>
             </bk-bar-right>
         </bk-bar>
+        <!-- Manage access: per-path role grants. No rules for a path means it is open to everyone
+             who can use Documents - the CMS is not deny-by-default. -->
+        <bk-dialog visible="access.visible" aria-label="{{'documents:manageAccess' | t:'Manage access'}}">
+            <bk-dialog-header>
+                <bk-title header-size="5" header-level="2">{{'documents:manageAccess' | t:'Manage access'}} &mdash; {{access.path}}</bk-title>
+            </bk-dialog-header>
+            <bk-dialog-body>
+                <bk-message-page glyph="sap-icon--unlocked" ng-if="!access.own.length && !access.inherited.length">
+                    <bk-message-page-title>{{'documents:accessOpen' | t:'No rules: open to everyone who can use Documents.'}}</bk-message-page-title>
+                </bk-message-page>
+                <table bk-table ng-if="access.own.length || access.inherited.length">
+                    <thead bk-table-header>
+                        <tr bk-table-row>
+                            <th bk-table-header-cell>{{'documents:accessMethod' | t:'Permission'}}</th>
+                            <th bk-table-header-cell>{{'documents:accessRole' | t:'Role'}}</th>
+                            <th bk-table-header-cell>{{'documents:accessSource' | t:'Applies from'}}</th>
+                            <th bk-table-header-cell></th>
+                        </tr>
+                    </thead>
+                    <tbody bk-table-body>
+                        <tr bk-table-row ng-repeat="grant in access.own">
+                            <td bk-table-cell>{{grant.method}}</td>
+                            <td bk-table-cell>{{grant.role}}</td>
+                            <td bk-table-cell>{{'documents:accessOwn' | t:'This folder'}}</td>
+                            <td bk-table-cell fit-content="true">
+                                <bk-button glyph="sap-icon--delete" state="transparent" aria-label="{{'delete' | t:'Delete'}}" ng-click="removeGrant(grant)"></bk-button>
+                            </td>
+                        </tr>
+                        <tr bk-table-row ng-repeat="grant in access.inherited">
+                            <td bk-table-cell>{{grant.method}}</td>
+                            <td bk-table-cell>{{grant.role}}</td>
+                            <td bk-table-cell>{{grant.path}}</td>
+                            <td bk-table-cell fit-content="true"></td>
+                        </tr>
+                    </tbody>
+                </table>
+                <bk-form-group>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="accessRole">{{'documents:accessRole' | t:'Role'}}</bk-form-label>
+                        <bk-input id="accessRole" type="text" ng-model="access.draft.role" ng-keypress="$event.key === 'Enter' && addGrant()"></bk-input>
+                    </bk-form-item>
+                    <bk-form-item horizontal="false">
+                        <bk-form-label for="accessMethod">{{'documents:accessMethod' | t:'Permission'}}</bk-form-label>
+                        <bk-select id="accessMethod" ng-model="access.draft.method" dropdown-fixed="true">
+                            <bk-option text="{{'documents:accessRead' | t:'Read'}}" value="'READ'"></bk-option>
+                            <bk-option text="{{'documents:accessWrite' | t:'Write'}}" value="'WRITE'"></bk-option>
+                        </bk-select>
+                    </bk-form-item>
+                </bk-form-group>
+                <bk-message-strip type="negative" ng-if="access.error">{{access.error}}</bk-message-strip>
+            </bk-dialog-body>
+            <bk-dialog-footer>
+                <bk-button label="{{'documents:accessAdd' | t:'Add'}}" state="emphasized" compact="true" ng-click="addGrant()" ng-disabled="!access.draft.role"></bk-button>
+                <bk-button label="{{'close' | t:'Close'}}" state="transparent" compact="true" ng-click="access.visible = false"></bk-button>
+            </bk-dialog-footer>
+        </bk-dialog>
         <theme></theme>
     </body>
 

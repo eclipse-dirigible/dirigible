@@ -48,7 +48,11 @@ class TenantConfigurationKeyPolicy {
             // Serve and store Office documents with the legacy Microsoft mime types. Per-tenant
             // because it depends on the client software a tenant's users actually open files with;
             // the resolver reads it per call, so a change applies without a restart.
-            "DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED");
+            "DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", //
+            // Whether the per-path CMS access grants are enforced at all. Per-tenant because whether
+            // a tenant restricts folders by role is its own decision; the resolver reads it per
+            // request, so switching it applies immediately.
+            "DIRIGIBLE_CMS_ROLES_ENABLED");
 
     /**
      * The full list of configuration keys a tenant may override, in display order.

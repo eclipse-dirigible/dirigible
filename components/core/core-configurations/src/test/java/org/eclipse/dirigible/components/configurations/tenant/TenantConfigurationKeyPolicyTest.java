@@ -34,6 +34,7 @@ class TenantConfigurationKeyPolicyTest {
         // The platform language set is tenant-overridable (default "en"; e.g. "en,bg,fr").
         assertTrue(policy.isInjectable("DIRIGIBLE_APPLICATION_LANGUAGES"));
         assertTrue(policy.isInjectable("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED"));
+        assertTrue(policy.isInjectable("DIRIGIBLE_CMS_ROLES_ENABLED"));
     }
 
     @Test

@@ -9,39 +9,35 @@
  */
 package org.eclipse.dirigible.components.engine.cms.documents;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.eclipse.dirigible.commons.config.Configuration;
-import org.eclipse.dirigible.components.security.domain.Access;
-import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
+import org.eclipse.dirigible.components.engine.cms.access.CmsAccessGrant;
+import org.eclipse.dirigible.components.engine.cms.access.CmsAccessService;
 import org.springframework.stereotype.Component;
 
 import jakarta.servlet.http.HttpServletRequest;
 
 /**
- * Answers whether the caller may read or write a CMS path, from the {@code CMIS}-scoped access
- * constraints.
+ * Applies the CMS path grants to the caller of a request.
  * <p>
- * A path inherits the constraints of every ancestor; holding ANY granted role suffices; a path with
- * no constraints is open to any authenticated caller. Contexts without a request - synchronizers
- * seeding content, scheduled jobs, workflow delegates - are always allowed: they act as the system,
- * not as a user, and denying them would break content seeding the moment a rule exists.
+ * The decision itself belongs to {@link CmsAccessService}; this adds the request-bound part - which
+ * roles the caller holds, and when enforcement does not apply at all.
+ * <p>
+ * <b>System contexts are always allowed.</b> Content seeding, scheduled jobs, workflow delegates
+ * and message listeners write to the CMS with no user and no roles behind them; denying them would
+ * break document seeding and snapshot generation the moment an administrator creates a single
+ * grant. Enforcement therefore engages only for an actual request, is skipped in anonymous mode,
+ * and can be switched off wholesale with {@code DIRIGIBLE_CMS_ROLES_ENABLED=false}.
  */
 @Component
 public class DocumentAccessEvaluator {
 
-    /** Kill switch, honoured for compatibility with the JavaScript implementation. */
+    /** Kill switch, carried over from the JavaScript implementation. */
     private static final String DIRIGIBLE_CMS_ROLES_ENABLED = "DIRIGIBLE_CMS_ROLES_ENABLED";
 
-    private static final String SCOPE_CMIS = "CMIS";
-    private static final String METHOD_READ = "READ";
-    private static final String METHOD_WRITE = "WRITE";
+    private final CmsAccessService accessService;
 
-    private final AccessVerifier accessVerifier;
-
-    DocumentAccessEvaluator(AccessVerifier accessVerifier) {
-        this.accessVerifier = accessVerifier;
+    DocumentAccessEvaluator(CmsAccessService accessService) {
+        this.accessService = accessService;
     }
 
     /**
@@ -52,11 +48,7 @@ public class DocumentAccessEvaluator {
      * @return true when reading is allowed
      */
     public boolean isReadable(String path, HttpServletRequest request) {
-        if (enforcementDisabled(request)) {
-            return true;
-        }
-        List<Access> constraints = constraints(path, METHOD_READ);
-        return constraints.isEmpty() || holdsAnyRole(constraints, request);
+        return isAllowed(path, CmsAccessGrant.METHOD_READ, request);
     }
 
     /**
@@ -67,14 +59,7 @@ public class DocumentAccessEvaluator {
      * @return true when writing is allowed
      */
     public boolean isWritable(String path, HttpServletRequest request) {
-        if (enforcementDisabled(request)) {
-            return true;
-        }
-        if (!isReadable(path, request)) {
-            return false;
-        }
-        List<Access> constraints = constraints(path, METHOD_WRITE);
-        return constraints.isEmpty() || holdsAnyRole(constraints, request);
+        return isAllowed(path, CmsAccessGrant.METHOD_WRITE, request);
     }
 
     /**
@@ -89,34 +74,16 @@ public class DocumentAccessEvaluator {
         return new AccessFlags(readable, readable && !isWritable(path, request));
     }
 
+    private boolean isAllowed(String path, String method, HttpServletRequest request) {
+        if (enforcementDisabled(request)) {
+            return true;
+        }
+        return accessService.isAllowed(path, method, request::isUserInRole);
+    }
+
     private boolean enforcementDisabled(HttpServletRequest request) {
         return request == null || Configuration.isAnonymousModeEnabled()
                 || !Boolean.parseBoolean(Configuration.get(DIRIGIBLE_CMS_ROLES_ENABLED, Boolean.TRUE.toString()));
-    }
-
-    /** The constraints of the path and of every ancestor of it. */
-    private List<Access> constraints(String path, String method) {
-        List<Access> matching = new ArrayList<>();
-        String normalized = path == null || path.isBlank() ? "/" : path;
-        int separator = 0;
-        do {
-            String ancestor = normalized;
-            separator = normalized.indexOf('/', separator + 1);
-            if (separator > 0) {
-                ancestor = normalized.substring(0, separator);
-            }
-            matching.addAll(accessVerifier.getMatchingSecurityAccesses(SCOPE_CMIS, ancestor, method));
-        } while (separator > 0);
-        return matching;
-    }
-
-    private boolean holdsAnyRole(List<Access> constraints, HttpServletRequest request) {
-        for (Access constraint : constraints) {
-            if (request.isUserInRole(constraint.getRole())) {
-                return true;
-            }
-        }
-        return false;
     }
 
     /**

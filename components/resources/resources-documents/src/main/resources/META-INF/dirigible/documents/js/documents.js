@@ -255,6 +255,54 @@ documents.controller('DocumentsController', ($scope, $http, $timeout, $element, 
     $scope.getFileDownloadUrl = (item) => isDocument(item) ?
         `${$scope.downloadPath}?path=${$scope.getFullPath(item.name)}` : 'about:blank';
 
+    // MANAGE ACCESS
+    // Grants are per path and inherited by everything under it; the deepest path with any grants
+    // decides, and holding ANY granted role suffices. Managing them needs an administrative role, so
+    // a non-administrator simply gets the error strip from the endpoint's 403.
+    const accessApi = '/services/documents/access';
+
+    $scope.access = { visible: false, path: '/', own: [], inherited: [], draft: { role: '', method: 'READ' }, error: null };
+
+    $scope.showAccessDialog = () => {
+        $scope.access.path = $scope.folder.path;
+        $scope.access.draft = { role: '', method: 'READ' };
+        $scope.access.error = null;
+        $scope.access.visible = true;
+        loadAccess();
+    };
+
+    $scope.addGrant = () => {
+        const role = ($scope.access.draft.role || '').trim();
+        if (!role) return;
+        $http.put(accessApi, { path: $scope.access.path, method: $scope.access.draft.method, role: role })
+            .then(() => {
+                $scope.access.draft.role = '';
+                loadAccess();
+                refreshFolder();
+            }, (response) => setAccessError(response, LocaleService.t('documents:errMsg.accessAdd', 'Could not add the rule.')));
+    };
+
+    $scope.removeGrant = (grant) => {
+        $http({ method: 'DELETE', url: accessApi, data: grant, headers: { 'Content-Type': 'application/json' } })
+            .then(() => {
+                loadAccess();
+                refreshFolder();
+            }, (response) => setAccessError(response, LocaleService.t('documents:errMsg.accessRemove', 'Could not remove the rule.')));
+    };
+
+    function loadAccess() {
+        $http.get(`${accessApi}?path=${encodeURIComponent($scope.access.path)}`)
+            .then((response) => {
+                $scope.access.own = response.data.own || [];
+                $scope.access.inherited = response.data.inherited || [];
+                $scope.access.error = null;
+            }, (response) => setAccessError(response, LocaleService.t('documents:errMsg.accessLoad', 'Could not load the access rules.')));
+    }
+
+    function setAccessError(response, fallback) {
+        $scope.access.error = (response && response.data && response.data.message) || fallback;
+    }
+
     $scope.showNewFolderDialog = (value = '', errorMsg, excluded = []) => {
         dialogHub.showFormDialog({
             title: LocaleService.t('documents:newFolder', 'New Folder'),

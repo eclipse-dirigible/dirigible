@@ -15,8 +15,9 @@ import java.util.Set;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.http.HttpRequestFacade;
 import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
+import org.eclipse.dirigible.components.engine.cms.access.CmsAccessGrant;
+import org.eclipse.dirigible.components.engine.cms.access.CmsAccessService;
 import org.eclipse.dirigible.components.security.domain.Access;
-import org.eclipse.dirigible.components.security.verifier.AccessVerifier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.InitializingBean;
@@ -42,17 +43,21 @@ public class CmisFacade implements InitializingBean {
     private static final Logger logger = LoggerFactory.getLogger(CmisFacade.class);
     /** The instance. */
     private static CmisFacade INSTANCE;
-    /** The security access verifier. */
-    private final AccessVerifier securityAccessVerifier;
+
+    /**
+     * The CMS path grants. This facade no longer resolves constraints itself: the decision belongs to
+     * one service so the Java callers and the JavaScript ones cannot drift apart.
+     */
+    private final CmsAccessService cmsAccessService;
 
     /**
      * Instantiates a new cmis facade.
      *
-     * @param securityAccessVerifier the security access verifier
+     * @param cmsAccessService the CMS access grants
      */
     @Autowired
-    public CmisFacade(AccessVerifier securityAccessVerifier) {
-        this.securityAccessVerifier = securityAccessVerifier;
+    public CmisFacade(CmsAccessService cmsAccessService) {
+        this.cmsAccessService = cmsAccessService;
     }
 
     /**
@@ -115,56 +120,18 @@ public class CmisFacade implements InitializingBean {
         }
 
         try {
-            String user = HttpRequestFacade.getRemoteUser();
-            Set<Access> readDefinitions = getAccessDefinitions(path, CMIS_METHOD_READ);
-            boolean isReadOnly = false;
-            boolean isReadable = true;
-            if (!readDefinitions.isEmpty()) {
-                isReadable = false;
-                if (user == null) {
-                    if (logger.isErrorEnabled()) {
-                        logger.error("No logged in user accessing path: " + path);
-                    }
-                    return false;
-                }
-            }
-
-            for (Access readDefinition : readDefinitions) {
-                if (HttpRequestFacade.isUserInRole(readDefinition.getRole())) {
-                    isReadOnly = true;
-                    isReadable = true;
-                    break;
-                }
-            }
-
-            if (method.equals(CMIS_METHOD_WRITE)) {
-                Set<Access> writeDefinitions = getAccessDefinitions(path, CMIS_METHOD_WRITE);
-                if (!writeDefinitions.isEmpty()) {
-                    isReadOnly = true;
-                    if (user == null) {
-                        if (logger.isErrorEnabled()) {
-                            logger.error("No logged in user accessing path: " + path);
-                        }
-                        return false;
-                    }
-                }
-                for (Access writeDefinition : writeDefinitions) {
-                    if (HttpRequestFacade.isUserInRole(writeDefinition.getRole())) {
-                        isReadOnly = false;
-                        break;
-                    }
-                }
-                return isReadable && !isReadOnly;
-            } else {
-                return isReadable;
-            }
-
-        } catch (Exception e) {
-            if (logger.isErrorEnabled()) {
-                logger.error(e.getMessage());
-            }
+            return CmisFacade.get()
+                             .getCmsAccessService()
+                             .isAllowed(path, method, CmisFacade::isUserInRole);
+        } catch (RuntimeException e) {
+            logger.error("Failed to resolve the CMS access of [{}] for [{}]", path, method, e);
         }
         return true;
+    }
+
+    /** Whether the caller of the current request holds a role. */
+    private static boolean isUserInRole(String role) {
+        return HttpRequestFacade.isUserInRole(role);
     }
 
     /**
@@ -177,27 +144,29 @@ public class CmisFacade implements InitializingBean {
      */
     public static Set<Access> getAccessDefinitions(String path, String method) throws ServletException {
         Set<Access> accessDefinitions = new HashSet<Access>();
-        int indexOf = 0;
-        do {
-            String accessPath = path;
-            indexOf = path.indexOf("/", indexOf + 1);
-            if (indexOf > 0) {
-                accessPath = path.substring(0, indexOf);
+        for (CmsAccessGrant grant : CmisFacade.get()
+                                              .getCmsAccessService()
+                                              .effectiveGrants(path)
+                                              .all()) {
+            if (method.equalsIgnoreCase(grant.method())) {
+                Access access = new Access();
+                access.setScope(SECURITY_TYPE_CMIS);
+                access.setPath(grant.path());
+                access.setMethod(grant.method());
+                access.setRole(grant.role());
+                accessDefinitions.add(access);
             }
-            accessDefinitions.addAll(CmisFacade.get()
-                                               .getSecurityAccessVerifier()
-                                               .getMatchingSecurityAccesses(SECURITY_TYPE_CMIS, accessPath, method));
-        } while (indexOf > 0);
+        }
         return accessDefinitions;
     }
 
     /**
-     * Gets the security access verifier.
+     * Gets the CMS access grants.
      *
-     * @return the security access verifier
+     * @return the CMS access grants
      */
-    public AccessVerifier getSecurityAccessVerifier() {
-        return securityAccessVerifier;
+    public CmsAccessService getCmsAccessService() {
+        return cmsAccessService;
     }
 
     /**

@@ -78,7 +78,19 @@
       "noMatch": "No items match your search.",
       "emptyFolder": "This folder is empty.",
       "cannotPreview": "This file cannot be previewed.",
-      "previewHint": "Click on a file to see its preview."
+      "previewHint": "Click on a file to see its preview.",
+      "manageAccess": "Manage access",
+      "accessFor": "Rules for",
+      "accessOpen": "No rules: open to everyone who can use Documents.",
+      "accessOwn": "On this folder",
+      "accessInherited": "Inherited from a parent folder",
+      "accessRole": "Role",
+      "accessRolePlaceholder": "Role name...",
+      "accessMethod": "Permission",
+      "accessRead": "Read",
+      "accessWrite": "Write",
+      "accessAdd": "Add",
+      "close": "Close"
     },
     "reports": {
       "select": "Select a report",
@@ -155,7 +167,9 @@
         "theme": "Theme",
         "prefix": "Prefix",
         "analytics": "Analytics",
-        "languages": "Application Languages"
+        "languages": "Application Languages",
+        "cmsRoles": "Document access rules enforced",
+        "msOfficeContentTypes": "Legacy Microsoft Office file types"
       }
     },
     "apps": {
