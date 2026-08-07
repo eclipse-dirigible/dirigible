@@ -37,6 +37,15 @@ document.addEventListener('alpine:init', () => {
       'Almost there...',
     ],
 
+    /**
+     * Ask - once, on load - whether the assistant is usable, so an unconfigured instance says so
+     * before the user types a message that can only fail. The check is configuration-only
+     * server-side; it never costs an upstream model call.
+     */
+    async probeConfiguration() {
+      this.notConfigured = !(await App.services.intentApi.agentConfigured());
+    },
+
     /** The localStorage key holding this app's conversation (per project; a fresh app has its own). */
     storageKey() {
       return 'dirigible.builder.chat.' + (Alpine.store('intent').project || 'new');

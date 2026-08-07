@@ -94,6 +94,22 @@
     },
 
     /**
+     * Whether the AI assistant is usable on this instance. Configuration-only server-side, so the
+     * shell can say up front that it is unavailable without spending an upstream model call to find
+     * out. An unreachable status endpoint is treated as configured - the first real turn then
+     * reports the truth, which is better than a false "not configured" banner over a working shell.
+     */
+    async agentConfigured() {
+      try {
+        const result = await call('GET', `${INTENT_BASE}/agent/status`);
+        return !result.data || result.data.configured !== false;
+      } catch (e) {
+        console.error('builder: could not read the assistant status', e);
+        return true;
+      }
+    },
+
+    /**
      * One conversation turn. `history` must be the clean alternating user/assistant transcript.
      * Returns `{reply, proposedYaml}` - note the endpoint answers 200 even when the proposal is
      * still invalid, so callers MUST re-validate the proposal through parse() before applying it.

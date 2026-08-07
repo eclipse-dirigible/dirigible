@@ -32,6 +32,9 @@ document.addEventListener('alpine:init', () => {
 
     async init() {
       const intent = Alpine.store('intent');
+      // Fire-and-forget: the "not configured" banner appears as soon as the answer arrives, without
+      // holding up the rest of the shell.
+      Alpine.store('conversation').probeConfiguration();
       await intent.loadApps();
 
       // Reopen whatever was last worked on, so a browser refresh is not a lost app.

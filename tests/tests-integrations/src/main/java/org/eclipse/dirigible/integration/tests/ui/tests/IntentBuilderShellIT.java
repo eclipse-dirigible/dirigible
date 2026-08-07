@@ -132,6 +132,23 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
                 .shouldBe(Condition.visible);
         Selenide.$(By.id("builder-input"))
                 .shouldBe(Condition.visible);
+
+        // The assistant IS configured here (the stub), so the shell must not claim otherwise.
+        Selenide.$(By.xpath("//*[contains(text(), 'is not configured on this instance')]"))
+                .shouldNotBe(Condition.visible);
+    }
+
+    @Test
+    void an_unconfigured_assistant_is_announced_before_the_user_types() {
+        // Without a key the shell can do nothing, so it says so up front rather than letting the
+        // first message fail. The status probe is configuration-only server-side - this banner costs
+        // no upstream model call, which is why it can run on every page load.
+        Configuration.remove(API_KEY_ENV);
+
+        openBuilder();
+
+        Selenide.$(By.xpath("//*[contains(text(), 'is not configured on this instance')]"))
+                .shouldBe(Condition.visible, Duration.ofSeconds(30));
     }
 
     @Test
