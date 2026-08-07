@@ -13,6 +13,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -84,5 +86,27 @@ class CalcTest {
     void isoStringDatesReadAsEpochDaysToo() {
         // The HTML date input binds a plain yyyy-MM-dd string; it must behave like the LocalDate field.
         assertEquals(new BigDecimal("5"), Calc.eval("businessDaysBetween(StartText, ToDate)", subject(), 0));
+    }
+
+    @Test
+    void aMapEntityReadsIdentifiersFromItsEntries() {
+        // The generated mapping code evaluates a formula over a record that has no compiled type.
+        Map<String, Object> record = new HashMap<>();
+        record.put("Hours", new BigDecimal("8"));
+        record.put("Rate", new BigDecimal("12.5"));
+        assertEquals(new BigDecimal("100.00"), Calc.eval("Hours * Rate", record, 2));
+    }
+
+    @Test
+    void aMissingMapKeyReadsAsZeroLikeAMissingField() {
+        assertEquals(new BigDecimal("0.00"), Calc.eval("Hours * Rate", new HashMap<String, Object>(), 2));
+    }
+
+    @Test
+    void aMapEntitySupportsTheDateFunctionsToo() {
+        Map<String, Object> record = new HashMap<>();
+        record.put("FromDate", LocalDate.of(2026, 7, 20)); // Monday
+        record.put("ToDate", LocalDate.of(2026, 7, 24)); // Friday
+        assertEquals(new BigDecimal("5"), Calc.eval("businessDaysBetween(FromDate, ToDate)", record, 0));
     }
 }
