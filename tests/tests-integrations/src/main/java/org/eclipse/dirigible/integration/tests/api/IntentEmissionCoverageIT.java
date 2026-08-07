@@ -315,9 +315,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 function: DocumentItem
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string }
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Voucher, kind: manyToOne, to: Voucher, composition: true, required: true }
+
+              # Source of the computed create-from below (#6555): a Voucher is generated from a Slip
+              # with ONE synthetic line whose cells are expressions over the Slip (not a 1:1 mirror).
+              - name: Slip
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string }
+                  - { name: total, type: decimal, precision: 18, scale: 2 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
@@ -665,6 +674,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 items:
                   - { debit: "Amount" }
                   - { credit: "Amount" }
+
+            # Computed create-from item lines (#6555): the list form of generates.items builds a fixed
+            # synthetic line from EXPRESSIONS over the source Slip - a Calc amount, a {} interpolated
+            # string, and a when guard - instead of mirroring a source child 1:1. The target items child
+            # (VoucherLine) is resolved automatically. Enforcement lives in the generated Generate.java.
+            generates:
+              - name: voucher-from-slip
+                from: Slip
+                to: Voucher
+                defaults:
+                  refNumber: "AUTO"
+                  date: now
+                items:
+                  - note: "Slip {label}"
+                    amount: "Total * 2"
+                    when: "Total != 0"
 
             seeds:
               - name: people
@@ -1369,6 +1394,23 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the admin perspective must declare the ADMIN kind and group");
         assertTrue(contentOf("gen/emission/perspectives/admin/perspective.extension").contains("application-admin-perspectives"),
                 "the admin perspective must register on the admin extension point (never the application/my/partner ones)");
+
+        // generates computed item lines (#6555): the create-from controller builds ONE synthetic
+        // VoucherLine whose cells are expressions over the loaded `source` Slip - a Calc amount rounded
+        // to the target field's scale, a {} interpolated string, and a null-safe Calc `when` guard -
+        // then re-points it at the saved Voucher through the target repository. The Calc import proves
+        // the numeric-expression path is wired.
+        String generate = contentOf("gen/events/emission/VoucherFromSlipGenerate.java");
+        assertTrue(generate.contains("import org.eclipse.dirigible.sdk.utils.Calc;"),
+                "a computed item line must import Calc for its numeric expressions");
+        assertTrue(generate.contains("Calc.eval(\"Total * 2\", source, 2)"),
+                "a numeric item-line cell must emit a Calc expression over the source, rounded to the target scale");
+        assertTrue(generate.contains("\"Slip \" + String.valueOf(source.Label)"),
+                "a {field} string item-line cell must emit source interpolation");
+        assertTrue(generate.contains("Calc.eval(\"Total\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0"),
+                "an item-line when cell must emit a null-safe Calc row guard");
+        assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
+                "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1443,6 +1485,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/voucher/VoucherController")
                                                  .then()
                                                  .statusCode(400));
+
+        // generates computed item lines (#6555) at the outermost layer: create a Slip, fire the
+        // create-from, and assert the Voucher was born with ONE computed line - amount = Total * 2
+        // (Calc arithmetic over the source), note = "Slip <label>" ({} interpolation). This is the
+        // capability that did not exist before: a create-from that builds a COMPUTED line, not a
+        // 1:1 clone of a source child.
+        AtomicInteger slipId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> slipId.set(given().contentType("application/json")
+                                                            .body("{\"Label\":\"March\",\"Total\":21}")
+                                                            .when()
+                                                            .post(API + "/slip/SlipController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        AtomicInteger generatedVoucherId = new AtomicInteger();
+        // The generated create-from controller returns Json.stringify(saved) as a String, which the SDK
+        // serves as text/plain - so parse the body as JSON explicitly rather than RestAssured's
+        // content-type-driven .path() (which only maps a JSON/XML response).
+        restAssuredExecutor.execute(() -> {
+            String voucher = given().contentType("application/json")
+                                    .body("{\"id\":" + slipId.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            generatedVoucherId.set(io.restassured.path.json.JsonPath.from(voucher)
+                                                                    .getInt("Id"));
+        });
+        restAssuredExecutor.execute(() -> {
+            int voucherId = generatedVoucherId.get();
+            String matching = "findAll { it.Voucher == " + voucherId + " }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the computed create-from must produce exactly one synthetic line");
+            // amount = Total(21) * 2, computed by Calc over the source (not a copied literal).
+            assertEquals(42.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
+            // note = "Slip " + the source's label, via {} interpolation.
+            assertEquals("Slip March", lines.getString(matching + ".Note[0]"));
+        });
 
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a
         // well-formed one accepted - the regex authored in the intent is what actually runs.

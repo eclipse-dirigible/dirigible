@@ -118,6 +118,135 @@ public final class CrossModelSupport {
     }
 
     /**
+     * Everything a {@code generates} computed-line
+     * ({@link org.eclipse.dirigible.components.intent.model.GeneratesIntent#getItemLines()}) needs to
+     * type its cells against a cross-model target's line-items child: the child entity name and the
+     * perspective it lives under (== the master's, a document renders its items there), plus each
+     * property's JDBC type / decimal scale and which properties are to-one relations. Types drive the
+     * per-cell rendering (numeric {@code Calc} vs {@code {}} string interpolation vs foreign-key copy)
+     * exactly as the local {@code FieldIntent} does for a same-model target.
+     *
+     * @param resolved whether the owner model was found, parsed AND contained a composition child of
+     *        the master (false → nothing resolved; the caller treats the target as having no items
+     *        child)
+     */
+    public record ItemsChildInfo(boolean resolved, String childEntity, String perspectiveName, Map<String, String> propertyTypes,
+            Map<String, Integer> propertyScales, java.util.Set<String> relationProperties, Map<String, String> propertyWidgets) {
+    }
+
+    /**
+     * Resolve the composition line-items child of a cross-model {@code generates} target master (e.g.
+     * {@code SalesInvoiceItem} for {@code SalesInvoice}). Order-independent and read from the same two
+     * sources as {@link #resolve} (workspace {@code .model}, else the published registry copy); fails
+     * loudly the same way when neither is present so a computed-line create-from never silently drops
+     * its lines. A resolved model that simply has no composition child of the master returns an
+     * <b>unresolved</b> {@link ItemsChildInfo} (not an error) - the caller reports "no items child".
+     */
+    public static ItemsChildInfo resolveItemsChild(IntentGenerationContext context, UsesIntent uses, String masterEntity) {
+        if (context == null || context.getRepository() == null || context.getProjectRoot() == null) {
+            return new ItemsChildInfo(false, null, masterEntity, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(),
+                    java.util.Map.of()); // no repository (unit test)
+        }
+        String alias = uses.getModel();
+        String project = uses.resolveProject();
+        IRepository repository = context.getRepository();
+        String workspacePath = siblingModelPath(context.getProjectRoot(), project, alias);
+        ItemsChildInfo fromWorkspace = readItemsChild(repository, workspacePath, masterEntity);
+        if (fromWorkspace != null) {
+            return fromWorkspace;
+        }
+        String registryPath = IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + project + "/" + alias + ".model";
+        ItemsChildInfo fromRegistry = readItemsChild(repository, registryPath, masterEntity);
+        if (fromRegistry != null) {
+            return fromRegistry;
+        }
+        throw new IntentValidationException(List.of("Cross-model generates target [" + masterEntity + "] (model alias [" + alias
+                + "], project [" + project + "]) cannot be resolved for computed item lines: no model found in the workspace ["
+                + workspacePath + "] or the registry [" + registryPath + "]. Generate the [" + alias
+                + "] model first, or install/publish its prebuilt module so its .model is in the registry."));
+    }
+
+    /**
+     * Read the target master's composition line-items child from a {@code .model} resource, or
+     * {@code null} when the resource is absent / unparseable (so the caller tries the next source). A
+     * resource that parses but has no composition child of the master returns a resolved-but-empty
+     * {@link ItemsChildInfo} so the caller stops looking and reports "no items child".
+     */
+    @SuppressWarnings("unchecked")
+    private static ItemsChildInfo readItemsChild(IRepository repository, String modelPath, String masterEntity) {
+        if (modelPath == null) {
+            return null;
+        }
+        IResource resource = repository.getResource(modelPath);
+        if (!resource.exists()) {
+            return null;
+        }
+        try {
+            String content = new String(resource.getContent(), StandardCharsets.UTF_8);
+            Map<String, Object> root = GSON.fromJson(content, Map.class);
+            Map<String, Object> body = (Map<String, Object>) root.get("model");
+            List<Map<String, Object>> entities = body == null ? null : (List<Map<String, Object>>) body.get("entities");
+            if (entities == null) {
+                return null;
+            }
+            for (Map<String, Object> entity : entities) {
+                List<Map<String, Object>> properties = (List<Map<String, Object>>) entity.get("properties");
+                if (properties == null) {
+                    continue;
+                }
+                boolean isChild = false;
+                for (Map<String, Object> p : properties) {
+                    if ("COMPOSITION".equals(String.valueOf(p.get("relationshipType")))
+                            && masterEntity.equals(String.valueOf(p.get("relationshipEntityName")))) {
+                        isChild = true;
+                        break;
+                    }
+                }
+                if (!isChild) {
+                    continue;
+                }
+                String childEntity = str(entity.get("name"), null);
+                String perspective = str(entity.get("perspectiveName"), masterEntity);
+                Map<String, String> propertyTypes = new java.util.LinkedHashMap<>();
+                Map<String, Integer> propertyScales = new java.util.LinkedHashMap<>();
+                java.util.Set<String> relationProperties = new java.util.LinkedHashSet<>();
+                Map<String, String> propertyWidgets = new java.util.LinkedHashMap<>();
+                for (Map<String, Object> p : properties) {
+                    String propertyName = str(p.get("name"), null);
+                    if (propertyName == null) {
+                        continue;
+                    }
+                    propertyTypes.put(propertyName, str(p.get("dataType"), "VARCHAR"));
+                    Object scale = p.get("dataScale");
+                    if (scale != null) {
+                        try {
+                            propertyScales.put(propertyName, (int) Double.parseDouble(String.valueOf(scale)));
+                        } catch (NumberFormatException ignore) {
+                            // a non-numeric scale is meaningless - leave it unscaled (default applies)
+                        }
+                    }
+                    String relationshipType = str(p.get("relationshipType"), null);
+                    if (relationshipType != null && !"null".equals(relationshipType)) {
+                        relationProperties.add(propertyName);
+                    }
+                    String widget = str(p.get("widgetType"), null);
+                    if (widget != null) {
+                        propertyWidgets.put(propertyName, widget);
+                    }
+                }
+                return new ItemsChildInfo(true, childEntity, perspective, propertyTypes, propertyScales, relationProperties,
+                        propertyWidgets);
+            }
+            // The model resolved but declares no composition child of the master - stop looking here.
+            return new ItemsChildInfo(false, null, masterEntity, java.util.Map.of(), java.util.Map.of(), java.util.Set.of(),
+                    java.util.Map.of());
+        } catch (RuntimeException e) {
+            LOGGER.warn("Failed to read owner model [{}] for cross-model items child of [{}]", modelPath, masterEntity, e);
+        }
+        return null;
+    }
+
+    /**
      * Read the cross-model target entity's facts from a {@code .model} resource, or {@code null} when
      * the resource is absent, unparseable, or does not contain the target entity (so the caller can try
      * the next source).

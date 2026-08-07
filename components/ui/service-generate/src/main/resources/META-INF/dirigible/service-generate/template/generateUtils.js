@@ -1099,6 +1099,10 @@ export function generateFiles(model, parameters, templateSources) {
                                 toPk: g.toPk,
                                 fieldAssignments: g.fieldAssignments,
                                 hasItems: g.hasItems,
+                                // Computed line-items form (issue #6555): synthetic lines whose cells are
+                                // pre-rendered expressions over the source master; passed through untouched.
+                                hasItemLines: g.hasItemLines,
+                                itemLines: g.itemLines,
                                 fromItemEntity: g.fromItemEntity,
                                 toItemEntity: g.toItemEntity,
                                 // The source item's own package (a non-composition primary source item

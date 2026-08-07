@@ -141,6 +141,7 @@ public final class IntentParser {
             return new IntentModel();
         }
         rejectRemovedNumberKeys(tree);
+        moveGeneratesItemLines(tree);
         String json = GSON.toJson(tree);
         IntentModel model;
         try {
@@ -752,7 +753,8 @@ public final class IntentParser {
                     + "] (add a uses: alias if the target lives in another model)");
         }
         validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
-        if (g.getItems() != null) {
+        if (g.getItems() != null || (g.getItemLines() != null && !g.getItemLines()
+                                                                   .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
@@ -2303,6 +2305,47 @@ public final class IntentParser {
      * @param tree the SnakeYAML-loaded raw tree
      * @throws IntentValidationException naming every removed key found, with the migration target
      */
+    /**
+     * A {@code generates[].items} may be EITHER an object (the mirror form ->
+     * {@link GeneratesItemsIntent}) or a LIST of computed line rows (issue #6555 ->
+     * {@code GeneratesIntent.itemLines}). Gson maps a field by its static type, so a list-valued
+     * {@code items:} would fail the typed mapping against the object-typed {@code items} field. Rehome
+     * a list-valued {@code items:} to the {@code itemLines} key on the raw tree, BEFORE the typed
+     * mapping, so the two shapes stay in distinct typed fields. A mapping-valued {@code items:} is left
+     * untouched.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    private static void moveGeneratesItemLines(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) {
+            return;
+        }
+        if (root.get("generates") instanceof List<?> generates) {
+            for (Object generateNode : generates) {
+                rehomeItemLines(generateNode);
+            }
+        }
+        // A schedule's generate rejects items entirely (validated below); rehome a list-valued items:
+        // here too, so the invalid combination surfaces as that clear message rather than a Gson crash.
+        if (root.get("schedules") instanceof List<?> schedules) {
+            for (Object scheduleNode : schedules) {
+                if (scheduleNode instanceof Map<?, ?> schedule) {
+                    rehomeItemLines(schedule.get("generate"));
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void rehomeItemLines(Object generateNode) {
+        if (!(generateNode instanceof Map<?, ?> generate) || !(generate.get("items") instanceof List<?> itemLines)) {
+            return;
+        }
+        Map<Object, Object> mutable = (Map<Object, Object>) generate;
+        mutable.put("itemLines", itemLines);
+        mutable.remove("items");
+    }
+
     private static void rejectRemovedNumberKeys(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;
@@ -3761,6 +3804,106 @@ public final class IntentParser {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+            }
+            validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
+        }
+    }
+
+    /**
+     * Validate the computed line-items form ({@code itemLines}, issue #6555): a fixed set of synthetic
+     * target lines whose cells are expressions over the SOURCE record. The two item forms are mutually
+     * exclusive. For a SAME-model target the cell keys must be fields / to-one relations of the target
+     * document's composition line-items child (resolved automatically, never named), a to-one relation
+     * cell copies a bare source relation, a {@code {field}} placeholder / bare-identifier string cell
+     * references a real source property, and a {@code when} guard has the {@code <field> ==|!= <n>}
+     * shape. A CROSS-model target's items child lives in the owner model (not loaded here), so only the
+     * always-checkable shapes are validated - the cell keys are checked at generation, the same
+     * deferral the mirror form's cross-model {@code map} uses.
+     */
+    private static void validateGeneratesItemLines(GeneratesIntent g, String name, EntityIntent source, Map<String, EntityIntent> byName,
+            boolean crossModel, List<String> issues) {
+        List<Map<String, String>> itemLines = g.getItemLines();
+        if (itemLines == null || itemLines.isEmpty()) {
+            return;
+        }
+        String subject = "generates [" + name + "]";
+        if (g.getItems() != null) {
+            issues.add(subject + " declares both an items mapping (object) and computed item lines (list) - use exactly one");
+        }
+        EntityIntent itemsChild = null;
+        if (!crossModel && g.getTo() != null && byName.get(g.getTo()) != null) {
+            itemsChild = compositionChildOf(byName.get(g.getTo()), byName);
+            if (itemsChild == null) {
+                issues.add(
+                        subject + " declares computed item lines but the target [" + g.getTo() + "] has no composition line-items child");
+            }
+        }
+        Set<String> sourceProperties = new HashSet<>();
+        if (source != null) {
+            if (source.getFields() != null) {
+                for (FieldIntent field : source.getFields()) {
+                    if (field.getName() != null) {
+                        sourceProperties.add(field.getName()
+                                                  .toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+            if (source.getRelations() != null) {
+                for (RelationIntent relation : source.getRelations()) {
+                    if (relation.getName() != null) {
+                        sourceProperties.add(relation.getName()
+                                                     .toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+        }
+        for (Map<String, String> row : itemLines) {
+            boolean hasCell = false;
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String key = cell.getKey();
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                if ("when".equalsIgnoreCase(key)) {
+                    if (!value.matches("\\s*\\w+\\s*[!=]=\\s*\\d+(\\.\\d+)?\\s*")) {
+                        issues.add(subject + " item line when [" + value + "] must be `<SourceField> ==|!= <number>`");
+                    }
+                    continue;
+                }
+                hasCell = true;
+                if (itemsChild != null && !hasPropertyIgnoreCase(itemsChild, key)) {
+                    issues.add(subject + " item line cell [" + key + "] is not a field or to-one relation of the target items child ["
+                            + itemsChild.getName() + "]");
+                    continue;
+                }
+                if (itemsChild != null && toOneRelationByName(itemsChild, key) != null) {
+                    // A to-one relation cell copies a bare source foreign key (issue #6533 parity) - it
+                    // cannot be arithmetic-evaluated. Its value must name a to-one relation of the source.
+                    if (!value.matches("\\w+")) {
+                        issues.add(subject + " item line cell [" + key + "] is a to-one relation - its value must copy a source to-one"
+                                + " relation (a bare source relation name), not an expression [" + value + "]");
+                    } else if (source != null && toOneRelationByName(source, value) == null) {
+                        issues.add(subject + " item line cell [" + key + "] copies [" + value + "] which is not a to-one relation of the"
+                                + " source entity [" + source.getName() + "]");
+                    }
+                } else if (source != null) {
+                    // A string {field} placeholder / bare-identifier copy must reference a real source
+                    // property; a numeric Calc expression's identifiers are validated at runtime (a null
+                    // field reads as 0, the calculated-field contract), so only the string refs are checked.
+                    java.util.regex.Matcher placeholders = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                                                  .matcher(value);
+                    while (placeholders.find()) {
+                        if (!sourceProperties.contains(placeholders.group(1)
+                                                                   .toLowerCase(Locale.ROOT))) {
+                            issues.add(subject + " item line cell [" + key + "] interpolates {" + placeholders.group(1)
+                                    + "} which is not a property of the source entity ["
+                                    + (source.getName() == null ? g.getFrom() : source.getName()) + "]");
+                        }
+                    }
+                }
+            }
+            if (!hasCell) {
+                issues.add(subject + " has a computed item line with no cells");
             }
         }
     }
