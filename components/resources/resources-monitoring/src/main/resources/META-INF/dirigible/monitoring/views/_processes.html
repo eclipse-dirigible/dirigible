@@ -1,0 +1,201 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Processes - the triage page. Running (or completed) instances on the left; the selected instance's
+  live diagram, variables, tasks and incidents on the right. The only management actions are Retry
+  and Skip on a stuck step; starting instances and editing variables stay in the Workbench.
+-->
+<div id="monitoring-processes-page" class="vbox size-full" x-data="processesPage">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:processes.title', 'Processes')"></span>
+    <button x-h-button data-size="sm" :data-variant="state.mode === 'active' ? 'primary' : 'transparent'"
+            @click="state.setMode('active')" x-text="T('monitoring:processes.active', 'Running')"></button>
+    <button x-h-button data-size="sm" :data-variant="state.mode === 'historic' ? 'primary' : 'transparent'"
+            @click="state.setMode('historic')" x-text="T('monitoring:processes.historic', 'Completed')"></button>
+    <div x-h-toolbar-spacer></div>
+    <div class="w-64 shrink-0">
+      <input x-h-input type="search" x-model="state.filter"
+             :placeholder="T('monitoring:processes.search', 'Search process, business key or id')" />
+    </div>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
+      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+      <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
+    </button>
+  </div>
+
+  <div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
+
+    <!-- Instances -->
+    <div x-h-split-panel data-size="40%">
+      <div class="vbox size-full overflow-auto">
+        <div x-show="state.loading" x-cloak class="vbox gap-2 p-3">
+          <template x-for="i in 5" :key="i"><div x-h-skeleton class="h-6 w-full"></div></template>
+        </div>
+        <div x-show="!state.loading && state.error" x-cloak x-h-text.muted class="p-3 text-sm"
+             x-text="T('monitoring:processes.loadFailed', 'The process engine could not be reached.')"></div>
+        <div x-show="!state.loading && !state.error && state.visibleInstances.length === 0" x-cloak
+             x-h-text.muted class="p-3 text-sm"
+             x-text="T('monitoring:processes.empty', 'No process instances.')"></div>
+
+        <table x-h-table x-show="!state.loading && state.visibleInstances.length" x-cloak>
+          <thead x-h-table-header>
+            <tr>
+              <th x-h-table-head scope="col" x-text="T('monitoring:processes.colProcess', 'Process')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:processes.colStarted', 'Started')"></th>
+            </tr>
+          </thead>
+          <tbody x-h-table-body>
+            <template x-for="instance in state.visibleInstances" :key="instance.id">
+              <tr x-h-table-row data-hoverable="true" class="cursor-pointer"
+                  :data-state="state.selectedId === instance.id ? 'selected' : ''" @click="state.select(instance)">
+                <td x-h-table-cell x-text="titleOf(instance)"></td>
+                <td x-h-table-cell x-text="instance.businessKey || ''"></td>
+                <td x-h-table-cell x-text="startedText(instance)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Detail: collapsed until an instance is selected. -->
+    <div x-h-split-panel data-size="60%" :data-hidden="!state.selected">
+      <template x-if="state.selected">
+        <div class="vbox size-full min-h-0">
+
+          <div x-h-toolbar data-size="sm">
+            <span x-h-toolbar-title class="shrink-0" x-text="titleOf(state.selected)"></span>
+            <span x-show="state.selected.businessKey" x-h-badge data-variant="outline"
+                  x-text="state.selected.businessKey"></span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.clearSelection()"
+                    aria-label="Close" :title="T('monitoring:processes.close', 'Close')">
+              <i role="img" x-h-lucide data-lucide="x"></i>
+            </button>
+          </div>
+
+          <!-- The incident is why this page exists, so it sits above the tabs, with its two actions. -->
+          <div x-show="state.incidents.length" x-cloak class="vbox gap-2 p-3">
+            <div class="hbox items-center gap-2">
+              <span x-h-badge data-variant="negative"
+                    x-text="T('monitoring:processes.stuck', 'Stuck: {{count}} dead-letter job(s)', { count: state.incidents.length })"></span>
+              <div class="flex-1"></div>
+              <button x-h-button data-variant="outline" data-size="sm" :data-loading="state.acting"
+                      @click="state.act('RETRY')">
+                <i role="img" x-h-lucide data-lucide="rotate-cw"></i>
+                <span x-text="T('monitoring:processes.retry', 'Retry')"></span>
+              </button>
+              <button x-h-button data-variant="outline" data-size="sm" :data-loading="state.acting"
+                      @click="state.act('SKIP')">
+                <i role="img" x-h-lucide data-lucide="skip-forward"></i>
+                <span x-text="T('monitoring:processes.skip', 'Skip step')"></span>
+              </button>
+            </div>
+            <template x-for="incident in state.incidents" :key="incident.id">
+              <p class="text-xs text-muted-foreground" :title="incident.exceptionMessage"
+                 x-text="shorten(incident.exceptionMessage)"></p>
+            </template>
+          </div>
+
+          <div x-show="state.actionResult" x-cloak class="px-3 pb-2">
+            <span x-h-badge :data-variant="state.actionResult ? state.actionResult.variant : 'outline'"
+                  x-text="state.actionResult ? state.actionResult.text : ''"></span>
+          </div>
+
+          <div x-h-tabs data-orientation="horizontal" class="flex-1 min-h-0">
+            <div x-h-tab-bar data-size="sm">
+              <div x-h-tab-list>
+                <button x-h-tab :aria-selected="tab === 'diagram'" @click="selectTab('diagram')"
+                        x-text="T('monitoring:processes.tabDiagram', 'Diagram')"></button>
+                <button x-h-tab :aria-selected="tab === 'variables'" @click="selectTab('variables')"
+                        x-text="T('monitoring:processes.tabVariables', 'Variables')"></button>
+                <button x-h-tab x-show="state.mode === 'active'" :aria-selected="tab === 'tasks'"
+                        @click="selectTab('tasks')" x-text="T('monitoring:processes.tabTasks', 'Tasks')"></button>
+              </div>
+              <div class="flex-1"></div>
+              <template x-if="tab === 'diagram'">
+                <div class="hbox items-center gap-1 pr-1">
+                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="zoomOut()" aria-label="Zoom out">
+                    <i role="img" x-h-lucide data-lucide="zoom-out"></i>
+                  </button>
+                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="zoomIn()" aria-label="Zoom in">
+                    <i role="img" x-h-lucide data-lucide="zoom-in"></i>
+                  </button>
+                  <button x-h-button data-variant="transparent" data-size="icon-sm" @click="fit()" aria-label="Fit">
+                    <i role="img" x-h-lucide data-lucide="maximize"></i>
+                  </button>
+                </div>
+              </template>
+            </div>
+
+            <!-- The diagram is rendered into its container by the page component; the container only
+                 exists while its tab is open, because the visualizer measures it on load. -->
+            <template x-if="tab === 'diagram'">
+              <div class="flex-1 min-h-0">
+                <div x-show="diagramError" x-cloak x-h-text.muted class="p-3 text-sm" x-text="diagramError"></div>
+                <div x-ref="diagram" class="monitoring-bpmn size-full"></div>
+              </div>
+            </template>
+
+            <!-- Variables (read-only - editing them is Workbench territory) -->
+            <template x-if="tab === 'variables'">
+              <div class="flex-1 min-h-0 overflow-auto p-3">
+                <div x-show="!state.variables.length" x-h-text.muted class="text-sm"
+                     x-text="T('monitoring:processes.noVariables', 'This instance carries no variables.')"></div>
+                <table x-h-table x-show="state.variables.length">
+                  <thead x-h-table-header>
+                    <tr>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colName', 'Name')"></th>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colType', 'Type')"></th>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colValue', 'Value')"></th>
+                    </tr>
+                  </thead>
+                  <tbody x-h-table-body>
+                    <template x-for="variable in state.variables" :key="variable.id || variable.name">
+                      <tr x-h-table-row>
+                        <td x-h-table-cell x-text="variable.name"></td>
+                        <td x-h-table-cell x-text="typeOf(variable)"></td>
+                        <td x-h-table-cell x-text="valueText(variable.value)"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+
+            <!-- Open user tasks -->
+            <template x-if="tab === 'tasks'">
+              <div class="flex-1 min-h-0 overflow-auto p-3">
+                <div x-show="!state.tasks.length" x-h-text.muted class="text-sm"
+                     x-text="T('monitoring:processes.noTasks', 'No open user tasks.')"></div>
+                <table x-h-table x-show="state.tasks.length">
+                  <thead x-h-table-header>
+                    <tr>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colTask', 'Task')"></th>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colAssignee', 'Assignee')"></th>
+                      <th x-h-table-head scope="col" x-text="T('monitoring:processes.colCandidates', 'Candidates')"></th>
+                    </tr>
+                  </thead>
+                  <tbody x-h-table-body>
+                    <template x-for="task in state.tasks" :key="task.id">
+                      <tr x-h-table-row>
+                        <td x-h-table-cell x-text="task.name"></td>
+                        <td x-h-table-cell x-text="task.assignee || ''"></td>
+                        <td x-h-table-cell x-text="[task.candidateUsers, task.candidateGroups].filter(Boolean).join(', ')"></td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
+              </div>
+            </template>
+          </div>
+
+        </div>
+      </template>
+    </div>
+
+  </div>
+</div>

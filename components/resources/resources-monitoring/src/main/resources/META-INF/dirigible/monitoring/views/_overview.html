@@ -6,7 +6,7 @@
   source; the lists below name the individual failures. All state comes from the polled `overview`
   store (js/stores/overview.js); this view only renders it.
 -->
-<div class="vbox size-full overflow-auto" x-data="overviewPage">
+<div id="monitoring-overview-page" class="vbox size-full overflow-auto" x-data="overviewPage">
   <div class="vbox gap-6 p-6">
 
     <div class="hbox items-start gap-3">
@@ -183,22 +183,22 @@
         <h2 x-h-card-title x-text="T('monitoring:overview.artefactsTitle', 'Artefacts that did not synchronize')"></h2>
       </div>
       <div x-h-card-content class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
+        <table x-h-table>
+          <thead x-h-table-header>
             <tr>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colProject', 'Project')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colLocation', 'Location')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colPhase', 'Phase')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colError', 'Error')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProject', 'Project')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colLocation', 'Location')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colPhase', 'Phase')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colError', 'Error')"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody x-h-table-body>
             <template x-for="artefact in state.failedArtefacts" :key="artefact.type + artefact.location + artefact.name">
-              <tr>
-                <td class="py-1 pr-3" x-text="projectOf(artefact.location)"></td>
-                <td class="py-1 pr-3" x-text="artefact.location"></td>
-                <td class="py-1 pr-3"><span x-h-badge data-variant="negative" x-text="(artefact.phase || '') + ' · ' + artefact.status"></span></td>
-                <td class="py-1 pr-3" :title="artefact.error" x-text="shorten(artefact.error)"></td>
+              <tr x-h-table-row>
+                <td x-h-table-cell x-text="projectOf(artefact.location)"></td>
+                <td x-h-table-cell x-text="artefact.location"></td>
+                <td x-h-table-cell><span x-h-badge data-variant="negative" x-text="(artefact.phase || '') + ' · ' + artefact.status"></span></td>
+                <td x-h-table-cell :title="artefact.error" x-text="shorten(artefact.error)"></td>
               </tr>
             </template>
           </tbody>
@@ -211,20 +211,20 @@
         <h2 x-h-card-title x-text="T('monitoring:overview.jobsTitle', 'Failed job executions')"></h2>
       </div>
       <div x-h-card-content class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
+        <table x-h-table>
+          <thead x-h-table-header>
             <tr>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colJob', 'Job')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colExecuted', 'Last run')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJob', 'Job')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colExecuted', 'Last run')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody x-h-table-body>
             <template x-for="job in state.failedJobs" :key="job.name">
-              <tr>
-                <td class="py-1 pr-3" x-text="job.name"></td>
-                <td class="py-1 pr-3" x-text="executedAtText(job)"></td>
-                <td class="py-1 pr-3" :title="job.message" x-text="shorten(job.message)"></td>
+              <tr x-h-table-row>
+                <td x-h-table-cell x-text="job.name"></td>
+                <td x-h-table-cell x-text="executedAtText(job)"></td>
+                <td x-h-table-cell :title="job.message" x-text="shorten(job.message)"></td>
               </tr>
             </template>
           </tbody>
@@ -237,22 +237,22 @@
         <h2 x-h-card-title x-text="T('monitoring:overview.incidentsTitle', 'Stuck process instances')"></h2>
       </div>
       <div x-h-card-content class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
+        <table x-h-table>
+          <thead x-h-table-header>
             <tr>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colProcess', 'Process')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colJobs', 'Dead-letter jobs')"></th>
-              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colProcess', 'Process')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colJobs', 'Dead-letter jobs')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
             </tr>
           </thead>
-          <tbody>
+          <tbody x-h-table-body>
             <template x-for="incident in state.incidents" :key="incident.id">
-              <tr>
-                <td class="py-1 pr-3" x-text="incident.definition"></td>
-                <td class="py-1 pr-3" x-text="incident.businessKey"></td>
-                <td class="py-1 pr-3" x-text="incident.jobCount"></td>
-                <td class="py-1 pr-3" :title="incident.message" x-text="shorten(incident.message)"></td>
+              <tr x-h-table-row>
+                <td x-h-table-cell x-text="incident.definition"></td>
+                <td x-h-table-cell x-text="incident.businessKey"></td>
+                <td x-h-table-cell x-text="incident.jobCount"></td>
+                <td x-h-table-cell :title="incident.message" x-text="shorten(incident.message)"></td>
               </tr>
             </template>
           </tbody>

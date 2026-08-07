@@ -60,12 +60,42 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
                   <li x-h-sidebar-menu-item>
-                    <button x-h-sidebar-menu-button :data-active="isActive('/overview')" @click="navigate('/overview')">
+                    <button id="monitoring-nav-overview" x-h-sidebar-menu-button :data-active="isActive('/overview')" @click="navigate('/overview')">
                       <i role="img" x-h-lucide data-lucide="activity"></i>
                       <span class="flex-1" x-text="T('monitoring:shell.nav.overview', 'Overview')"></span>
                       <!-- The problem count doubles as the shell's alarm: it is visible from every page. -->
                       <span x-show="$store.overview.problemCount > 0" x-h-badge data-variant="negative"
                             x-text="$store.overview.problemCount"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-processes" x-h-sidebar-menu-button :data-active="isActive('/processes')" @click="navigate('/processes')">
+                      <i role="img" x-h-lucide data-lucide="workflow"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.processes', 'Processes')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-jobs" x-h-sidebar-menu-button :data-active="isActive('/jobs')" @click="navigate('/jobs')">
+                      <i role="img" x-h-lucide data-lucide="alarm-clock"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.jobs', 'Jobs')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-logs" x-h-sidebar-menu-button :data-active="isActive('/logs')" @click="navigate('/logs')">
+                      <i role="img" x-h-lucide data-lucide="scroll-text"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.logs', 'Logs')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-messaging" x-h-sidebar-menu-button :data-active="isActive('/messaging')" @click="navigate('/messaging')">
+                      <i role="img" x-h-lucide data-lucide="mails"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.messaging', 'Messaging')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-system" x-h-sidebar-menu-button :data-active="isActive('/system')" @click="navigate('/system')">
+                      <i role="img" x-h-lucide data-lucide="server"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.system', 'System')"></span>
                     </button>
                   </li>
                 </ul>
@@ -129,30 +159,14 @@
 
     </div>
 
-    <!-- App-wide transient toasts (raised through Harmonia's notifications magic with this template). -->
-    <section x-h-notification-overlay>
-      <template id="toast">
-        <li x-h-notification.floating data-variant="toast" class="hbox items-center gap-3 min-w-3xs max-w-md">
-          <div x-h-notification-media>
-            <span x-h-avatar class="rounded-full" :data-variant="variant">
-              <template x-if="variant === 'positive'"><svg x-h-icon data-icon="circle-success" role="img" aria-label="success"></svg></template>
-              <template x-if="variant === 'negative'"><svg x-h-icon data-icon="circle-error" role="img" aria-label="error"></svg></template>
-              <template x-if="variant !== 'positive' && variant !== 'negative'"><svg x-h-icon data-icon="circle-info" role="img" aria-label="info"></svg></template>
-            </span>
-          </div>
-          <span x-h-notification-title class="flex-1" x-text="message"></span>
-          <div x-h-notification-actions data-orientation="vertical">
-            <button x-h-button x-h-notification-close class="rounded-full" data-variant="transparent" data-size="icon-md" aria-label="Dismiss">
-              <svg x-h-icon data-icon="close" role="img" aria-label="close"></svg>
-            </button>
-          </div>
-        </li>
-      </template>
-    </section>
-
     <!-- Routes -->
     <template x-route="/" x-template.target.app="./views/_overview.html"></template>
     <template x-route="/overview" x-template.target.app="./views/_overview.html"></template>
+    <template x-route="/processes" x-template.target.app="./views/_processes.html"></template>
+    <template x-route="/jobs" x-template.target.app="./views/_jobs.html"></template>
+    <template x-route="/logs" x-template.target.app="./views/_logs.html"></template>
+    <template x-route="/messaging" x-template.target.app="./views/_messaging.html"></template>
+    <template x-route="/system" x-template.target.app="./views/_system.html"></template>
     <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
 
     <!-- 1. Plugins -->
@@ -173,8 +187,20 @@
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
     <script src="./js/services/ops.js" defer></script>
+    <!-- The BPMN visualizer itself is ~1 MB and loads on first use (see processDiagram.js). -->
+    <script src="./js/services/processDiagram.js" defer></script>
     <script src="./js/stores/overview.js" defer></script>
+    <script src="./js/stores/processes.js" defer></script>
+    <script src="./js/stores/jobs.js" defer></script>
+    <script src="./js/stores/logs.js" defer></script>
+    <script src="./js/stores/messaging.js" defer></script>
+    <script src="./js/stores/system.js" defer></script>
     <script src="./js/components/pages/overviewPage.js" defer></script>
+    <script src="./js/components/pages/processesPage.js" defer></script>
+    <script src="./js/components/pages/jobsPage.js" defer></script>
+    <script src="./js/components/pages/logsPage.js" defer></script>
+    <script src="./js/components/pages/messagingPage.js" defer></script>
+    <script src="./js/components/pages/systemPage.js" defer></script>
     <script src="./js/appShell.js" defer></script>
 
     <!-- 3. Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
