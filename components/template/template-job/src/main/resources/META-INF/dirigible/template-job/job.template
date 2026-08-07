@@ -1,6 +1,0 @@
-{
-	"expression":"0/5 * * * * ?",
-	"group":"defined",
-	"handler":"{{projectName}}/{{fileName}}-handler.js",
-	"description":"{{fileName}} Job"
-}

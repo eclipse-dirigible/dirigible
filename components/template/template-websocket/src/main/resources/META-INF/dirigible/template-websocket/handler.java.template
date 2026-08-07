@@ -1,0 +1,47 @@
+package {{javaPackageName}};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.net.WebsocketHandler;
+
+/**
+ * An inbound WebSocket service. The endpoint returned by {@link #endpoint()} is the whole binding -
+ * there is no separate descriptor file to keep in sync. Clients connect to
+ * {@code /websockets/stomp/{{javaClassName}}}.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a WebSocket service of
+ * the same name without colliding in the shared client container.
+ */
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} implements WebsocketHandler {
+
+    private static final Logger LOGGER = Logging.getLogger("{{javaPackageName}}.{{javaClassName}}");
+
+    @Override
+    public String endpoint() {
+        return "{{javaClassName}}";
+    }
+
+    @Override
+    public void onOpen() {
+        LOGGER.info("Connection opened at the {{javaClassName}} service");
+    }
+
+    @Override
+    public void onMessage(String message, String from) {
+        LOGGER.info("Message received by the {{javaClassName}} service from [{}]: {}", from, message);
+    }
+
+    @Override
+    public void onError(String error) {
+        LOGGER.error("Error in the {{javaClassName}} service: {}", error);
+    }
+
+    @Override
+    public void onClose() {
+        LOGGER.warn("Connection closed at the {{javaClassName}} service");
+    }
+
+}

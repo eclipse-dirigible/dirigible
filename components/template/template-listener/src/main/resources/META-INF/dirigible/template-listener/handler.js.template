@@ -1,7 +1,0 @@
-export function onMessage(message) {
-	console.log("Hello from the {{fileName}} Listener! Message: " + message);
-};
-
-export function onError(error) {
-	console.error("Error from the {{fileName}} Listener! Error: " + error);
-};

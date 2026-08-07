@@ -4,28 +4,13 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getTemplate = () => ({
-  name: "WebSocket Service (Model)",
-  description: "WebSocket Service With a JavaScript Handler",
+  name: "WebSocket Service (Java)",
+  description: "WebSocket Service with a client Java handler",
   sources: [
     {
-      location: "/template-websocket/websocket.template",
+      location: "/template-websocket/handler.java.template",
       action: "generate",
-      rename: "{{fileName}}.websocket",
-    },
-    {
-      location: "/template-websocket/service-handler.js.template",
-      action: "generate",
-      rename: "{{fileName}}-service-handler.js",
-    },
-    {
-      location: "/template-websocket/client-handler.js.template",
-      action: "generate",
-      rename: "{{fileName}}-client-handler.js",
-    },
-    {
-      location: "/template-websocket/client.js.template",
-      action: "generate",
-      rename: "{{fileName}}-client.js",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
   ],
   parameters: [],

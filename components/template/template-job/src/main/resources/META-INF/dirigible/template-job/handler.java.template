@@ -1,0 +1,31 @@
+package {{javaPackageName}};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.job.JobHandler;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+
+/**
+ * A scheduled job. The cron expression returned by {@link #cron()} is the whole schedule - there is
+ * no separate descriptor file to keep in sync.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a job of the same name
+ * without colliding in the shared client container.
+ */
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} implements JobHandler {
+
+    private static final Logger LOGGER = Logging.getLogger("{{javaPackageName}}.{{javaClassName}}");
+
+    @Override
+    public String cron() {
+        return "0/5 * * * * ?";
+    }
+
+    @Override
+    public void run() {
+        LOGGER.info("Hello from the {{javaClassName}} job");
+    }
+
+}
