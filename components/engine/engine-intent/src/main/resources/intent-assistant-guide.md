@@ -926,9 +926,13 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. **Any field type may be editable** - the generated Writer coerces the value to
-  the field's Java type (date, timestamp, number, boolean, string). An editable field must also appear in
-  `fields`; a `relation.field` can never be editable.
+  entity on completion. `editable` may list ONLY **plain entity fields** of `forEntity` (string, text,
+  number, date, timestamp, boolean - the generated Writer coerces the value to the field's Java type)
+  that are **also listed in `fields`** - a field that is not displayed cannot be edited, so add it to
+  `fields` first. Neither a **relation** (a dropdown FK like `Category` or `Status` - even though
+  relations are legal in `fields`) nor a **`relation.field`** path can EVER be editable; to change a
+  related value during the flow, use `setRelationField` on a step instead (a `serviceTask` on the
+  decision branch, or the `userTask` itself for a single-action task).
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
