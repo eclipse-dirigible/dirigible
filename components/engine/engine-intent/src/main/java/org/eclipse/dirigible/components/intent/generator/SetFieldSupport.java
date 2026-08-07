@@ -83,7 +83,7 @@ public final class SetFieldSupport {
             if (owner == null) {
                 continue; // no trigger entity -> no entity instance to set a field on
             }
-            String perspective = IntentEntities.resolvePerspective(triggerEntity, compositionParents);
+            String perspective = IntentEntities.resolvePerspective(triggerEntity, compositionParents, model);
             String keyProp = IntentEntities.keyFieldName(owner);
             String keyAcc = idAccessor(IntentEntities.primaryKeyOf(owner));
             for (StepIntent step : process.getSteps()) {

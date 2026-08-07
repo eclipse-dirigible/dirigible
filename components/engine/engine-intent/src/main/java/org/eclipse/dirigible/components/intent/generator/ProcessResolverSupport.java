@@ -164,10 +164,12 @@ public final class ProcessResolverSupport {
         if (!seen.add(process.getName() + "/" + handler)) {
             return; // same resolution already anchored at an earlier step in this process
         }
+        Set<String> settingEntities = IntentEntities.settingEntities(byName.values());
         resolvers.add(new Resolver(process.getName(), step.getName(), relationName + "." + fieldName, relationName + "_" + fieldName,
                 handler, IntentNaming.pascalCase(relationName), relation.getTo(), IntentNaming.pascalCase(fieldName),
-                IntentEntities.resolvePerspective(relation.getTo(), compositionParents), idAccessor(IntentEntities.primaryKeyOf(target)),
-                owner.getName(), IntentEntities.resolvePerspective(owner.getName(), compositionParents), IntentEntities.keyFieldName(owner),
+                IntentEntities.resolvePerspective(relation.getTo(), compositionParents, settingEntities),
+                idAccessor(IntentEntities.primaryKeyOf(target)), owner.getName(),
+                IntentEntities.resolvePerspective(owner.getName(), compositionParents, settingEntities), IntentEntities.keyFieldName(owner),
                 idAccessor(IntentEntities.primaryKeyOf(owner))));
     }
 

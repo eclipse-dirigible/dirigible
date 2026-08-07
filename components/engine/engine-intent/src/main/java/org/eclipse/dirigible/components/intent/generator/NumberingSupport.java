@@ -52,7 +52,7 @@ final class NumberingSupport {
                 }
                 Map<String, Object> descriptor = new LinkedHashMap<>();
                 descriptor.put("entity", entity.getName());
-                descriptor.put("perspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents));
+                descriptor.put("perspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents, model));
                 descriptor.put("masterPk", IntentEntities.keyFieldName(entity));
                 descriptor.put("field", IntentNaming.pascalCase(field.getName()));
                 descriptor.put("series", number.getSeries() == null ? entity.getName() : number.getSeries());
