@@ -11,7 +11,7 @@
   "projectName": "CamelTransactionsCommitIT",
   "workspaceName": "workspace",
   "filePath": "edm.model",
-  "templateId": "template-application-angular/template/template.js",
+  "templateId": "template-application-schema/template/template.js",
   "perspectives": {
     "Books": {
       "views": [

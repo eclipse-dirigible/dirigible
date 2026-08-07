@@ -1,15 +1,12 @@
-import { BookRepository } from "../gen/edm/dao/Books/BookRepository";
-import { logging } from "@aerokit/sdk/log";
+import { Update } from "@aerokit/sdk/db";
 
-const logger = logging.getLogger("test-job-handler.ts");
+// The BOOK table comes from the generated schema; the row is written with plain SQL rather than a
+// generated DAO because what this test asserts is the Quartz transaction boundary, not the
+// persistence layer above it.
+const INSERT_BOOK = "INSERT INTO BOOK (BOOK_TITLE, BOOK_AUTHOR) VALUES (?, ?)";
 
+Update.execute(INSERT_BOOK, ["test-title-01", "test-author-01"]);
 
-const repo = new BookRepository();
-const entity = {
-    Title: "test-title-01",
-    Author: "test-author-01"
-}
-repo.create(entity);
 console.log("test-job-handler.ts: an entity is saved");
 
 throw new Error("Intentionally throw error to check the QUARTZ transactions logic");
