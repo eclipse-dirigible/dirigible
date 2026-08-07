@@ -154,8 +154,11 @@ abstract class BPMLeaveRequestTestProject extends BaseTestProject {
         MimeMessage receivedEmail = getLatestReceivedEmailMessage();
 
         String decision = shouldApproveRequest() ? "approved" : "declined";
-        String bodyRegex = "<h4>Your leave request from \\[\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z] to "
-                + "\\[\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z] has been " + decision + " by \\["
+        // The dates are the ones typed into the form. Harmonia's date picker holds a date-only model
+        // value (YYYY-MM-DD by its contract), where the retired AngularJS form bound a JS Date and so
+        // serialized a full ISO instant - hence the optional time part.
+        String isoDate = "\\d{4}-\\d{2}-\\d{2}(?:T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z)?";
+        String bodyRegex = "<h4>Your leave request from \\[" + isoDate + "] to " + "\\[" + isoDate + "] has been " + decision + " by \\["
                 + Pattern.quote(EMPLOYEE_MANAGER_USERNAME) + "]</h4>";
 
         EmailAssertion emailAssertion = new EmailAssertionBuilder().expectedFrom("leave-request-app@example.com")
