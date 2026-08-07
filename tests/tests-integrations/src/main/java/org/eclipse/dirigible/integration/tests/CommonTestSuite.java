@@ -15,7 +15,6 @@ import org.eclipse.dirigible.integration.tests.api.rest.DisabledMultitenantModeI
 import org.eclipse.dirigible.integration.tests.api.rest.EnabledMultitenantModeIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.CreateNewProjectIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.CsvimIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.DependsOnIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.MailIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
@@ -27,7 +26,6 @@ import org.junit.platform.suite.api.Suite;
         EnabledMultitenantModeIT.class, //
         SecurityIT.class, //
         CreateNewProjectIT.class, //
-        DependsOnIT.class, //
         MailIT.class, //
         CsvimIT.class})
 public class CommonTestSuite {
