@@ -108,6 +108,17 @@ class IntentAgentService {
                                                     .build();
 
     /**
+     * Whether an API key is configured, i.e. whether {@link #chat} can do anything at all. Read live
+     * (not cached) so a key set after start-up is picked up, and deliberately free of any upstream
+     * call: a client asking "can I use the assistant?" must not cost a model round-trip.
+     *
+     * @return {@code true} when the assistant is usable
+     */
+    boolean isConfigured() {
+        return StringUtils.isNotBlank(DirigibleConfig.INTENT_AI_API_KEY.getStringValue());
+    }
+
+    /**
      * Run one assistant turn against the configured Claude model, validating any proposed YAML with
      * {@link IntentParser} and sending the issues back for correction up to {@link #MAX_REPAIR_ROUNDS}
      * times.
