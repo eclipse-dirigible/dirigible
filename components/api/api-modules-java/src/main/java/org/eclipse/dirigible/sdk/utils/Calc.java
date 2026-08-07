@@ -12,6 +12,7 @@ package org.eclipse.dirigible.sdk.utils;
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Map;
 
 /**
  * Evaluator for calculated-field formulas in generated entity repositories. A single neutral
@@ -29,7 +30,9 @@ import java.math.RoundingMode;
  *   func   := IDENT '(' expr (',' expr)* ')'
  * </pre>
  *
- * An {@code IDENT} names a property of the {@code entity} and is read from its public field;
+ * An {@code IDENT} names a property of the {@code entity} and is read from its public field - or,
+ * when the entity is a {@link Map}, from the entry under that key, so a formula can also be
+ * evaluated over a record that has no compiled type (the generated mapping code does this);
  * functions are limited to {@code round(x, n)}, {@code abs(x)}, {@code min(a, b)},
  * {@code max(a, b)}, {@code ceil(x)}, {@code floor(x)} and the date functions
  * {@code daysBetween(a, b)} (calendar days, {@code b - a}), {@code businessDaysBetween(a, b)}
@@ -265,17 +268,24 @@ public final class Calc {
         }
 
         /**
-         * Read an identifier from the entity's public field; null / missing / non-numeric reads as 0. A
-         * date-typed value reads as its epoch day so the date functions can consume it.
+         * Read an identifier from the entity's public field - or, when the entity is a {@link Map}, from
+         * the entry under that key, which is how the generated mapping code evaluates a formula over a
+         * record that has no compiled type. Null / missing / non-numeric reads as 0. A date-typed value
+         * reads as its epoch day so the date functions can consume it.
          */
         private double readField(String name) {
             if (entity == null) {
                 return 0d;
             }
             try {
-                Field field = entity.getClass()
-                                    .getField(name);
-                Object value = field.get(entity);
+                Object value;
+                if (entity instanceof Map) {
+                    value = ((Map<?, ?>) entity).get(name);
+                } else {
+                    Field field = entity.getClass()
+                                        .getField(name);
+                    value = field.get(entity);
+                }
                 if (value == null) {
                     return 0d;
                 }

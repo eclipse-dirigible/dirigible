@@ -1,0 +1,69 @@
+package gen.${javaGenFolderName}.mappings;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+
+/**
+ * Maps source records onto the ${mappingTarget} structure.
+ *
+ * Generated from the mapping model - do not edit; it is re-generated with the model. Each target
+ * column is assigned from its declared source: a direct column, a constant, a neutral arithmetic
+ * formula evaluated by the SDK Calc over the source record, or a call-out to a
+ * org.eclipse.dirigible.sdk.mapping.ColumnMapper bean. A column with a criteria drops the whole
+ * record when the comparison holds.
+ */
+@Component("${javaGenFolderName}_${mapperClassName}")
+public class ${mapperClassName} {
+
+    private static final Logger LOGGER = Logging.getLogger("gen.${javaGenFolderName}.mappings.${mapperClassName}");
+
+    /**
+     * Maps every source record onto a target record, skipping the records excluded by a criteria.
+     *
+     * @param sourceEntries the records to map, keyed by source column name
+     * @return the mapped records, keyed by target column name
+     */
+    public List<Map<String, Object>> map(List<Map<String, Object>> sourceEntries) {
+        List<Map<String, Object>> mappedEntries = new ArrayList<>();
+        for (Map<String, Object> source : sourceEntries) {
+            Map<String, Object> target = new LinkedHashMap<>();
+#foreach($column in $mappingColumns)
+            target.put(${column.nameLiteral}, ${column.expression});
+#if($column.criteria)
+            if (${column.criteria}) {
+                LOGGER.debug("Skipping record [{}] on the ${column.name} criteria", source);
+                continue;
+            }
+#end
+#end
+            mappedEntries.add(target);
+        }
+        LOGGER.debug("Mapped [{}] source records to [{}] target records", sourceEntries.size(), mappedEntries.size());
+        return mappedEntries;
+    }
+#if($usesNumber)
+
+    /** Reads a mapped value as a number for a numeric criteria; null and non-numeric read as 0. */
+    private static double number(Object value) {
+        if (value instanceof Number) {
+            return ((Number) value).doubleValue();
+        }
+        if (value == null) {
+            return 0d;
+        }
+        try {
+            return Double.parseDouble(value.toString()
+                                           .trim());
+        } catch (NumberFormatException e) {
+            return 0d;
+        }
+    }
+#end
+
+}

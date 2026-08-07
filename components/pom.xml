@@ -303,6 +303,7 @@
         <module>template/template-editor</module>
         <module>template/template-perspective</module>
         <module>template/template-mapping-javascript</module>
+        <module>template/template-mapping-java</module>
 
         <!-- Groups -->
         <module>group/group-api-core</module>
@@ -1699,6 +1700,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-mapping-javascript</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-mapping-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
