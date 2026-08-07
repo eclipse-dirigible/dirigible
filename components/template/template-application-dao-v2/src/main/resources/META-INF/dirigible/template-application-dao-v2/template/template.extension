@@ -1,5 +1,0 @@
-{
-    "module": "template-application-dao-v2/template/template.js",
-    "extensionPoint": "platform-templates",
-    "description": "Application Template - DAO - v2"
-}

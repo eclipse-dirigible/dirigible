@@ -99,9 +99,9 @@ Each modeler in §2.4 has an in-IDE editor under `components/ui/editor-*` and a 
 
 Project templates available via the IDE's *Generate* action. Source: `components/template/template-*` (also reachable through `GenerationEndpoint`).
 
-- **Application templates.** `template-application-angular`, `…-angular-java`, `…-angular-v2`, `template-application-dao` (+ `-java`, `-v2`), `template-application-data` (+ `-v2`), `template-application-feed` (+ `-v2`), `template-application-odata`, `template-application-rest` (+ `-java`, `-v2`), `template-application-schema`, `template-application-ui-angular` (+ `-java`, `-v2`).
-- **Sample applications.** `template-bookstore`, `template-hello-world`.
-- **Single-artefact templates.** `template-bpm`, `template-camel`, `template-camel-cron-route`, `template-camel-http-route`, `template-database-access`, `template-database-table`, `template-database-view`, `template-editor`, `template-extension-perspective`, `template-extension-view`, `template-form`, `template-form-builder-angularjs`, `template-html`, `template-http-client`, `template-job`, `template-listener`, `template-mapping-javascript`, `template-perspective`, `template-react`, `template-typescript`, `template-view`, `template-websocket`.
+- **Application templates.** `template-application-schema`, `template-application-dao-java`, `template-application-rest-java`, `template-application-ui-harmonia-java`, `template-application-events-java` — the single Harmonia + client-Java stack. The AngularJS and TypeScript stacks (`template-application-angular*`, `-ui-angular*`, `-dao`, `-data`, `-feed`, `-rest` and their `-v2` twins) have been removed; `template-application-odata` moved out with the OData engine.
+- **Sample applications.** `template-hello-world`.
+- **Single-artefact templates.** `template-bpm`, `template-camel`, `template-camel-cron-route`, `template-camel-http-route`, `template-database-access`, `template-database-table`, `template-database-view`, `template-editor`, `template-form`, `template-form-builder-harmonia`, `template-html`, `template-http-client`, `template-job`, `template-listener`, `template-mapping-java`, `template-mapping-javascript`, `template-perspective`, `template-react`, `template-typescript`, `template-view`, `template-websocket`.
 
 ---
 
