@@ -1,0 +1,264 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Overview - the one screen that answers "is everything OK, and if not, what?". Tiles summarise each
+  source; the lists below name the individual failures. All state comes from the polled `overview`
+  store (js/stores/overview.js); this view only renders it.
+-->
+<div class="vbox size-full overflow-auto" x-data="overviewPage">
+  <div class="vbox gap-6 p-6">
+
+    <div class="hbox items-start gap-3">
+      <div class="vbox gap-1 flex-1">
+        <h1 class="text-2xl font-bold" x-text="T('monitoring:overview.title', 'Overview')"></h1>
+        <p x-h-text.muted x-text="T('monitoring:overview.subtitle', 'The health of this instance and what needs attention.')"></p>
+      </div>
+      <div class="hbox items-center gap-2">
+        <span x-show="state.lastUpdated" x-cloak x-h-text.muted class="text-xs"
+              x-text="T('monitoring:overview.updated', 'Updated {{time}}', { time: lastUpdatedText() })"></span>
+        <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.togglePause()"
+                :title="state.paused ? T('monitoring:overview.resume', 'Resume auto-refresh') : T('monitoring:overview.pause', 'Pause auto-refresh')"
+                :aria-label="state.paused ? 'Resume auto-refresh' : 'Pause auto-refresh'">
+          <svg x-h-lucide x-show="!state.paused" role="img" data-lucide="pause"></svg>
+          <svg x-h-lucide x-show="state.paused" role="img" data-lucide="play"></svg>
+        </button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()" :data-loading="state.refreshing">
+          <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+          <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- First load: skeletons rather than an empty page that looks like "nothing is wrong". -->
+    <div x-show="state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-24 w-full"></div></template>
+    </div>
+
+    <!-- The all-clear. Shown only once every source has been read and none of them counted anything. -->
+    <div x-show="!state.loading && state.problemCount === 0" x-cloak x-h-card>
+      <div x-h-card-content class="hbox items-center gap-3">
+        <span x-h-avatar class="rounded-full" data-variant="positive">
+          <svg x-h-icon data-icon="circle-success" role="img" aria-label="ok"></svg>
+        </span>
+        <div class="vbox gap-0">
+          <span class="font-medium" x-text="T('monitoring:overview.allClear', 'Nothing needs attention')"></span>
+          <span x-h-text.muted class="text-sm"
+                x-text="T('monitoring:overview.allClearHint', 'Synchronization, jobs and processes are all in a good state.')"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- KPI tiles: one per source, each a count of what is wrong there. -->
+    <div x-show="!state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="heart-pulse" class="size-4"></i>
+            <span x-text="T('monitoring:overview.health', 'Health')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <span x-h-badge :data-variant="state.healthVariant" class="self-start"
+                x-text="state.errors.health ? '—' : ((state.health && state.health.status) || '—')"></span>
+          <span x-h-text.muted class="text-xs" x-show="!state.errors.health"
+                x-text="state.failedSynchronizers.length
+                  ? T('monitoring:overview.synchronizersFailed', '{{count}} synchronizer(s) failed', { count: state.failedSynchronizers.length })
+                  : T('monitoring:overview.synchronizersOk', 'All synchronizers succeeded')"></span>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.health" x-text="errorText('health')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="plug-zap" class="size-4"></i>
+            <span x-text="T('monitoring:overview.readiness', 'Readiness')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <span x-h-badge :data-variant="state.readinessVariant" class="self-start"
+                x-text="state.errors.readiness ? '—' : ((state.readiness && state.readiness.status) || '—')"></span>
+          <span x-h-text.muted class="text-xs" x-show="state.readiness && !state.errors.readiness"
+                x-text="T('monitoring:overview.readinessDetail', '{{pending}} pending, {{failed}} failed artefacts',
+                          { pending: (state.readiness || {}).pendingArtefacts, failed: (state.readiness || {}).failedArtefacts })"></span>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.readiness" x-text="errorText('readiness')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="file-warning" class="size-4"></i>
+            <span x-text="T('monitoring:overview.artefacts', 'Artefacts in error')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <p class="text-3xl font-bold" x-text="valueText('artefacts', state.failedArtefacts.length)"></p>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.artefacts" x-text="errorText('artefacts')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="alarm-clock" class="size-4"></i>
+            <span x-text="T('monitoring:overview.jobs', 'Failed jobs')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <p class="text-3xl font-bold" x-text="valueText('jobs', state.failedJobs.length)"></p>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.jobs" x-text="errorText('jobs')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="workflow" class="size-4"></i>
+            <span x-text="T('monitoring:overview.incidents', 'Process incidents')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <p class="text-3xl font-bold" x-text="valueText('processes', state.incidents.length)"></p>
+          <span x-h-text.muted class="text-xs" x-show="state.incidentsTruncated && !state.errors.processes"
+                x-text="T('monitoring:overview.incidentsTruncated', 'Only the first 50 active instances were checked')"></span>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.processes" x-text="errorText('processes')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="database" class="size-4"></i>
+            <span x-text="T('monitoring:overview.pools', 'Database pools')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <span x-h-badge :data-variant="state.pressuredPools.length ? 'negative' : 'positive'" class="self-start"
+                x-text="state.errors.counts
+                  ? '—'
+                  : (state.pressuredPools.length
+                      ? T('monitoring:overview.poolsPressured', '{{count}} under pressure', { count: state.pressuredPools.length })
+                      : T('monitoring:overview.poolsOk', 'No waiting callers'))"></span>
+          <template x-for="pool in state.pools" :key="pool.name">
+            <span x-h-text.muted class="text-xs"
+                  x-text="pool.name + ': ' + pool.active + (pool.max ? '/' + pool.max : '') + ' active, ' + pool.awaiting + ' waiting'"></span>
+          </template>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.counts" x-text="errorText('counts')"></span>
+        </div>
+      </div>
+
+      <div x-h-card>
+        <div x-h-card-header>
+          <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+            <i role="img" x-h-lucide data-lucide="mails" class="size-4"></i>
+            <span x-text="T('monitoring:overview.broker', 'Broker backlog')"></span>
+          </div>
+        </div>
+        <div x-h-card-content class="vbox gap-1">
+          <p class="text-3xl font-bold" x-text="valueText('messaging', state.backlog.reduce((sum, q) => sum + q.size, 0))"></p>
+          <span x-h-text.muted class="text-xs" x-show="state.stalledQueues.length && !state.errors.messaging"
+                x-text="T('monitoring:overview.queuesStalled', '{{count}} queue(s) with no consumer', { count: state.stalledQueues.length })"></span>
+          <span x-h-text.muted class="text-xs" x-show="state.errors.messaging" x-text="errorText('messaging')"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- What exactly is wrong: one section per source that counted something. -->
+    <div x-show="state.failedSynchronizers.length" x-cloak x-h-card>
+      <div x-h-card-header>
+        <h2 x-h-card-title x-text="T('monitoring:overview.synchronizersTitle', 'Failed synchronizers')"></h2>
+      </div>
+      <div x-h-card-content class="hbox flex-wrap gap-2">
+        <template x-for="name in state.failedSynchronizers" :key="name">
+          <span x-h-badge data-variant="negative" x-text="name"></span>
+        </template>
+      </div>
+    </div>
+
+    <div x-show="state.failedArtefacts.length" x-cloak x-h-card>
+      <div x-h-card-header>
+        <h2 x-h-card-title x-text="T('monitoring:overview.artefactsTitle', 'Artefacts that did not synchronize')"></h2>
+      </div>
+      <div x-h-card-content class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colProject', 'Project')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colLocation', 'Location')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colPhase', 'Phase')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colError', 'Error')"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="artefact in state.failedArtefacts" :key="artefact.type + artefact.location + artefact.name">
+              <tr>
+                <td class="py-1 pr-3" x-text="projectOf(artefact.location)"></td>
+                <td class="py-1 pr-3" x-text="artefact.location"></td>
+                <td class="py-1 pr-3"><span x-h-badge data-variant="negative" x-text="(artefact.phase || '') + ' · ' + artefact.status"></span></td>
+                <td class="py-1 pr-3" :title="artefact.error" x-text="shorten(artefact.error)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div x-show="state.failedJobs.length" x-cloak x-h-card>
+      <div x-h-card-header>
+        <h2 x-h-card-title x-text="T('monitoring:overview.jobsTitle', 'Failed job executions')"></h2>
+      </div>
+      <div x-h-card-content class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colJob', 'Job')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colExecuted', 'Last run')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="job in state.failedJobs" :key="job.name">
+              <tr>
+                <td class="py-1 pr-3" x-text="job.name"></td>
+                <td class="py-1 pr-3" x-text="executedAtText(job)"></td>
+                <td class="py-1 pr-3" :title="job.message" x-text="shorten(job.message)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div x-show="state.incidents.length" x-cloak x-h-card>
+      <div x-h-card-header>
+        <h2 x-h-card-title x-text="T('monitoring:overview.incidentsTitle', 'Stuck process instances')"></h2>
+      </div>
+      <div x-h-card-content class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colProcess', 'Process')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colBusinessKey', 'Business key')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colJobs', 'Dead-letter jobs')"></th>
+              <th class="py-1 pr-3 text-left font-semibold text-muted-foreground" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
+            </tr>
+          </thead>
+          <tbody>
+            <template x-for="incident in state.incidents" :key="incident.id">
+              <tr>
+                <td class="py-1 pr-3" x-text="incident.definition"></td>
+                <td class="py-1 pr-3" x-text="incident.businessKey"></td>
+                <td class="py-1 pr-3" x-text="incident.jobCount"></td>
+                <td class="py-1 pr-3" :title="incident.message" x-text="shorten(incident.message)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>
