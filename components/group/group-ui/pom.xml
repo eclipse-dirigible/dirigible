@@ -41,7 +41,7 @@
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>
-            <artifactId>dirigible-components-resources-my</artifactId>
+            <artifactId>dirigible-components-resources-personal</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

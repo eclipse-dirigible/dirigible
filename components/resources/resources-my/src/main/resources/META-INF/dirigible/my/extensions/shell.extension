@@ -1,5 +1,0 @@
-{
-    "module": "my/configs/shell.js",
-    "extensionPoint": "platform-shells",
-    "description": "My Work Shell"
-}

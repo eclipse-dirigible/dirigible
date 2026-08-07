@@ -58,7 +58,7 @@ Env: `BASE_URL` (default `http://localhost:8080`), `APPTEST_USERNAME`/`APPTEST_P
   field null on the personal wire, the own row in the personal list, foreign rows 404 (when the
   owner relation is optional), own-row delete. Skips with a pointer when the test user has no
   identity mapping (seed the dev identity row). Personal *UI* parity (resolved labels, chat,
-  calendar on the My shell) is deliberately not asserted yet — it tracks the personal-template
+  calendar on the Personal shell) is deliberately not asserted yet — it tracks the personal-template
   parity fixes.
 - **shell** (opt-in) — the shared application shell's nav item opens the module SPA in its iframe.
 

@@ -9,8 +9,8 @@
 		<relativePath>../../pom.xml</relativePath>
 	</parent>
 
-	<name>Components - Resources - My</name>
-	<artifactId>dirigible-components-resources-my</artifactId>
+	<name>Components - Resources - Personal</name>
+	<artifactId>dirigible-components-resources-personal</artifactId>
 	<packaging>jar</packaging>
 
 	<properties>

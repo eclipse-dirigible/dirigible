@@ -17,11 +17,11 @@
  */
 document.addEventListener('alpine:init', () => {
     // Fallbacks for shells that do not declare their own icon/description (older registrations).
-    const ICONS = { applicationShell: 'layout-grid', myShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
+    const ICONS = { applicationShell: 'layout-grid', personalShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
         monitoringShell: 'activity', shellIde: 'code' };
     const DESCRIPTIONS = {
         applicationShell: 'All business applications in one workspace.',
-        myShell: 'Your tasks and your records - the personal workspace.',
+        personalShell: 'Your tasks and your records - the personal workspace.',
         partnerShell: 'The portal for external partners.',
         adminShell: 'Every record as a plain table and form - one level above the database.',
         monitoringShell: 'Is the system healthy - and if not, what broke.',
