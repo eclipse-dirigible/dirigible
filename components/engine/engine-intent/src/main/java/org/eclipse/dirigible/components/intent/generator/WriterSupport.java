@@ -112,7 +112,7 @@ public final class WriterSupport {
                     continue;
                 }
                 writers.add(new Writer(process.getName(), step.getName(), className(process.getName(), step.getName()), triggerEntity,
-                        IntentEntities.resolvePerspective(triggerEntity, compositionParents), IntentEntities.keyFieldName(owner),
+                        IntentEntities.resolvePerspective(triggerEntity, compositionParents, model), IntentEntities.keyFieldName(owner),
                         idAccessor(IntentEntities.primaryKeyOf(owner)), fields));
             }
         }

@@ -104,6 +104,34 @@ class NotificationSupportTest {
     }
 
     @Test
+    void settingEntityRelationLoadsFromTheSettingsPerspective() {
+        // Signal --Status--> SignalStatus (function: Setting): the DAO/entity of a setting entity are
+        // generated under data/settings, so the load's perspective must be "Settings" - the entity-named
+        // perspective produced imports of a non-existent gen.<model>.data.<entityname> package and the
+        // whole client-Java batch failed to compile (the Sofia city-signals first-use failure).
+        EntityIntent status = new EntityIntent();
+        status.setName("SignalStatus");
+        status.setFunction("Setting");
+        status.setFields(List.of(field("id"), field("name")));
+        EntityIntent signal = new EntityIntent();
+        signal.setName("Signal");
+        signal.setFields(List.of(field("id"), field("title")));
+        signal.setRelations(List.of(toOne("Status", "SignalStatus")));
+        Map<String, EntityIntent> byName = new LinkedHashMap<>();
+        byName.put("SignalStatus", status);
+        byName.put("Signal", signal);
+
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Signal is now {Status.name}"), byName.get("Signal"), byName, Map.of());
+
+        assertEquals(1, plan.loads()
+                            .size());
+        assertEquals("Settings", plan.loads()
+                                     .get(0)
+                                     .targetPerspective());
+    }
+
+    @Test
     void unresolvableRecipientRelationYieldsNoPlan() {
         Map<String, EntityIntent> byName = libraryModel();
         // 'nope' is not a to-one relation of Order -> recipient cannot resolve -> skip the notification.

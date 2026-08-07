@@ -87,10 +87,10 @@ public final class ProcessWaitSupport {
                 }
                 waits.add(new Wait(process.getName(), step.getName(), className(process.getName(), step.getName()),
                         messageName(process.getName(), step.getName()), eventKind, eventEntity,
-                        IntentEntities.resolvePerspective(eventEntity, compositionParents),
+                        IntentEntities.resolvePerspective(eventEntity, compositionParents, model),
                         IntentEntities.keyFieldName(byName.get(eventEntity)), stringArg(step, "when"),
                         direct ? null : IntentNaming.pascalCase(via), triggerEntity,
-                        IntentEntities.resolvePerspective(triggerEntity, compositionParents)));
+                        IntentEntities.resolvePerspective(triggerEntity, compositionParents, model)));
             }
         }
         return waits;

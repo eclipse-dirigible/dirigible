@@ -84,10 +84,10 @@ final class SnapshotSupport {
             Map<String, Object> snapshot = new LinkedHashMap<>();
             snapshot.put("master", master.getName());
             snapshot.put("masterPk", IntentEntities.keyFieldName(master));
-            snapshot.put("masterPerspective", IntentEntities.resolvePerspective(master.getName(), compositionParents));
+            snapshot.put("masterPerspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
             putLanguage(snapshot, entity, master, byName, compositionParents, crossModel);
             snapshot.put("snapshotEntity", entity.getName());
-            snapshot.put("snapshotPerspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents));
+            snapshot.put("snapshotPerspective", IntentEntities.resolvePerspective(entity.getName(), compositionParents, model));
             snapshot.put("snapshotMasterFk", IntentNaming.pascalCase(masterRelation.getName()));
             snapshots.add(snapshot);
         }
@@ -152,8 +152,8 @@ final class SnapshotSupport {
                 throw new IllegalStateException("languageFrom [" + path + "] of snapshot [" + entity.getName() + "]: [" + fieldName
                         + "] is not a string field of [" + relation.getTo() + "]");
             }
-            snapshot.put("languageTargetPerspective",
-                    target.isSetting() ? "Settings" : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+            snapshot.put("languageTargetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents,
+                    IntentEntities.settingEntities(byName.values())));
         }
         snapshot.put("languageFkProperty", IntentNaming.pascalCase(relationName));
         snapshot.put("languageTargetEntity", relation.getTo());

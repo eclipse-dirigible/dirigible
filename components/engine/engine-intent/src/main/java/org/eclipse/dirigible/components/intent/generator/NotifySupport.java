@@ -103,7 +103,8 @@ public final class NotifySupport {
         if (back == null) {
             return null;
         }
-        return new FanOut(rows.getName(), IntentEntities.resolvePerspective(rows.getName(), compositionParents),
+        return new FanOut(rows.getName(),
+                IntentEntities.resolvePerspective(rows.getName(), compositionParents, IntentEntities.settingEntities(byName.values())),
                 IntentNaming.pascalCase(back.getName()), IntentEntities.keyFieldName(rows));
     }
 
@@ -341,8 +342,8 @@ public final class NotifySupport {
                 throw new IllegalArgumentException(
                         "languageFrom [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
             }
-            load = new LanguageLoad(IntentNaming.pascalCase(relationName), relation.getTo(),
-                    target.isSetting() ? "Settings" : IntentEntities.resolvePerspective(relation.getTo(), compositionParents), false, "");
+            load = new LanguageLoad(IntentNaming.pascalCase(relationName), relation.getTo(), IntentEntities.resolvePerspective(
+                    relation.getTo(), compositionParents, IntentEntities.settingEntities(byName.values())), false, "");
         }
         String expression = "attachLanguageSource == null || attachLanguageSource." + pascalField + " == null || attachLanguageSource."
                 + pascalField + ".isBlank() ? " + DEFAULT_LANGUAGE_EXPRESSION + " : attachLanguageSource." + pascalField + ".trim()";
