@@ -1,7 +1,0 @@
-import { IntegrationMessage } from "@aerokit/sdk/integrations"
-
-export function onMessage(message: IntegrationMessage) {
-    message.setBody("Set by handler.ts");
-
-    return message;
-}

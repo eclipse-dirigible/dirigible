@@ -94,11 +94,11 @@ final class PrintFeederSupport {
         Map<String, Object> feeder = new LinkedHashMap<>();
         feeder.put("className", master.getName());
         feeder.put("entity", master.getName());
-        feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents));
+        feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
         feeder.put("rootScalars", scalarDescriptors(master));
 
         feeder.put("itemsEntity", items.getName());
-        feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents));
+        feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents, model));
         feeder.put("itemsFkProperty", masterFkProperty(items, master.getName()));
         feeder.put("itemScalars", scalarDescriptors(items));
 
@@ -157,8 +157,7 @@ final class PrintFeederSupport {
             } else {
                 EntityIntent target = byName.get(relation.getTo());
                 node.put("model", "");
-                node.put("perspective", target != null && target.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 node.put("labelField", nameField(target));
                 node.put("scalars", scalarDescriptors(target));
             }
@@ -216,8 +215,7 @@ final class PrintFeederSupport {
         } else {
             EntityIntent target = byName.get(relation.getTo());
             node.put("model", "");
-            node.put("perspective", target != null && target.isSetting() ? "Settings"
-                    : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+            node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             node.put("labelField", nameField(target));
             node.put("scalars", scalarDescriptors(target));
             nodes.add(node);

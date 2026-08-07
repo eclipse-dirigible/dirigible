@@ -124,7 +124,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                           logger.warn("[java-lsp] Classpath pre-warm failed (will materialise lazily on first use)", warmEx);
                       }
                   } catch (Exception e) {
-                      logger.warn("[java-lsp] JDT.LS is not available: {}. Java language support will be disabled.", e.getMessage());
+                      logger.warn("[java-lsp] JDT.LS is not available. Java language support will be disabled.", e);
                   }
               });
     }
@@ -573,7 +573,10 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     }
 
     /**
-     * Extracts the JDT.LS tar.gz that was bundled into the JAR at build time.
+     * Extracts the JDT.LS tar.gz that was bundled into the JAR at build time. A half-written
+     * installation is removed before the failure propagates: {@link #isInstalled()} only looks for the
+     * Equinox launcher JAR, so leaving one behind would make every subsequent startup believe JDT.LS is
+     * present and silently keep Java language support broken.
      *
      * @return {@code true} if the bundled resource was found and extracted successfully
      */
@@ -586,17 +589,36 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
             }
             logger.info("[java-lsp] Extracting bundled JDT.LS to {} ...", jdtlsHome);
             Files.createDirectories(jdtlsHome);
-            Process tar = new ProcessBuilder("tar", "xzf", "-", "-C", jdtlsHome.toString()).redirectError(ProcessBuilder.Redirect.INHERIT)
-                                                                                           .start();
-            bundled.transferTo(tar.getOutputStream());
-            tar.getOutputStream()
-               .close();
-            int rc = tar.waitFor();
-            if (rc != 0) {
-                throw new Exception("[java-lsp] tar extraction of bundled JDT.LS failed with exit code " + rc);
+            try {
+                Process tar =
+                        new ProcessBuilder("tar", "xzf", "-", "-C", jdtlsHome.toString()).redirectError(ProcessBuilder.Redirect.INHERIT)
+                                                                                         .start();
+                bundled.transferTo(tar.getOutputStream());
+                tar.getOutputStream()
+                   .close();
+                int rc = tar.waitFor();
+                if (rc != 0) {
+                    throw new Exception("[java-lsp] tar extraction of bundled JDT.LS failed with exit code " + rc);
+                }
+            } catch (Exception e) {
+                discardPartialInstallation();
+                throw e;
             }
             logger.info("[java-lsp] JDT.LS installed from bundled resource at {}", jdtlsHome);
             return true;
+        }
+    }
+
+    /**
+     * Removes an installation directory left behind by a failed extraction so the next startup extracts
+     * again from scratch.
+     */
+    private void discardPartialInstallation() {
+        try {
+            deleteDirectory(jdtlsHome);
+        } catch (IOException e) {
+            logger.warn("[java-lsp] Could not remove the partially extracted JDT.LS at {} - delete it manually, "
+                    + "otherwise Java language support stays disabled", jdtlsHome, e);
         }
     }
 

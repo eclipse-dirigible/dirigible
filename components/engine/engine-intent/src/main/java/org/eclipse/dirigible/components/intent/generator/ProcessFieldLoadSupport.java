@@ -85,7 +85,7 @@ public final class ProcessFieldLoadSupport {
                 }
                 loads.add(new FieldLoad(process.getName(), step.getName(),
                         "Load" + IntentNaming.pascalCase(process.getName()) + IntentNaming.pascalCase(step.getName()), triggerEntity,
-                        IntentEntities.resolvePerspective(triggerEntity, compositionParents), IntentEntities.keyFieldName(owner),
+                        IntentEntities.resolvePerspective(triggerEntity, compositionParents, model), IntentEntities.keyFieldName(owner),
                         idAccessor(IntentEntities.primaryKeyOf(owner)), fields));
             }
         }

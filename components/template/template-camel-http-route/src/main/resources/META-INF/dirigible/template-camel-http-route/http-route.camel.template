@@ -17,10 +17,10 @@
             logName: HttpRouteLogger
         - to:
             id: to-1a81
-            description: TypeScript handler
-            uri: dirigible-java-script
+            description: Java handler
+            uri: dirigible-java
             parameters:
-              javaScriptPath: ${projectName}/handler.ts
+              className: ${javaPackageName}.Handler
         - log:
             id: log-13c5
             description: Log execution completed

@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -67,8 +68,70 @@ public final class IntentEntities {
         return parents;
     }
 
-    /** The perspective an entity belongs to: itself, or its transitive composition parent. */
-    public static String resolvePerspective(String entityName, Map<String, String> compositionParents) {
+    /** The global perspective every {@code function: Setting} entity is generated under. */
+    public static final String SETTINGS_PERSPECTIVE = "Settings";
+
+    /**
+     * Names of the model's entities declared as settings / nomenclature.
+     *
+     * @param entities the entities to scan
+     * @return the setting entity names
+     */
+    public static Set<String> settingEntities(Collection<EntityIntent> entities) {
+        Set<String> settings = new LinkedHashSet<>();
+        for (EntityIntent entity : entities) {
+            if (entity.getName() != null && entity.isSetting()) {
+                settings.add(entity.getName());
+            }
+        }
+        return settings;
+    }
+
+    /**
+     * The perspective an entity's GENERATED artifacts live under: the global {@code Settings}
+     * perspective for a setting entity, otherwise the entity itself or its transitive composition
+     * parent. This is the resolution every emission that names a package, an import, a controller URL
+     * or an event topic must use - a setting entity's DAO/controller are generated under
+     * {@code data/settings} / {@code api/settings} and its events publish on the
+     * {@code <project>-Settings-<entity>} topic, so a settings-unaware resolution produces imports of a
+     * non-existent package and topic bindings nothing ever publishes to.
+     *
+     * @param entityName the entity (or relation target) to resolve
+     * @param compositionParents the composition-parent map ({@link #compositionParents(IntentModel)})
+     * @param settingEntities the setting entity names ({@link #settingEntities(Collection)})
+     * @return the perspective name
+     */
+    public static String resolvePerspective(String entityName, Map<String, String> compositionParents, Set<String> settingEntities) {
+        if (settingEntities.contains(entityName)) {
+            return SETTINGS_PERSPECTIVE;
+        }
+        return compositionPerspective(entityName, compositionParents);
+    }
+
+    /**
+     * Convenience overload of {@link #resolvePerspective(String, Map, Set)} deriving the setting set
+     * from the model.
+     *
+     * @param entityName the entity (or relation target) to resolve
+     * @param compositionParents the composition-parent map
+     * @param model the intent model the entity belongs to
+     * @return the perspective name
+     */
+    public static String resolvePerspective(String entityName, Map<String, String> compositionParents, IntentModel model) {
+        return resolvePerspective(entityName, compositionParents, settingEntities(model.getEntities()));
+    }
+
+    /**
+     * The raw composition walk - itself, or the transitive composition parent - DELIBERATELY
+     * settings-unaware. Role naming keys on it (a setting entity's generated roles stay named by the
+     * entity, not by the shared {@code Settings} perspective). Anything that emits packages, URLs or
+     * topics must use {@link #resolvePerspective(String, Map, Set)} instead.
+     *
+     * @param entityName the entity to resolve
+     * @param compositionParents the composition-parent map
+     * @return the composition-resolved perspective
+     */
+    public static String compositionPerspective(String entityName, Map<String, String> compositionParents) {
         String current = entityName;
         Set<String> visited = new LinkedHashSet<>();
         while (compositionParents.containsKey(current)) {

@@ -23,6 +23,7 @@ import java.util.Queue;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
 import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
@@ -206,7 +207,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
-            String rolePerspective = resolvePerspective(name, compositionParents);
+            String rolePerspective = IntentEntities.compositionPerspective(name, compositionParents);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder, projectName, rolePerspective);
             if (extension) {
@@ -708,13 +709,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     /** Names of entities declared as settings / nomenclature ({@code kind: setting}). */
     private static Set<String> settingEntities(List<EntityIntent> entities) {
-        Set<String> settings = new LinkedHashSet<>();
-        for (EntityIntent entity : entities) {
-            if (entity.getName() != null && entity.isSetting()) {
-                settings.add(entity.getName());
-            }
-        }
-        return settings;
+        return IntentEntities.settingEntities(entities);
     }
 
     /**
@@ -745,7 +740,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             Map<String, Object> guard = new LinkedHashMap<>();
             guard.put("parentEntity", parent.getName());
-            guard.put("parentPerspective", resolvePerspective(parent.getName(), compositionParents));
+            guard.put("parentPerspective", IntentEntities.resolvePerspective(parent.getName(), compositionParents, model));
             guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
@@ -756,10 +751,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String perspectiveFor(String entityName, Map<String, String> compositionParents, Set<String> settingEntities) {
-        if (settingEntities.contains(entityName)) {
-            return SETTINGS_PERSPECTIVE;
-        }
-        return resolvePerspective(entityName, compositionParents);
+        return IntentEntities.resolvePerspective(entityName, compositionParents, settingEntities);
     }
 
     private static Map<String, EntityIntent> indexEntities(List<EntityIntent> entities) {
@@ -827,7 +819,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Map each entity to its composition parent: the target of its first {@code composition: true}
      * {@code manyToOne} / {@code oneToOne} relation. Entities present as keys are DEPENDENT; their
-     * perspective is the parent's, resolved transitively by {@link #resolvePerspective}.
+     * perspective is the parent's, resolved transitively by
+     * {@code IntentEntities.compositionPerspective}.
      */
     private static Map<String, String> computeCompositionParents(List<EntityIntent> entities) {
         Map<String, String> parents = new LinkedHashMap<>();
@@ -846,23 +839,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return parents;
     }
 
-    /**
-     * Follow the composition-parent chain to the first PRIMARY entity; that entity's name is the
-     * perspective every entity in the chain lives under. A cycle (mutually required relations) falls
-     * back to the starting entity itself.
-     */
-    private static String resolvePerspective(String entityName, Map<String, String> compositionParents) {
-        String current = entityName;
-        Set<String> visited = new LinkedHashSet<>();
-        while (compositionParents.containsKey(current)) {
-            if (!visited.add(current)) {
-                LOGGER.warn("Composition cycle detected at entity [{}] - keeping its own perspective", entityName);
-                return entityName;
-            }
-            current = compositionParents.get(current);
-        }
-        return current;
-    }
 
     private static final String UNICONS_BASE = "/services/web/resources/unicons/";
 

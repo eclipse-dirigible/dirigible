@@ -171,7 +171,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> trigger = new LinkedHashMap<>();
             trigger.put("process", process.getName());
             trigger.put("entity", entity);
-            trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             trigger.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             // The BPM business key: the flagged trigger field's property, or the primary key when none
             // is flagged (preserving the historical default). keyProperty stays the PK - the listener
@@ -221,8 +221,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("toEntity", child.getTo());
             entry.put("toCrossModel", crossModel);
             entry.put("toModel", crossModel ? uses.getModel() : "");
-            entry.put("toPerspective",
-                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(child.getTo(), compositionParents));
+            entry.put("toPerspective", target != null ? target.perspectiveName()
+                    : IntentEntities.resolvePerspective(child.getTo(), compositionParents, model));
             entry.put("toPk", target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(child.getTo())));
             entry.put("parentFkProperty", IntentNaming.pascalCase(child.getParent()));
             Object days = child.getForEach()
@@ -253,7 +253,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
                     entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
                 } else {
-                    entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents));
+                    entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents, model));
                 }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
@@ -310,10 +310,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 link.put("targetProject", "");
                 link.put("targetModel", "");
                 // A setting entity's controller lives under the shared "Settings" perspective, not its
-                // own name (the template routes SETTING entities there); resolvePerspective only handles
-                // composition nesting, so special-case settings or the FK URL 404s.
-                link.put("targetPerspective", target != null && target.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                // own name - the settings-aware resolvePerspective handles it, or the FK URL 404s.
+                link.put("targetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 link.put("labelField", nameField(target));
             }
             links.add(link);
@@ -354,8 +352,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 trigger.put("personalTargetModel", "");
                 trigger.put("personalIdentityProperty",
                         target != null && target.getIdentity() != null ? IntentNaming.pascalCase(target.getIdentity()) : "Email");
-                trigger.put("personalTargetPerspective", target != null && target.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                trigger.put("personalTargetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             }
             return;
         }
@@ -415,7 +412,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             // The PK property an `attach: print` hands to the generated print feeder. Deliberately
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
@@ -500,13 +497,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // imports gen.<mod>.data.<entityname> (which does not exist) instead of ...data.settings
             // and the whole client-Java batch fails to compile (a setting-entity roll-up, e.g.
             // Currency <- CurrencyRate, is the case that exposed it).
-            base.put("childPerspective",
-                    child.isSetting() ? "Settings" : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
+            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
             base.put("parentEntity", via.getTo());
             // A cross-model parent's perspective comes from the owner's model (resolved above); a local
             // one from this model's own composition/setting layout.
             base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
-                    : parent.isSetting() ? "Settings" : IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+                    : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
             // Empty for a local parent - generateUtils then falls back to this project's gen folder.
             base.put("parentModel", crossModelParent ? via.getModel() : "");
             base.put("parentCrossModel", crossModelParent);
@@ -595,7 +591,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("match", pascalList(s.getMatch()));
             // invoice (this project)
             e.put("invoiceEntity", s.getInvoice());
-            e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents));
+            e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents, model));
             e.put("invoicePk", IntentEntities.keyFieldName(invoice));
             e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
             e.put("invoicePaid", IntentNaming.pascalCase(s.getPaid()));
@@ -604,7 +600,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("payableCondition", payableCondition(s.getPayableStatuses()));
             // junction (this project)
             e.put("junctionEntity", s.getJunction());
-            e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents));
+            e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents, model));
             e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
             e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
             e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
@@ -653,7 +649,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
             CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
             String toPerspective =
-                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents, model);
             String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
 
             Map<String, Object> e = new LinkedHashMap<>();
@@ -661,7 +657,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("className", IntentNaming.pascalIdentifier(g.getName()));
             e.put("crossModel", crossModel);
             e.put("fromEntity", g.getFrom());
-            e.put("fromPerspective", IntentEntities.resolvePerspective(g.getFrom(), compositionParents));
+            e.put("fromPerspective", IntentEntities.resolvePerspective(g.getFrom(), compositionParents, model));
             e.put("toEntity", g.getTo());
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
@@ -703,7 +699,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // its OWN package - the template must qualify srcItem with this, not the source
                 // document's perspective. (The TARGET item stays on toPerspective: a create-from
                 // always writes into the target document's own composition-item table.)
-                e.put("fromItemPerspective", IntentEntities.resolvePerspective(items.getFrom(), compositionParents));
+                e.put("fromItemPerspective", IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
@@ -803,7 +799,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("name", t.getName());
             e.put("className", IntentNaming.pascalIdentifier(t.getName()));
             e.put("entity", t.getForEntity());
-            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
+            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents, model));
             e.put("statusProperty", statusProperty);
             e.put("setStatus", String.valueOf(t.getSetStatus()));
             List<String> terms = new ArrayList<>();
@@ -971,7 +967,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("step", sender.step());
             e.put("className", sender.className());
             e.put("entity", sender.entity());
-            e.put("perspective", IntentEntities.resolvePerspective(sender.entity(), compositionParents));
+            e.put("perspective", IntentEntities.resolvePerspective(sender.entity(), compositionParents, model));
             e.put("keyProperty", sender.keyProperty());
             e.put("keyAccessor", sender.keyAccessor());
             e.putAll(fields);
@@ -1067,14 +1063,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 itemsEntity = child.getName();
                 itemsFk = fk;
-                itemsPerspective = IntentEntities.resolvePerspective(child.getName(), compositionParents);
+                itemsPerspective = IntentEntities.resolvePerspective(child.getName(), compositionParents, model);
             }
 
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", p.getName());
             e.put("className", IntentNaming.pascalIdentifier(p.getName()));
             e.put("entity", p.getForEntity());
-            e.put("sourcePerspective", IntentEntities.resolvePerspective(p.getForEntity(), compositionParents));
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(p.getForEntity(), compositionParents, model));
             e.put("sourceKeyField", IntentEntities.keyFieldName(source));
             e.put("isCreate", isCreate);
             e.put("event", p.getEvent());
@@ -1085,7 +1081,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("itemsFk", itemsFk);
             e.put("itemsPerspective", itemsPerspective);
             e.put("into", p.getInto());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(p.getInto(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(p.getInto(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(target));
             e.put("backRef", p.getIdempotentBy() == null ? "" : IntentNaming.pascalCase(p.getIdempotentBy()));
             e.put("guard", p.getGuard() == null ? "" : p.getGuard());
@@ -1203,12 +1199,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("className", IntentNaming.pascalIdentifier(a.getName()));
             e.put("op", op);
             e.put("sourceEntity", a.getOf());
-            e.put("sourcePerspective", IntentEntities.resolvePerspective(a.getOf(), compositionParents));
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(a.getOf(), compositionParents, model));
             e.put("sourceKeyField", IntentEntities.keyFieldName(source));
             e.put("sumField", a.getSum() == null ? "" : IntentNaming.pascalCase(a.getSum()));
             e.put("keys", keys);
             e.put("targetEntity", a.getInto());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(a.getInto(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(a.getInto(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(target));
             e.put("targetField", IntentNaming.pascalCase(a.getField()));
             out.add(e);
@@ -1316,7 +1312,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             } else {
                 sourceProject = ""; // resolved to the own project name at template time
                 sourceGenFolder = "";
-                sourcePerspective = IntentEntities.resolvePerspective(sourceEntity, compositionParents);
+                sourcePerspective = IntentEntities.resolvePerspective(sourceEntity, compositionParents, model);
                 EntityIntent local = byName.get(sourceEntity);
                 if (local != null) {
                     sourceKeyField = IntentEntities.keyFieldName(local);
@@ -1352,10 +1348,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardProperty", guardProperty);
             e.put("guardValue", guardValue);
             e.put("targetEntity", creates.getName());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
             e.put("itemsEntity", itemsEntity.getName());
-            e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents));
+            e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
             e.put("backRefProperty", IntentNaming.pascalCase(effective.getBackReference()));
             // Reversal coordinates: the reversal handler locates the original through the empty
@@ -1378,9 +1374,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                 .get("entity"));
                 e.put("ruleEntity", ruleEntityName);
                 // A setting rule entity (the normal case) lives under the global Settings perspective.
-                EntityIntent ruleEntityIntent = byName.get(ruleEntityName);
-                e.put("rulePerspective", ruleEntityIntent != null && ruleEntityIntent.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(ruleEntityName, compositionParents));
+                e.put("rulePerspective", IntentEntities.resolvePerspective(ruleEntityName, compositionParents, model));
                 Map<?, ?> match = (Map<?, ?>) effective.getRule()
                                                        .get("match");
                 Map.Entry<?, ?> selector = match.entrySet()
@@ -2100,10 +2094,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String fkProperty = IntentNaming.pascalCase(back.getName());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("masterEntity", expansion.getFrom());
-            base.put("masterPerspective", IntentEntities.resolvePerspective(expansion.getFrom(), compositionParents));
+            base.put("masterPerspective", IntentEntities.resolvePerspective(expansion.getFrom(), compositionParents, model));
             base.put("masterPk", IntentEntities.keyFieldName(master));
             base.put("childEntity", expansion.getInto());
-            base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents));
+            base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents, model));
             base.put("fkProperty", fkProperty);
             base.put("startProperty", IntentNaming.pascalCase(expansion.getBetween()
                                                                        .getStart()));
@@ -2252,7 +2246,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", webhook.getName());
             entry.put("className", IntentNaming.pascalCase(webhook.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             entry.put("path", webhook.getPath());
             inbound.add(entry);
         }
@@ -2279,7 +2273,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", integration.getName());
             entry.put("className", IntentNaming.pascalCase(integration.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             entry.put("topicSuffix", EventBinding.topicSuffix(EventBinding.kind(integration.getEvent())));
             entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
             entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
@@ -2354,8 +2348,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // perspective / key come from the owner's .model.
             entry.put("sourceCrossModel", sourceCrossModel);
             entry.put("sourceModel", sourceCrossModel ? schedule.getModel() : "");
-            entry.put("perspective",
-                    sourceCrossModel ? sourceTarget.perspectiveName() : IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", sourceCrossModel ? sourceTarget.perspectiveName()
+                    : IntentEntities.resolvePerspective(entity, compositionParents, model));
             // The PK property an `attach: print` hands to the generated print feeder. Deliberately
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
@@ -2376,7 +2370,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
                 CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
                 String toPerspective =
-                        target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+                        target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents, model);
                 String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
                 entry.put("action", "generate");
                 entry.put("genCrossModel", crossModel);

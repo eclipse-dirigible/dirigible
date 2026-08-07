@@ -160,6 +160,12 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-engine-javascript</artifactId>
 		</dependency>
+
+
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-core-java</artifactId>
+		</dependency>
 	</dependencies>
 
 	<dependencyManagement>

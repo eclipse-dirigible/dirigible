@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -215,6 +216,7 @@ public final class NotificationSupport {
         private final EntityIntent entity;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
+        private final Set<String> settingEntities;
         private final CrossModelLookup crossModel;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
 
@@ -223,6 +225,7 @@ public final class NotificationSupport {
             this.entity = entity;
             this.byName = byName;
             this.compositionParents = compositionParents;
+            this.settingEntities = IntentEntities.settingEntities(byName.values());
             this.crossModel = crossModel;
         }
 
@@ -314,8 +317,10 @@ public final class NotificationSupport {
             if (target == null || fieldOf(target, fieldName) == null) {
                 return null;
             }
-            loads.computeIfAbsent(relationName, name -> new RelationLoad(name, relation.getTo(),
-                    IntentEntities.resolvePerspective(relation.getTo(), compositionParents), IntentNaming.pascalCase(name), false, "", ""));
+            loads.computeIfAbsent(relationName,
+                    name -> new RelationLoad(name, relation.getTo(),
+                            IntentEntities.resolvePerspective(relation.getTo(), compositionParents, settingEntities),
+                            IntentNaming.pascalCase(name), false, "", ""));
             // The listener loads the related entity into a local named after the relation.
             return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
         }
