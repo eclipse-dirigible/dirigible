@@ -1,5 +1,0 @@
-{
-    "module": "template-form-builder-angularjs/template/template.js",
-    "extensionPoint": "platform-templates",
-    "description": "The generator template from form to AngularJS format"
-}

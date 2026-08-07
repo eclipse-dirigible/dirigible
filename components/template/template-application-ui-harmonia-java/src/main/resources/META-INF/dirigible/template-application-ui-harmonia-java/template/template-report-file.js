@@ -6,7 +6,7 @@
 
 /*
  * Standalone report from a .report file — Harmonia variant of
- * template-application-ui-angular-java/template/template-report-file.js. The Java backend
+ * the retired AngularJS report generator. The Java backend
  * (reportFileEntity Repository + Controller) is framework-neutral and reused verbatim; only the
  * UI differs: a self-contained Alpine.js + Harmonia page instead of the AngularJS perspective.
  */
