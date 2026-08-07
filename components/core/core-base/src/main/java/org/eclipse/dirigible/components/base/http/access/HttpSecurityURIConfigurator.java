@@ -73,6 +73,28 @@ public class HttpSecurityURIConfigurator {
             "/api-docs/**", //
             "/swagger-ui/**"};
 
+    /**
+     * Monitoring surface. The controllers behind these paths all declare
+     * {@code @RolesAllowed({ADMINISTRATOR, DEVELOPER, OPERATOR})}, but they live under
+     * {@code /services/ide/**} and {@code /services/bpm/**}, which the URL layer gates on DEVELOPER
+     * alone - so an OPERATOR was rejected before method security ever ran. These patterns re-align the
+     * URL layer with the declared method policy; they are matched before {@link #DEVELOPER_PATTERNS},
+     * so the rest of those prefixes (workspaces, git, publisher, the BPMN modeler, ...) stays
+     * DEVELOPER-only.
+     */
+    private static final String[] MONITORING_PATTERNS = { //
+            "/services/bpm/bpm-processes", //
+            "/services/bpm/bpm-processes/**", //
+            "/services/ide/monitoring", //
+            "/services/ide/monitoring/**", //
+            "/services/ide/logs", //
+            "/services/ide/logs/**", //
+            "/services/ide/loggers", //
+            "/services/ide/loggers/**", //
+            "/services/ide/messaging-monitoring", //
+            "/services/ide/messaging-monitoring/**", //
+            "/websockets/ide/console"};
+
     /** The Constant DEVELOPER_PATTERNS. */
     private static final String[] DEVELOPER_PATTERNS = { //
             "/services/bpm/**", //
@@ -91,6 +113,32 @@ public class HttpSecurityURIConfigurator {
             "/services/native-apps", //
             "/services/native-apps/**"};
 
+    /** The roles allowed on the monitoring and native-app management surfaces. */
+    private static final String[] OPERATIONS_ROLES = { //
+            Roles.ADMINISTRATOR.getRoleName(), //
+            Roles.DEVELOPER.getRoleName(), //
+            Roles.OPERATOR.getRoleName()};
+
+    /**
+     * The role gates in the order they are applied - the first gate whose pattern matches a request
+     * decides the roles required for it. Both {@link #configure(HttpSecurity)} and the test that guards
+     * the matrix read this single declaration.
+     */
+    static final List<RoleGate> ROLE_GATES = List.of( //
+            new RoleGate(MONITORING_PATTERNS, OPERATIONS_ROLES), //
+            new RoleGate(DEVELOPER_PATTERNS, new String[] {Roles.DEVELOPER.getRoleName()}), //
+            new RoleGate(OPERATOR_PATTERNS, new String[] {Roles.OPERATOR.getRoleName()}), //
+            new RoleGate(NATIVE_APPS_MANAGEMENT_PATTERNS, OPERATIONS_ROLES));
+
+    /**
+     * A role gate - the URI patterns it covers and the roles any of which grants access to them.
+     *
+     * @param patterns the Ant patterns
+     * @param roles the role names, any of which is sufficient
+     */
+    record RoleGate(String[] patterns, String[] roles) {
+    }
+
     private final BeanProvider beanProvider;
 
     HttpSecurityURIConfigurator(BeanProvider beanProvider) {
@@ -106,40 +154,35 @@ public class HttpSecurityURIConfigurator {
     public void configure(HttpSecurity http) throws Exception {
         applyCustomConfigurations(http);
 
-        http.authorizeHttpRequests((authz) -> //
+        http.authorizeHttpRequests((authz) -> {
 
-        authz.requestMatchers(PUBLIC_PATTERNS)
-             .permitAll()
+            authz.requestMatchers(PUBLIC_PATTERNS)
+                 .permitAll();
 
-             // NOTE!: the order is important - role checks should be before just
-             // authenticated paths
+            // NOTE!: the order is important - role checks should be before just
+            // authenticated paths
 
-             // Fine grained configurations
-             .requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")
-             .authenticated()
+            // Fine grained configurations
+            authz.requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")
+                 .authenticated();
 
-             .requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
-             .authenticated()
+            authz.requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
+                 .authenticated();
 
-             // "DEVELOPER" role required
-             .requestMatchers(DEVELOPER_PATTERNS)
-             .hasRole(Roles.DEVELOPER.getRoleName())
+            // Role gates, in declaration order
+            for (RoleGate gate : ROLE_GATES) {
+                authz.requestMatchers(gate.patterns())
+                     .hasAnyRole(gate.roles());
+            }
 
-             // "OPERATOR" role required
-             .requestMatchers(OPERATOR_PATTERNS)
-             .hasRole(Roles.OPERATOR.getRoleName())
+            // Authenticated
+            authz.requestMatchers(authenticatedPatterns())
+                 .authenticated();
 
-             // Native-apps management: any of DEVELOPER, ADMINISTRATOR, OPERATOR
-             .requestMatchers(NATIVE_APPS_MANAGEMENT_PATTERNS)
-             .hasAnyRole(Roles.DEVELOPER.getRoleName(), Roles.ADMINISTRATOR.getRoleName(), Roles.OPERATOR.getRoleName())
-
-             // Authenticated
-             .requestMatchers(authenticatedPatterns())
-             .authenticated()
-
-             // Deny all other requests
-             .anyRequest()
-             .denyAll());
+            // Deny all other requests
+            authz.anyRequest()
+                 .denyAll();
+        });
     }
 
     /**
