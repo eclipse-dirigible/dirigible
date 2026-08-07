@@ -252,6 +252,7 @@
         <module>resources/resources-application</module>
         <module>resources/resources-home</module>
         <module>resources/resources-my</module>
+        <module>resources/resources-builder</module>
         <module>resources/resources-partner</module>
         <module>resources/resources-admin</module>
         <module>resources/resources-inbox</module>
@@ -1365,6 +1366,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-my</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-builder</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
