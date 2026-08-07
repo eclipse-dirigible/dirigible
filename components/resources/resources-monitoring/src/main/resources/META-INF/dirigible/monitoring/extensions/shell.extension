@@ -1,0 +1,5 @@
+{
+    "module": "monitoring/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Monitoring Shell"
+}
