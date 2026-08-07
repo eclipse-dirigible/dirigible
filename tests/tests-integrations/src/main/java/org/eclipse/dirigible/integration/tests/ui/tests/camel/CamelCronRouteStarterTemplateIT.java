@@ -51,6 +51,6 @@ public class CamelCronRouteStarterTemplateIT extends UserInterfaceIntegrationTes
 
         await().atMost(15, TimeUnit.SECONDS)
                .until(() -> camelRouteLogAsserter.containsMessage("Executing cron route with body []...", Level.INFO)
-                       && camelRouteLogAsserter.containsMessage("Execution completed! Body: Set by handler.ts", Level.INFO));
+                       && camelRouteLogAsserter.containsMessage("Execution completed! Body: Set by Handler.java", Level.INFO));
     }
 }

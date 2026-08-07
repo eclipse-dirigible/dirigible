@@ -14,10 +14,10 @@ export const getTemplate = () => ({
       rename: "cron-route.camel",
     },
     {
-      location: "/template-camel-cron-route/handler.ts.template",
+      location: "/template-camel-cron-route/Handler.java.template",
       action: "generate",
       engine: "velocity",
-      rename: "handler.ts",
+      rename: "Handler.java",
     },
     {
       location: "/template-camel-cron-route/project.json",
