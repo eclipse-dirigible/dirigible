@@ -4,18 +4,13 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getTemplate = () => ({
-  name: "Scheduled Job (Model)",
-  description: "Scheduled Job definition with a simple Javascript handler",
+  name: "Scheduled Job (Java)",
+  description: "Scheduled Job with a client Java handler",
   sources: [
     {
-      location: "/template-job/job.template",
+      location: "/template-job/handler.java.template",
       action: "generate",
-      rename: "{{fileName}}.job",
-    },
-    {
-      location: "/template-job/handler.js.template",
-      action: "generate",
-      rename: "{{fileName}}-handler.js",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
   ],
   parameters: [],

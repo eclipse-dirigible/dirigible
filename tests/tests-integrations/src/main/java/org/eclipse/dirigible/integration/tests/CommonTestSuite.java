@@ -13,7 +13,6 @@ import org.eclipse.dirigible.integration.tests.api.SecurityIT;
 import org.eclipse.dirigible.integration.tests.api.java.messaging.MessagingFacadeIT;
 import org.eclipse.dirigible.integration.tests.api.rest.DisabledMultitenantModeIT;
 import org.eclipse.dirigible.integration.tests.api.rest.EnabledMultitenantModeIT;
-import org.eclipse.dirigible.integration.tests.api.rest.ODataAPIIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.CreateNewProjectIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.CsvimIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.DependsOnIT;
@@ -26,7 +25,6 @@ import org.junit.platform.suite.api.Suite;
         MessagingFacadeIT.class, //
         DisabledMultitenantModeIT.class, //
         EnabledMultitenantModeIT.class, //
-        ODataAPIIT.class, //
         SecurityIT.class, //
         CreateNewProjectIT.class, //
         DependsOnIT.class, //

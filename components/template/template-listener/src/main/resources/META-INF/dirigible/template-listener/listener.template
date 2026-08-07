@@ -1,6 +1,0 @@
-{
-    "name":"{{projectName}}/{{fileName}}",
-    "kind":"Q",
-    "handler":"{{projectName}}/{{fileName}}-handler.js",
-    "description":"{{fileName}} Listener"
-}

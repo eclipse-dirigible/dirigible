@@ -1,8 +1,15 @@
-import { Controller, Post, Put, response } from "@aerokit/sdk/http"
+import { Controller, Get, Post, Put, response } from "@aerokit/sdk/http"
 import { process, tasks } from "@aerokit/sdk/bpm"
+import { query, sql } from "@aerokit/sdk/db"
 
 @Controller
 class ProcessService {
+
+    @Get("/employees")
+    public getEmployees() {
+        const sqlQuery = sql.getDialect().select().from("EMPLOYEES").build();
+        return query.execute(sqlQuery, []);
+    }
 
     @Post("/processes")
     public startProcess(parameters: any) {

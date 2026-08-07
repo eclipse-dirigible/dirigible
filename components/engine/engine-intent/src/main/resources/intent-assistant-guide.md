@@ -1032,8 +1032,8 @@ generates:
     defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
       InvoiceDate: now
       Note: "Generated from timesheet"
-    items:                         # optional: clone the source document's composition items too
-      from: ProjectTimesheetItem
+    items:                         # optional MIRROR form (an OBJECT): clone each source item row
+      from: ProjectTimesheetItem   #   1:1 into a target item row (map = copy, defaults = now/literal)
       to: SalesInvoiceItem
       map:
         Description: Description
@@ -1041,6 +1041,32 @@ generates:
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
 ```
+
+**Computed line-items (the `items:` LIST form).** When the target's lines are not a 1:1 mirror of a
+source child but must be **computed** from the source record (e.g. one invoice line carrying a
+period's rolled-up total), give `items:` a **list** of synthetic rows instead of the object above.
+The target's line-items child is resolved automatically (never named). Each cell value is an
+expression over the SOURCE record - the same conventions as calculated fields and posting item
+amounts:
+
+```yaml
+    items:                         # LIST form => computed synthetic lines over the SOURCE record
+      - name: "Services for {period}"   # string cell: {field} interpolates a source property
+        quantity: 1                     # numeric cell: a Calc arithmetic expression over the source,
+        price: BillableAmount           #   rounded to the target field's scale (a literal is trivial)
+        when: "BillableAmount != 0"     # optional guard: `<SourceField> ==|!= <number>` (Calc, null-safe)
+```
+
+- A **numeric** target field (decimal/double/integer/long) takes a `Calc` arithmetic expression -
+  identifiers are **PascalCase** source field names (`BillableAmount`, `Hours * Rate`), exactly as
+  posting item amounts are authored; a null field reads as 0.
+- A **string** field takes `{field}` interpolation of source properties, a bare source-property name
+  (a copy), or a plain quoted literal (a caption is not mistaken for a field).
+- A **to-one relation** cell copies the raw source foreign key (a bare source relation name) - the
+  counterparty/dimension the line carries; it is never arithmetic-evaluated.
+- A `when` cell guards the whole line (the line is created only when the guard holds).
+- The two forms are **mutually exclusive** - a `generates` uses either the object mirror or the list.
+  The list form is not available on a scheduled generate.
 
 **Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
 entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared

@@ -303,6 +303,8 @@ public class GenerationService {
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME, fileName);
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME_EXT, fileNameExt);
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME_BASE, fileNameBase);
+        parameters.put(GenerationParameters.PARAMETER_JAVA_CLASS_NAME, JavaNames.toClassName(fileNameBase));
+        parameters.put(GenerationParameters.PARAMETER_JAVA_PACKAGE_NAME, JavaNames.toPackageName(project));
         parameters.put(GenerationParameters.PARAMETER_FILE_PATH, filePath.build());
         parameters.put(GenerationParameters.PARAMETER_PACKAGE_PATH, packagePath.build());
     }
