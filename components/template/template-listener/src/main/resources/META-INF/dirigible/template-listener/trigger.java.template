@@ -1,0 +1,30 @@
+package {{javaPackageName}};
+
+import java.time.Instant;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.messaging.Producer;
+
+/**
+ * Sends a message to the queue that {@link {{javaClassName}}} listens on, so the listener can be
+ * exercised from the browser. Call it at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/{{javaClassName}}Trigger/send}.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a trigger of the same
+ * name without colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_{{javaClassName}}Trigger")
+public class {{javaClassName}}Trigger {
+
+    @Get("/send")
+    public String send() {
+        String message = "[ I am a message created at: " + Instant.now() + " ]";
+        Producer.sendToQueue({{javaClassName}}.DESTINATION, message);
+        return message;
+    }
+
+}

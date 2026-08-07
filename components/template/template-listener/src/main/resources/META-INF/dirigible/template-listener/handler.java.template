@@ -1,0 +1,45 @@
+package {{javaPackageName}};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.messaging.ListenerKind;
+import org.eclipse.dirigible.sdk.messaging.MessageHandler;
+
+/**
+ * A message listener. The destination returned by {@link #destination()} is the whole binding -
+ * there is no separate descriptor file to keep in sync.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a listener of the same
+ * name without colliding in the shared client container.
+ */
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} implements MessageHandler {
+
+    /** The queue both this listener and its trigger address. */
+    public static final String DESTINATION = "{{projectName}}/{{fileNameBase}}";
+
+    private static final Logger LOGGER = Logging.getLogger("{{javaPackageName}}.{{javaClassName}}");
+
+    @Override
+    public String destination() {
+        return DESTINATION;
+    }
+
+    @Override
+    public ListenerKind kind() {
+        return ListenerKind.QUEUE;
+    }
+
+    @Override
+    public void onMessage(String message) {
+        LOGGER.info("Hello from the {{javaClassName}} listener! Message: {}", message);
+    }
+
+    @Override
+    public void onError(String error) {
+        LOGGER.error("Error in the {{javaClassName}} listener: {}", error);
+    }
+
+}

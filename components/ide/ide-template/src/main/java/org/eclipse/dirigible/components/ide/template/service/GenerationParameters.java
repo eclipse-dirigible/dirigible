@@ -29,6 +29,12 @@ public interface GenerationParameters {
     /** The name of the entered file name without extension. */
     public static final String PARAMETER_FILE_NAME_BASE = "fileNameBase";
 
+    /** The entered file name without extension, as a valid PascalCase Java class name. */
+    public static final String PARAMETER_JAVA_CLASS_NAME = "javaClassName";
+
+    /** The name of the selected project, as a valid lower-case Java package name. */
+    public static final String PARAMETER_JAVA_PACKAGE_NAME = "javaPackageName";
+
     /** The name of the entered file's path. */
     public static final String PARAMETER_FILE_PATH = "filePath";
 
