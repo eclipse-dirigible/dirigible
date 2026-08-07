@@ -92,9 +92,9 @@ Velocity model vars (per-entity collections, same as the Angular module):
 no `collection`, so `$models` = `model.entities`.
 
 **Perspective icons are Lucide NAMES, not unicons URLs.** The generated `perspective.js`
-(both the shared-shell `perspective/perspective.js.template` and the My-shell
+(both the shared-shell `perspective/perspective.js.template` and the Personal-shell
 `my/my-perspective.js.template`) emits `icon: '${iconName}'` — the bare Lucide / Harmonia
-built-in icon name (the model's `iconName`), which the application shell and My shell render
+built-in icon name (the model's `iconName`), which the application shell and Personal shell render
 via `x-h-lucide`. It does **NOT** emit `${perspectiveIcon}` (the `/services/web/resources/unicons/<name>.svg`
 URL): that path is only meaningful to the legacy **AngularJS** perspective and 404s in the Harmonia
 shells (whose `isSvgIcon`/`isImageIcon` would send a `.svg` path down the `<svg data-link>` branch to

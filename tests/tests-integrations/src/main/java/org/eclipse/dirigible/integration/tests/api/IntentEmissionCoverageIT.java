@@ -1115,7 +1115,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(spaIndex.contains("/my/Claim"), "the SPA must route the personal pages");
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
         assertTrue(myPerspective.contains("application-personal-perspectives"),
-                "the personal perspective must register on the My Shell's extension point");
+                "the personal perspective must register on the Personal Shell's extension point");
 
         // partner: the EXTERNAL-partner surface - an ADDITIONAL scoped controller (identity match +
         // forced owner FK + sensitive strip) and a perspective on the DISJOINT Partner-shell point.
@@ -2023,10 +2023,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                    .statusCode(200);
         }, 30);
 
-        // My Shell (phase C): the shell page is served and aggregates the published personal
+        // Personal Shell (phase C): the shell page is served and aggregates the published personal
         // perspective through the application-personal-perspectives extension point.
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get("/services/web/my/index.html")
+                                                 .get("/services/web/personal/index.html")
                                                  .then()
                                                  .statusCode(200));
         restAssuredExecutor.execute(() -> given().when()

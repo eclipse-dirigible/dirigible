@@ -11,7 +11,7 @@
  * e.g. the old Settings - are intentionally excluded; this is the pure-Harmonia application layer).
  */
 const PERSPECTIVES_URL = '/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-personal-perspectives';
-const PROJECTIONS_URL = '/services/js/platform-core/extension-services/projections.js?extensionPoints=my-shell-no-projections';
+const PROJECTIONS_URL = '/services/js/platform-core/extension-services/projections.js?extensionPoints=personal-shell-no-projections';
 // Last selected projection, persisted like the theme/language flags (shared localStorage convention).
 const PROJECTION_KEY = 'codbex.harmonia.projection';
 

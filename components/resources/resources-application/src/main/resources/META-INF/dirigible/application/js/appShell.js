@@ -358,7 +358,7 @@ document.addEventListener('alpine:init', () => {
         body: JSON.stringify({ username }),
       });
       if (res.ok) {
-        window.location.href = '/services/web/my/';
+        window.location.href = '/services/web/personal/';
       } else {
         console.error('Failed to arm act-as', res.status);
       }

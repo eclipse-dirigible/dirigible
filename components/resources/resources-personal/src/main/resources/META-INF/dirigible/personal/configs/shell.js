@@ -10,9 +10,9 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 const shellData = {
-    id: 'myShell',
-    path: '/services/web/my/index.html',
-    label: 'My Work',
+    id: 'personalShell',
+    path: '/services/web/personal/index.html',
+    label: 'Personal',
     icon: 'inbox',
     description: 'Your tasks and your records - the personal workspace.',
     order: 20
