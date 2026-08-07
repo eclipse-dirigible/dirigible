@@ -14,10 +14,10 @@ export const getTemplate = () => ({
       rename: "http-route.camel",
     },
     {
-      location: "/template-camel-http-route/handler.ts.template",
+      location: "/template-camel-http-route/Handler.java.template",
       action: "generate",
       engine: "velocity",
-      rename: "handler.ts",
+      rename: "Handler.java",
     },
     {
       location: "/template-camel-http-route/project.json",
