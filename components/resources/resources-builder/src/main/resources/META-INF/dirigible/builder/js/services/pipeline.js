@@ -1,0 +1,225 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * The one button: turn the conversation into a running application.
+ *
+ * A linear client-side pipeline over endpoints that already ship - save, generate the models,
+ * generate the code, publish, verify - exposed as an Alpine store so the shell can show each step
+ * ticking green and end on a verdict the user can act on. There are no decisions to make along the
+ * way: either every step succeeds and the app is live, or the pipeline stops and says where.
+ *
+ * "Verified" is the honest part. Publishing is synchronous but reports nothing about what the
+ * synchronizers then made of the artefacts, so the pipeline snapshots the Problems feed BEFORE
+ * publishing and diffs it afterwards: a client-Java compile error or a failed CSVIM seed shows up
+ * there and nowhere else, and without the diff a broken app would be reported as a success.
+ */
+document.addEventListener('alpine:init', () => {
+  Alpine.store('publish', {
+    /** 'idle' | 'running' | 'success' | 'failure' */
+    state: 'idle',
+    steps: [],
+    /** The current step's label, shown on the button while it runs. */
+    activity: '',
+
+    // ----- Outcome -----------------------------------------------------------
+    /** Validation issues from generate (422) - prose, no line numbers exist server-side. */
+    issues: [],
+    /** Non-fatal glue that was NOT emitted. Shown as an amber note; does not block success. */
+    warnings: [],
+    /** Problems the publish introduced for this project: { location, cause, category }. */
+    problems: [],
+    /** What went wrong, when the failure was not a validation or a problems failure. */
+    error: '',
+    /** Where to try the result: the app's own URL plus the platform shells. */
+    appUrl: '',
+    shells: [],
+
+    STEPS: [
+      { key: 'save', label: 'Saving the app' },
+      { key: 'baseline', label: 'Checking the current state' },
+      { key: 'models', label: 'Generating the model' },
+      { key: 'code', label: 'Generating the code' },
+      { key: 'publish', label: 'Publishing' },
+      { key: 'verify', label: 'Verifying' },
+    ],
+
+    get running() { return this.state === 'running'; },
+
+    reset() {
+      this.steps = this.STEPS.map(s => ({ ...s, status: 'pending', detail: '' }));
+      this.issues = [];
+      this.warnings = [];
+      this.problems = [];
+      this.error = '';
+      this.appUrl = '';
+      this.activity = '';
+    },
+
+    step(key) { return this.steps.find(s => s.key === key); },
+
+    begin(key) {
+      const step = this.step(key);
+      step.status = 'running';
+      this.activity = step.label;
+      return step;
+    },
+
+    done(key) { this.step(key).status = 'done'; },
+
+    fail(key, message) {
+      this.step(key).status = 'failed';
+      this.state = 'failure';
+      this.error = message || '';
+      this.activity = '';
+    },
+
+    /**
+     * Run the whole pipeline for the currently open app. Re-entry is blocked: the button is disabled
+     * while running, and this guard covers the keyboard path too.
+     */
+    async run() {
+      if (this.running) return;
+      const intent = Alpine.store('intent');
+      const api = App.services.intentApi;
+      if (!intent.project || !intent.hasIntent) return;
+
+      this.state = 'running';
+      this.reset();
+
+      // 1. Save. Generate reads the intent from DISK, so an unsaved buffer would silently publish
+      //    the previous version of the app.
+      this.begin('save');
+      if (!(await intent.save())) {
+        this.fail('save', intent.saveError || 'The app could not be saved.');
+        return;
+      }
+      this.done('save');
+
+      // 2. Baseline the Problems feed, so step 6 can tell OUR failures from pre-existing ones.
+      this.begin('baseline');
+      let baseline = new Set();
+      try {
+        baseline = new Set((await api.problems()).map(p => p.id));
+      } catch (e) {
+        // Problems is a diagnostic, not a gate: losing the baseline degrades verification to
+        // "no new problems could be determined" rather than failing an otherwise good publish.
+        console.error('builder: could not snapshot the problems', e);
+        baseline = null;
+      }
+      this.done('baseline');
+
+      // 3. Generate the model files from the intent.
+      this.begin('models');
+      let generated;
+      try {
+        generated = await api.generate(intent.project, App.config.intentFile);
+      } catch (e) {
+        if (e.status === 422) {
+          this.issues = e.issues;
+          this.fail('models', '');
+        } else {
+          this.fail('models', 'The model could not be generated.');
+        }
+        return;
+      }
+      this.warnings = generated.warnings || [];
+      this.done('models');
+
+      // 4. Generate the code from each model, in the order the recipe returned them.
+      const plan = generated.codeGenerations || [];
+      const codeStep = this.begin('code');
+      for (let i = 0; i < plan.length; i++) {
+        codeStep.detail = `${i + 1} / ${plan.length}`;
+        this.activity = `${codeStep.label} (${i + 1}/${plan.length})`;
+        try {
+          await api.generateCode(intent.project, plan[i]);
+        } catch (e) {
+          this.fail('code', `Generating the code from '${plan[i].path}' failed.`);
+          return;
+        }
+      }
+      codeStep.detail = '';
+      this.done('code');
+
+      // 5. Publish everything into the registry. Synchronous - the 200 means it is done.
+      this.begin('publish');
+      try {
+        await api.publish(intent.project);
+      } catch (e) {
+        this.fail('publish', 'Publishing failed.');
+        return;
+      }
+      this.done('publish');
+
+      // 6. Verify: wait for the platform to settle, then diff the Problems feed.
+      this.begin('verify');
+      await this.awaitReady();
+      if (baseline) {
+        try {
+          const after = await api.problems();
+          const prefix = '/' + intent.project;
+          this.problems = after.filter(p => !baseline.has(p.id)
+            && typeof p.location === 'string'
+            && (p.location === prefix || p.location.startsWith(prefix + '/')));
+        } catch (e) {
+          console.error('builder: could not re-read the problems', e);
+        }
+      }
+      if (this.problems.length) {
+        this.fail('verify', '');
+        return;
+      }
+      this.done('verify');
+
+      this.appUrl = (await api.appEntryUrl(intent.project)) || '';
+      this.shells = await this.loadShells();
+      this.state = 'success';
+      this.activity = '';
+
+      const notifications = Alpine.store('notifications');
+      if (notifications) {
+        notifications.add({
+          title: intent.appName + ' is live',
+          description: 'Published and verified - no errors.',
+          variant: 'positive',
+        });
+      }
+    },
+
+    /**
+     * Wait for the platform to report itself ready after a publish, bounded so a permanently
+     * un-ready instance cannot hang the pipeline - verification then falls through to the Problems
+     * diff, which is the signal that actually matters.
+     */
+    async awaitReady(timeoutMs = 60000) {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          if ((await App.services.intentApi.health()) === 'Ready') return true;
+        } catch (e) { /* keep polling - a transient failure is not a verdict */ }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+      return false;
+    },
+
+    /** The shells worth offering as "try it here", in their registered order. */
+    async loadShells() {
+      try {
+        const shells = await App.services.intentApi.shells();
+        // The Builder itself is where the user already is, and the IDE is not where you try an app.
+        return shells.filter(s => s.id !== 'builderShell' && s.id !== 'shellIde');
+      } catch (e) {
+        console.error('builder: could not load the shells', e);
+        return [];
+      }
+    },
+
+    /** Dismiss the outcome panel and hand the canvas back to the diagrams. */
+    dismiss() {
+      this.state = 'idle';
+      this.reset();
+      document.dispatchEvent(new CustomEvent('builder:model-changed'));
+    },
+  });
+}, { once: true });

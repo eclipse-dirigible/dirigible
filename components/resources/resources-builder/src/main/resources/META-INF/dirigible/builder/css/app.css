@@ -1,0 +1,156 @@
+/*
+ * Copyright (c) 2010-2026 Eclipse Dirigible contributors
+ * SPDX-License-Identifier: EPL-2.0
+ *
+ * Builder shell styles on top of Harmonia. Layout is Harmonia's (vbox/hbox/size-full/x-h-*); this
+ * covers the two surfaces Harmonia has no component for - the conversation transcript and the
+ * diagram canvas. Every colour resolves through a Harmonia token (with a light-theme fallback), so
+ * the shell follows the theme switch without any JS.
+ */
+[x-cloak] {
+  display: none !important;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+/* ----- Conversation ------------------------------------------------------- */
+
+.builder-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow-y: auto;
+  padding: 1rem;
+  min-height: 0;
+}
+
+.builder-message {
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  /* The assistant explains changes in prose with line breaks; keep them, and never let a long
+     identifier push the pane wider than its panel. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-width: 92%;
+}
+
+.builder-message.user {
+  align-self: flex-end;
+  background: var(--color-primary, #3584e4);
+  color: var(--color-primary-foreground, #ffffff);
+}
+
+.builder-message.assistant,
+.builder-message.note {
+  align-self: flex-start;
+  background: var(--color-muted, #f1f3f5);
+  color: var(--color-foreground, #1d2d3e);
+}
+
+.builder-message.error {
+  align-self: stretch;
+  max-width: 100%;
+  background: var(--color-negative-muted, #fdeaea);
+  color: var(--color-negative, #a51d2d);
+}
+
+.builder-thinking {
+  color: var(--color-muted-foreground, #6a6d70);
+}
+
+.builder-welcome {
+  padding: 0.5rem 0.25rem;
+}
+
+/* An opener is a full-width, left-aligned, wrapping button - it is a sentence, not a label. */
+.builder-example {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  padding: 0.5rem 0.75rem;
+  line-height: 1.4;
+}
+
+.builder-composer {
+  padding: 0.75rem;
+  border-top: 1px solid var(--color-border, #e5e5e5);
+  align-items: flex-end;
+}
+
+/* ----- Canvas ------------------------------------------------------------- */
+
+.builder-summary {
+  padding: 0.75rem 1rem 0 1rem;
+}
+
+.builder-panel {
+  padding: 1rem;
+}
+
+.builder-issues {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-negative-muted, #fdeaea);
+  color: var(--color-negative, #a51d2d);
+  overflow-wrap: anywhere;
+}
+
+.builder-warnings {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--color-warning-muted, #fdf3e3);
+  color: var(--color-warning, #b45309);
+  overflow-wrap: anywhere;
+}
+
+.builder-source {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  white-space: pre;
+}
+
+/* ----- Diagrams ----------------------------------------------------------- */
+/*
+ * The class names below are the contract of the shared IntentDiagrams renderer - it creates these
+ * elements itself, so they are styled here rather than in markup. The mxGraph cells carry fixed
+ * brand colours that read on both themes, so only the surrounding chrome is themed.
+ */
+
+.builder-diagrams {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.builder-diagrams .intent-section-title {
+  margin: 0.75rem 0 0.25rem 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--color-foreground, #1d2d3e);
+}
+
+.builder-diagrams .intent-diagram {
+  width: 100%;
+  overflow: auto;
+  border: 1px solid var(--color-border, #e5e5e5);
+  border-radius: 0.5rem;
+  background: var(--color-card, #ffffff);
+}
+
+.builder-diagrams .intent-diagram-empty {
+  color: var(--color-muted-foreground, #6a6d70);
+  font-style: italic;
+  font-size: 0.875rem;
+}

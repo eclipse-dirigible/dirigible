@@ -25,6 +25,7 @@ document.addEventListener('alpine:init', () => {
         partnerShell: 'The portal for external partners.',
         adminShell: 'Every record as a plain table and form - one level above the database.',
         monitoringShell: 'Is the system healthy - and if not, what broke.',
+        builderShell: 'Describe an application in plain language and publish it.',
         shellIde: 'The development workbench for building on the platform.',
     };
 
@@ -46,10 +47,12 @@ document.addEventListener('alpine:init', () => {
      *  - adminShell: an operator tool. Everything it shows is reachable through the applications
      *    themselves; it is the way in only when someone needs the plain, every-column view.
      *  - monitoringShell: an operations tool - opened when something looks wrong, not every morning.
+     *  - builderShell: like the Workbench, a way of BUILDING applications rather than working in
+     *    one, and gated to developers/administrators - so it belongs next to it, not above.
      *  - shellIde: a developer tool. Every developer is also an employee, so it must stay visible,
      *    but it should not compete with the two shells the rest of the company opens every morning.
      */
-    const SECONDARY = ['partnerShell', 'adminShell', 'monitoringShell', 'shellIde'];
+    const SECONDARY = ['partnerShell', 'adminShell', 'monitoringShell', 'builderShell', 'shellIde'];
 
     Alpine.data('home', () => ({
         branding: { name: '', subtitle: '', logo: '' },
