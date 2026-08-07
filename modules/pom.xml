@@ -19,7 +19,6 @@
         <module>commons</module>
         <module>database</module>
         <module>engines</module>
-        <module>odata</module>
         <module>repository</module>
         <module>parsers</module>
     </modules>
@@ -299,11 +298,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-engine-odata</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-engine-graalium-execution</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -323,18 +317,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-api-mail</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <!-- OData -->
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-odata-core-test</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-odata-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

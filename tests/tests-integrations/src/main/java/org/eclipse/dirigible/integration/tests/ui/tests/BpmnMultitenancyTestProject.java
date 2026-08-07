@@ -95,12 +95,12 @@ class BpmnMultitenancyTestProject extends BaseMultitenantTestProject {
             String employeeManagerPass) {
         restAssuredExecutor.execute(() -> given().header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                                                  .when()
-                                                 .get("/odata/v2/Employees")
+                                                 .get("/services/ts/BpmnMultitenancyIT/ProcessService.ts/employees")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body("d.results", hasSize(1))
-                                                 .body("d.results[0].Id", equalTo(1))
-                                                 .body("d.results[0].Name", equalTo(employeeName)),
+                                                 .body("$", hasSize(1))
+                                                 .body("[0].ID", equalTo(1))
+                                                 .body("[0].NAME", equalTo(employeeName)),
                 tenantHost, employeeManagerUsername, employeeManagerPass);
     }
 
