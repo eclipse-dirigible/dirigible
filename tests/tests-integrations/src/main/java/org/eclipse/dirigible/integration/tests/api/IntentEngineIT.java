@@ -284,6 +284,18 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void agent_status_reports_whether_the_assistant_is_configured() {
+        // The cheap counterpart of the 412 above: a client can ask whether the assistant is usable
+        // BEFORE the user types, without spending an upstream model call to find out. No key is set
+        // in the test environment, so it must answer 200 with configured=false. Network-free.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(AGENT_URL + "/status")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("configured", equalTo(false)));
+    }
+
+    @Test
     void parse_reports_every_validation_issue_at_once() {
         String broken = """
                 name: broken

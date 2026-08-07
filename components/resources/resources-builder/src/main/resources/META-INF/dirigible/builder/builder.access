@@ -1,0 +1,13 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/builder/",
+            "method": "*",
+            "roles": [
+                "ADMINISTRATOR",
+                "DEVELOPER"
+            ]
+        }
+    ]
+}

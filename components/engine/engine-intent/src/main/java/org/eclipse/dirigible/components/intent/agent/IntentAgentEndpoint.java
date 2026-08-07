@@ -15,6 +15,7 @@ import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -30,6 +31,12 @@ import org.springframework.web.server.ResponseStatusException;
  * proposes a complete YAML for the editor to diff; it never writes to the workspace or runs the
  * generators (the developer accepts the diff, then Saves and Generates as usual). Returns
  * {@code 412} when no API key is configured and {@code 502} when the upstream model call fails.
+ *
+ * <p>
+ * {@code GET /services/ide/intent/agent/status} - whether the assistant is usable at all, so a
+ * client can say so before the user types instead of letting the first message fail with
+ * {@code 412}. It reads configuration only and never calls the model: a UI that probes on every
+ * page load must not cost an upstream round-trip.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_IDE + "intent")
@@ -40,6 +47,11 @@ class IntentAgentEndpoint {
 
     IntentAgentEndpoint(IntentAgentService agentService) {
         this.agentService = agentService;
+    }
+
+    @GetMapping(value = "/agent/status", produces = MediaType.APPLICATION_JSON_VALUE)
+    ResponseEntity<AgentStatus> status() {
+        return ResponseEntity.ok(new AgentStatus(agentService.isConfigured()));
     }
 
     @PostMapping(value = "/agent", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.APPLICATION_JSON_VALUE)
