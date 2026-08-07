@@ -14,3 +14,21 @@ body {
   height: 100%;
   margin: 0;
 }
+
+/*
+ * The BPMN diagram container. bpmn-visualization measures the element it renders into, so it needs a
+ * resolved size; the overlay badges are styled the way the IDE's process viewer styles them.
+ */
+.monitoring-bpmn {
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.monitoring-bpmn .overlay-badge {
+  font-weight: bold;
+}
+
+.monitoring-bpmn .overlay-badge rect {
+  stroke-width: 0.5rem;
+  rx: 0.25rem;
+}

@@ -1,0 +1,228 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  System - the JVM snapshot: CPU, memory, threads and GC, the platform's own counters, and the live
+  thread list. Read-only. The sparklines are filled while the page is open (there is no server-side
+  metric history); long-term dashboards remain the OpenTelemetry stack's job.
+-->
+<div id="monitoring-system-page" class="vbox size-full overflow-auto" x-data="systemPage">
+  <div class="vbox gap-6 p-6">
+
+    <div class="hbox items-start gap-3">
+      <div class="vbox gap-1 flex-1">
+        <h1 class="text-2xl font-bold" x-text="T('monitoring:system.title', 'System')"></h1>
+        <p x-h-text.muted x-text="T('monitoring:system.subtitle', 'The Java virtual machine this instance runs in.')"></p>
+      </div>
+      <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()">
+        <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+        <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
+      </button>
+    </div>
+
+    <div x-show="state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-24 w-full"></div></template>
+    </div>
+
+    <div x-show="!state.loading && state.error" x-cloak x-h-text.muted class="text-sm"
+         x-text="T('monitoring:system.loadFailed', 'The JVM metrics are currently unavailable.')"></div>
+
+    <template x-if="!state.loading && state.metrics">
+      <div class="vbox gap-6">
+
+        <!-- Headline figures -->
+        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div x-h-card>
+            <div x-h-card-header>
+              <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                <i role="img" x-h-lucide data-lucide="cpu" class="size-4"></i>
+                <span x-text="T('monitoring:system.cpu', 'CPU')"></span>
+              </div>
+            </div>
+            <div x-h-card-content class="vbox gap-1">
+              <p class="text-3xl font-bold" x-text="percent(state.metrics.cpu.processCpuLoad)"></p>
+              <span x-h-text.muted class="text-xs"
+                    x-text="T('monitoring:system.cpuSystem', 'System {{value}}', { value: percent(state.metrics.cpu.systemCpuLoad) })"></span>
+            </div>
+          </div>
+
+          <div x-h-card>
+            <div x-h-card-header>
+              <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                <i role="img" x-h-lucide data-lucide="memory-stick" class="size-4"></i>
+                <span x-text="T('monitoring:system.heap', 'Heap')"></span>
+              </div>
+            </div>
+            <div x-h-card-content class="vbox gap-1">
+              <p class="text-3xl font-bold" x-text="mb(state.metrics.memory.heap.used)"></p>
+              <span x-h-badge class="self-start" :data-variant="ratioVariant(usedRatio(state.metrics.memory.heap))"
+                    x-text="T('monitoring:system.ofMax', '{{used}} of {{max}}',
+                              { used: mb(state.metrics.memory.heap.used), max: mb(state.metrics.memory.heap.max) })"></span>
+            </div>
+          </div>
+
+          <div x-h-card>
+            <div x-h-card-header>
+              <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                <i role="img" x-h-lucide data-lucide="layers" class="size-4"></i>
+                <span x-text="T('monitoring:system.threads', 'Threads')"></span>
+              </div>
+            </div>
+            <div x-h-card-content class="vbox gap-1">
+              <p class="text-3xl font-bold" x-text="state.metrics.threads.liveCount"></p>
+              <span x-h-text.muted class="text-xs"
+                    x-text="T('monitoring:system.threadsDetail', '{{daemon}} daemon, peak {{peak}}',
+                              { daemon: state.metrics.threads.daemonCount, peak: state.metrics.threads.peakCount })"></span>
+              <span x-show="state.deadlockedCount > 0" x-h-badge data-variant="negative" class="self-start"
+                    x-text="T('monitoring:system.deadlocked', '{{count}} deadlocked', { count: state.deadlockedCount })"></span>
+            </div>
+          </div>
+
+          <div x-h-card>
+            <div x-h-card-header>
+              <div class="hbox items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
+                <i role="img" x-h-lucide data-lucide="server" class="size-4"></i>
+                <span x-text="T('monitoring:system.runtime', 'Runtime')"></span>
+              </div>
+            </div>
+            <div x-h-card-content class="vbox gap-0">
+              <p class="text-lg font-semibold" x-text="uptime(state.metrics.runtime.uptimeMillis)"></p>
+              <span x-h-text.muted class="text-xs" x-text="state.metrics.runtime.vmName"></span>
+              <span x-h-text.muted class="text-xs"
+                    x-text="'Java ' + state.metrics.runtime.javaVersion + ' · pid ' + state.metrics.runtime.pid"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Session-local sparklines. -->
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <div x-h-card>
+            <div x-h-card-header>
+              <h2 x-h-card-title x-text="T('monitoring:system.heapOverTime', 'Heap while this page is open')"></h2>
+            </div>
+            <div x-h-card-content style="height: 180px;">
+              <div x-h-chart-line="state.heapHistory" class="size-full"></div>
+            </div>
+          </div>
+          <div x-h-card>
+            <div x-h-card-header>
+              <h2 x-h-card-title x-text="T('monitoring:system.cpuOverTime', 'CPU while this page is open')"></h2>
+            </div>
+            <div x-h-card-content style="height: 180px;">
+              <div x-h-chart-line="state.cpuHistory" class="size-full"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Memory pools -->
+        <div x-h-card>
+          <div x-h-card-header>
+            <h2 x-h-card-title x-text="T('monitoring:system.pools', 'Memory pools')"></h2>
+          </div>
+          <div x-h-card-content class="overflow-x-auto">
+            <table x-h-table>
+              <thead x-h-table-header>
+                <tr>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colPool', 'Pool')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colUsed', 'Used')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCommitted', 'Committed')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colMax', 'Max')"></th>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="pool in state.metrics.memory.pools" :key="pool.name">
+                  <tr x-h-table-row>
+                    <td x-h-table-cell x-text="pool.name"></td>
+                    <td x-h-table-cell x-text="mb(pool.usage.used)"></td>
+                    <td x-h-table-cell x-text="mb(pool.usage.committed)"></td>
+                    <td x-h-table-cell x-text="mb(pool.usage.max)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Garbage collectors -->
+        <div x-h-card>
+          <div x-h-card-header>
+            <h2 x-h-card-title x-text="T('monitoring:system.gc', 'Garbage collection')"></h2>
+          </div>
+          <div x-h-card-content class="overflow-x-auto">
+            <table x-h-table>
+              <thead x-h-table-header>
+                <tr>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollector', 'Collector')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCollections', 'Collections')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colTime', 'Time')"></th>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="collector in state.metrics.gc" :key="collector.name">
+                  <tr x-h-table-row>
+                    <td x-h-table-cell x-text="collector.name"></td>
+                    <td x-h-table-cell x-text="collector.collectionCount.toLocaleString()"></td>
+                    <td x-h-table-cell x-text="collector.collectionTimeMillis.toLocaleString() + ' ms'"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- The platform's own counters, grouped as the endpoint groups them. -->
+        <template x-for="group in ((state.counts && state.counts.groups) || [])" :key="group.title">
+          <div x-h-card>
+            <div x-h-card-header>
+              <h2 x-h-card-title x-text="group.title"></h2>
+            </div>
+            <div x-h-card-content class="grid grid-cols-2 gap-x-6 gap-y-1 sm:grid-cols-3 lg:grid-cols-4">
+              <template x-for="item in group.items" :key="item.name">
+                <div class="hbox items-baseline justify-between gap-2">
+                  <span x-h-text.muted class="text-xs" x-text="item.name"></span>
+                  <span class="text-sm font-medium" x-text="countText(item)"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- Live threads -->
+        <div x-h-card>
+          <div x-h-card-header>
+            <div class="hbox items-center gap-3">
+              <h2 x-h-card-title class="flex-1" x-text="T('monitoring:system.threadList', 'Live threads')"></h2>
+              <div class="w-56 shrink-0">
+                <input x-h-input type="search" x-model="state.threadFilter"
+                       :placeholder="T('monitoring:system.threadFilter', 'Filter by name or state')" />
+              </div>
+            </div>
+          </div>
+          <div x-h-card-content class="overflow-x-auto">
+            <table x-h-table>
+              <thead x-h-table-header>
+                <tr>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colThread', 'Thread')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colState', 'State')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colCpuTime', 'CPU time')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:system.colLock', 'Waiting on')"></th>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="thread in state.visibleThreads" :key="thread.id">
+                  <tr x-h-table-row>
+                    <td x-h-table-cell x-text="thread.name"></td>
+                    <td x-h-table-cell x-text="thread.state"></td>
+                    <td x-h-table-cell x-text="cpuTime(thread.cpuTimeNanos)"></td>
+                    <td x-h-table-cell x-text="thread.lockOwnerName ? thread.lockOwnerName : (thread.lockName || '')"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+    </template>
+  </div>
+</div>

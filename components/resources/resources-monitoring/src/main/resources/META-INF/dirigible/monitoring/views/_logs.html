@@ -1,0 +1,126 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Logs - the live stream from the platform's console socket, and the log files on disk. Changing log
+  levels is not offered here: that is management with real blast radius and stays in the Workbench.
+-->
+<div id="monitoring-logs-page" class="vbox size-full" x-data="logsPage">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:logs.title', 'Logs')"></span>
+    <button x-h-button data-size="sm" :data-variant="tab === 'live' ? 'primary' : 'transparent'"
+            @click="selectTab('live')" x-text="T('monitoring:logs.live', 'Live')"></button>
+    <button x-h-button data-size="sm" :data-variant="tab === 'files' ? 'primary' : 'transparent'"
+            @click="selectTab('files')" x-text="T('monitoring:logs.files', 'Files')"></button>
+    <div x-h-toolbar-spacer></div>
+
+    <template x-if="tab === 'live'">
+      <div class="hbox items-center gap-2">
+        <span x-h-badge :data-variant="state.connected ? 'positive' : 'negative'"
+              x-text="state.connected ? T('monitoring:logs.connected', 'Connected') : T('monitoring:logs.disconnected', 'Disconnected')"></span>
+        <div class="w-56 shrink-0">
+          <input x-h-input type="search" x-model="state.search"
+                 :placeholder="T('monitoring:logs.search', 'Filter messages')" />
+        </div>
+        <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.togglePause()"
+                :title="state.paused ? T('monitoring:overview.resume', 'Resume') : T('monitoring:overview.pause', 'Pause')"
+                :aria-label="state.paused ? 'Resume' : 'Pause'">
+          <svg x-h-lucide x-show="!state.paused" role="img" data-lucide="pause"></svg>
+          <svg x-h-lucide x-show="state.paused" role="img" data-lucide="play"></svg>
+        </button>
+        <button x-h-button data-variant="outline" data-size="sm" @click="state.clear()">
+          <i role="img" x-h-lucide data-lucide="eraser"></i>
+          <span x-text="T('monitoring:logs.clear', 'Clear')"></span>
+        </button>
+      </div>
+    </template>
+  </div>
+
+  <!-- Live stream -->
+  <template x-if="tab === 'live'">
+    <div class="vbox flex-1 min-h-0">
+      <div class="hbox items-center gap-3 px-3 pb-2">
+        <template x-for="level in ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE']" :key="level">
+          <label class="hbox items-center gap-1 text-xs cursor-pointer">
+            <input x-h-checkbox type="checkbox" :checked="state.levels[level]" @change="state.toggleLevel(level)" />
+            <span x-text="level"></span>
+          </label>
+        </template>
+        <div class="flex-1"></div>
+        <label class="hbox items-center gap-1 text-xs cursor-pointer">
+          <input x-h-checkbox type="checkbox" x-model="autoScroll" />
+          <span x-text="T('monitoring:logs.autoScroll', 'Follow')"></span>
+        </label>
+      </div>
+
+      <div x-ref="stream" class="flex-1 min-h-0 overflow-auto px-3 pb-3 font-mono text-xs">
+        <div x-show="!state.visibleRecords.length" x-h-text.muted
+             x-text="T('monitoring:logs.waiting', 'Waiting for log records...')"></div>
+        <template x-for="(record, index) in state.visibleRecords" :key="index">
+          <div class="hbox items-start gap-2 py-0.5">
+            <span class="shrink-0 text-muted-foreground" x-text="timeText(record.timestamp)"></span>
+            <span x-h-badge class="shrink-0" :data-variant="levelVariant(record.level)" x-text="record.level"></span>
+            <span class="whitespace-pre-wrap break-all" x-text="record.message"></span>
+          </div>
+        </template>
+        <!-- Nudge the view to the newest record after each render pass. -->
+        <div x-effect="state.records.length; scrollToBottom()"></div>
+      </div>
+    </div>
+  </template>
+
+  <!-- Files on disk -->
+  <template x-if="tab === 'files'">
+    <div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
+      <div x-h-split-panel data-size="25%">
+        <div class="vbox size-full overflow-auto p-2">
+          <div x-show="state.filesLoading" x-cloak class="vbox gap-2">
+            <template x-for="i in 3" :key="i"><div x-h-skeleton class="h-5 w-full"></div></template>
+          </div>
+          <div x-show="!state.filesLoading && !state.files.length" x-cloak x-h-text.muted class="p-2 text-sm"
+               x-text="T('monitoring:logs.noFiles', 'No log files.')"></div>
+          <ul x-h-list>
+            <template x-for="file in state.files" :key="file">
+              <li x-h-list-item class="cursor-pointer" :data-selected="state.selectedFile === file"
+                  @click="state.selectFile(file)">
+                <span x-text="file"></span>
+              </li>
+            </template>
+          </ul>
+        </div>
+      </div>
+
+      <div x-h-split-panel data-size="75%" :data-hidden="!state.selectedFile">
+        <div class="vbox size-full min-h-0">
+          <div x-h-toolbar data-size="sm">
+            <span x-h-toolbar-title class="shrink-0" x-text="state.selectedFile"></span>
+            <div x-h-toolbar-spacer></div>
+            <a x-h-button data-variant="transparent" data-size="sm" :href="downloadUrl(state.selectedFile)"
+               target="_blank" rel="noopener">
+              <i role="img" x-h-lucide data-lucide="download"></i>
+              <span x-text="T('monitoring:logs.download', 'Download')"></span>
+            </a>
+            <button x-h-button data-variant="transparent" data-size="icon-sm"
+                    @click="state.selectFile(state.selectedFile)" aria-label="Reload">
+              <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+            </button>
+          </div>
+          <div class="flex-1 min-h-0 overflow-auto p-3">
+            <div x-show="state.fileLoading" x-cloak><div x-h-spinner></div></div>
+            <div x-show="state.fileError" x-cloak x-h-text.muted class="text-sm"
+                 x-text="T('monitoring:logs.fileFailed', 'The file could not be read.')"></div>
+            <!-- The endpoint returns whole files, so the page tails what it loaded and grows the
+                 window upwards on demand rather than re-reading. -->
+            <button x-show="state.hasMoreAbove" x-cloak x-h-button data-variant="outline" data-size="sm"
+                    class="mb-2" @click="state.showMore()">
+              <i role="img" x-h-lucide data-lucide="chevron-up"></i>
+              <span x-text="T('monitoring:logs.loadMore', 'Load earlier lines')"></span>
+            </button>
+            <pre class="font-mono text-xs whitespace-pre-wrap break-all" x-text="state.fileTail"></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </template>
+</div>
