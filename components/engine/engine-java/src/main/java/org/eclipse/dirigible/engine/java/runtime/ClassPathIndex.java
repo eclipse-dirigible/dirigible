@@ -60,6 +60,12 @@ import org.springframework.stereotype.Component;
  * For development / test runs the application is launched from a plain {@link URLClassLoader}, not
  * a fat jar. In that case we simply collect the loader's URLs — they're already on disk and no
  * extraction is needed.
+ *
+ * <p>
+ * Either way the entries of {@code loader.path} / {@code LOADER_PATH} are appended — the runtime
+ * image's drop-in directory for AOT compiled module jars (see
+ * {@code build/application/Dockerfile}). Those jars are on the application classpath, so client
+ * sources must be able to compile against them.
  */
 @Component
 public class ClassPathIndex {
@@ -95,6 +101,12 @@ public class ClassPathIndex {
     }
 
     private static List<Path> build() {
+        List<Path> entries = new ArrayList<>(buildPlatformEntries());
+        entries.addAll(loaderPathEntries(rawLoaderPath()));
+        return Collections.unmodifiableList(entries);
+    }
+
+    private static List<Path> buildPlatformEntries() {
         Path anchor = locateAnchorOnDisk();
         if (anchor != null && anchor.toString()
                                     .endsWith(".jar")
@@ -102,6 +114,55 @@ public class ClassPathIndex {
             return extractFatJar(anchor);
         }
         return collectFromUrlClassLoader();
+    }
+
+    /**
+     * The drop-in modules location as Spring Boot's {@code PropertiesLauncher} sees it: the
+     * {@code loader.path} system property the runtime image sets, or the {@code LOADER_PATH}
+     * environment variable that overrides it. Absent under a plain {@code java -jar} launch.
+     */
+    private static String rawLoaderPath() {
+        String property = System.getProperty("loader.path");
+        return property != null ? property : System.getenv("LOADER_PATH");
+    }
+
+    /**
+     * Resolve a {@code loader.path} value - a comma-separated list of directories and/or jars already
+     * on the application classpath - to on-disk {@code javac} entries, so client sources can compile
+     * against the classes an AOT compiled module drops in. A directory contributes its {@code *.jar}
+     * files (in a stable order); a jar contributes itself; anything that does not exist is skipped.
+     * Package-visible for testing.
+     */
+    static List<Path> loaderPathEntries(String rawLoaderPath) {
+        if (rawLoaderPath == null || rawLoaderPath.isBlank()) {
+            return List.of();
+        }
+        List<Path> entries = new ArrayList<>();
+        for (String segment : rawLoaderPath.split(",")) {
+            String trimmed = segment.trim();
+            if (trimmed.isEmpty()) {
+                continue;
+            }
+            Path path = Path.of(trimmed);
+            if (Files.isDirectory(path)) {
+                entries.addAll(jarsIn(path));
+            } else if (Files.isRegularFile(path) && trimmed.endsWith(".jar")) {
+                entries.add(path);
+            }
+        }
+        return entries;
+    }
+
+    private static List<Path> jarsIn(Path directory) {
+        try (var stream = Files.list(directory)) {
+            return stream.filter(p -> p.toString()
+                                       .endsWith(".jar"))
+                         .sorted()
+                         .toList();
+        } catch (IOException e) {
+            LOGGER.warn("Could not list the drop-in modules directory [{}]: {}", directory, e.getMessage(), e);
+            return List.of();
+        }
     }
 
     private static Path locateAnchorOnDisk() {
