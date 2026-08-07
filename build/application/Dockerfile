@@ -26,7 +26,16 @@ RUN npm i -g esbuild \
 
 
 COPY target/dirigible-application-*-executable.jar dirigible.jar
-ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-jar", "/dirigible.jar"]
+
+# Drop-in directory for AOT compiled module jars (a jar carrying the module's compiled classes, its
+# META-INF/dirigible/<project>/.compiled marker and its registry payload). A downstream image COPYs
+# such jars here, or they are mounted at run time - the platform jar is consumed verbatim. Empty or
+# missing /modules is a no-op. Set LOADER_PATH to use other locations (comma-separated).
+RUN mkdir -p /modules
+
+# PropertiesLauncher (instead of the default JarLauncher) is what makes -Dloader.path work; it reads
+# the Start-Class from /dirigible.jar's manifest, so the application boots exactly as with -jar.
+ENTRYPOINT ["java", "--add-opens", "java.base/java.lang=ALL-UNNAMED", "--add-opens", "java.base/java.lang.reflect=ALL-UNNAMED", "--add-opens", "java.base/java.nio=ALL-UNNAMED", "-cp", "/dirigible.jar", "-Dloader.path=/modules", "org.springframework.boot.loader.launch.PropertiesLauncher"]
 
 # 8080 for the spring boot application,
 # 8081 for graalium debug port

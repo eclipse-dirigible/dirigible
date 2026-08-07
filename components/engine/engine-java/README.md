@@ -125,6 +125,36 @@ The engine sidesteps this by cracking the outer fat jar with the standard
 `javac`'s `--class-path` via `setLocationFromPaths(CLASS_PATH, ...)`. The extraction is
 cleaned up on shutdown via `DisposableBean#destroy()`.
 
+### AOT compiled modules and the `/modules` drop-in directory
+
+A module can also ship **already compiled**, with no runtime `javac` at all. Such a module jar carries
+its compiled classes (packages `gen.*` / `custom.*`), a marker at
+`META-INF/dirigible/<project>/.compiled` listing the module's top-level class binary names (one per
+line, `#` comments allowed), and the module's declarative registry payload under the same
+`META-INF/dirigible/<project>/` folder.
+
+On `ApplicationReadyEvent`, `CompiledModuleClassProvider` scans the classpath for those markers, loads
+each listed class through the application classloader and installs them via
+`JavaLoader.installCompiledModules(...)` — the same install path a registry rebuild uses, so the standard
+consumers register the module's controllers, entities and handlers (`Registered [N] class(es) from AOT
+compiled module(s) on the classpath`). `ClasspathExpander` lays the payload into
+`registry/public/<project>/` in parallel, so a single jar delivers both halves of the module.
+
+The runtime image (`build/application/Dockerfile`) makes such jars deployable without touching the
+platform artifact: it launches through Spring Boot's `PropertiesLauncher` with `-Dloader.path=/modules`
+and ships an empty `/modules` directory. Drop module jars in — by `COPY` in a downstream image, or by
+mounting a volume — and they are on the application classpath; there is no need to explode the fat jar.
+
+- Empty or missing `/modules` is a **no-op**: `PropertiesLauncher` reads `Start-Class` from the jar's
+  manifest, so the boot sequence and startup time match a plain `java -jar` launch.
+- `loader.path` entries precede the fat jar's own `BOOT-INF/classes` + `BOOT-INF/lib`, so a drop-in jar
+  could in principle shadow a platform class — in practice it cannot happen by accident, because module
+  packages are `gen.*` / `custom.*`, which the platform does not use.
+- **`LOADER_PATH`** (comma-separated, honored natively by `PropertiesLauncher`) overrides the location;
+  no Dirigible configuration property is involved.
+- `ClassPathIndex` appends the same entries to the compile classpath, so registry sources can be
+  compiled against a drop-in module's classes.
+
 ### Hot reload + classloader hygiene
 
 Each source unit gets a **fresh** `BytecodeClassLoader`. On update, the registry's `put` atomically
