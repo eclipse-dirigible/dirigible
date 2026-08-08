@@ -1,0 +1,36 @@
+package {{javaPackageName}};
+
+import java.time.Instant;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.security.User;
+
+/**
+ * A client Java service using the platform APIs. A {@code @Controller} is routed by its fully
+ * qualified class name, so this one answers at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/{{javaClassName}}}.
+ *
+ * <p>
+ * A method returning anything other than {@code String} or {@code void} is serialized to JSON, so
+ * the record below is the whole response body.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a service of the same
+ * name without colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} {
+
+    /** The response payload - a record maps straight onto a JSON object. */
+    public record Message(String message, String user, Instant date) {
+    }
+
+    @Get
+    public Message getMessage() {
+        return new Message("Hello World", User.getName(), Instant.now());
+    }
+
+}
