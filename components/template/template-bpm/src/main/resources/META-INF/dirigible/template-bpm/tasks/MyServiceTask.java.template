@@ -1,0 +1,28 @@
+package ${javaPackageName};
+
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.flowable.engine.delegate.DelegateExecution;
+import org.flowable.engine.delegate.JavaDelegate;
+
+/**
+ * The service task of the ${processId} process. The BPMN reaches it through the platform's Java call
+ * delegate - the JavaTask delegate expression - plus a handler field holding this class' fully
+ * qualified name.
+ *
+ * <p>
+ * A delegate is instantiated per execution through its no-arg constructor - it is NOT a bean, so it
+ * carries no injected collaborators; reach platform services through the SDK facades or
+ * {@code org.eclipse.dirigible.sdk.component.Beans}.
+ */
+public class MyServiceTask implements JavaDelegate {
+
+    private static final Logger LOGGER = Logging.getLogger("${javaPackageName}.MyServiceTask");
+
+    @Override
+    public void execute(DelegateExecution execution) {
+        LOGGER.info("Hello World! Process instance [{}] with variables: {}", execution.getProcessInstanceId(),
+                execution.getVariables());
+    }
+
+}
