@@ -1,5 +1,0 @@
-{
-    "module": "dashboard/configs/dashboard.js",
-    "extensionPoint": "platform-shells",
-    "description": "Dashboard Shell"
-}

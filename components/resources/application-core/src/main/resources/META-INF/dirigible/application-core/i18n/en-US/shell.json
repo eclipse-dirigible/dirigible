@@ -182,6 +182,10 @@
     },
     "related": {
       "addNew": "Add new"
+    },
+    "switch": {
+      "title": "Switch to",
+      "home": "Home"
     }
   }
 }

@@ -30,13 +30,12 @@ document.addEventListener('alpine:init', () => {
     };
 
     /*
-     * Registered shells that are deliberately not offered as a Home destination. They stay
-     * registered on `platform-shells` (the IDE's Window menu still lists them) and remain
-     * reachable by their own URL - Home simply is not the way in. Only the legacy
-     * AngularJS/BlimpKit dashboard, superseded by the Harmonia shells; its module stays, because
-     * the generated AngularJS apps still load its services.
+     * Registered shells that are deliberately not offered as a Home destination. Empty today: the
+     * legacy AngularJS/BlimpKit dashboard used to be hidden here, but it is no longer registered on
+     * `platform-shells` at all (its module stays for the services the generated views load), so
+     * nothing has to be filtered out of a list that is now exactly the shells this stack ships.
      */
-    const HIDDEN = ['dashboardShell'];
+    const HIDDEN = [];
 
     /*
      * Shells that belong on Home but are not where the working day starts - rendered as quiet rows
