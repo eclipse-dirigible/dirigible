@@ -199,7 +199,7 @@
             </div>
 
             <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
-            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
               <i role="img" x-h-lucide data-lucide="circle-user"></i>
             </button>
@@ -223,6 +223,23 @@
                   <i role="img" x-h-lucide data-lucide="user-round-x"></i> <span x-text="T('application-core:shell.actAs.stop', 'Stop acting as') + ' ' + actAs.acting"></span>
                 </li>
               </template>
+              <!-- Switch shells without the detour through Home: the same `platform-shells` list the
+                   launchpad renders, minus this one (the shared `shells` store). -->
+              <div x-h-menu-separator></div>
+              <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
+              <li x-h-menu-item @click="$store.shells.openHome()">
+                <i role="img" x-h-lucide data-lucide="house"></i>
+                <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
+              </li>
+              <template x-for="shell in $store.shells.items" :key="shell.id">
+                <li x-h-menu-item @click="$store.shells.open(shell)">
+                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
+                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
+                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <span x-text="shell.label"></span>
+                </li>
+              </template>
+              <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
                 <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
               </li>
@@ -372,6 +389,7 @@
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>
     <script src="./js/appShell.js" defer></script>

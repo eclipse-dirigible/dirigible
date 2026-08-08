@@ -12,7 +12,6 @@
 import { getWindowMenu } from './modules/window-menu.mjs'
 import { request, response } from '@aerokit/sdk/http';
 import { extensions } from '@aerokit/sdk/extensions';
-import { uuid } from '@aerokit/sdk/utils';
 
 let mainmenu = [];
 const extensionPoints = request.getParameterValues('extensionPoints') ?? ['platform-menus'];
@@ -28,11 +27,13 @@ for (let i = 0; i < extensionPoints.length; i++) {
 	}
 }
 
-function setETag() {
-	const maxAge = 30 * 24 * 60 * 60;
-	const etag = uuid.random();
-	response.setHeader('ETag', etag);
-	response.setHeader('Cache-Control', `public, must-revalidate, max-age=${maxAge}`);
+/*
+ * The menu is CONTENT (it aggregates the registered shells, perspectives and views), so it must
+ * revalidate - see the note in shells.js. A 30-day cache here is why a renamed or removed shell kept
+ * showing in an already-open Window menu.
+ */
+function setCacheControl() {
+	response.setHeader('Cache-Control', 'private, no-cache');
 }
 
 let helpMenu;
@@ -48,7 +49,7 @@ mainmenu.push(await getWindowMenu(perspectiveExtPoints, viewExtPoints, shellExtP
 mainmenu.push(helpMenu);
 
 response.setContentType('application/json');
-setETag();
+setCacheControl();
 response.println(JSON.stringify(mainmenu));
 response.flush();
 response.close();
