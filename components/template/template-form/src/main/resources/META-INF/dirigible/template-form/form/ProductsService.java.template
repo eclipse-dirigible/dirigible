@@ -1,0 +1,47 @@
+package {{javaPackageName}};
+
+import java.util.List;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+
+/**
+ * Feeds the product dropdown of {@code order.form}. A {@code @Controller} is routed by its fully
+ * qualified class name, so this one answers at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/ProductsService} - the URL the form's
+ * {@code productOptions} feed points at.
+ *
+ * <p>
+ * A method returning anything other than {@code String} or {@code void} is serialized to JSON, so
+ * the list below is the whole response body.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold this sample without
+ * colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_ProductsService")
+public class ProductsService {
+
+    /** One dropdown entry - `id` is the option value, `label` the option text. */
+    public record Product(String id, String label) {
+    }
+
+    private static final List<Product> PRODUCTS = List.of(new Product("P0000000001", "Product A - Premium Quality Widget"),
+            new Product("P0000000002", "Product B - Professional Grade Gadget"),
+            new Product("P0000000003", "Product C - Deluxe Widget Set"),
+            new Product("P0000000004", "Product D - Ultimate Gadget Package"),
+            new Product("P0000000005", "Product E - Advanced Widget Toolkit"),
+            new Product("P0000000006", "Product F - Essential Gadget Bundle"),
+            new Product("P0000000007", "Product G - Classic Widget Collection"),
+            new Product("P0000000008", "Product H - Modern Gadget Assortment"),
+            new Product("P0000000009", "Product I - Basic Widget Package"),
+            new Product("P0000000010", "Product J - Sleek Gadget Combo"));
+
+    @Get
+    public List<Product> getAllProducts() {
+        return PRODUCTS;
+    }
+
+}

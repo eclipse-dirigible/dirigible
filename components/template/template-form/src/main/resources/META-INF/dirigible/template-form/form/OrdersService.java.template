@@ -1,0 +1,43 @@
+package {{javaPackageName}};
+
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.log.Logger;
+import org.eclipse.dirigible.sdk.log.Logging;
+import org.eclipse.dirigible.sdk.utils.Uuid;
+
+/**
+ * Accepts the submission of {@code order.form}. A {@code @Controller} is routed by its fully
+ * qualified class name, so this one answers at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/OrdersService} - the URL the form's
+ * submit handler posts to.
+ *
+ * <p>
+ * The submitted form model arrives as a free-form map; a real service would bind it to a record and
+ * persist it through the entity's repository.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold this sample without
+ * colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_OrdersService")
+public class OrdersService {
+
+    /** The submission acknowledgement - serialized to JSON as the response body. */
+    public record Acknowledgement(String orderId, String status) {
+    }
+
+    private static final Logger LOGGER = Logging.getLogger("{{javaPackageName}}.OrdersService");
+
+    @Post
+    public Acknowledgement createOrder(@Body Map<String, Object> orderData) {
+        LOGGER.info("Order accepted: {}", orderData);
+        return new Acknowledgement(Uuid.random(), "Accepted");
+    }
+
+}

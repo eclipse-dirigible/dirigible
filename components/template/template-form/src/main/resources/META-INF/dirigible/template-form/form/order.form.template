@@ -2,7 +2,7 @@
     "feeds": [
         {
             "name": "productOptions",
-            "url": "/services/ts/{{projectName}}/api/products.ts"
+            "url": "/services/java/{{projectName}}/{{javaPackageName}}/ProductsService"
         },
         {
             "name": "shippingOptions",
@@ -10,7 +10,7 @@
         }
     ],
     "scripts": [],
-    "code": "$scope.submitOrder = () => {\n    console.log(`Order Model is: ${JSON.stringify($scope.model)}`);\n\n    if ($scope.forms.form.$invalid) {\n        const ivalidFieldErrorMessages = [\n            'Please enter valid values for the following form items:'\n        ];\n        for (const formId in $scope.forms.form) {\n            const formElement = $scope.forms.form[formId];\n            if (formElement && formElement.$invalid) {\n                ivalidFieldErrorMessages.push(`  - '${formId}' has an invalid value '${formElement.$viewValue ?? ''}'`);\n            }\n        }\n        const errorMessage = ivalidFieldErrorMessages.join('\\n');\n        console.error(errorMessage);\n        alert(errorMessage);\n        return;\n    }\n\n    $http.post('/services/ts/{{projectName}}/api/orders.ts', JSON.stringify($scope.model)).then(response => {\n        console.log(`Response is: ${JSON.stringify(response)}`);\n        alert(`Response is: \\n${JSON.stringify(response, null, 4)}`)\n    }).catch(e => {\n        console.error(e);\n        alert(`Error occurred: ${e}`);\n    });\n}",
+    "code": "$scope.submitOrder = () => {\n    console.log(`Order Model is: ${JSON.stringify($scope.model)}`);\n\n    if ($scope.forms.form.$invalid) {\n        const ivalidFieldErrorMessages = [\n            'Please enter valid values for the following form items:'\n        ];\n        for (const formId in $scope.forms.form) {\n            const formElement = $scope.forms.form[formId];\n            if (formElement && formElement.$invalid) {\n                ivalidFieldErrorMessages.push(`  - '${formId}' has an invalid value '${formElement.$viewValue ?? ''}'`);\n            }\n        }\n        const errorMessage = ivalidFieldErrorMessages.join('\\n');\n        console.error(errorMessage);\n        alert(errorMessage);\n        return;\n    }\n\n    $http.post('/services/java/{{projectName}}/{{javaPackageName}}/OrdersService', JSON.stringify($scope.model)).then(response => {\n        console.log(`Response is: ${JSON.stringify(response)}`);\n        alert(`Response is: \\n${JSON.stringify(response, null, 4)}`)\n    }).catch(e => {\n        console.error(e);\n        alert(`Error occurred: ${e}`);\n    });\n}",
     "form": [
         {
             "controlId": "header",
