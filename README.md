@@ -505,7 +505,6 @@ Monaco Editor by Microsoft: [https://github.com/microsoft/monaco-editor](https:/
 mxGraph: [https://github.com/jgraph/mxgraph](https://github.com/jgraph/mxgraph)
 Xterm.js: [https://github.com/xtermjs/xterm.js](https://github.com/xtermjs/xterm.js)
 Flowable: [https://github.com/flowable](https://github.com/flowable)
-Chart.js: [https://github.com/chartjs/Chart.js](https://github.com/chartjs/Chart.js)
 AG Grid: [https://github.com/ag-grid/ag-grid](https://github.com/ag-grid/ag-grid)
 BlimpKit: [https://github.com/blimpkit/blimpkit.github.io](https://github.com/blimpkit/blimpkit.github.io)
 

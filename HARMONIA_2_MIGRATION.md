@@ -177,6 +177,9 @@ compatible (verify each on the running app).
   in `components/resources/resources-resources/pom.xml` (`chart.js.version` in
   root `pom.xml`); only droppable if both report surfaces fully migrate. Do this
   as a separate, coordinated PR.
+  **Done (#6590):** the Harmonia reports run on the native `x-h-chart-*` charts and
+  the AngularJS report surface was removed with the Dashboard shell (#6589), so the
+  Chart.js webjar and its version property are gone.
 
 ## Verification
 

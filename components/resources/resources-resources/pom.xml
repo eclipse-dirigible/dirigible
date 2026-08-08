@@ -13,14 +13,6 @@
     <artifactId>dirigible-components-resources-resources</artifactId>
     <packaging>jar</packaging>
     
-    <dependencies>
-        <dependency>
-            <groupId>org.webjars.npm</groupId>
-            <artifactId>chart.js</artifactId>
-            <version>${chart.js.version}</version>
-        </dependency>
-    </dependencies>
-    
     <build>
         <plugins>
             <plugin>
