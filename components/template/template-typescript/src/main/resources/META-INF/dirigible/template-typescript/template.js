@@ -4,9 +4,9 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getTemplate = () => ({
-  name: "TypeScript (API)",
-  description: "TypeScript Service Sample",
-  image: "/services/web/template-typescript/template.svg",
+  name: "Java (API)",
+  description: "Client Java Service Sample",
+  glyph: "sap-icon--source-code",
   sources: [
     {
       location: "/template-typescript/project.json.template",
@@ -14,9 +14,9 @@ export const getTemplate = () => ({
       rename: "project.json",
     },
     {
-      location: "/template-typescript/service.ts.template",
-      action: "copy",
-      rename: "{{fileName}}.ts",
+      location: "/template-typescript/service.java.template",
+      action: "generate",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
   ],
   parameters: [],

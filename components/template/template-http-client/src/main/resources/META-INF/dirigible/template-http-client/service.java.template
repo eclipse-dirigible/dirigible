@@ -1,0 +1,33 @@
+package {{javaPackageName}};
+
+import java.io.IOException;
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+import org.eclipse.dirigible.sdk.http.HttpClient;
+
+/**
+ * A client Java service calling out to a remote HTTP endpoint. It answers at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/{{javaClassName}}}.
+ *
+ * <p>
+ * {@link HttpClient} returns the whole remote response as JSON - status, headers and body - which
+ * this service passes through unchanged.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a service of the same
+ * name without colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} {
+
+    private static final String SERVICE_URL = "https://services.odata.org/V4/Northwind/Northwind.svc/";
+
+    @Get
+    public String fetch() throws IOException {
+        return HttpClient.get(SERVICE_URL);
+    }
+
+}

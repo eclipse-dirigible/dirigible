@@ -1,6 +1,0 @@
-import { client, response } from "@aerokit/sdk/http";
-
-let httpResponse = client.get("https://services.odata.org/V4/Northwind/Northwind.svc/");
-
-response.println(httpResponse.statusMessage);
-response.println(httpResponse.text);

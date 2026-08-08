@@ -1,5 +1,0 @@
-{
-    "extensionPoint": "platform-templates",
-    "module": "template-react/template.js",
-    "description": "React Template"
-}

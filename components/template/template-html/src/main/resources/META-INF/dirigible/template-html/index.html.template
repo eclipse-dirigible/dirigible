@@ -1,141 +1,132 @@
 <!DOCTYPE html>
-<html lang="en" ng-app="page" ng-controller="PageController">
+<!--
+  A standalone Harmonia (Alpine.js) page. It is served straight from the project
+  (/services/web/[[projectName]]/[[fileName]].html) and needs nothing but the platform's own webjars -
+  no build step, no shell.
+
+  The data comes from a plain fetch() against a public OData service; point loadRows() at one of
+  your own client Java controllers (/services/java/<project>/...) to render your data instead.
+-->
+<html lang="en">
 
   <head>
-   <meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1">
-		<!-- Fake icon -->
-		<link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=">
-		<!-- Title directive that will automatically create a title based on the view config -->
-		<title config-title></title>
-		<!-- View config -->
-		<script type="text/javascript" src="/services/web/platform-samples/configs/view-center.js"></script>
-		<!-- View services and styles -->
-		<meta name="platform-links" category="ng-view">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>[[fileNameBase]]</title>
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <style>
+      /* Harmonia themes `body`; theme `html` too so the area below short content is not left with
+         the browser default. The light/dark choice itself is applied by harmonia.min.js from the
+         shared `codbex.harmonia.colorMode` key, so this page follows the platform theme. */
+      html { background-color: var(--background); color: var(--foreground); }
+      body { min-height: 100vh; }
+      [x-cloak] { display: none !important; }
+    </style>
   </head>
 
-  <body class="bk-vbox">
-    <bk-busy-indicator-extended class="bk-fill-parent" ng-hide="state.error || !state.isBusy" size="l">
-      {{state.busyText}}
-    </bk-busy-indicator-extended>
-    <bk-toolbar has-title="true" ng-show="!state.error && !state.isBusy">
-      <bk-toolbar-title>Explore:</bk-toolbar-title>
-      <bk-select compact="true" ng-model="explore.value">
-        <bk-option text="Customers" value="'customers'"></bk-option>
-        <bk-option text="Employees" value="'employees'"></bk-option>
-        <bk-option text="Products" value="'products'"></bk-option>
-      </bk-select>
-    </bk-toolbar>
-    <bk-scrollbar class="bk-full-height" ng-show="!state.error && !state.isBusy">
-      <table bk-table display-mode="compact" outer-borders="bottom"
-        ng-show="explore.value === 'customers'">
-        <thead bk-table-header sticky="true">
-          <tr bk-table-row>
-            <th bk-table-header-cell>Company</th>
-            <th bk-table-header-cell>City</th>
-            <th bk-table-header-cell>Address</th>
-          </tr>
-        </thead>
-        <tbody bk-table-body>
-          <tr bk-table-row ng-repeat="customer in customers" hoverable="false" activable="false">
-            <td bk-table-cell>{{customer.CompanyName}}</td>
-            <td bk-table-cell>{{customer.City}}</td>
-            <td bk-table-cell>{{customer.Address}}</td>
-          </tr>
-          <tr ng-if="customers.length === 0" bk-table-row>
-            <td bk-table-cell no-data="true">No data</td>
-          </tr>
-        </tbody>
-      </table>
+  <body class="vbox size-full" x-data="page" x-cloak>
 
-      <table bk-table display-mode="compact" outer-borders="bottom"
-        ng-show="explore.value === 'employees'">
-        <thead bk-table-header sticky="true">
-          <tr bk-table-row>
-            <th bk-table-header-cell>Name</th>
-            <th bk-table-header-cell>Title</th>
-            <th bk-table-header-cell>Country</th>
-          </tr>
-        </thead>
-        <tbody bk-table-body>
-          <tr bk-table-row ng-repeat="employee in employees" hoverable="false" activable="false">
-            <td bk-table-cell>{{employee.FirstName}} {{employee.LastName}}</td>
-            <td bk-table-cell>{{employee.Title}}</td>
-            <td bk-table-cell>{{employee.Country}}</td>
-          </tr>
-          <tr ng-if="employees.length === 0" bk-table-row>
-            <td bk-table-cell no-data="true">No data</td>
-          </tr>
-        </tbody>
-      </table>
+    <div x-h-toolbar>
+      <span x-h-toolbar-title class="shrink-0">Explore</span>
+      <div x-h-select class="w-56">
+        <input x-h-select-input x-model="selected" placeholder="Choose a collection" />
+        <div x-h-select-content>
+          <template x-for="collection in collections" :key="collection.name">
+            <div x-h-select-option="collection.label" :data-value="String(collection.name)"></div>
+          </template>
+        </div>
+      </div>
+      <div class="flex-1"></div>
+      <button x-h-button data-variant="transparent" data-size="icon-sm" aria-label="Reload" @click="load()">
+        <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+      </button>
+    </div>
 
-      <table bk-table display-mode="compact" outer-borders="bottom"
-        ng-show="explore.value === 'products'">
-        <thead bk-table-header sticky="true">
-          <tr bk-table-row>
-            <th bk-table-header-cell>Name</th>
-            <th bk-table-header-cell>Unit Price</th>
-            <th bk-table-header-cell>Quantity Per Unit</th>
-          </tr>
-        </thead>
-        <tbody bk-table-body>
-          <tr bk-table-row ng-repeat="product in products" hoverable="false" activable="false">
-            <td bk-table-cell>{{product.ProductName}}</td>
-            <td bk-table-cell>${{product.UnitPrice}}</td>
-            <td bk-table-cell>{{product.QuantityPerUnit}}</td>
-          </tr>
-          <tr ng-if="products.length === 0" bk-table-row>
-            <td bk-table-cell no-data="true">No data</td>
-          </tr>
-        </tbody>
-      </table>
-    </bk-scrollbar>
-    <bk-message-page glyph="sap-icon--error" ng-if="state.error">
-      <bk-message-page-title>Editor encounterd an error!</bk-message-page-title>
-      <bk-message-page-subtitle>{{errorMessage}}</bk-message-page-subtitle>
-    </bk-message-page>
+    <div class="vbox gap-4 p-4" style="flex: 1 1 auto;">
 
-    <script type="text/javascript">
-      angular.module('page', ['blimpKit', 'platformView']).controller('PageController', ($scope, $http) => {
-          $scope.state = {
-              isBusy: true,
-              error: false,
-              busyText: 'Fetching data from server...',
-          };
-          $scope.explore = { value: 'customers' };
+      <div x-show="error" x-h-alert data-variant="negative" role="alert">
+        <div x-h-alert-description x-text="error"></div>
+      </div>
 
-          $http.get('https://services.odata.org/Northwind/Northwind.svc/Customers', { disableInterceptors: true })
-              .then((response) => {
-                  $scope.customers = response.data.value;
-                  $scope.state.isBusy = false;
-              }, (response) => {
-                  console.error(response);
-                  $scope.state.error = true;
-                  $scope.errorMessage = 'Unable to load customer data';
-              });
+      <div x-show="loading" x-h-text.muted>Loading...</div>
 
-          $http.get('https://services.odata.org/Northwind/Northwind.svc/Employees', { disableInterceptors: true })
-              .then((response) => {
-                  $scope.employees = response.data.value;
-                  $scope.state.isBusy = false;
-              }, (response) => {
-                  console.error(response);
-                  $scope.state.error = true;
-                  $scope.errorMessage = 'Unable to load employees data';
-              });
+      <div x-show="!loading && !error" x-h-table-container.scroll>
+        <table x-h-table data-borders="rows">
+          <thead x-h-table-header>
+            <tr x-h-table-row>
+              <template x-for="column in columns()" :key="column">
+                <th x-h-table-head scope="col" x-text="column"></th>
+              </template>
+            </tr>
+          </thead>
+          <tbody x-h-table-body>
+            <template x-for="(row, index) in rows" :key="index">
+              <tr x-h-table-row data-hoverable="true">
+                <template x-for="column in columns()" :key="column">
+                  <td x-h-table-cell x-text="row[column]"></td>
+                </template>
+              </tr>
+            </template>
+            <tr x-show="rows.length === 0">
+              <td x-h-table-cell :colspan="columns().length" class="text-center">No data</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
-          $http.get('https://services.odata.org/Northwind/Northwind.svc/Products', { disableInterceptors: true })
-              .then((response) => {
-                  $scope.products = response.data.value;
-                  $scope.state.isBusy = false;
-              }, (response) => {
-                  console.error(response);
-                  $scope.state.error = true;
-                  $scope.errorMessage = 'Unable to load product data';
-              });
-        });
+    </div>
+
+    <script>
+      // Registered on `alpine:init` because Alpine is loaded deferred and starts itself - this page
+      // must never call Alpine.start().
+      document.addEventListener('alpine:init', () => {
+        Alpine.data('page', () => ({
+          serviceUrl: 'https://services.odata.org/V4/Northwind/Northwind.svc',
+          collections: [
+            { name: 'Customers', label: 'Customers', columns: ['CompanyName', 'City', 'Address'] },
+            { name: 'Employees', label: 'Employees', columns: ['FirstName', 'LastName', 'Title', 'Country'] },
+            { name: 'Products', label: 'Products', columns: ['ProductName', 'UnitPrice', 'QuantityPerUnit'] },
+          ],
+          selected: 'Customers',
+          rows: [],
+          loading: false,
+          error: '',
+
+          init() {
+            this.$watch('selected', () => this.load());
+            this.load();
+          },
+
+          columns() {
+            return this.collections.find((collection) => collection.name === this.selected)?.columns ?? [];
+          },
+
+          async load() {
+            this.loading = true;
+            this.error = '';
+            try {
+              const response = await fetch(`${this.serviceUrl}/${this.selected}`, { headers: { Accept: 'application/json' } });
+              if (!response.ok) {
+                throw new Error(`${response.status} ${response.statusText}`);
+              }
+              const payload = await response.json();
+              this.rows = payload.value ?? [];
+            } catch (error) {
+              this.rows = [];
+              this.error = `Unable to load ${this.selected}: ${error.message}`;
+            } finally {
+              this.loading = false;
+            }
+          },
+        }));
+      });
     </script>
-    <theme></theme>
+
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <!-- opt-in Harmonia Lucide plugin: registers x-h-lucide (renders Lucide icons + keeps them in sync); needs window.lucide (above). -->
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
   </body>
 
 </html>

@@ -5,13 +5,13 @@
  */
 export const getTemplate = () => ({
   name: "Database Access (API)",
-  description: "Service With Database Query Support",
+  description: "Client Java Service With Database Query Support",
   glyph: "sap-icon--database",
   sources: [
     {
-      location: "/template-database-access/service.mjs.template",
+      location: "/template-database-access/service.java.template",
       action: "generate",
-      rename: "{{fileName}}.mjs",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
   ],
   parameters: [],

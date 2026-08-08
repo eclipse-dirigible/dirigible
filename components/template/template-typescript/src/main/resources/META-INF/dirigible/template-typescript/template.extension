@@ -1,5 +1,5 @@
 {
     "extensionPoint": "platform-templates",
     "module": "template-typescript/template.js",
-    "description": "TypeScript Sample Template"
+    "description": "Java Sample Template"
 }

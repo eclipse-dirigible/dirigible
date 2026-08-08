@@ -4,13 +4,15 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getTemplate = () => ({
-	name: 'Hello World',
-	description: 'Basic Service Sample',
-	sources: [{
-		location: '/template-hello-world/service.mjs.template',
-		action: 'copy',
-		rename: '{{fileName}}.mjs'
-	}],
-	parameters: [],
-	order: 0,
+  name: "Hello World",
+  description: "Basic client Java service sample",
+  sources: [
+    {
+      location: "/template-hello-world/service.java.template",
+      action: "generate",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
+    },
+  ],
+  parameters: [],
+  order: 0,
 });
