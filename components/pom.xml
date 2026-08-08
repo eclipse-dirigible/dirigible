@@ -248,7 +248,6 @@
         <module>resources/resources-theme-classic</module>
         <module>resources/resources-theme-high-contrast</module>
         <module>resources/resources-theme-mystic</module>
-        <module>resources/resources-dashboard</module>
         <module>resources/resources-application</module>
         <module>resources/resources-home</module>
         <module>resources/resources-personal</module>
@@ -1346,11 +1345,6 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-locale</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-dashboard</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
