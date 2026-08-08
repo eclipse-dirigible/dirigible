@@ -13,14 +13,14 @@ export const getTemplate = () => ({
       rename: "project.json",
     },
     {
-      location: "/template-form/form/products.ts.template",
-      action: "copy",
-      rename: "api/products.ts",
+      location: "/template-form/form/ProductsService.java.template",
+      action: "generate",
+      rename: "{{javaPackageName}}/ProductsService.java",
     },
     {
-      location: "/template-form/form/orders.ts.template",
-      action: "copy",
-      rename: "api/orders.ts",
+      location: "/template-form/form/OrdersService.java.template",
+      action: "generate",
+      rename: "{{javaPackageName}}/OrdersService.java",
     },
     {
       location: "/template-form/form/shippingOptions.json.template",
