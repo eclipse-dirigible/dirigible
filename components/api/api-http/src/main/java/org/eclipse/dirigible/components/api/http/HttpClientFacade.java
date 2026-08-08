@@ -256,12 +256,16 @@ public class HttpClientFacade {
     }
 
     /**
-     * Parse HTTP Request Options.
+     * Parse HTTP Request Options. Every caller dereferences the result, so a missing options document
+     * yields the defaults rather than null - the client Java SDK's no-options overloads pass none.
      *
-     * @param options the options
-     * @return the http client request options
+     * @param options the options, may be null or blank
+     * @return the http client request options, never null
      */
     public static HttpClientRequestOptions parseOptions(String options) {
+        if (options == null || options.isBlank()) {
+            return new HttpClientRequestOptions();
+        }
         return GsonHelper.fromJson(options, HttpClientRequestOptions.class);
     }
 
