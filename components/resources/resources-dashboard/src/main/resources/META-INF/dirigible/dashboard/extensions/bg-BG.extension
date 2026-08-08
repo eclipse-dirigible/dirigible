@@ -1,5 +1,0 @@
-{
-    "description": "Platform Locale - Bulgarian",
-    "extensionPoint": "application-locales",
-    "module": "dashboard/configs/bg-BG.js"
-}
