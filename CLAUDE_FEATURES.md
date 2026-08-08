@@ -553,7 +553,7 @@ First-class designers, each writing one of the modeler artefacts from §2.4:
 | Integrations Modeler (Karavan) | `*.camel` | Apache Camel route (`resources-karavan-libs`). |
 
 #### Underlying libraries
-Monaco (editor), mxGraph (Schema/EDM diagrams), bpmn-visualization-js (BPMN viewer), Flowable BPMN (modeler), Karavan (Camel route designer), AngularJS + GoldenLayout (legacy layout), AG Grid (tables), Chart.js (charts), jsTree (trees), Xterm.js (terminal).
+Monaco (editor), mxGraph (Schema/EDM diagrams), bpmn-visualization-js (BPMN viewer), Flowable BPMN (modeler), Karavan (Camel route designer), AngularJS + GoldenLayout (legacy layout), AG Grid (tables), jsTree (trees), Xterm.js (terminal).
 
 ### 7.3 Views (`components/ui/view-*`)
 Side / bottom panels: `view-artefacts`, `view-configurations`, `view-console`, `view-databases`, `view-data-structures`, `view-debugger` (JS), `view-java-debug`, `view-extensions`, `view-git`, `view-import`, `view-jobs`, `view-listeners`, `view-loggers`, `view-logs`, `view-preview`, `view-problems`, `view-projects`, `view-properties`, `view-registry`, `view-repository`, `view-search`, `view-security`, `view-sql`, `view-swagger`, `view-terminal`, `view-transfer`, `view-translation`, `view-websockets`, `view-welcome`.
@@ -662,7 +662,7 @@ For doc generation: the full list of `@RestController`-annotated classes is in `
 
 ### 10.2 Frontend toolchain
 - Node 22.x with global `typescript` and `esbuild`. WebJar modules under `components/ide/` and `components/ui/` are transpiled / bundled at Maven build time.
-- Monaco editor, mxGraph, BlimpKit theme, BPMN visualization, AG Grid, Chart.js, Xterm.js, jsTree.
+- Monaco editor, mxGraph, BlimpKit theme, BPMN visualization, AG Grid, Xterm.js, jsTree.
 
 ### 10.3 CLI (`cli/`)
 Standalone helper that starts the Dirigible jar against a given user project path; produces `cli/target/dirigible-cli-*-executable.jar`. See `cli/README.md`.
