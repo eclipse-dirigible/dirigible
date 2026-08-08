@@ -1,0 +1,41 @@
+package ${javaPackageName};
+
+import java.util.Map;
+
+import org.eclipse.dirigible.sdk.bpm.Process;
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.http.Body;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Post;
+import org.eclipse.dirigible.sdk.utils.Json;
+
+/**
+ * Starts an instance of the ${processId} process. A {@code @Controller} is routed by its fully
+ * qualified class name, so this one answers at
+ * {@code POST /services/java/${projectName}/${javaPackageName}/ProcessService/processes} with the
+ * process variables as its JSON body (post an empty object to start without any).
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold this sample without
+ * colliding in the shared client container.
+ */
+@Controller
+@Component("${javaPackageName}_ProcessService")
+public class ProcessService {
+
+    /** The start acknowledgement - serialized to JSON as the response body. */
+    public record Started(String processInstanceId, String processKey, Map<String, Object> parameters, String message) {
+    }
+
+    private static final String PROCESS_KEY = "${processId}";
+
+    private static final String BUSINESS_KEY = "BPM-Project-Starter";
+
+    @Post("/processes")
+    public Started startProcess(@Body Map<String, Object> parameters) {
+        String processInstanceId = Process.start(PROCESS_KEY, BUSINESS_KEY, Json.stringify(parameters));
+        return new Started(processInstanceId, PROCESS_KEY, parameters,
+                "Started process instance with id [" + processInstanceId + "] for process with key [" + PROCESS_KEY + "]");
+    }
+
+}

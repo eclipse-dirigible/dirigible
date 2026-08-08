@@ -1,7 +1,7 @@
 # template-form-builder-harmonia
 
-Runtime form generator for the **Alpine.js + Harmonia** stack — the counterpart to
-`template-form-builder-angularjs`. Given a `.form` artifact it generates a standalone
+Runtime form generator for the **Alpine.js + Harmonia** stack — the platform's only
+`form` generator since the AngularJS one was removed. Given a `.form` artifact it generates a standalone
 Harmonia form page (`gen/<genFolder>/forms/<form>/index.html` + `form.js`), used for
 app forms and **BPM task forms** (opened by the `processTasks` store of
 `template-application-ui-harmonia-java`).
