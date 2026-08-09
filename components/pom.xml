@@ -136,7 +136,6 @@
         <module>api/api-redis</module>
         <module>api/api-qldb</module>
         <module>api/api-pdf</module>
-        <module>api/api-junit</module>
         <module>api/api-component</module>
 
         <!-- Platform UI -->
