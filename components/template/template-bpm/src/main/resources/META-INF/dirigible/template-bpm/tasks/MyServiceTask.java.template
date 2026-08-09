@@ -21,8 +21,7 @@ public class MyServiceTask implements JavaDelegate {
 
     @Override
     public void execute(DelegateExecution execution) {
-        LOGGER.info("Hello World! Process instance [{}] with variables: {}", execution.getProcessInstanceId(),
-                execution.getVariables());
+        LOGGER.info("Hello World! Process variables: {}", execution.getVariables());
     }
 
 }
