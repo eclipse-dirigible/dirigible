@@ -179,6 +179,65 @@ class GlueGeneratesTest {
         assertTrue(fields.contains(Map.of("targetProp", "Note", "expr", "source.Note")));
     }
 
+    /**
+     * A cross-model SOURCE ({@code fromUses:}) is what lets a create-from be authored on the module
+     * owning the TARGET, so only that module references the other and the pair stays independently
+     * compilable (and jar-packageable). The glue must therefore point the SOURCE half at the owner's
+     * gen folder / project while the generated controller itself stays in this project.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesCrossModelSourceGenFolderAndOwningProject() {
+        IntentModel model = IntentParser.parse("""
+                name: delivery-notes
+                uses:
+                  - { model: inventory }
+                entities:
+                  - name: DeliveryNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue, model: inventory }
+                generates:
+                  - name: delivery-note-from-goods-issue
+                    from: GoodsIssue
+                    fromUses: inventory
+                    to: DeliveryNote
+                    forEntity: GoodsIssue
+                    map:
+                      GoodsIssue: id
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals(true, g.get("crossModelSource"));
+        assertEquals("inventory", g.get("fromModel"));
+        // The project owning the source's views and its "-transitioned" topic (alias, no project:).
+        assertEquals("inventory", g.get("fromProject"));
+        assertEquals("GoodsIssue", g.get("fromEntity"));
+        // With no repository the owner perspective falls back to the entity name (convention).
+        assertEquals("GoodsIssue", g.get("fromPerspective"));
+        // The TARGET is local here - the exact mirror of the usual cross-model-target case.
+        assertEquals(false, g.get("crossModel"));
+        assertEquals("DeliveryNote", g.get("toEntity"));
+        assertEquals("", g.get("toModel"));
+
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
+        assertTrue(fields.contains(Map.of("targetProp", "GoodsIssue", "expr", "source.Id")));
+    }
+
+    /** A purely local generate keeps the cross-model-source markers empty (backward compatibility). */
+    @Test
+    void localSourceLeavesTheCrossModelSourceMarkersEmpty() {
+        IntentModel model = IntentParser.parse(YAML);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertFalse(((Boolean) g.get("crossModelSource")).booleanValue());
+        assertEquals("", g.get("fromModel"));
+        assertEquals("", g.get("fromProject"));
+    }
+
     @Test
     void integerDecimalAndBooleanLiteralsRenderTyped() {
         String yaml = """

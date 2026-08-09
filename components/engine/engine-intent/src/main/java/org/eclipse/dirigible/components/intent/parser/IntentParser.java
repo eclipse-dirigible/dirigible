@@ -3818,7 +3818,16 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate generates action [" + name + "]");
             }
-            if (g.getSourceStatus() != null) {
+            // A cross-model SOURCE (fromUses:) is resolved from the OWNER's .model at generation time,
+            // exactly as a cross-model target is - nothing about it is checkable against this model's
+            // entities, so every local check below is skipped for it (the glue generator fails loudly
+            // if the owner model cannot be resolved).
+            boolean crossModelSource = g.isCrossModelSource();
+            if (crossModelSource && !usesAliases.contains(g.getFromUses())) {
+                issues.add("generates [" + name + "] fromUses unknown model alias [" + g.getFromUses()
+                        + "] (declare it under the model's uses:)");
+            }
+            if (g.getSourceStatus() != null && !crossModelSource) {
                 // The completion hook flips the SOURCE's status after the target is created - it
                 // needs the EntityStatus relation to write to.
                 EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
@@ -3839,8 +3848,11 @@ public final class IntentParser {
             if (g.getFrom() == null || g.getFrom()
                                         .isBlank()) {
                 issues.add("generates [" + name + "] has no from entity");
+            } else if (crossModelSource) {
+                source = null; // owned elsewhere - resolved against the owner's .model, not this one
             } else if (!entityNames.contains(g.getFrom())) {
-                issues.add("generates [" + name + "] from references unknown entity [" + g.getFrom() + "]");
+                issues.add("generates [" + name + "] from references unknown entity [" + g.getFrom()
+                        + "] (add a fromUses: alias if the source lives in another model)");
             } else {
                 source = byName.get(g.getFrom());
             }
@@ -3864,6 +3876,15 @@ public final class IntentParser {
             String forEntity = g.getForEntity();
             if (forEntity == null || forEntity.isBlank()) {
                 issues.add("generates [" + name + "] has no forEntity");
+            } else if (crossModelSource) {
+                // The button is contributed onto the SOURCE's view, which the owner model generates and
+                // which lives in the owner's project. Hosting it on some other view would need a record
+                // of that view to carry the source id - there is none.
+                if (!forEntity.equals(g.getFrom())) {
+                    issues.add("generates [" + name + "] has a cross-model source (fromUses [" + g.getFromUses()
+                            + "]), so forEntity must be the source entity [" + g.getFrom() + "] - the button is contributed onto "
+                            + "the owner model's view; it cannot be hosted on a local view [" + forEntity + "]");
+                }
             } else if (!entityNames.contains(forEntity)) {
                 issues.add("generates [" + name + "] forEntity references unknown entity [" + forEntity + "]");
             }
@@ -3878,6 +3899,9 @@ public final class IntentParser {
                 if (items.getFrom() == null || items.getFrom()
                                                     .isBlank()) {
                     issues.add("generates [" + name + "] items has no from entity");
+                } else if (crossModelSource) {
+                    // The source's items belong to the source - i.e. to the owner model, resolved there.
+                    itemSource = null;
                 } else if (!entityNames.contains(items.getFrom())) {
                     issues.add("generates [" + name + "] items from references unknown entity [" + items.getFrom() + "]");
                 } else {

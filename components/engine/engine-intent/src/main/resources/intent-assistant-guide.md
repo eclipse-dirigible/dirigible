@@ -1062,7 +1062,8 @@ source view that, on click, clones the selected record on the server and toasts 
 ```yaml
 generates:
   - name: invoice-from-timesheet   # unique id; also names the contribution files + the controller class
-    from: ProjectTimesheet         # source entity in THIS model (loaded by the selected record's id)
+    from: ProjectTimesheet         # source entity (loaded by the selected record's id); in THIS model
+                                   #   unless `fromUses` names the model that owns it
     to: SalesInvoice               # target entity to create
     uses: sales                    # model alias (from uses:) the target lives in; omit if same model
     forEntity: ProjectTimesheet    # view that shows the button (defaults to `from`)
@@ -1084,6 +1085,49 @@ generates:
     sourceStatus: 3                # optional completion hook: the SOURCE's EntityStatus seed id
                                    # after the target is created (e.g. proforma -> INVOICED)
 ```
+
+**Cross-model SOURCE (`fromUses:`) - author the create-from on the TARGET's module.** By default the
+`from` entity is local and the target may be foreign (`uses:`). `fromUses:` mirrors that: the SOURCE is
+owned by another model and the TARGET is the local one. Both directions describe the same button; they
+differ only in which module OWNS the generated controller - and that choice decides which module's
+compiled code references which.
+
+```yaml
+# authored in `delivery-notes`, whose DeliveryNote already references inventory's GoodsIssue
+generates:
+  - name: delivery-note-from-goods-issue
+    from: GoodsIssue               # the SOURCE, owned by...
+    fromUses: inventory            # ...the `inventory` model (declare the alias under uses:)
+    to: DeliveryNote               # the TARGET, local to this model
+    forEntity: GoodsIssue          # must BE the source entity (see below)
+    map:
+      Customer: Customer
+      GoodsIssue: id
+```
+
+**Use it when the two modules would otherwise reference each other.** "A generates into B" authored in
+A puts a reference to B's entities inside A's generated controller; if B already holds a foreign key
+back into A (which is usually WHY the create-from exists), the two modules' generated Java is mutually
+dependent - neither compiles, or packages as a jar, before the other. Authoring the same create-from in
+B with `fromUses: A` leaves exactly one edge, B -> A, and the pair is a DAG again. The same reasoning
+made a schedule's source addressable across models (#6532).
+
+**Rules specific to a cross-model source:**
+- `fromUses` must be a declared `uses:` alias; the source entity, its items and its status relation are
+  resolved from that owner's `.model` (the same two-source, order-independent resolution a cross-model
+  target uses) - nothing about it is checked against this model.
+- `forEntity` **must equal `from`**. The button is contributed onto the source's view, which the owner
+  project generates; it cannot be hosted on a local view, because no record of a local view carries the
+  source id the endpoint needs.
+- The button registers on the **owner's** `<owner-project>-custom-action` extension point (the point
+  that view reads) while the descriptor file and the controller stay in this project. Contributing to
+  another module's action point is an ordinary, supported use of that point.
+- `sourceStatus:` works: the flip writes through the source's cross-model repository and publishes on
+  the OWNER's `<owner-project>-<perspective>-<Entity>-transitioned` topic, so the owner's postings and
+  integrations observe it exactly as for a local generate. Generation fails loudly if the owner entity
+  declares no `function: EntityStatus` relation.
+- A cross-model source may be combined with a cross-model target (both `fromUses:` and `uses:`); the
+  controller then simply references two foreign models and neither of them references it.
 
 **Computed line-items (the `items:` LIST form).** When the target's lines are not a 1:1 mirror of a
 source child but must be **computed** from the source record (e.g. one invoice line carrying a
@@ -1111,9 +1155,10 @@ amounts:
 - The two forms are **mutually exclusive** - a `generates` uses either the object mirror or the list.
   The list form is not available on a scheduled generate.
 
-**Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
-entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared
-entity; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
+**Rules:** unique `name`; `from` must be a declared entity in this model (add a `fromUses:` alias when
+the source lives in another model); `to` must be a declared entity (add a `uses:` alias when the target
+lives in another model); `forEntity` must be a declared entity - and must be `from` itself when the
+source is cross-model; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
 to-one relation** of the source entity - one-hop `relation.field` paths are not yet supported. `map`
 copies a source value; `defaults` sets a constant (`now` = today, rendered in the target field's own
 shape - a `date` field gets today's date, a `month` field the current `YYYY-MM`, a `week` field the

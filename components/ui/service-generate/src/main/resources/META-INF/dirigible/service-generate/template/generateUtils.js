@@ -1100,6 +1100,12 @@ export function generateFiles(model, parameters, templateSources) {
                                 className: g.className,
                                 fromEntity: g.fromEntity,
                                 fromJavaPerspective: sanitizeJavaIdentifier(g.fromPerspective),
+                                // The SOURCE's gen folder / owning project: this project unless the
+                                // source belongs to another model (intent `fromUses:`). That is what lets
+                                // a create-from be authored on the module owning the TARGET and keeps the
+                                // two modules' generated Java acyclic - only one side references the other.
+                                fromGenFolder: g.crossModelSource ? sanitizeJavaIdentifier(g.fromModel) : parameters.javaGenFolderName,
+                                fromProjectName: g.crossModelSource ? g.fromProject : parameters.projectName,
                                 toEntity: g.toEntity,
                                 toGenFolder: g.crossModel ? sanitizeJavaIdentifier(g.toModel) : parameters.javaGenFolderName,
                                 toJavaPerspective: sanitizeJavaIdentifier(g.toPerspective),
