@@ -14,7 +14,6 @@ import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.jobs.domain.JobLog;
 import org.eclipse.dirigible.components.jobs.service.JobLogService;
 import org.eclipse.dirigible.components.jobs.tenant.JobNameCreator;
-import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
 import org.quartz.JobExecutionException;
@@ -22,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.nio.file.Path;
 import java.util.Date;
 
 @Service
@@ -35,14 +33,14 @@ public class JobExecutionService {
     private final JobLogService jobLogService;
     private final JobNameCreator jobNameCreator;
     private final DataSourcesManager dataSourcesManager;
-    private final org.springframework.beans.factory.ObjectProvider<JavaJobExecutor> javaJobExecutor;
+    private final JobHandlerRunner jobHandlerRunner;
 
     JobExecutionService(JobLogService jobLogService, JobNameCreator jobNameCreator, DataSourcesManager dataSourcesManager,
-            org.springframework.beans.factory.ObjectProvider<JavaJobExecutor> javaJobExecutor) {
+            JobHandlerRunner jobHandlerRunner) {
         this.jobLogService = jobLogService;
         this.jobNameCreator = jobNameCreator;
         this.dataSourcesManager = dataSourcesManager;
-        this.javaJobExecutor = javaJobExecutor;
+        this.jobHandlerRunner = jobHandlerRunner;
     }
 
     public void executeJob(JobExecutionContext context) throws JobExecutionException {
@@ -70,21 +68,10 @@ public class JobExecutionService {
 
             if (triggered != null) {
                 context.put("handler", handler);
-                if (java) {
-                    // Client-Java scheduled job: dispatch to the Java engine's executor (the client
-                    // bean resolved + invoked there). Same JobLog wrapping as the JS path below, so
-                    // it is equally visible/monitored in the Jobs perspective.
-                    JavaJobExecutor executor = javaJobExecutor.getIfAvailable();
-                    if (executor == null) {
-                        throw new IllegalStateException("No JavaJobExecutor is available to run the Java job [" + handler + "]");
-                    }
-                    executor.execute(handler);
-                } else {
-                    Path handlerPath = Path.of(handler);
-                    try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
-                        runner.run(handlerPath);
-                    }
-                }
+                // A client-Java job dispatches to the Java engine's executor, a JS one to the code
+                // runner - inside the same JobLog wrapping either way, so both are equally
+                // visible/monitored in the Jobs perspective.
+                jobHandlerRunner.run(handler, engine);
             }
 
             registeredFinished(name, handler, triggered);

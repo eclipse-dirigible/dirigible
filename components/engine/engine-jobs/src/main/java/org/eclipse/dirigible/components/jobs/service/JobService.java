@@ -10,16 +10,15 @@
 package org.eclipse.dirigible.components.jobs.service;
 
 import static java.text.MessageFormat.format;
-import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.artefact.BaseArtefactService;
 import org.eclipse.dirigible.components.jobs.domain.Job;
 import org.eclipse.dirigible.components.jobs.email.JobEmailProcessor;
+import org.eclipse.dirigible.components.jobs.handler.JobHandlerRunner;
 import org.eclipse.dirigible.components.jobs.manager.JobsManager;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
-import org.eclipse.dirigible.graalium.core.DirigibleJavascriptCodeRunner;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,17 +35,23 @@ public class JobService extends BaseArtefactService<Job, Long> {
     /** The jobs manager. */
     private final JobsManager jobsManager;
 
+    /** Runs a job's handler on the engine it declares - shared with the scheduled fire. */
+    private final JobHandlerRunner jobHandlerRunner;
+
     /**
      * Instantiates a new job service.
      *
      * @param repository the repository
      * @param jobEmailProcessor the job email processor
      * @param jobsManager the jobs manager
+     * @param jobHandlerRunner the job handler runner
      */
-    public JobService(JobRepository repository, JobEmailProcessor jobEmailProcessor, JobsManager jobsManager) {
+    public JobService(JobRepository repository, JobEmailProcessor jobEmailProcessor, JobsManager jobsManager,
+            JobHandlerRunner jobHandlerRunner) {
         super(repository);
         this.jobEmailProcessor = jobEmailProcessor;
         this.jobsManager = jobsManager;
+        this.jobHandlerRunner = jobHandlerRunner;
     }
 
     /**
@@ -140,14 +145,9 @@ public class JobService extends BaseArtefactService<Job, Long> {
                 Configuration.set(entry.getKey(), entry.getValue());
             }
 
-            String handler = job.getHandler();
-            Path handlerPath = Path.of(handler);
-
-            try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
-                runner.run(handlerPath);
-            } catch (Exception e) {
-                throw new Exception(e);
-            }
+            // Run it on the engine the job declares - the same dispatch the scheduled fire uses. A
+            // client-Java job's handler is a class name, not a JavaScript path (dirigible #6305).
+            jobHandlerRunner.run(job.getHandler(), job.getEngine());
         } finally {
             for (Map.Entry<String, String> entry : memento.entrySet()) {
                 Configuration.set(entry.getKey(), entry.getValue());
