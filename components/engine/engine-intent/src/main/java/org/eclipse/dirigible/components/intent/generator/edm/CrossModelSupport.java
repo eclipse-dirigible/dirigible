@@ -73,10 +73,15 @@ public final class CrossModelSupport {
      *        {@code MONTH}) - the only place a consumer can learn a cross-model field's LOGICAL type
      *        ({@code month}/{@code week} are VARCHAR at the JDBC level); {@code null} when the model
      *        was not resolved - callers then fall back to the untyped behavior
+     * @param statusProperty the entity's {@code function: EntityStatus} relation property (PascalCase)
+     *        - the one carrying the {@code DOCUMENT_STATUS} widget; {@code null} when it has none or
+     *        the model was not resolved. A cross-model {@code generates} SOURCE needs it to render the
+     *        {@code sourceStatus} completion hook, which reads the same fact off
+     *        {@code RelationIntent.isEntityStatus()} in the local case
      */
     public record TargetInfo(boolean resolved, String perspectiveName, String tableDataName, String keyField, String keyColumn,
             String labelField, String fkType, java.util.Set<String> propertyNames, String hierarchyProperty, String identityProperty,
-            java.util.Map<String, String> propertyWidgets) {
+            java.util.Map<String, String> propertyWidgets, String statusProperty) {
     }
 
     @SuppressWarnings("unchecked")
@@ -281,6 +286,7 @@ public final class CrossModelSupport {
                 String labelField = "Name";
                 java.util.Set<String> propertyNames = null;
                 java.util.Map<String, String> propertyWidgets = null;
+                String statusProperty = null;
                 if (properties != null) {
                     propertyNames = new java.util.LinkedHashSet<>();
                     propertyWidgets = new java.util.LinkedHashMap<>();
@@ -297,6 +303,12 @@ public final class CrossModelSupport {
                             if (widget != null) {
                                 propertyWidgets.put(propertyName, widget);
                             }
+                            // The EntityStatus FK is the one the edm generator gave the DOCUMENT_STATUS
+                            // widget (EdmIntentGenerator: isEntityStatus() ? DOCUMENT_STATUS : DROPDOWN),
+                            // so the owner's .model carries the fact without a new attribute.
+                            if ("DOCUMENT_STATUS".equals(widget)) {
+                                statusProperty = propertyName;
+                            }
                         }
                     }
                     labelField = labelField(properties, keyField);
@@ -304,7 +316,7 @@ public final class CrossModelSupport {
                 String hierarchyProperty = str(entity.get("hierarchyProperty"), null);
                 String identityProperty = str(entity.get("identityProperty"), null);
                 return new TargetInfo(true, perspective, tableDataName, keyField, keyColumn, labelField, fkType, propertyNames,
-                        hierarchyProperty, identityProperty, propertyWidgets);
+                        hierarchyProperty, identityProperty, propertyWidgets, statusProperty);
             }
         } catch (RuntimeException e) {
             LOGGER.warn("Failed to read owner model [{}] for cross-model target [{}]", modelPath, targetEntity, e);
@@ -339,7 +351,7 @@ public final class CrossModelSupport {
     private static TargetInfo convention(String alias, String targetEntity) {
         String table = IntentNaming.upperSnake(alias) + "_" + IntentNaming.upperSnake(targetEntity);
         String keyColumn = IntentNaming.upperSnake(targetEntity) + "_ID";
-        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null);
+        return new TargetInfo(false, targetEntity, table, "Id", keyColumn, "Name", "INTEGER", null, null, null, null, null);
     }
 
     /**

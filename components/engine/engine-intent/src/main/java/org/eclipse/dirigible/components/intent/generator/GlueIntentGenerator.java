@@ -636,8 +636,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                         .isBlank()) {
                 continue;
             }
-            EntityIntent source = byName.get(g.getFrom());
-            if (source == null) {
+            // The SOURCE is normally a local entity; with `fromUses:` it is owned by another model and
+            // resolved from that model's .model exactly as a cross-model TARGET is. Authoring the
+            // create-from on the TARGET's module is what keeps the two modules' generated Java a DAG:
+            // otherwise "A generates into B" puts a reference to B inside A while B already references
+            // A, and neither can be compiled - or packaged as a jar - before the other.
+            boolean crossModelSource = g.isCrossModelSource();
+            UsesIntent fromUses = crossModelSource ? findUses(model, g.getFromUses()) : null;
+            CrossModelSupport.TargetInfo sourceInfo = fromUses == null ? null : CrossModelSupport.resolve(context, fromUses, g.getFrom());
+            EntityIntent source = crossModelSource ? null : byName.get(g.getFrom());
+            if (source == null && !crossModelSource) {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("generates", g.getName())) {
@@ -651,13 +659,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String toPerspective =
                     target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents, model);
             String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
+            String fromPerspective = sourceInfo != null ? sourceInfo.perspectiveName()
+                    : IntentEntities.resolvePerspective(g.getFrom(), compositionParents, model);
 
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", g.getName());
             e.put("className", IntentNaming.pascalIdentifier(g.getName()));
             e.put("crossModel", crossModel);
             e.put("fromEntity", g.getFrom());
-            e.put("fromPerspective", IntentEntities.resolvePerspective(g.getFrom(), compositionParents, model));
+            e.put("fromPerspective", fromPerspective);
+            // Cross-model source: the gen folder and the project that owns the source's topics/views.
+            e.put("crossModelSource", crossModelSource);
+            e.put("fromModel", crossModelSource ? g.getFromUses() : "");
+            e.put("fromProject", crossModelSource ? fromUses.resolveProject() : "");
             e.put("toEntity", g.getTo());
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
@@ -665,12 +679,28 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("fieldAssignments",
                     assignments(g.getMap(), g.getDefaults(), "source", temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
-            // is created (empty = no hook). Pre-resolved to the PascalCase FK property.
+            // is created (empty = no hook). Pre-resolved to the PascalCase FK property - locally off
+            // the relation, cross-model off the owner .model's DOCUMENT_STATUS widget.
             String sourceStatusProperty = "";
             if (g.getSourceStatus() != null) {
-                for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
-                    if (relation.isEntityStatus()) {
-                        sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
+                if (crossModelSource) {
+                    // Never guess the property name: the status FK is author-named (Status / Stage /
+                    // State), so a wrong guess would emit an updateProperty against a column that does
+                    // not exist - a failure visible only at run time, on the button's first click.
+                    if (sourceInfo == null || sourceInfo.statusProperty() == null) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates ["
+                                + g.getName()
+                                + "] declares sourceStatus but the function: EntityStatus relation of its cross-model source ["
+                                + g.getFrom() + "] (model [" + g.getFromUses() + "]) could not be read: either the owner entity declares "
+                                + "none, or its model was not resolvable here. Generate the [" + g.getFromUses()
+                                + "] model first, or publish its module so its .model is in the registry."));
+                    }
+                    sourceStatusProperty = sourceInfo.statusProperty();
+                } else {
+                    for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
+                        }
                     }
                 }
             }
@@ -699,7 +729,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // its OWN package - the template must qualify srcItem with this, not the source
                 // document's perspective. (The TARGET item stays on toPerspective: a create-from
                 // always writes into the target document's own composition-item table.)
-                e.put("fromItemPerspective", IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
+                // A cross-model source's items are owned by the same foreign model as the source.
+                e.put("fromItemPerspective", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
+                                                                                 .perspectiveName()
+                        : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
@@ -746,7 +779,13 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 e.put("itemFieldAssignments", new ArrayList<>());
-                e.put("itemLines", computedItemLines(lineRows, itemMetas, sourceProperties(source)));
+                // Cell expressions are written over the SOURCE record, so the known-property set comes
+                // from wherever the source is defined - locally, or the owner .model for a cross-model
+                // source (an unresolved owner yields an empty set, i.e. no local name check).
+                java.util.Set<String> knownSourceProperties = crossModelSource
+                        ? (sourceInfo != null && sourceInfo.propertyNames() != null ? sourceInfo.propertyNames() : java.util.Set.of())
+                        : sourceProperties(source);
+                e.put("itemLines", computedItemLines(lineRows, itemMetas, knownSourceProperties));
             } else {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");

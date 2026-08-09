@@ -56,8 +56,25 @@ public class GeneratesIntent {
      */
     private String name;
 
-    /** The source entity in THIS model, loaded by the selected record's id. */
+    /**
+     * The source entity, loaded by the selected record's id. Lives in THIS model unless
+     * {@link #fromUses} names the model that owns it.
+     */
     private String from;
+
+    /**
+     * Optional model alias (from the model's {@code uses:} list) the {@link #from} entity lives in.
+     * Blank means the source is a local entity of this model (the default, fully backward compatible).
+     *
+     * <p>
+     * A cross-model source lets the create-from be authored on the module that owns the TARGET, which
+     * is what breaks a mutual compile dependency between two modules: without it, "A generates into B"
+     * must be authored in A - so A's generated controller references B's entities while B already
+     * references A's, and neither module can be compiled (or packaged as a jar) before the other. The
+     * mirror of the cross-model {@code entity}/{@code model} source a {@code schedules} block accepts
+     * (issue #6532).
+     */
+    private String fromUses;
 
     /** The target entity to create. May live in another model (see {@link #uses}). */
     private String to;
@@ -137,6 +154,19 @@ public class GeneratesIntent {
 
     public void setFrom(String from) {
         this.from = from;
+    }
+
+    public String getFromUses() {
+        return fromUses;
+    }
+
+    public void setFromUses(String fromUses) {
+        this.fromUses = fromUses;
+    }
+
+    /** Whether the {@link #from} entity is owned by another model (see {@link #getFromUses()}). */
+    public boolean isCrossModelSource() {
+        return fromUses != null && !fromUses.isBlank();
     }
 
     public String getTo() {

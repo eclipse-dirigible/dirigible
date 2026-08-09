@@ -33,8 +33,8 @@ public class ${className}Generate {
         if (req == null || req.id == null) {
             return "{\"error\": \"missing source id\"}";
         }
-        gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Entity source =
-                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Entity source =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository().findById(req.id);
         if (source == null) {
             return "{\"error\": \"source ${fromEntity} not found\"}";
         }
@@ -46,8 +46,8 @@ public class ${className}Generate {
         gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Entity saved =
                 new gen.${toGenFolder}.data.${toJavaPerspective}.${toEntity}Repository().save(target);
 #if($hasItems)
-        for (gen.${javaGenFolderName}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
-                new gen.${javaGenFolderName}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
+        for (gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Entity srcItem :
+                new gen.${fromGenFolder}.data.${fromItemJavaPerspective}.${fromItemEntity}Repository()
                         .findAll(Criteria.create()
                                          .eq("${srcFkProperty}", req.id))) {
             gen.${toGenFolder}.data.${toJavaPerspective}.${toItemEntity}Entity item =
@@ -89,14 +89,14 @@ public class ${className}Generate {
         // the target and its items were created - and silently revert any concurrent write to the source
         // row in that window (recalculated totals, a workflow status). Same reason the process trigger
         // writes ProcessId via updateProperty rather than update().
-        gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
-                new gen.${javaGenFolderName}.data.${fromJavaPerspective}.${fromEntity}Repository();
+        gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository sourceRepository =
+                new gen.${fromGenFolder}.data.${fromJavaPerspective}.${fromEntity}Repository();
         sourceRepository.updateProperty(req.id, "${sourceStatusProperty}", ${sourceStatusValue});
         // Reload so the "-transitioned" payload carries the committed row (the flipped status plus any
         // write the target creation performed on the source), not the stale pre-generation snapshot.
         source = sourceRepository.findById(req.id);
         org.eclipse.dirigible.sdk.messaging.Producer.sendToTopic(
-                "${projectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
+                "${fromProjectName}-${fromPerspective}-${fromEntity}-transitioned", Json.stringify(source));
 #end
         return Json.stringify(saved);
     }
