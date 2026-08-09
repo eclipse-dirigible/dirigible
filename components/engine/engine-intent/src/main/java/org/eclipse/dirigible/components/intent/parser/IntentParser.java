@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -2797,11 +2798,25 @@ public final class IntentParser {
      * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
      */
     /**
-     * A {@code kind: parallel} step forks over {@code args.branches} (declared steps run concurrently)
-     * and joins before {@code args.next}. v1 scope: at least two branches; each is a SINGLE declared
-     * task step that joins directly - no own {@code next}/{@code then}, no boundary timer, no nested
-     * parallel; {@code next} is a declared step or {@code end}. Multi-step branch chains and nested
-     * forks are a documented follow-up.
+     * A {@code kind: parallel} step forks over {@code args.branches} (at least two declared steps, run
+     * concurrently) and joins before {@code args.next}. Each branch is a <b>chain</b>: it continues
+     * through its steps' own routing ({@code next}, a decision's {@code then}/{@code else}, a boundary
+     * timer's {@code then}) and may itself be a nested {@code parallel}. Everything reachable that way
+     * is the branch <b>region</b> ({@link ProcessParallelSupport#regions}), and the rules make the
+     * region a closed sub-flow:
+     *
+     * <ul>
+     * <li>a step with no routing at all is a branch terminal and joins implicitly; the literal
+     * {@code join} converges on the join explicitly, and means nothing outside a branch;
+     * <li>{@code end} is not reachable from inside a branch - a token that ends there never arrives at
+     * the join, and the instance hangs on it forever;
+     * <li>no step belongs to two branches - a step entered by two concurrent tokens would run twice and
+     * still leave the join waiting;
+     * <li>nothing outside a branch may route into one, which is also how "a branch routed to the fork's
+     * own {@code next} instead of converging on {@code join}" surfaces;
+     * <li>a top-level fork needs a {@code next} (a declared step or {@code end}) on the main flow; a
+     * nested fork may omit it, and then joins into its own enclosing join.
+     * </ul>
      */
     private static void validateParallelSteps(ProcessIntent process, List<String> issues) {
         Map<String, StepIntent> byName = new HashMap<>();
@@ -2810,49 +2825,112 @@ public final class IntentParser {
                 byName.put(step.getName(), step);
             }
         }
-        Set<String> usedBranches = new HashSet<>();
+        ProcessParallelSupport.Regions regions = ProcessParallelSupport.regions(process.getSteps());
+        String prefix = "process [" + process.getName() + "] ";
         for (StepIntent step : process.getSteps()) {
-            if (!"parallel".equals(step.getKind())) {
+            if (!ProcessParallelSupport.isParallel(step)) {
                 continue;
             }
-            String subject = "process [" + process.getName() + "] parallel [" + step.getName() + "]";
+            String subject = prefix + "parallel [" + step.getName() + "]";
             Map<String, Object> args = step.getArgs() == null ? Map.of() : step.getArgs();
             List<?> branches = args.get("branches") instanceof List<?> list ? list : List.of();
             if (branches.size() < 2) {
                 issues.add(subject + " needs a `branches` list of at least two step names");
             }
-            Object next = args.get("next");
-            String nextStep = next == null ? null
-                    : next.toString()
-                          .trim();
-            if (nextStep == null || nextStep.isEmpty()) {
+            boolean nested = regions.contains(step.getName());
+            String nextStep = trimmedOrNull(args.get("next"));
+            if (nextStep == null && !nested) {
                 issues.add(subject + " needs a `next` step to join into");
-            } else if (!"end".equalsIgnoreCase(nextStep) && !byName.containsKey(nextStep)) {
+            } else if (nextStep != null && !nested && !"end".equalsIgnoreCase(nextStep) && !byName.containsKey(nextStep)) {
                 issues.add(subject + " next [" + nextStep + "] is not a declared step or `end`");
             }
+            Set<String> declared = new HashSet<>();
             for (Object branchRaw : branches) {
                 String branch = String.valueOf(branchRaw);
-                StepIntent branchStep = byName.get(branch);
-                if (branchStep == null) {
+                if (!declared.add(branch)) {
+                    issues.add(subject + " lists branch [" + branch + "] twice");
+                }
+                if (branch.equals(step.getName())) {
+                    issues.add(subject + " lists itself as a branch");
+                } else if (!byName.containsKey(branch)) {
                     issues.add(subject + " branch [" + branch + "] is not a declared step");
-                    continue;
-                }
-                if (!usedBranches.add(branch)) {
-                    issues.add(subject + " branch [" + branch + "] is a branch of more than one parallel");
-                }
-                String branchKind = branchStep.getKind() == null ? "userTask" : branchStep.getKind();
-                if (!"userTask".equals(branchKind) && !"serviceTask".equals(branchKind) && !"script".equals(branchKind)) {
-                    issues.add(subject + " branch [" + branch + "] must be a userTask/serviceTask/script step, not [" + branchKind
-                            + "] (nested parallels are not yet supported)");
-                }
-                Map<String, Object> branchArgs = branchStep.getArgs() == null ? Map.of() : branchStep.getArgs();
-                if (branchArgs.get("next") != null || branchArgs.get("then") != null || branchArgs.get("timeout") != null
-                        || branchArgs.get("expire") != null) {
-                    issues.add(subject + " branch [" + branch + "] declares next/then/timeout/expire - a v1 parallel branch is a single"
-                            + " step that joins directly (multi-step branch chains and boundary timers on a branch are not yet supported)");
                 }
             }
         }
+        for (String shared : regions.shared()) {
+            issues.add(prefix + "step [" + shared + "] is reachable from more than one parallel branch - a step run by two"
+                    + " concurrent tokens runs twice and still leaves the join waiting");
+        }
+        validateParallelRouting(process, byName, regions, issues);
+    }
+
+    /**
+     * Validate every step's routing against the parallel branch regions: {@code join} is meaningful
+     * only inside a branch, a branch may never reach the process end event, and nothing outside a
+     * branch may point into one (see {@link #validateParallelSteps} for why).
+     */
+    private static void validateParallelRouting(ProcessIntent process, Map<String, StepIntent> byName,
+            ProcessParallelSupport.Regions regions, List<String> issues) {
+        String prefix = "process [" + process.getName() + "] ";
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null) {
+                continue;
+            }
+            String join = regions.joinOf(step.getName());
+            String subject = prefix + "step [" + step.getName() + "]";
+            if (ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(step.getName())) {
+                issues.add(subject + " uses the reserved name `join` - that is the routing literal for a parallel branch's join gateway");
+            }
+            if (join != null && "end".equalsIgnoreCase(step.getKind())) {
+                issues.add(subject + " is an `end` step inside a parallel branch - a branch must reach its join, so route to"
+                        + " `join` and end after the fork instead");
+            }
+            for (String target : ProcessParallelSupport.routingTargets(step)) {
+                if (ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(target)) {
+                    if (join == null) {
+                        issues.add(subject + " routes to `join`, which is only valid inside a parallel branch");
+                    }
+                } else if (join == null && regions.contains(target)) {
+                    // A branch absorbs whatever its steps route to, so a step still on the main flow
+                    // pointing into a branch means the two claims collide. The fork's own `next` is the
+                    // common case (a branch routed to it instead of converging on `join`) - and reporting
+                    // it from the fork names both halves of the mistake.
+                    issues.add(ProcessParallelSupport.isParallel(step)
+                            ? prefix + "parallel [" + step.getName() + "] next [" + target + "] is also reachable from inside one of its"
+                                    + " branches - a branch converges on `join`, it must not route to the fork's own `next`"
+                            : subject + " routes to [" + target + "], which is inside a parallel branch - a branch is entered through its"
+                                    + " fork only");
+                } else if (join != null && isEndStep(target, byName)) {
+                    issues.add(subject + " routes to `end` from inside a parallel branch - the join would wait for a token that"
+                            + " never arrives; route to `join` instead");
+                }
+            }
+        }
+    }
+
+    /** Whether a routing target is the process end event: the literal {@code end} or an `end` step. */
+    private static boolean isEndStep(String target, Map<String, StepIntent> byName) {
+        StepIntent step = byName.get(target);
+        return "end".equalsIgnoreCase(target) || (step != null && "end".equalsIgnoreCase(step.getKind()));
+    }
+
+    /**
+     * A routing target that names no step: the literal {@code end} (the process end event) or
+     * {@code join} (the enclosing parallel branch's join gateway). Where {@code join} is actually
+     * allowed is checked by {@link #validateParallelRouting} - it is only meaningful inside a branch.
+     */
+    private static boolean isRoutingLiteral(String target) {
+        return "end".equalsIgnoreCase(target) || ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(target);
+    }
+
+    /** A trimmed non-empty string form of a raw arg value, or {@code null}. */
+    private static String trimmedOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString()
+                           .trim();
+        return text.isEmpty() ? null : text;
     }
 
     /** The entity a process trigger starts on (onCreate/onUpdate/onDelete target), or null. */
@@ -3068,7 +3146,7 @@ public final class IntentParser {
                 }
             }
             String next = stepArg(step, "next");
-            if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
+            if (next != null && !next.isBlank() && !isRoutingLiteral(next) && !stepNames.contains(next)) {
                 issues.add(
                         "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
             }
@@ -3183,7 +3261,7 @@ public final class IntentParser {
                 if (then == null || then.toString()
                                         .isBlank()) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer + " must declare `then`");
-                } else if (!"end".equalsIgnoreCase(then.toString()) && !stepNames.contains(then.toString())) {
+                } else if (!isRoutingLiteral(then.toString()) && !stepNames.contains(then.toString())) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer
                             + " `then` references unknown step [" + then + "]");
                 }
@@ -3381,7 +3459,7 @@ public final class IntentParser {
 
     private static void checkDecisionTarget(ProcessIntent process, StepIntent step, String arg, String target, Set<String> stepNames,
             List<String> issues) {
-        if (!"end".equalsIgnoreCase(target) && !stepNames.contains(target)) {
+        if (!isRoutingLiteral(target) && !stepNames.contains(target)) {
             issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg + "` references unknown step ["
                     + target + "]");
         }
