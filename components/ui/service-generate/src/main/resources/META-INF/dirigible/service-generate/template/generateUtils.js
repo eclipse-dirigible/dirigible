@@ -289,8 +289,11 @@ export function generateFiles(model, parameters, templateSources) {
     // the landing route and the layout's list moves to /<Entity>/list (see the shell template).
     const uiCalendarModels = model.entities.filter(e => e.calendarView === "true" && e.type === "PRIMARY");
 
-    // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
-    const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
+    // UI Slots: a PRIMARY entity that ALSO renders as an x-h-slot-picker (slotsView, from `view: slots`)
+    // for appointment booking. Like the calendar it is an ADDITIONAL page: the entity keeps its own
+    // layout, the picker takes over the landing route, and that layout's browse page moves to
+    // /<Entity>/list - a picker creates a booking, the list/document works with it afterwards.
+    const uiSlotsModels = model.entities.filter(e => e.slotsView === "true" && e.type === "PRIMARY");
 
     // Personal (my) surface: entities owned by the logged-in user - a direct personal FK
     // (intent `personal: true`) or the scope inherited from the direct composition parent

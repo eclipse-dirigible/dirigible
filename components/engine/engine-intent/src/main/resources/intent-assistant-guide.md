@@ -630,14 +630,13 @@ bookings, day allocations, anything keyed by a date. Set `view:` on the entity (
 the role alias for `view: calendar`) and add the matching config block. The generated REST controller
 and form are reused unchanged; only the presentation differs.
 
-**A calendar is an ADDITIONAL page, never a replacement.** `view: calendar` / `view: range` leave the
-entity's own layout (list / master / document) fully in place: the calendar becomes the landing browse
-page `/<Entity>`, the layout's own browse page moves to `/<Entity>/list`, both offer a switch to the
-other, and create / edit / preview stay the layout's own routes. So `function: Document` + `view:
-calendar` is a valid, useful combination - the documents are browsed on a calendar and still edited on
-the document page, with their line items, Print and inline process tasks. (`view: slots` is the one
-exception: a slot picker is an authoring surface, not a second way to browse, so it does replace the
-layout.)
+**A view is an ADDITIONAL page, never a replacement.** `view: calendar` / `range` / `slots` leave the
+entity's own layout (list / master / document) fully in place: the view becomes the landing browse page
+`/<Entity>`, the layout's own browse page moves to `/<Entity>/list`, both offer a switch to the other,
+and create / edit / preview stay the layout's own routes. So `function: Document` + `view: calendar`
+(or `view: slots`) is a valid, useful combination - the documents are browsed on a calendar, or booked
+from a slot picker, and still edited on the document page with their line items, Print and inline
+process tasks.
 
 - **`view: calendar`** (or `function: Calendar`) + a `calendar:` block renders the records as events on
   the Harmonia calendar. **`view: range`** uses the same block for start/end spans.

@@ -1113,6 +1113,39 @@ class EdmIntentGeneratorTest {
         assertEquals(null, primary.get("detailCalendar"));
     }
 
+    @Test
+    void documentMasterWithASlotsViewKeepsTheDocumentLayoutAndAddsThePicker() {
+        // #6547, same rule as the calendar: a slot picker is how a booking is CREATED, the document page
+        // is how it is worked with afterwards - so the picker rides alongside the layout instead of
+        // replacing it, and slot-click lands on the document editor.
+        String yaml = """
+                name: clinic
+                entities:
+                  - name: Appointment
+                    function: Document
+                    view: slots
+                    slots: { start: startsAt, open: "09:00", close: "17:00", step: 15 }
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: startsAt, type: timestamp, required: true }
+                  - name: AppointmentItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                    relations:
+                      - { name: Appointment, kind: manyToOne, to: Appointment, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "clinic");
+        Map<String, Object> appointment = entityByName(entities(model), "Appointment");
+        assertEquals("MANAGE_DOCUMENT", appointment.get("layoutType"), "view: slots no longer overrides the document layout");
+        assertEquals("true", appointment.get("slotsView"), "the picker rides alongside the layout as an additional page");
+        assertEquals("StartsAt", appointment.get("slotStartProperty"));
+        assertEquals("09:00", appointment.get("slotOpen"));
+        assertEquals("17:00", appointment.get("slotClose"));
+        assertEquals("15", appointment.get("slotStep"));
+    }
+
     @SuppressWarnings("unchecked")
     @Test
     void documentWhoseItemsChildIsACalendarRendersTheItemsPaneAsACalendar() {

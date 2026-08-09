@@ -7,17 +7,24 @@
 /*
  * Slots view type — Harmonia SPA variant.
  *
- * A PRIMARY entity declared with `view: slots` is emitted by EdmIntentGenerator with layoutType
- * MANAGE_SLOTS plus the slot* metadata (slotStartProperty / slotOpen / slotClose / slotStep /
- * slotDisabledDays). It renders as a Harmonia x-h-slot-picker (a 3-day grid of selectable time slots):
- * free slots are bookable, already-booked slots (from the entity's own records) are shown taken, and
- * picking a slot opens the shared create form prefilled with the chosen datetime (?<Start>=…).
+ * A PRIMARY entity declared with `view: slots` is emitted by EdmIntentGenerator with slotsView="true"
+ * plus the slot* metadata (slotStartProperty / slotOpen / slotClose / slotStep / slotDisabledDays). It
+ * renders as a Harmonia x-h-slot-picker (a 3-day grid of selectable time slots): free slots are
+ * bookable, already-booked slots (from the entity's own records) are shown taken, and picking a slot
+ * opens the create form prefilled with the chosen datetime (?<Start>=…).
+ *
+ * The picker is an ADDITIONAL page, not a replacement (#6547). The entity keeps its own layout
+ * (MANAGE / MANAGE_MASTER / MANAGE_DOCUMENT) and every page that layout generates - so this descriptor
+ * emits ONLY the picker, and the create/edit surface it opens is whatever that layout owns. A picker is
+ * how a booking is CREATED; the list or document page is how it is worked with afterwards, and an
+ * author needs both. The picker takes over the landing route:
  *
  *   /<Entity>            -> the slot-picker page
- *   /<Entity>/create     -> the shared form (create; opened on slot-click)
- *   /<Entity>/{id}/edit  -> the shared form (edit)
+ *   /<Entity>/list       -> the layout's own browse page (list / master / document list)
+ *   /<Entity>/create     -> the layout's editor (create; opened on slot-click)
+ *   /<Entity>/{id}/edit  -> the layout's editor (edit)
  *
- * Collection: uiSlotsModels = layoutType === "MANAGE_SLOTS" && type === "PRIMARY".
+ * Collection: uiSlotsModels = slotsView === "true" && type === "PRIMARY".
  */
 export function getSources(parameters) {
     const collection = "uiSlotsModels";
@@ -34,20 +41,6 @@ export function getSources(parameters) {
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-slots.html",
-            collection
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/perspective/manage/form-page.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/js/components/pages/{{perspectiveName}}/{{name}}FormPage.js",
-            collection
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/perspective/manage/form-view.html.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-form.html",
             collection
         }
     ];

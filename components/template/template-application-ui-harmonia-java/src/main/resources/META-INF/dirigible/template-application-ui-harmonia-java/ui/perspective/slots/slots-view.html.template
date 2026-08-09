@@ -14,6 +14,12 @@
         <span x-text="action.translation &amp;&amp; action.translation.key ? T(action.translation.key, action.label, action.translation.options || {}) : action.label"></span>
       </button>
     </template>
+    <!-- The picker is an ADDITIONAL browse page: this switches to the entity's own layout (its list /
+         master / document list) at /${name}/list, which carries the mirror switch back here. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goList()">
+      <i role="img" x-h-lucide data-lucide="table"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.list', 'List')"></span>
+    </button>
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
