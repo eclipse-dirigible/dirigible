@@ -13,6 +13,18 @@
 	<artifactId>dirigible-components-resources-monitoring</artifactId>
 	<packaging>jar</packaging>
 
+	<dependencies>
+		<!-- The Processes page loads this at runtime from /webjars/bpmn-visualization/... to render the
+			live BPMN diagram, so this shell has to bring it itself. No Java here imports it, which is
+			exactly why it is declared: the shell is built to work without the Web IDE, and in an
+			assembly that leaves the IDE out there is no other module to inherit it from. -->
+		<dependency>
+			<groupId>org.webjars.npm</groupId>
+			<artifactId>bpmn-visualization</artifactId>
+			<version>${bpmn-visualization.version}</version>
+		</dependency>
+	</dependencies>
+
 	<properties>
 		<license.header.location>../../../licensing-header.txt</license.header.location>
 		<parent.pom.folder>../../../</parent.pom.folder>
