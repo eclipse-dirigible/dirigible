@@ -16,6 +16,7 @@ import static org.hamcrest.Matchers.greaterThanOrEqualTo;
 import java.util.concurrent.TimeUnit;
 
 import org.eclipse.dirigible.tests.framework.logging.LogsAsserter;
+import io.restassured.http.ContentType;
 import org.eclipse.dirigible.tests.framework.util.SynchronizationUtil;
 import org.junit.jupiter.api.BeforeEach;
 
@@ -65,6 +66,34 @@ public class JavaJobDecoratorSampleProjectIT extends SampleProjectRepositoryIT {
                                                  .then()
                                                  .statusCode(200)
                                                  .body("findAll { it.engine == 'java' }.size()", greaterThanOrEqualTo(2)));
+
+        verifyTriggerNowRunsTheClientJavaJob();
+    }
+
+    /**
+     * Trigger-now (the Jobs perspective's play button) must run a client-Java job on the Java engine.
+     * The manual path used to be JavaScript-only, so it tried to run the job's CLASS NAME as a
+     * repository path to a JS module and answered 500 (dirigible #6305).
+     *
+     * <p>
+     * The status is the whole assertion: the Java dispatch either resolves the client bean and invokes
+     * it, or throws (an unknown bean, a job body that fails) - and either way the endpoint surfaces
+     * that as a 500. It cannot answer 200 without having run the job.
+     */
+    private void verifyTriggerNowRunsTheClientJavaJob() {
+        String name = restAssuredExecutor.executeWithResult(() -> given().when()
+                                                                         .get("/services/jobs")
+                                                                         .then()
+                                                                         .statusCode(200)
+                                                                         .extract()
+                                                                         .path("find { it.engine == 'java' }.name"));
+
+        restAssuredExecutor.execute(() -> given().contentType(ContentType.JSON)
+                                                 .body("[]")
+                                                 .when()
+                                                 .post("/services/jobs/trigger/" + name)
+                                                 .then()
+                                                 .statusCode(200));
     }
 
 }

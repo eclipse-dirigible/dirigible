@@ -94,7 +94,15 @@ instantiate client classes.
 - `EntityClassConsumer` (data-store-java) — `@Entity` → `JavaEntityManager` (Hibernate dynamic-map).
 - `ControllerClassConsumer` — `@Controller` → `ControllerRouter` + OpenAPI via
   `JavaControllerOpenApiPublisher`. (A `@Controller` must not also implement `JavaHandler`.)
-- `ScheduledClassConsumer` — jobs (see two styles below) → cron via a dedicated `ThreadPoolTaskScheduler`.
+- `ScheduledClassConsumer` — jobs (see two styles below) → a real `Job` row per tenant on the platform's
+  **shared Quartz scheduler** (#6375), under the synthetic `RUNTIME_LOCATION_PREFIX` location so the job
+  synchronizer does not reap it as a registry orphan. So a client-Java job is listed, enable/disable-able,
+  trigger-now-able and job-logged in the Jobs perspective like any `.job`, and fires **once cluster-wide**
+  — not once per JVM, as the private `ThreadPoolTaskScheduler` this replaced did. At fire time the jobs
+  engine dispatches back through the `JavaJobExecutor` SPI (engine `java`); both that path and the manual
+  trigger go through `JobHandlerRunner`, which is the ONLY place the engine→runner dispatch lives —
+  trigger-now was written out separately once and stayed JavaScript-only, so triggering a client-Java job
+  ran its class name as a JS path and 500'd (#6305).
 - `ListenerClassConsumer` — listeners → ActiveMQ; re-establishes the message's tenant context.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free
