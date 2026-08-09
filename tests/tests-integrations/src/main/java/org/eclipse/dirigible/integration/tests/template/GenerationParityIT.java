@@ -133,6 +133,11 @@ class GenerationParityIT extends IntegrationTest {
             new Case("sales-order.model", TEMPLATE_APPLICATION, false), //
             new Case("simple.model", TEMPLATE_SCHEMA, false), //
             new Case("simple.model", TEMPLATE_APPLICATION, false), //
+            // The additional-page views (#6547): a calendar entity and a slot-picker entity, each
+            // keeping its own MANAGE layout. Without them the two pipelines could disagree about the
+            // uiCalendarModels / uiSlotsModels partitions - as they silently did once - and every
+            // existing fixture would still match, because none of them declares a view.
+            new Case("views.model", TEMPLATE_APPLICATION, false), //
             new Case("orders.glue", TEMPLATE_GLUE, false), //
             new Case("leave-request.form", TEMPLATE_FORM, false), //
             new Case("revenue.report", TEMPLATE_REPORT, false), //

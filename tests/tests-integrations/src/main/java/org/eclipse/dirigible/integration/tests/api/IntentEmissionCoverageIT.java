@@ -379,6 +379,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, personal: true }
 
+              # view: slots on a DOCUMENT master (#6547) - the picker is an additional page: the document
+              # layout survives it (slot-click creates a document), and the document list stays reachable
+              # at /<Entity>/list.
+              - name: Visit
+                function: Document
+                view: slots
+                slots: { start: startsAt, open: "09:00", close: "17:00", step: 15 }
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: startsAt, type: timestamp, required: true }
+              - name: VisitItem
+                function: DocumentItem
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: Visit, kind: manyToOne, to: Visit, composition: true, required: true }
+
               # view: calendar on the document's LINE-ITEMS child (#6482) - the document's items PANE
               # renders as the calendar (a day-grained line belongs on one), instead of the calendar
               # markup being emitted and then filtered out of the secondary panels. The document layout
@@ -1262,6 +1280,20 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the calendar must offer the switch back to the entity's own browse page");
         assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
                 "the personal list must offer the switch to the personal calendar");
+
+        // The slot picker follows the same additive rule: a DOCUMENT master declaring view: slots keeps
+        // its document layout (slot-click creates a document, not a bare form), the document list stays
+        // at /<Entity>/list, and the two browse pages switch to each other.
+        assertTrue(shellIndex.contains("x-route=\"/Visit\" x-template.target.app=\"./views/Visit/Visit-slots.html\""),
+                "a slots entity must land on its picker");
+        assertTrue(shellIndex.contains("x-route=\"/Visit/list\" x-template.target.app=\"./views/Visit/Visit-manage-list.html\""),
+                "the document list of a slots entity must stay reachable at /<Entity>/list");
+        assertTrue(shellIndex.contains("x-route=\"/Visit/create\" x-template.target.app=\"./views/Visit/Visit-document.html\""),
+                "slot-click must create through the DOCUMENT editor, not a plain form");
+        assertTrue(contentOf("gen/emission/views/Visit/Visit-slots.html").contains("goList()"),
+                "the picker must offer the switch to the entity's own browse page");
+        assertTrue(contentOf("gen/emission/views/Visit/Visit-manage-list.html").contains("goSlots()"),
+                "the document list must offer the switch back to the picker");
 
         // #6482: a document whose LINE-ITEMS child declares view: calendar renders the items PANE as
         // the calendar - on the power, personal and partner document surfaces alike. This is the

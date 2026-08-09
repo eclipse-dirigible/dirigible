@@ -69,6 +69,7 @@
         "chooseDate": "Choose date",
         "calendar": "Calendar",
         "list": "List",
+        "slots": "Slots",
         "details": "Details",
         "selectTitle": "Select a {{name}}",
         "back": "Back",

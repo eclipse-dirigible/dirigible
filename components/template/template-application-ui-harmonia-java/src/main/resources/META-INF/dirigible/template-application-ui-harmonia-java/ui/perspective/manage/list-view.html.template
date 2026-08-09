@@ -23,6 +23,14 @@
       <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
     </button>
 #end
+#if($slotsView)
+    <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
+         this browse page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
+      <i role="img" x-h-lucide data-lucide="clock"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
+    </button>
+#end
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>

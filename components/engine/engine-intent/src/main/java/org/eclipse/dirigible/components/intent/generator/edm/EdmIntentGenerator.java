@@ -287,12 +287,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A slots entity renders as a Harmonia x-h-slot-picker for appointment/booking: free time
             // slots are bookable and open the create form prefilled with the chosen datetime. Reuses the
-            // generated controller (existing records mark their slots taken) and the shared form. Unlike
-            // the calendar above, the slot picker still REPLACES the layout - it is an authoring surface
-            // (pick a free slot -> create), not a second way to browse the same records.
+            // generated controller (existing records mark their slots taken) and the shared form. Like the
+            // calendar above it is an ADDITIONAL page - the entity keeps its own layout and every page
+            // that brings, the picker takes over the landing route, and the layout's browse page moves to
+            // /<Entity>/list. A picker is how you CREATE a booking; the document/list is how you work
+            // with one afterwards, and an author needs both.
             if (entity.isSlots()) {
                 SlotsIntent slotsCfg = entity.getSlots();
-                entityMap.put("layoutType", "MANAGE_SLOTS");
+                entityMap.put("slotsView", "true");
                 if (slotsCfg != null) {
                     if (notBlank(slotsCfg.getStart())) {
                         entityMap.put("slotStartProperty", IntentNaming.pascalCase(slotsCfg.getStart()));
@@ -323,8 +325,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A document master keeps its own perspective/nav but swaps the master-detail layout for the
             // document layout; it names its line-items entity so the document page renders that child as
-            // the inline table (and any other composition children as ordinary detail panels).
-            else if (documentItems.containsKey(name)) {
+            // the inline table (and any other composition children as ordinary detail panels). Resolved
+            // independently of the calendar / slots views above, which are additional pages now.
+            if (documentItems.containsKey(name)) {
                 String itemsEntity = documentItems.get(name);
                 entityMap.put("layoutType", "MANAGE_DOCUMENT");
                 entityMap.put("documentItemsEntity", itemsEntity);
@@ -375,10 +378,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A document master (owns a *Item / DocumentItem composition child) gets a generated .print
             // template + feeder, so its edit surface can offer a Print button. Flag it independently of
-            // the layout: the MANAGE_DOCUMENT layout renders Print in the document view already, but a
-            // document master whose UI is overridden to a slots view reuses the plain manage form for
-            // edit - the flag is what lets that shared form show Print too. (A calendar view no longer
-            // overrides the layout, so a calendar-browsed document edits on the document page.)
+            // the layout - the MANAGE_DOCUMENT layout renders Print in the document view, and the flag is
+            // what lets the shared manage form show Print too for a master whose edit surface is that
+            // form. (Neither the calendar nor the slots view overrides the layout any more, so a document
+            // browsed on either still edits on its document page.)
             if (documentItems.containsKey(name)) {
                 entityMap.put("hasPrint", "true");
             }

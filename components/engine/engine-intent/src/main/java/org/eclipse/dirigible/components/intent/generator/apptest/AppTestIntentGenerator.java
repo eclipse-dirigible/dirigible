@@ -145,7 +145,8 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
         out.put("name", name);
         out.put("label", stringOr(edm.get("entityLabel"), IntentNaming.humanize(name)));
         out.put("labelPlural", stringOr(edm.get("menuLabel"), IntentNaming.pluralize(IntentNaming.humanize(name))));
-        out.put("layout", layout(string(edm.get("layoutType")), "true".equals(string(edm.get("calendarView")))));
+        out.put("layout", layout(string(edm.get("layoutType")), "true".equals(string(edm.get("calendarView"))),
+                "true".equals(string(edm.get("slotsView")))));
         out.put("route", "#/" + name);
         out.put("navGroup", string(edm.get("perspectiveNavId")));
         out.put("api", "/" + sanitizeJavaIdentifier(string(edm.get("perspectiveName"))) + "/" + name + "Controller");
@@ -501,18 +502,20 @@ public class AppTestIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * The runner's layout token from the EDM layout type. A calendar view keeps the entity's layout
-     * intact but takes over its landing route (the layout's list moves to {@code /<Entity>/list}), so
-     * the token the runner drives at {@code #/<Entity>} is the calendar - it must not expect
-     * columns/rows there. Same for the slot picker, which does replace the layout.
+     * The runner's layout token from the EDM layout type. A calendar or slots view keeps the entity's
+     * layout intact but takes over its landing route (the layout's list moves to
+     * {@code /<Entity>/list}), so the token the runner drives at {@code #/<Entity>} is that view - it
+     * must not expect columns/rows there.
      */
-    private static String layout(String layoutType, boolean calendarView) {
+    private static String layout(String layoutType, boolean calendarView, boolean slotsView) {
         if (calendarView) {
             return "calendar";
         }
+        if (slotsView) {
+            return "slots";
+        }
         return switch (layoutType == null ? "" : layoutType) {
             case "MANAGE_DOCUMENT" -> "document";
-            case "MANAGE_SLOTS" -> "slots";
             default -> "manage-list";
         };
     }

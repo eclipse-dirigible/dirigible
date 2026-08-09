@@ -192,5 +192,10 @@ document.addEventListener('alpine:init', () => {
     // Switch to the additional calendar page (intent `view: calendar|range`), which owns /${name}.
     goCalendar() { window.PineconeRouter.navigate('/${name}'); },
 #end
+#if($slotsView)
+
+    // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
+    goSlots() { window.PineconeRouter.navigate('/${name}'); },
+#end
   }));
 }, { once: true });
