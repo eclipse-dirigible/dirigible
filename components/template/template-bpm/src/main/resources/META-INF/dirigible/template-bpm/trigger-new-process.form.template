@@ -2,7 +2,7 @@
 {
     "feeds": [],
     "scripts": [],
-    "code": "${dollar}scope.model.param1 = \"\";\n${dollar}scope.model.param2 = 0;\n\n${dollar}scope.onTriggerClicked = function(){\n    ${dollar}http.post(\"/services/ts/${projectName}/api/ProcessService.ts/processes\", JSON.stringify(${dollar}scope.model)).then(function (response) {\n        if (response.status != 202) {\n            alert(`Unable to trigger a new process: '${dollar}{response.message}'`);\n            return;\n        }\n        alert(\"A new process instance has been triggered.\\nResponse: \" + JSON.stringify(response.data));\n    });\n}\n",
+    "code": "${dollar}scope.model.param1 = \"\";\n${dollar}scope.model.param2 = 0;\n\n${dollar}scope.onTriggerClicked = function(){\n    ${dollar}http.post(\"/services/java/${projectName}/${javaPackageName}/ProcessService/processes\", JSON.stringify(${dollar}scope.model)).then(function (response) {\n        alert(\"A new process instance has been triggered.\\nResponse: \" + JSON.stringify(response.data));\n    }, function (error) {\n        alert(`Unable to trigger a new process: '${dollar}{(error && error.data && error.data.message) || error}'`);\n    });\n}\n",
     "form": [
         {
             "controlId": "header",

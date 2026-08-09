@@ -49,7 +49,11 @@ public class BPMStarterTemplateIT extends UserInterfaceIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        this.consoleLogAsserter = new LogsAsserter("app.out", Level.INFO);
+        // The service task is client Java now and logs through the SDK logger, which nests the name it
+        // is given under the platform's "app." root - not the "app.out" console stream the retired
+        // TypeScript task wrote to. Watch the whole application tree, so the assertion does not depend
+        // on the package name the template derives from the project.
+        this.consoleLogAsserter = new LogsAsserter("app", Level.INFO);
     }
 
     @Test
