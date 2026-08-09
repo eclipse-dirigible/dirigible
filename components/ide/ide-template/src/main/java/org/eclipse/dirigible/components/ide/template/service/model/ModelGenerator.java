@@ -655,8 +655,12 @@ class ModelGenerator {
         // A document master owns a line-items child: a header form, an inline items table and a totals
         // footer. The items child stays an ordinary dependent detail.
         collections.put("uiDocumentModels", select(entities, layout("MANAGE_DOCUMENT", "PRIMARY")));
-        collections.put("uiCalendarModels", select(entities, layout("MANAGE_CALENDAR", "PRIMARY")));
-        collections.put("uiSlotsModels", select(entities, layout("MANAGE_SLOTS", "PRIMARY")));
+        // A calendar / slot-picker view is an ADDITIONAL page (#6547): the entity keeps its own layout, so
+        // these two key on their own flags rather than on a layout type - there is no MANAGE_CALENDAR or
+        // MANAGE_SLOTS layout any more. Keep in step with generateUtils.js while both paths are live.
+        collections.put("uiCalendarModels",
+                select(entities, e -> "true".equals(str(e, "calendarView")) && "PRIMARY".equals(str(e, "type"))));
+        collections.put("uiSlotsModels", select(entities, e -> "true".equals(str(e, "slotsView")) && "PRIMARY".equals(str(e, "type"))));
 
         // The personal surface: entities the logged-in user owns, either through a direct personal
         // relation or through the scope inherited from their composition parent.
@@ -665,9 +669,10 @@ class ModelGenerator {
         // its parent's panels rather than through navigation.
         collections.put("personalRootModels", select(entities, e -> e.get("personalProperty") != null));
         collections.put("personalCalendarModels",
-                select(entities, e -> "MANAGE_CALENDAR".equals(str(e, "layoutType")) && e.get("personalProperty") != null));
-        collections.put("personalListModels",
-                select(entities, e -> e.get("personalProperty") != null && !"MANAGE_CALENDAR".equals(str(e, "layoutType"))));
+                select(entities, e -> "true".equals(str(e, "calendarView")) && e.get("personalProperty") != null));
+        // Every personal root gets the list pair, calendar roots included: the calendar is an additional
+        // page, so the list stays reachable at /my/<Entity>/list.
+        collections.put("personalListModels", select(entities, e -> e.get("personalProperty") != null));
         collections.put("personalDocumentModels",
                 select(entities, e -> "MANAGE_DOCUMENT".equals(str(e, "layoutType")) && e.get("personalProperty") != null));
         // A document root uses the document layout instead of the plain form, so it is excluded here
