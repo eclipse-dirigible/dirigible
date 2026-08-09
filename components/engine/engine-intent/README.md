@@ -230,12 +230,22 @@ included. For logic beyond an expression, a hand-written `CalculatedField` compo
   slots: { start: startTime }
 ```
 
+`view: calendar` / `view: range` on a **top-level entity** adds a calendar **alongside** that entity's
+own layout - it never replaces it. The calendar becomes the entity's landing browse page
+(`/<Entity>`), the layout's own browse page moves to `/<Entity>/list`, and both carry a switch to the
+other; create / edit / preview stay the layout's own, so a **document master browsed on a calendar
+still edits on its document page** (line items, Print, inline process tasks included). Same on the
+personal surface: `/my/<Entity>` is the calendar, `/my/<Entity>/list` the list.
+
 `view: calendar` on a **composition child** renders an **embedded calendar panel inside its master's
 page** (and the master's edit form) instead of the detail table: the same master-filtered rows become
 events, event-click edits the child, an empty-day click creates one with the master FK and the
 clicked date preset. The child keeps everything a detail has (registry, filtered controller, form
-pages) - the calendar is just how its panel renders. `range` works the same way; `slots` stays
-primary-only.
+pages) - the calendar is just how its panel renders. When that child is the document's **line-items**
+entity, the document's items **pane** is the calendar (see below); `range` works the same way.
+
+`view: slots` is the exception that still REPLACES the layout: a slot picker is an authoring surface
+(pick a free slot → create), not a second way to browse the same records.
 
 ## generate children - collection-driven scheduled generation
 

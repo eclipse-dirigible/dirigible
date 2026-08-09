@@ -1895,6 +1895,26 @@ class IntentParserTest {
                 "expected an audit issue, got: " + issues);
     }
 
+    @Test
+    void chatDocumentRejectsAnItemsChildThatIsAlsoACalendar() {
+        // Both render the line items (#6482), so declaring both leaves it undecidable which pane wins.
+        String yaml = CHAT_HEAD + """
+                    audit: true
+                    view: calendar
+                    calendar: { start: sentOn }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text, messageBody: true }
+                      - { name: sentOn, type: date }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        List<String> issues = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml)).getIssues();
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("both render the line items")),
+                "expected a chat-vs-calendar issue, got: " + issues);
+    }
+
     /**
      * A guard's non-blocking outcomes each need their own companion key, and a companion belonging to
      * another outcome is an authoring mistake worth failing on: the write would look guarded and do

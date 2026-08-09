@@ -56,6 +56,11 @@ document.addEventListener('alpine:init', () => {
     itemMode: 'create',
     draft: {},
     itemOptions: {},
+#if($documentItemsLayout == "calendar")
+    // Reactive config for the items x-h-calendar (the items child declares view: calendar); rebuilt
+    // after every items load. The configuration itself rides the child's detail registration.
+    itemsCalCfg: { view: 'month', events: [] },
+#end
 
     // The item column metadata, reused from detail-register (App.detailsFor). Resolved lazily: the
     // detail-register script may run after this component's init, so re-resolve until it is present.
@@ -200,7 +205,69 @@ document.addEventListener('alpine:init', () => {
         this.itemsError = (e && e.message) || 'Could not load the line items.';
         this.items = [];
       }
+#if($documentItemsLayout == "calendar")
+      this.refreshItemsCalendar();
+#end
     },
+#if($documentItemsLayout == "calendar")
+
+    // ----- Items calendar (the items child declares view: calendar) -------------------------------
+    // The partner counterpart of the power document's items calendar: the same rows, the same partner
+    // item dialog, placed on a timeline. The event mapping is the shared one
+    // (services/calendarEvents.js) and the calendar's configuration rides the child's registration.
+    refreshItemsCalendar() {
+      const d = this.def();
+      const cal = (d && d.calendar) || null;
+      this.itemsCalCfg = {
+        view: (cal && cal.view) || 'month',
+        events: cal ? window.HarmoniaCalendar.events(this.items, cal, {
+          primaryKey: d.primaryKey,
+          label: '${documentItemsLabel}',
+          title: cal.title ? (row => this.itemEventTitle(cal, row)) : null,
+        }) : [],
+      };
+    },
+
+    // The event pill's title: the titling column resolved exactly as the items table renders it.
+    itemEventTitle(cal, row) {
+      const value = row[cal.title];
+      if (value === null || value === undefined || value === '') return '';
+      const column = this.itemColumns()
+                         .find(c => c.name === cal.title);
+      return column ? this.displayItem(row, column) : String(value);
+    },
+
+    // An immutable document still SHOWS the calendar - it just never opens the item dialog from it.
+    itemsEditable() {
+      return #if($immutableStatusProperty || $immutableAlways)this.mutable === true#{else}true#end;
+    },
+
+    onItemsEventClick(e) {
+      if (!this.itemsEditable()) return;
+      const id = window.HarmoniaCalendar.clickedEventId(e);
+      if (id === null) return;
+      const pk = this.def().primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(id));
+      if (row) this.openItem(row);
+    },
+
+    onItemsDateClick(e) {
+      if (!this.itemsEditable()) return;
+      const cal = (this.def() || {}).calendar;
+      if (!cal) return;
+      const value = window.HarmoniaCalendar.clickedDateValue(e);
+      this.openItem(null, value ? { [cal.start]: value } : null);
+    },
+
+    // Delete from the line dialog: the calendar pane has no per-row button, so this is the only route.
+    async deleteDraftItem() {
+      const pk = this.def().primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(this.draft[pk]));
+      if (!row) return;
+      this.itemDialog = false;
+      await this.deleteItem(row);
+    },
+#end
 
     itemColumns() { const d = this.def(); return (d && d.editColumns) || []; },
     // The read-only items TABLE shows the display columns (major fields - `major: false` hides a
@@ -224,12 +291,18 @@ document.addEventListener('alpine:init', () => {
       return String(v);
     },
 
-    async openItem(row) {
+    // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
+    // calendar).
+    async openItem(row, preset) {
       const d = this.def();
       await this.ensureItemOptions();
       this.itemMode = row ? 'edit' : 'create';
       this.draft = row ? { ...row } : {};
       this.draft[d.masterEntityId] = String(this.id);
+      if (preset) {
+        Object.keys(preset)
+              .forEach((key) => { this.draft[key] = preset[key]; });
+      }
       this.itemDialog = true;
     },
 

@@ -403,6 +403,12 @@ public final class IntentParser {
                             + "] must be boolean");
                 }
             }
+            // Both claim the SAME pane: the chat thread and the items calendar (the child's own
+            // `view: calendar`) are two renderings of the line items, so only one may be declared.
+            if (child.isCalendar()) {
+                issues.add("entity [" + name + "] declares documentItemsLayout: chat while its items child [" + child.getName()
+                        + "] declares view: calendar - both render the line items; drop one of the two");
+            }
         }
     }
 

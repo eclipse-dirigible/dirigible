@@ -236,11 +236,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (rollupGuards.containsKey(name)) {
                 entityMap.put("rollupGuard", rollupGuards.get(name));
             }
-            // A calendar entity renders its records as events on a Harmonia x-h-calendar instead of a
-            // list/manage table. It keeps its own perspective/nav; the calendar page reuses the generated
-            // REST controller (fetch) and the generated create/edit form (opened in a dialog on
-            // date-click / event-click). The property names are PascalCased to match the .model property
-            // (and the Jackson-serialized controller row) the calendar page reads.
+            // A calendar entity renders its records as events on a Harmonia x-h-calendar. The calendar is
+            // an ADDITIONAL page, not a replacement: the entity keeps its own layout (MANAGE /
+            // MANAGE_MASTER / MANAGE_DOCUMENT resolved below) with every page that layout brings, and the
+            // calendar becomes its landing browse route while that layout's list moves to
+            // /<Entity>/list (see the Harmonia shell template). So a document master browsed on a
+            // calendar still edits on the document page - Print, line items and inline process tasks
+            // included. The property names are PascalCased to match the .model property (and the
+            // Jackson-serialized controller row) the calendar page reads.
             if (entity.isCalendar()) {
                 CalendarIntent cal = entity.getCalendar();
                 if (dependent) {
@@ -251,7 +254,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     // detail-register.js; no standalone calendar page is generated.
                     entityMap.put("detailCalendar", "true");
                 } else {
-                    entityMap.put("layoutType", "MANAGE_CALENDAR");
+                    // Drives the additional calendar page + its routes; the layout stays the natural one.
+                    entityMap.put("calendarView", "true");
                 }
                 if (cal != null) {
                     if (notBlank(cal.getStart())) {
@@ -283,8 +287,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A slots entity renders as a Harmonia x-h-slot-picker for appointment/booking: free time
             // slots are bookable and open the create form prefilled with the chosen datetime. Reuses the
-            // generated controller (existing records mark their slots taken) and the shared form.
-            else if (entity.isSlots()) {
+            // generated controller (existing records mark their slots taken) and the shared form. Unlike
+            // the calendar above, the slot picker still REPLACES the layout - it is an authoring surface
+            // (pick a free slot -> create), not a second way to browse the same records.
+            if (entity.isSlots()) {
                 SlotsIntent slotsCfg = entity.getSlots();
                 entityMap.put("layoutType", "MANAGE_SLOTS");
                 if (slotsCfg != null) {
@@ -349,6 +355,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         }
                     }
                 }
+                // Calendar items: the line-items child itself declares `view: calendar`, so the items
+                // pane renders as an embedded x-h-calendar instead of the row grid - a day-grained line
+                // (a booked day, an allocated hour) is entered on a calendar. The child is the document's
+                // items entity, so it is deliberately NOT a secondary detail panel; without this the
+                // child's calendar declaration was emitted and then filtered out, rendering nothing.
+                // The calendar's own configuration rides the child's detail registration
+                // (detail-register.js `calendar: {...}`), which the document page reads at runtime.
+                else if (isCalendarItemsChild(byName.get(itemsEntity))) {
+                    entityMap.put("documentItemsLayout", "calendar");
+                }
             }
             // A plain PRIMARY entity with NO composition children of its own is standalone, not a
             // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
@@ -360,8 +376,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A document master (owns a *Item / DocumentItem composition child) gets a generated .print
             // template + feeder, so its edit surface can offer a Print button. Flag it independently of
             // the layout: the MANAGE_DOCUMENT layout renders Print in the document view already, but a
-            // document master whose UI is overridden to a calendar/slots view reuses the plain manage
-            // form for edit - the flag is what lets that shared form show Print too.
+            // document master whose UI is overridden to a slots view reuses the plain manage form for
+            // edit - the flag is what lets that shared form show Print too. (A calendar view no longer
+            // overrides the layout, so a calendar-browsed document edits on the document page.)
             if (documentItems.containsKey(name)) {
                 entityMap.put("hasPrint", "true");
             }
@@ -861,6 +878,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     private static boolean notBlank(String value) {
         return value != null && !value.isBlank();
+    }
+
+    /**
+     * Whether a document's line-items child asks for the calendar items pane - it declares
+     * {@code view: calendar} (or {@code range} / {@code function: Calendar}). The parser guarantees
+     * such a child also names its {@code calendar.start} date field.
+     */
+    private static boolean isCalendarItemsChild(EntityIntent itemsChild) {
+        return itemsChild != null && itemsChild.isCalendar();
     }
 
     /**

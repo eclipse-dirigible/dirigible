@@ -116,7 +116,7 @@
             </div>
 #end
 #set($hasEntities = false)
-#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT" || $entity.layoutType == "MANAGE_CALENDAR" || $entity.layoutType == "MANAGE_SLOTS") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
+#foreach($entity in $models)#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT" || $entity.layoutType == "MANAGE_SLOTS") && $entity.type == "PRIMARY")#set($hasEntities = true)#end#end
 #if($hasEntities)
             <!-- Entities: the top-level model entities (list / manage / master). -->
             <div x-h-sidebar-group>
@@ -124,7 +124,7 @@
               <div x-h-sidebar-group-content>
                 <ul x-h-sidebar-menu>
 #foreach($entity in $models)
-#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT" || $entity.layoutType == "MANAGE_CALENDAR" || $entity.layoutType == "MANAGE_SLOTS") && $entity.type == "PRIMARY")
+#if(($entity.layoutType == "LIST" || $entity.layoutType == "MANAGE" || $entity.layoutType == "LIST_MASTER" || $entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "MANAGE_DOCUMENT" || $entity.layoutType == "MANAGE_SLOTS") && $entity.type == "PRIMARY")
                   <li x-h-sidebar-menu-item>
                     <button x-h-sidebar-menu-button :data-active="isActive('/${entity.name}')" @click="navigate('/${entity.name}')">
                       <i role="img" x-h-lucide data-lucide="#if($entity.iconName && $entity.iconName != '')${entity.iconName}#{else}list#end"></i>
@@ -336,20 +336,30 @@
 #end
     <!-- Reports landing: always routed; the page lists reports discovered at runtime (reports store). -->
     <template x-route="/reports" x-template.target.app="/services/web/application-core/shell/views/_reports.html"></template>
+    <!-- The BROWSE route of a layout is /<Entity> - unless the entity also declares a calendar view
+         (intent `view: calendar|range`), which is an ADDITIONAL page that takes over the landing route
+         and pushes the layout's own browse page to /<Entity>/list (both carry a toggle between them).
+         Every other route of the layout is unchanged, so a calendar-browsed document still edits on its
+         document page. The calendar's own routes are registered LAST (after every layout block) so its
+         /:id catch-all can never shadow a layout's literal /list or /create. -->
     <!-- LIST entities: one read-only list route each. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "LIST" && $entity.type == "PRIMARY")
-    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-list.html"></template>
+#set($browse = "/${entity.name}")
+#if($entity.calendarView == "true")#set($browse = "/${entity.name}/list")#end
+    <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-list.html"></template>
 #end
 #end
     <!-- MANAGE entities: CRUD list + shared create/edit form (same view for create + :id/edit). -->
 #foreach($entity in $models)
 #if($entity.layoutType == "MANAGE" && $entity.type == "PRIMARY")
-    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
+#set($browse = "/${entity.name}")
+#if($entity.calendarView == "true")#set($browse = "/${entity.name}/list")#end
+    <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
+    <template x-route="${browse}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
 #end
     <!-- SETTING entities: same CRUD list + form, grouped under the Settings perspective. -->
@@ -365,29 +375,25 @@
     <!-- MASTER entities: master-detail page (list + selected record's detail panels) + own form. -->
 #foreach($entity in $models)
 #if(($entity.layoutType == "MANAGE_MASTER" || $entity.layoutType == "LIST_MASTER") && $entity.type == "PRIMARY")
-    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
+#set($browse = "/${entity.name}")
+#if($entity.calendarView == "true")#set($browse = "/${entity.name}/list")#end
+    <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
+    <template x-route="${browse}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-master.html"></template>
 #end
 #end
     <!-- DOCUMENT entities (header-items): browse list + a full-page document editor at create/edit. -->
 #foreach($entity in $models)
 #if($entity.layoutType == "MANAGE_DOCUMENT" && $entity.type == "PRIMARY")
-    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
+#set($browse = "/${entity.name}")
+#if($entity.calendarView == "true")#set($browse = "/${entity.name}/list")#end
+    <template x-route="${browse}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
     <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
     <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-document.html"></template>
-    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
-#end
-    <!-- MANAGE_CALENDAR entities: calendar page + the shared create/edit form (date-click / event-click). -->
-#if($entity.layoutType == "MANAGE_CALENDAR" && $entity.type == "PRIMARY")
-    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-calendar.html"></template>
-    <template x-route="/${entity.name}/create" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
-    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-calendar.html"></template>
+    <template x-route="${browse}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-manage-list.html"></template>
 #end
     <!-- MANAGE_SLOTS entities: slot-picker page + the shared create/edit form (slot-click / event edit). -->
 #if($entity.layoutType == "MANAGE_SLOTS" && $entity.type == "PRIMARY")
@@ -396,6 +402,17 @@
     <template x-route="/${entity.name}/:id/edit" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id/preview" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-form.html"></template>
     <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-slots.html"></template>
+#end
+#end
+    <!-- CALENDAR view (intent `view: calendar|range`): the ADDITIONAL calendar page, landing on
+         /<Entity> while the entity's own layout browses at /<Entity>/list (above). Create/edit are the
+         layout's own routes - the calendar just navigates to them - which is why a document master
+         keeps its document editor here. Registered last so the /:id catch-all resolves after every
+         literal route of the layout. -->
+#foreach($entity in $models)
+#if($entity.calendarView == "true" && $entity.type == "PRIMARY")
+    <template x-route="/${entity.name}" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-calendar.html"></template>
+    <template x-route="/${entity.name}/:id" x-template.target.app="./views/${entity.perspectiveName}/${entity.name}-calendar.html"></template>
 #end
 #end
     <!-- DETAIL entities: only a routed create/edit form (listed inside their master's panels). -->
@@ -415,9 +432,11 @@
     <!-- PERSONAL (my) surface: the user's own records - a list per root, a form per personal
          entity (children are reached from their parent's panels). -->
 #foreach($entity in $models)
-#if($entity.personalProperty && $entity.layoutType == "MANAGE_CALENDAR")
-    <!-- a view: calendar/range personal root lands on its calendar, exactly like the power surface -->
+#if($entity.personalProperty && $entity.calendarView == "true")
+    <!-- a view: calendar/range personal root lands on its calendar, exactly like the power surface;
+         its list stays reachable at /my/<Entity>/list (the calendar is an additional page) -->
     <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-calendar.html"></template>
+    <template x-route="/my/${entity.name}/list" x-template.target.app="./views/my/${entity.name}-list.html"></template>
 #elseif($entity.personalProperty)
     <template x-route="/my/${entity.name}" x-template.target.app="./views/my/${entity.name}-list.html"></template>
 #end
@@ -475,6 +494,8 @@
     <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/formValidation.js" defer></script>
     <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- rows -> x-h-calendar events (the document line-item calendars share this mapping) -->
+    <script src="/services/web/application-core/shell/js/services/calendarEvents.js"></script>
     <!-- Instance branding (same DIRIGIBLE_BRANDING_* env vars as the AngularJS shell): the platform
          service sets top.PlatformBranding; the adapter applies the favicon + " | <brand>" title suffix
          and exposes the Alpine `branding` store. Load the source before the adapter. -->
@@ -512,9 +533,9 @@
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ManageListPage.js" defer></script>
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}DocumentPage.js" defer></script>
 #end
-#if($entity.layoutType == "MANAGE_CALENDAR" && $entity.type == "PRIMARY")
+#if($entity.calendarView == "true" && $entity.type == "PRIMARY")
+    <!-- the additional calendar page; its create/edit form (or document editor) ships with the layout -->
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}CalendarPage.js" defer></script>
-    <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}FormPage.js" defer></script>
 #end
 #if($entity.layoutType == "MANAGE_SLOTS" && $entity.type == "PRIMARY")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}SlotsPage.js" defer></script>
@@ -527,9 +548,10 @@
 #if($entity.type == "REPORT")
     <script src="./js/components/pages/${entity.perspectiveName}/${entity.name}ReportPage.js" defer></script>
 #end
-#if($entity.personalProperty && $entity.layoutType == "MANAGE_CALENDAR")
+#if($entity.personalProperty && $entity.calendarView == "true")
     <script src="./js/components/pages/my/${entity.name}MyCalendarPage.js" defer></script>
-#elseif($entity.personalProperty)
+#end
+#if($entity.personalProperty)
     <script src="./js/components/pages/my/${entity.name}MyListPage.js" defer></script>
 #end
 #if($entity.personalProperty && $entity.layoutType == "MANAGE_DOCUMENT")

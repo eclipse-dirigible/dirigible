@@ -630,6 +630,15 @@ bookings, day allocations, anything keyed by a date. Set `view:` on the entity (
 the role alias for `view: calendar`) and add the matching config block. The generated REST controller
 and form are reused unchanged; only the presentation differs.
 
+**A calendar is an ADDITIONAL page, never a replacement.** `view: calendar` / `view: range` leave the
+entity's own layout (list / master / document) fully in place: the calendar becomes the landing browse
+page `/<Entity>`, the layout's own browse page moves to `/<Entity>/list`, both offer a switch to the
+other, and create / edit / preview stay the layout's own routes. So `function: Document` + `view:
+calendar` is a valid, useful combination - the documents are browsed on a calendar and still edited on
+the document page, with their line items, Print and inline process tasks. (`view: slots` is the one
+exception: a slot picker is an authoring surface, not a second way to browse, so it does replace the
+layout.)
+
 - **`view: calendar`** (or `function: Calendar`) + a `calendar:` block renders the records as events on
   the Harmonia calendar. **`view: range`** uses the same block for start/end spans.
   ```yaml
@@ -654,6 +663,13 @@ and form are reused unchanged; only the presentation differs.
   master's detail pane instead of a standalone page. A `scope:` to-one relation filters the events to
   the parent whose id arrives as `?<Scope>=<id>` and prefills that FK on create - so e.g. a timesheet's
   day allocations show only that timesheet's entries.
+
+  When that composition child is the document's **line-items** entity, the document's items **pane** is
+  the calendar (instead of the row grid): clicking an event edits that line in the usual line dialog,
+  clicking an empty day adds one with that date preset, and Delete moves into the dialog. This is the
+  shape for a day-grained line - booked days, allocated hours. Declare it on the CHILD (`view:
+  calendar` + its `calendar:` block), never as a layout on the master; it cannot be combined with
+  `documentItemsLayout: chat`, which claims the same pane.
 
 - **`view: slots`** + a `slots:` block renders an appointment/booking picker (a 3-day grid of
   selectable time slots); a free slot opens the create form prefilled with the chosen date + time.

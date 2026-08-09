@@ -15,6 +15,13 @@
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+#if($calendarView)
+    <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
+         this list lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
+      <i role="img" x-h-lucide data-lucide="calendar"></i><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
+    </button>
+#end
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
       <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
