@@ -20,7 +20,16 @@
             <groupId>org.eclipse.dirigible</groupId>
             <artifactId>dirigible-components-core-base</artifactId>
         </dependency>
-        
+
+        <!-- Modules -->
+        <dependency>
+            <groupId>org.eclipse.dirigible</groupId>
+            <!-- ConsoleWebsocketHandler, which the console socket serves and the logging appender
+                feeds. The appender itself stays in that module: logback configuration names it by
+                fully qualified class name, downstream configurations included. -->
+            <artifactId>dirigible-commons-resources</artifactId>
+        </dependency>
+
         <!-- Test -->
         <dependency>
             <groupId>org.eclipse.dirigible</groupId>

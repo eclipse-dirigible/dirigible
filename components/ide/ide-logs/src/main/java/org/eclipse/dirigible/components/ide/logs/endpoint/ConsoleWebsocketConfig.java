@@ -7,8 +7,9 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.commons.logging;
+package org.eclipse.dirigible.components.ide.logs.endpoint;
 
+import org.eclipse.dirigible.commons.logging.ConsoleWebsocketHandler;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.socket.WebSocketHandler;

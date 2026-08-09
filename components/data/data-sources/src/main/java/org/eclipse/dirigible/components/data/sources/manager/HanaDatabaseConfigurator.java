@@ -7,7 +7,7 @@
  *
  * SPDX-FileCopyrightText: Eclipse Dirigible contributors SPDX-License-Identifier: EPL-2.0
  */
-package org.eclipse.dirigible.database.sql.dialects.hana;
+package org.eclipse.dirigible.components.data.sources.manager;
 
 import com.zaxxer.hikari.HikariConfig;
 import org.eclipse.dirigible.components.database.DatabaseConfigurator;
