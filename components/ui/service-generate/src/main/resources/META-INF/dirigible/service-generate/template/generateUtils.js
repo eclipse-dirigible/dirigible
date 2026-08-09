@@ -281,10 +281,13 @@ export function generateFiles(model, parameters, templateSources) {
     // from its registration); other composition children render as ordinary detail panels.
     const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
 
-    // UI Calendar: a PRIMARY entity rendered as a Harmonia x-h-calendar (set by EdmIntentGenerator as
-    // layoutType MANAGE_CALENDAR from `view: calendar`) - its records become events on a month/week/day
-    // calendar; create/edit reuse the shared manage form on date-click / event-click.
-    const uiCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.type === "PRIMARY");
+    // UI Calendar: a PRIMARY entity that ALSO renders on a Harmonia x-h-calendar (calendarView, set by
+    // EdmIntentGenerator from `view: calendar|range`) - its records become events on a month/week/day
+    // calendar. The calendar is an ADDITIONAL page: the entity keeps its own layout (MANAGE /
+    // MANAGE_MASTER / MANAGE_DOCUMENT) and every page that layout generates, so date-click / event-click
+    // land on the natural editor (a document master edits on its document page). The calendar takes over
+    // the landing route and the layout's list moves to /<Entity>/list (see the shell template).
+    const uiCalendarModels = model.entities.filter(e => e.calendarView === "true" && e.type === "PRIMARY");
 
     // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
     const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
@@ -296,11 +299,12 @@ export function generateFiles(model, parameters, templateSources) {
     // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
     // reach their forms through the parent's panels, never through navigation.
     const personalRootModels = model.entities.filter(e => e.personalProperty);
-    // A personal CALENDAR/RANGE root (view: calendar|range) lands on a personal calendar page
-    // instead of the list - exactly like the power surface, where the calendar replaces the table.
-    const personalCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.personalProperty);
-    // The personal LIST pair renders for every root EXCEPT a calendar root (replaced above).
-    const personalListModels = model.entities.filter(e => e.personalProperty && e.layoutType !== "MANAGE_CALENDAR");
+    // A personal CALENDAR/RANGE root (view: calendar|range) additionally gets a personal calendar page,
+    // which takes over the /my/<Entity> landing route - exactly like the power surface.
+    const personalCalendarModels = model.entities.filter(e => e.calendarView === "true" && e.personalProperty);
+    // The personal LIST pair renders for every root, calendar roots included: the calendar is an
+    // additional page, so the list stays reachable at /my/<Entity>/list.
+    const personalListModels = model.entities.filter(e => e.personalProperty);
     // A personal document root (MANAGE_DOCUMENT + a direct personal owner) gets the personal DOCUMENT
     // layout (header form + inline items table + status pill + totals). It still gets a MyController
     // (personalModels, above) and a list + perspective (personalRootModels) - only its FORM is the

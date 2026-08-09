@@ -7,18 +7,22 @@
 /*
  * Calendar view type — Harmonia SPA variant.
  *
- * A PRIMARY entity declared with `view: calendar` is emitted by EdmIntentGenerator with layoutType
- * MANAGE_CALENDAR plus the calendar* metadata (calendarStartProperty / calendarEndProperty /
+ * A PRIMARY entity declared with `view: calendar` (or `range`) is emitted by EdmIntentGenerator with
+ * calendarView="true" plus the calendar* metadata (calendarStartProperty / calendarEndProperty /
  * calendarTitleProperty / calendarColorProperty / calendarInitialView). It renders as a full-page
  * Harmonia x-h-calendar: the entity's records become events, positioned by the date/datetime field.
  *
- * The calendar reuses the SAME generated REST controller (fetch) and the SAME shared create/edit form
- * as a manage entity - no new backend, no new form:
+ * The calendar is an ADDITIONAL page, not a replacement (#6547). The entity keeps its own layout
+ * (MANAGE / MANAGE_MASTER / MANAGE_DOCUMENT) and every page that layout generates - so this descriptor
+ * emits ONLY the calendar; the create/edit surface it navigates to is whatever that layout owns, which
+ * is why a document master browsed on a calendar still edits on its document page (Print, line items,
+ * inline process tasks included). The calendar takes over the landing route:
  *   /<Entity>            -> the calendar page (browse)
- *   /<Entity>/create     -> the shared form (create; opened on date-click)
- *   /<Entity>/{id}/edit  -> the shared form (edit; opened on event-click)
+ *   /<Entity>/list       -> the layout's own browse page (list / master / document list)
+ *   /<Entity>/create     -> the layout's editor (create; opened on date-click)
+ *   /<Entity>/{id}/edit  -> the layout's editor (edit; opened on event-click)
  *
- * Collection: uiCalendarModels = layoutType === "MANAGE_CALENDAR" && type === "PRIMARY".
+ * Collection: uiCalendarModels = calendarView === "true" && type === "PRIMARY".
  */
 export function getSources(parameters) {
     const collection = "uiCalendarModels";
@@ -36,21 +40,6 @@ export function getSources(parameters) {
             action: "generate",
             engine: "velocity",
             rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-calendar.html",
-            collection
-        },
-        // Reuse the shared manage create/edit form (page + view) so date-click / event-click can open it.
-        {
-            location: "/template-application-ui-harmonia-java/ui/perspective/manage/form-page.js.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/js/components/pages/{{perspectiveName}}/{{name}}FormPage.js",
-            collection
-        },
-        {
-            location: "/template-application-ui-harmonia-java/ui/perspective/manage/form-view.html.template",
-            action: "generate",
-            engine: "velocity",
-            rename: "gen/{{genFolderName}}/views/{{perspectiveName}}/{{name}}-form.html",
             collection
         }
     ];

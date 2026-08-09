@@ -365,8 +365,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
 
-              # view: range + a personal owner - the PERSONAL surface must render the range
-              # calendar (never the plain form+list), scoped to the MyController (U3 parity).
+              # view: range + a personal owner - the PERSONAL surface must render the range calendar
+              # (scoped to the MyController, U3 parity). Since #6547 the calendar is an ADDITIONAL page
+              # on BOTH shells: the entity keeps its own layout + form and browses at <Entity>/list,
+              # while the calendar owns the landing route.
               - name: Leave
                 view: range
                 calendar: { start: fromDate, end: toDate, title: Person }
@@ -376,6 +378,31 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: toDate, type: date, required: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, personal: true }
+
+              # view: calendar on the document's LINE-ITEMS child (#6482) - the document's items PANE
+              # renders as the calendar (a day-grained line belongs on one), instead of the calendar
+              # markup being emitted and then filtered out of the secondary panels. The document layout
+              # itself (header, totals, Print) is untouched. The personal owner makes it a personal root
+              # too, so the PERSONAL document surface is covered by the same fixture.
+              - name: Roster
+                function: Document
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: reference, type: string, length: 40 }
+                  - { name: hours,     type: decimal, precision: 18, scale: 2, aggregate: true }
+                relations:
+                  - { name: Owner, kind: manyToOne, to: Person, personal: true }
+              - name: RosterItem
+                function: DocumentItem
+                view: calendar
+                calendar: { start: day, title: Person, initialView: month }
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: day,   type: date, required: true }
+                  - { name: hours, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Roster, kind: manyToOne, to: Roster, composition: true, required: true }
+                  - { name: Person, kind: manyToOne, to: Person }
 
               # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
               # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
@@ -1201,8 +1228,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal document's child calendar must resolve a relation title via the label lookup");
         assertTrue(myTicketDoc.contains("onChildEventClick"), "the personal document must render the child calendar panel markup");
 
-        // view: range/calendar + personal - the personal surface renders the calendar (never the
-        // plain form+list), reads through the scoped controller, and /my/<Entity> lands on it.
+        // view: range/calendar + personal - the personal surface renders the calendar, reads through
+        // the scoped controller, and /my/<Entity> lands on it.
         String myLeaveCalendar = contentOf("gen/emission/js/components/pages/my/LeaveMyCalendarPage.js");
         assertTrue(myLeaveCalendar.contains("LeaveMyController"), "the personal calendar must read through the scoped controller");
         String myLeaveView = contentOf("gen/emission/views/my/Leave-calendar.html");
@@ -1216,6 +1243,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String leaveCalendar = contentOf("gen/emission/js/components/pages/Leave/LeaveCalendarPage.js");
         assertTrue(leaveCalendar.contains("titleLookup"), "the power calendar must resolve a relation title through a label lookup");
         assertTrue(myLeaveCalendar.contains("titleLookup"), "the personal calendar must resolve a relation title through a label lookup");
+
+        // #6547: the calendar is an ADDITIONAL page - the entity's own layout survives it. The range
+        // root above keeps its MANAGE list + form pages (the class where declaring a calendar silently
+        // deleted the entity's editing surface), the calendar owns the landing route, and the layout's
+        // browse page moves to /<Entity>/list with a switch between the two on both pages.
+        assertTrue(shellIndex.contains("x-route=\"/Leave\" x-template.target.app=\"./views/Leave/Leave-calendar.html\""),
+                "a calendar entity must land on its calendar");
+        assertTrue(shellIndex.contains("x-route=\"/Leave/list\" x-template.target.app=\"./views/Leave/Leave-manage-list.html\""),
+                "the entity's own browse page must stay reachable at /<Entity>/list");
+        assertTrue(shellIndex.contains("x-route=\"/Leave/create\" x-template.target.app=\"./views/Leave/Leave-form.html\""),
+                "the entity's own create/edit form must still be routed");
+        assertTrue(shellIndex.contains("x-route=\"/my/Leave/list\" x-template.target.app=\"./views/my/Leave-list.html\""),
+                "the personal list must stay reachable at /my/<Entity>/list");
+        assertTrue(contentOf("gen/emission/views/Leave/Leave-manage-list.html").contains("goCalendar()"),
+                "the entity's browse page must offer the switch to its calendar");
+        assertTrue(contentOf("gen/emission/views/Leave/Leave-calendar.html").contains("goList()"),
+                "the calendar must offer the switch back to the entity's own browse page");
+        assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
+                "the personal list must offer the switch to the personal calendar");
+
+        // #6482: a document whose LINE-ITEMS child declares view: calendar renders the items PANE as
+        // the calendar - on the power, personal and partner document surfaces alike. This is the
+        // authored-but-unconsumed class: the markup used to be emitted and then filtered out by name.
+        String rosterDoc = contentOf("gen/emission/views/Roster/Roster-document.html");
+        assertTrue(rosterDoc.contains("x-h-calendar=\"itemsCalCfg\""), "the document's items pane must render as a calendar");
+        assertTrue(rosterDoc.contains("onItemsEventClick") && rosterDoc.contains("onItemsDateClick"),
+                "the items calendar must be wired to the line dialog (edit on event, add on empty day)");
+        assertTrue(!rosterDoc.contains("x-for=\"col in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
+        assertTrue(rosterDoc.contains("askDeleteDraft()"), "the line dialog must offer Delete - the calendar pane has no per-row menu");
+        String rosterPage = contentOf("gen/emission/js/components/pages/Roster/RosterDocumentPage.js");
+        assertTrue(rosterPage.contains("window.HarmoniaCalendar.events"), "the items events must come from the shared calendar mapping");
+        assertTrue(rosterPage.contains("this.itemsDef.calendar"),
+                "the items calendar must be configured from the child's detail registration, not baked at generation time");
+        assertTrue(contentOf("gen/emission/js/components/pages/Roster/RosterItem.detail.js").contains("calendar: {"),
+                "the items child's registration must carry the calendar config the document page reads");
+        // The PERSONAL document surface renders the same items calendar through its scoped controller
+        // (the partner document is the mechanical mirror of this one).
+        String myRosterDoc = contentOf("gen/emission/views/my/Roster-document.html");
+        assertTrue(myRosterDoc.contains("x-h-calendar=\"itemsCalCfg\""),
+                "the personal document's items pane must render as a calendar too");
+        String myRosterPage = contentOf("gen/emission/js/components/pages/my/RosterMyDocumentPage.js");
+        assertTrue(myRosterPage.contains("window.HarmoniaCalendar.events") && myRosterPage.contains("RosterItemMyController"),
+                "the personal items calendar must read through the scoped items controller");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and

@@ -67,6 +67,8 @@
         "next": "Next",
         "today": "Today",
         "chooseDate": "Choose date",
+        "calendar": "Calendar",
+        "list": "List",
         "details": "Details",
         "selectTitle": "Select a {{name}}",
         "back": "Back",

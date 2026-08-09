@@ -174,6 +174,12 @@ document.addEventListener('alpine:init', () => {
     chatSending: false,
     chatInternal: false,
 #end
+#if($documentItemsLayout == "calendar")
+    // Reactive config for the items x-h-calendar (the items child declares view: calendar); rebuilt
+    // after every items load so the calendar re-renders. The view comes from the child's own
+    // declaration, which rides its detail registration.
+    itemsCalCfg: { view: 'month', events: [] },
+#end
     itemOptions: {},         // edit-column name -> [{ value, text }] for relationship cells
     // Depends-On-filtered options for the OPEN item dialog only. Kept apart from itemOptions,
     // which the items table uses to resolve labels for ALL rows and must stay the full set.
@@ -632,12 +638,79 @@ document.addEventListener('alpine:init', () => {
         const rows = await App.services.api.getAll(this.itemsDef.apiPath + q);
         this.items = rows || [];
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
+#if($documentItemsLayout == "calendar")
+        this.refreshItemsCalendar();
+#end
       } catch (e) {
         this.itemsError = App.services.apiErrors.messageFor(e, 'Could not load items.');
         this.itemsState = 'error';
       }
       this.refreshIcons();
     },
+#if($documentItemsLayout == "calendar")
+
+    // ----- Items calendar (the items child declares view: calendar) -------------------------------
+    // A day-grained line (a booked day, an allocated hour) is entered on a calendar instead of the row
+    // grid. The rows and the dialog are the SAME ones the table pane uses - only the presentation
+    // differs - and the event mapping is the shared one (services/calendarEvents.js). The calendar's
+    // own configuration (start / end / title / colour / initial view / range) rides the items child's
+    // detail registration, so this page never enumerates it at generation time.
+    itemsCalendar() {
+      return (this.itemsDef && this.itemsDef.calendar) || null;
+    },
+
+    refreshItemsCalendar() {
+      const cal = this.itemsCalendar();
+      this.itemsCalCfg = { view: (cal && cal.view) || 'month', events: this.buildItemEvents() };
+    },
+
+    buildItemEvents() {
+      const cal = this.itemsCalendar();
+      if (!cal) return [];
+      return window.HarmoniaCalendar.events(this.items, cal, {
+        primaryKey: this.itemsDef.primaryKey,
+        label: '${documentItemsLabel}',
+        title: cal.title ? (row => this.itemEventTitle(cal, row)) : null,
+      });
+    },
+
+    // The event pill's title: the titling column resolved exactly as the items table renders it (an FK
+    // shows its referenced label, a date its formatted value), blank when the row carries no value so
+    // the shared mapping falls back to "<label> #<id>".
+    itemEventTitle(cal, row) {
+      const value = row[cal.title];
+      if (value === null || value === undefined || value === '') return '';
+      const column = this.editColumns.find(c => c.name === cal.title);
+      return column ? this.cellDisplay(column, row) : String(value);
+    },
+
+    // Event click -> edit that line in the same dialog the table's Edit opens; empty-day click -> a new
+    // line with the clicked day (and, in week/day views, the clicked time) preset on the date field.
+    onItemsEventClick(e) {
+      const id = window.HarmoniaCalendar.clickedEventId(e);
+      if (id === null) return;
+      const pk = this.itemsDef.primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(id));
+      if (row) this.openRowDialog(row);
+    },
+
+    onItemsDateClick(e) {
+      const cal = this.itemsCalendar();
+      if (!cal) return;
+      const value = window.HarmoniaCalendar.clickedDateValue(e);
+      this.openRowDialog(null, value ? { [cal.start]: value } : null);
+    },
+
+    // Delete from the line dialog: the calendar pane has no per-row menu, so this is the only route to
+    // the (shared) delete confirmation.
+    askDeleteDraft() {
+      const pk = this.itemsDef.primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(this.draft[pk]));
+      if (!row) return;
+      this.rowDialogOpen = false;
+      this.askDeleteRow(row);
+    },
+#end
 #if($documentItemsLayout == "chat")
 
     // Append a chat message as a new items child (documentItemsLayout: chat). The message body maps to
@@ -906,7 +979,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Add / edit line dialog ----------------------------------------------------------------
-    openRowDialog(row) {
+    // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
+    // calendar), applied before the calculated columns are evaluated so a value derived from it is
+    // right on first render.
+    openRowDialog(row, preset) {
       if (!this.itemsEnabled || this.isPreview) return;
       this.draftError = null;
       this.draftMode = row ? 'edit' : 'create';
@@ -926,6 +1002,10 @@ document.addEventListener('alpine:init', () => {
         draft[col.name] = v == null ? (col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '')) : v;
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
+      if (preset) {
+        Object.keys(preset)
+              .forEach(key => { draft[key] = preset[key]; });
+      }
       this.draft = draft;
       this.recalcDraft();
       // Filter dependent dropdowns for already-populated triggers (edit) WITHOUT touching values.

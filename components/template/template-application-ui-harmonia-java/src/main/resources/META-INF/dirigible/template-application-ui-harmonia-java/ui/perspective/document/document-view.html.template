@@ -227,6 +227,20 @@
         </div>
       </div>
     </div>
+#elseif($documentItemsLayout == "calendar")
+    <!-- ===== Line items on a calendar (the items child declares view: calendar) — only once the
+         document exists. Same rows and the same add/edit dialog as the table pane, just placed on a
+         timeline: clicking an event edits that line, clicking an empty day adds one with that date
+         preset. The document header, status, totals and process tasks are untouched. -->
+    <div class="vbox gap-2 w-full" x-show="itemsEnabled">
+      <div x-h-toolbar data-variant="transparent">
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
+        <div x-h-toolbar-spacer></div>
+        <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+      </div>
+      <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
+      <div x-h-calendar="itemsCalCfg" style="height: 420px" @event-click="onItemsEventClick" @date-click="onItemsDateClick"></div>
+    </div>
 #else
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
     <div class="vbox gap-2 w-full" x-show="itemsEnabled">
@@ -594,6 +608,12 @@
         </div>
       </div>
       <div x-h-dialog-footer>
+#if($documentItemsLayout == "calendar")
+        <!-- The calendar pane has no per-row menu, so Delete lives here (edit mode only), pushed away
+             from Cancel/Save so it cannot be hit by accident. The margin is an inline style, not a
+             utility class: the shipped Harmonia CSS only carries the classes its own source scanned. -->
+        <button x-h-button data-variant="negative" style="margin-right: auto" x-show="draftMode === 'edit' &amp;&amp; !isPreview" @click="askDeleteDraft()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
+#end
         <button x-h-button data-variant="transparent" @click="closeRowDialog()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="primary" @click="saveDraft()" :disabled="draftSaving">
           <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.add', 'Add')"></span>

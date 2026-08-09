@@ -166,6 +166,10 @@ document.addEventListener('alpine:init', () => {
         window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}');
     },
 
+#if($calendarView)
+    // Switch to the additional calendar page (intent `view: calendar|range`), which owns /${name}.
+    goCalendar() { window.PineconeRouter.navigate('/${name}'); },
+#end
     newMaster()  { window.PineconeRouter.navigate('/${name}/create'); },
     editMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
     previewMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },

@@ -128,6 +128,10 @@ document.addEventListener('alpine:init', () => {
         'My ' + (window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}'));
     },
 
+#if($calendarView)
+    // Switch to the additional personal calendar page, which owns /my/${name}.
+    goCalendar() { this.navigate('/my/${name}'); },
+#end
     newEntity() { this.navigate('/my/${name}/create'); },
     openEntity(row) { this.navigate('/my/${name}/' + row.#foreach($property in $properties)#if($property.dataPrimaryKey)${property.name}#end#end + '/edit'); },
   }));

@@ -7,6 +7,14 @@
   <div x-h-toolbar data-variant="transparent">
     <span x-h-toolbar-title class="shrink-0" x-text="'My ' + T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}')"></span>
     <div x-h-toolbar-spacer></div>
+#if($calendarView)
+    <!-- The entity also renders on a personal calendar, which owns /my/${name}; this list lives at
+         /my/${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
+      <i role="img" x-h-lucide data-lucide="calendar"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
+    </button>
+#end
 #if(!$personalReadOnly)
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" x-h-lucide data-lucide="plus"></i>
