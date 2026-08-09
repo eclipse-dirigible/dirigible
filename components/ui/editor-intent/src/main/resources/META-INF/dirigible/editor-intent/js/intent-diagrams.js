@@ -183,25 +183,54 @@ window.IntentDiagrams = (() => {
                 else if (step.kind === 'parallel') byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 90, 60, shapeStyle('rhombus', COLOR.decision));
                 else byName[step.name] = graph.insertVertex(parent, null, step.name, 0, 0, 140, 44, nodeStyle(COLOR.entity));
             }
-            // Parallel fork/join (mirrors BpmnIntentGenerator): the branch steps + a synthesized join
-            // gateway are OFF the linear chain; the fork wires fork -> branch -> join -> next.
+            // Parallel fork/join (mirrors BpmnIntentGenerator + ProcessParallelSupport): a branch is a
+            // CHAIN - everything reachable from the branch step through its own routing, a nested fork
+            // included - and the whole branch region is OFF the linear chain. Inside a region a step
+            // routes explicitly or, declaring no routing, joins; the literal `join` converges on the
+            // enclosing join gateway.
             const forks = steps.filter(s => s.kind === 'parallel').map(s => ({
                 id: s.name, branches: ((s.args || {}).branches) || [], next: (s.args || {}).next, joinId: s.name + 'Join'
             }));
-            const branchNames = new Set();
             const joinVertex = {};
             for (const f of forks) {
-                (f.branches || []).forEach(b => branchNames.add(b));
                 joinVertex[f.joinId] = graph.insertVertex(parent, null, '', 0, 0, 50, 50, shapeStyle('rhombus', COLOR.decision));
             }
-            const vertexFor = (name) => {
-                if (String(name).toLowerCase() === 'end') return end;
-                return byName[name] || end;
+            const stepByName = {};
+            for (const s of steps) stepByName[s.name] = s;
+            const routingTargets = (step) => {
+                const args = step.args || {};
+                const targets = step.kind === 'decision' ? [args['then'], args['else']] : [args['next']];
+                for (const timer of ['timeout', 'expire']) {
+                    const t = args[timer];
+                    if (t && typeof t === 'object' && t.then) targets.push(t.then);
+                }
+                return targets.filter(t => t !== undefined && t !== null && String(t) !== '');
+            };
+            // Step name -> the innermost enclosing join id. A nested fork is claimed by the enclosing
+            // branch and the walk resumes at its `next`; its own branches are claimed by its own walk.
+            const joinOf = {};
+            for (const f of forks) {
+                for (const head of f.branches) {
+                    const pending = [head];
+                    while (pending.length) {
+                        const name = String(pending.shift());
+                        const step = stepByName[name];
+                        if (!step || joinOf[name]) continue;
+                        joinOf[name] = f.joinId;
+                        pending.push(...routingTargets(step));
+                    }
+                }
+            }
+            const vertexFor = (name, enclosingJoin) => {
+                const id = name === undefined || name === null ? '' : String(name);
+                if (id === '' || id.toLowerCase() === 'join') return enclosingJoin ? joinVertex[enclosingJoin] : end;
+                if (id.toLowerCase() === 'end') return end;
+                return byName[id] || end;
             };
 
             const chain = [start];
             for (const step of steps) {
-                if (branchNames.has(step.name)) continue; // branches are off the linear chain
+                if (joinOf[step.name]) continue; // a branch region is off the linear chain
                 const v = String(step.kind).toLowerCase() === 'end' ? end : byName[step.name];
                 if (chain[chain.length - 1] !== v) chain.push(v);
             }
@@ -210,17 +239,9 @@ window.IntentDiagrams = (() => {
             for (let i = 0; i < chain.length - 1; i++) {
                 const source = chain[i];
                 let target = chain[i + 1];
-                // A parallel fork fans to its branches and joins before `next` - no linear fall-through.
-                const fork = forks.find(f => byName[f.id] === source);
-                if (fork) {
-                    const join = joinVertex[fork.joinId];
-                    for (const b of (fork.branches || [])) {
-                        graph.insertEdge(parent, null, '', source, vertexFor(b), edgeStyle(false));
-                        graph.insertEdge(parent, null, '', vertexFor(b), join, edgeStyle(false));
-                    }
-                    graph.insertEdge(parent, null, '', join, fork.next ? vertexFor(fork.next) : end, edgeStyle(false));
-                    continue;
-                }
+                // A parallel fork fans to its branches and joins before `next` - no linear fall-through
+                // (the fork/join edges are drawn for every fork below, nested ones included).
+                if (forks.some(f => byName[f.id] === source)) continue;
                 const decision = steps.find(s => byName[s.name] === source && s.kind === 'decision');
                 if (decision) {
                     const args = decision.args || {};
@@ -240,6 +261,32 @@ window.IntentDiagrams = (() => {
                 }
             }
 
+            // Every fork fans to its branch chains; its join flows on to `next` (a nested fork with no
+            // `next` joins into its own enclosing join).
+            for (const f of forks) {
+                for (const b of f.branches) {
+                    graph.insertEdge(parent, null, '', byName[f.id] || start, vertexFor(b), edgeStyle(false));
+                }
+                graph.insertEdge(parent, null, '', joinVertex[f.joinId], vertexFor(f.next, joinOf[f.id]), edgeStyle(false));
+            }
+            // The routing inside the branch regions - explicit, or into the join.
+            for (const name of Object.keys(joinOf)) {
+                const step = stepByName[name];
+                const source = byName[name];
+                // A nested fork's outgoing edge belongs to its join, drawn above.
+                if (!step || !source || step.kind === 'parallel') continue;
+                const join = joinOf[name];
+                const args = step.args || {};
+                if (step.kind === 'decision') {
+                    graph.insertEdge(parent, null, '', source, vertexFor(args['else'], join), edgeStyle(true));
+                    if (args['if'] && args['then']) {
+                        graph.insertEdge(parent, null, String(args['if']), source, vertexFor(args['then'], join), edgeStyle(false));
+                    }
+                } else {
+                    graph.insertEdge(parent, null, '', source, vertexFor(args['next'], join), edgeStyle(false));
+                }
+            }
+
             // Boundary timers on a user task (timeout: non-cancelling reminder, expire: cancelling
             // date-driven expiry) draw as dashed labelled edges from the task to their `then` branch -
             // mirrors the boundaryEvent + timerEventDefinition BpmnIntentGenerator emits.
@@ -247,11 +294,11 @@ window.IntentDiagrams = (() => {
                 if (step.kind !== 'userTask' || !step.args || !byName[step.name]) continue;
                 const timeout = step.args['timeout'];
                 if (timeout && typeof timeout === 'object' && timeout.then) {
-                    graph.insertEdge(parent, null, 'timeout ' + String(timeout.after || ''), byName[step.name], vertexFor(timeout.then), edgeStyle(true));
+                    graph.insertEdge(parent, null, 'timeout ' + String(timeout.after || ''), byName[step.name], vertexFor(timeout.then, joinOf[step.name]), edgeStyle(true));
                 }
                 const expire = step.args['expire'];
                 if (expire && typeof expire === 'object' && expire.then) {
-                    graph.insertEdge(parent, null, 'expires ' + String(expire.until || ''), byName[step.name], vertexFor(expire.then), edgeStyle(true));
+                    graph.insertEdge(parent, null, 'expires ' + String(expire.until || ''), byName[step.name], vertexFor(expire.then, joinOf[step.name]), edgeStyle(true));
                 }
             }
 

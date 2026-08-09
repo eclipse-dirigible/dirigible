@@ -2142,16 +2142,76 @@ class IntentParserTest {
                 "expected an unknown-branch issue, got: " + ex.getIssues());
     }
 
+    /** A branch that is a two-step chain, and a branch that is itself a nested fork (#6568). */
     @Test
-    void parallelBranchWithItsOwnNextIsRejected() {
-        // A branch that chains onward is the multi-step follow-up, not v1.
+    void parallelBranchChainsAndNestedForksParse() {
+        IntentParser.parse(parallelProcess(
+                P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: techSignoff } }\n"
+                        + "      - { name: techSignoff, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n"
+                        + "      - { name: commercialReview, kind: parallel, args: { branches: [pricing, legal] } }\n"
+                        + "      - { name: pricing, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n"
+                        + "      - { name: legal, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n" + P_CONSOLIDATE));
+    }
+
+    @Test
+    void parallelBranchRoutingToTheForksOwnNextIsRejected() {
+        // `consolidate` is what the JOIN flows into - a branch converges on `join`, never on it directly
+        // (otherwise the branch and the join both feed it and the flow loops back into the branch).
         IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(
                 P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: consolidate } }\n"
                         + P_COMMERCIAL + P_CONSOLIDATE)));
         assertTrue(ex.getIssues()
                      .stream()
-                     .anyMatch(i -> i.contains("branch [techReview] declares next/then/timeout/expire")),
-                "expected a multi-step-branch issue, got: " + ex.getIssues());
+                     .anyMatch(i -> i.contains("next [consolidate] is also reachable from inside one of its branches")),
+                "expected a converge-on-join issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelBranchRoutingToEndIsRejected() {
+        // A token that ends inside a branch never reaches the join, and the instance hangs on it.
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: end } }\n"
+                                + P_COMMERCIAL + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("routes to `end` from inside a parallel branch")),
+                "expected an end-inside-a-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void theJoinLiteralOutsideAParallelBranchIsRejected() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(P_FORK + P_TECH + P_COMMERCIAL
+                        + "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: join } }\n")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("routes to `join`, which is only valid inside a parallel branch")),
+                "expected a join-outside-a-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void aStepReachableFromTwoParallelBranchesIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(P_FORK
+                        + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: sign } }\n"
+                        + "      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: sign } }\n"
+                        + "      - { name: sign, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n" + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("step [sign] is reachable from more than one parallel branch")),
+                "expected a shared-step issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void routingIntoAParallelBranchFromTheMainFlowIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(P_FORK
+                + P_TECH + P_COMMERCIAL
+                + "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: techReview } }\n")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("which is inside a parallel branch - a branch is entered through its fork only")),
+                "expected a routes-into-a-branch issue, got: " + ex.getIssues());
     }
 
     @Test

@@ -692,7 +692,7 @@ processes:
 
 **Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` /
 `parallel` / `end`. A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name
-a declared step or the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared
+a declared step or the literal `end` (or, inside a parallel branch, `join` - see below). The `trigger` fires on exactly one lifecycle event of a declared
 entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
 when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
 
@@ -710,10 +710,34 @@ branch is done; it emits a BPMN parallel-gateway fork/join.
       - { name: done, kind: end }
 ```
 
-Rules: at least two `branches`, each a **single** declared task step (a `userTask` / `serviceTask` /
-`script`) that joins directly; `next` names a declared step or `end`. v1 does not support a branch that
-chains onward (its own `next`/`then`/boundary timer) or a branch that is itself `parallel` - multi-step
-branch chains and nested parallels are a planned follow-up.
+A branch is a **chain**, not a single step: it starts at the branch step and continues through that
+step's own routing (`next`, a decision's `then`/`else`, a boundary `timeout`/`expire`), and it may
+itself be a nested `parallel`. Everything reachable that way belongs to the branch and runs
+concurrently with the sibling branches.
+
+```yaml
+    steps:
+      - { name: reviews, kind: parallel, args: { branches: [techReview, commercial], next: consolidate } }
+      # branch 1 - a two-step chain: the second step declares no routing, so it joins
+      - { name: techReview,  kind: userTask,    args: { assignee: engineer, form: ReviewOrder, next: techSignoff } }
+      - { name: techSignoff, kind: serviceTask, args: { setRelationField: TechStatus, value: 2 } }
+      # branch 2 - a nested fork; it declares no `next`, so its join flows into the outer join
+      - { name: commercial,  kind: parallel,    args: { branches: [pricing, legal] } }
+      - { name: pricing,     kind: decision,    args: { if: "amount > 1000", then: escalate, else: join } }
+      - { name: escalate,    kind: userTask,    args: { assignee: manager, form: ReviewOrder } }
+      - { name: legal,       kind: userTask,    args: { assignee: legal,   form: ReviewOrder } }
+      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+```
+
+Rules: at least two `branches`, each a declared step. Inside a branch there is **no positional
+fall-through** - a step routes explicitly (`next` / `then` / `else`), or, declaring no routing at all,
+it is a branch terminal and flows into the join. Route to the literal **`join`** to converge on the
+enclosing join explicitly - needed when a decision inside a branch must rejoin from both arms (`else:
+join` above); `join` means nothing outside a branch, and no step may be named `join`. A branch must
+never route to `end`: the join would wait forever for a token that ended. A step may belong to only one
+branch, and only its fork may route into a branch - in particular a branch converges on `join`, never
+on the fork's own `next` directly. A top-level fork needs a `next` (a declared step or `end`); a
+**nested** fork may omit it, and then joins into its own enclosing join.
 
 **Business key on the trigger.** By default a started process instance's BPM business key is the
 record's primary key (a bare number in the Processes admin view). Name a more readable trigger-entity

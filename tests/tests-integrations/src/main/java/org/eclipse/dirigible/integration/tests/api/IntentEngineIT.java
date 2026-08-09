@@ -986,6 +986,73 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void parallel_branches_chain_onward_and_nest() {
+        // #6568: a branch is a CHAIN - the first branch runs two steps before joining, and the second is
+        // itself a `parallel` whose own join (declaring no `next`) flows into the enclosing one.
+        String yaml = """
+                name: orders4
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: OrderReview
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: reviews, kind: parallel, args: { branches: [techReview, commercial], next: consolidate } }
+                      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: techSignoff } }
+                      - { name: techSignoff, kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+                      - { name: commercial, kind: parallel, args: { branches: [pricing, legal] } }
+                      - { name: pricing, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: legal, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SIGNED }
+                      - { id: 3, name: REVIEWED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String bpmn = contentOf("OrderReview.bpmn");
+        // Branch 1 runs its own chain and joins at the step that declares no routing.
+        assertTrue(bpmn.contains("sourceRef=\"reviews\" targetRef=\"techReview\""), "the fork enters the branch at its first step");
+        assertTrue(bpmn.contains("sourceRef=\"techReview\" targetRef=\"techSignoff\""), "the branch chains on to its own `next`");
+        assertTrue(bpmn.contains("sourceRef=\"techSignoff\" targetRef=\"reviewsJoin\""), "the branch terminal joins");
+        assertFalse(bpmn.contains("sourceRef=\"techSignoff\" targetRef=\"commercial\""),
+                "a branch step must not fall through into the next declared step");
+        // Branch 2 is a nested fork with its own gateway pair, joining into the enclosing join.
+        assertTrue(bpmn.contains("<parallelGateway id=\"commercial\"") && bpmn.contains("<parallelGateway id=\"commercialJoin\""),
+                "the nested fork gets its own gateway pair");
+        assertTrue(bpmn.contains("sourceRef=\"commercial\" targetRef=\"pricing\"")
+                && bpmn.contains("sourceRef=\"commercial\" targetRef=\"legal\""), "the nested fork fans to its own branches");
+        assertTrue(
+                bpmn.contains("sourceRef=\"pricing\" targetRef=\"commercialJoin\"")
+                        && bpmn.contains("sourceRef=\"legal\" targetRef=\"commercialJoin\""),
+                "the nested branches join into the nested join");
+        assertTrue(bpmn.contains("sourceRef=\"commercialJoin\" targetRef=\"reviewsJoin\""),
+                "a nested fork with no `next` joins into the enclosing join");
+        assertTrue(bpmn.contains("sourceRef=\"reviewsJoin\" targetRef=\"consolidate\""), "the outer join flows on to `next`");
+        assertFalse(bpmn.contains("sourceRef=\"end\""), "the end event must have no outgoing sequence flow");
+    }
+
+    @Test
     void field_major_false_is_kept_off_the_list_via_widget_is_major() {
         // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
         // omits that column (the field is still shown in forms + the details pane). Default is true.
