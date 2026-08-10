@@ -128,7 +128,7 @@ public class TracingFacade implements InitializingBean {
      * Disable tracing.
      */
     public static void disableTracing() {
-        Configuration.set(TaskStateService.DIRIGIBLE_TRACING_TASK_ENABLED, "true");
+        Configuration.set(TaskStateService.DIRIGIBLE_TRACING_TASK_ENABLED, "false");
     }
 
 

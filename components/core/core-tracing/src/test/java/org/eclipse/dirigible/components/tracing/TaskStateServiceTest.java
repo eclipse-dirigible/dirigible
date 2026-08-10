@@ -10,8 +10,10 @@
 package org.eclipse.dirigible.components.tracing;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.Map;
 import java.util.TreeMap;
@@ -65,6 +67,40 @@ public class TaskStateServiceTest {
     public void cleanup() throws Exception {
         // delete test task states
         taskStateService.deleteAll();
+    }
+
+    /**
+     * Resets the global tracing flag so the mutated runtime configuration does not leak into other test
+     * classes.
+     */
+    @AfterEach
+    public void resetTracingFlag() {
+        Configuration.remove(TaskStateService.DIRIGIBLE_TRACING_TASK_ENABLED);
+    }
+
+    /**
+     * Verifies the enable then disable round-trip on the service (regression for #6608).
+     */
+    @Test
+    public void enableThenDisableTracing() {
+        taskStateService.enableTracing();
+        assertTrue(taskStateService.isTracingEnabled());
+
+        taskStateService.disableTracing();
+        assertFalse(taskStateService.isTracingEnabled());
+    }
+
+    /**
+     * Verifies the enable then disable round-trip on the static facade the engines consult (regression
+     * for #6608).
+     */
+    @Test
+    public void enableThenDisableTracingViaFacade() {
+        TracingFacade.enableTracing();
+        assertTrue(TracingFacade.isTracingEnabled());
+
+        TracingFacade.disableTracing();
+        assertFalse(TracingFacade.isTracingEnabled());
     }
 
     /**
