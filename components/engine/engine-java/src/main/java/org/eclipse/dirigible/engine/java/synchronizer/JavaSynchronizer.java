@@ -222,9 +222,17 @@ public class JavaSynchronizer extends BaseSynchronizer<JavaFile, Long> {
         List<JavaLoader.ClientSource> sources = new ArrayList<>(all.size());
         for (JavaFile file : all) {
             if (!RegistrySourceLoader.exists(file.getLocation())) {
-                // The artefact's source disappeared between cycles; let the orchestrator's cleanup
-                // loop delete the artefact row. We must not include a stale source here.
-                continue;
+                // The source of a still-registered artefact is momentarily gone - a publish replaces
+                // a collection by deleting it and copying it back. Compiling now would submit a
+                // knowingly incomplete batch: every class referencing a missing one fails, javac can
+                // emit no bytecode for the whole batch, and the client codebase falls back to its
+                // last-good state - or, on a first publish, to nothing at all. Rebuild on the next
+                // cycle instead, by when the file is back or the orchestrator's cleanup has dropped
+                // the artefact.
+                LOGGER.info("Java source [{}] is registered but currently missing - deferring the rebuild to the next cycle",
+                        file.getLocation());
+                dirty.set(true);
+                return;
             }
             byte[] bytes;
             try {

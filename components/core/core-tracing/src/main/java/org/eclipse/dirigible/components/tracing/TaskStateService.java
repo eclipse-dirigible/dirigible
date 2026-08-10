@@ -232,7 +232,7 @@ public class TaskStateService {
      * Disable tracing.
      */
     public void disableTracing() {
-        Configuration.set(TaskStateService.DIRIGIBLE_TRACING_TASK_ENABLED, "true");
+        Configuration.set(TaskStateService.DIRIGIBLE_TRACING_TASK_ENABLED, "false");
     }
 
 }
