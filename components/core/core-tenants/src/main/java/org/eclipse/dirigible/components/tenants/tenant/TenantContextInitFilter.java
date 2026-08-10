@@ -28,7 +28,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
 /**
- * The Class TenantContextInitFilter.
+ * Opens the tenant execution scope for the duration of the request.
+ * <p>
+ * It runs for <em>every</em> request, with no path opt-outs. The authentication filters sit
+ * downstream of it in the same chain and resolve the user against the current tenant, so a request
+ * reaching them without a tenant scope fails authentication - which turned a {@code permitAll}
+ * static path (webjars, favicon) into a 401 as soon as valid credentials were presented. Anything
+ * else that reads tenant-scoped state (configuration overrides, datasource routing, translations)
+ * would equally throw rather than fall back.
  */
 @Component
 public class TenantContextInitFilter extends OncePerRequestFilter {
@@ -127,24 +134,6 @@ public class TenantContextInitFilter extends OncePerRequestFilter {
             return false;
         }
         return lower.contains("text/html");
-    }
-
-    /**
-     * Should not filter.
-     *
-     * @param request the request
-     * @return true, if successful
-     */
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI()
-                      .startsWith("/webjars/")
-                || request.getRequestURI()
-                          .startsWith("/css/")
-                || request.getRequestURI()
-                          .startsWith("/js/")
-                || request.getRequestURI()
-                          .endsWith(".ico");
     }
 
 }
