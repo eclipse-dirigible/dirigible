@@ -36,6 +36,7 @@ import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
@@ -143,6 +144,9 @@ public final class IntentParser {
         }
         rejectRemovedNumberKeys(tree);
         moveGeneratesItemLines(tree);
+        // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
+        // typed mapping, every validator and every generator keep seeing the integers they always saw.
+        StatusSymbolResolver.resolve(tree);
         String json = GSON.toJson(tree);
         IntentModel model;
         try {
@@ -4244,6 +4248,61 @@ public final class IntentParser {
             }
             validateAgeingDimensions(model, report, issues);
             validateBalanceReport(model, report, issues);
+            validateReportScope(model, report, issues);
+        }
+    }
+
+    /**
+     * A report's {@code scope} restricts the query to the lifecycle rows that a stage classifies, so
+     * "economically live only" stops being a hand-written predicate over positional seed ids. It is
+     * therefore only meaningful over a source carrying a {@code function: EntityStatus}, and a stage
+     * scope needs that nomenclature's seed rows to be classified <em>in this model</em> - a cross-model
+     * status entity is seeded elsewhere and nothing here can resolve its ids, which must fail loudly
+     * rather than emit a query missing its predicate.
+     */
+    private static void validateReportScope(IntentModel model, ReportIntent report, List<String> issues) {
+        String scope = report.getNormalizedScope();
+        if (scope == null) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] scope [" + report.getScope()
+                                                                             .trim()
+                + "]";
+        if (!LifecycleStages.SCOPE_ALL.equals(scope) && !LifecycleStages.STAGES.contains(scope)) {
+            issues.add(subject + " is unknown - expected `" + LifecycleStages.SCOPE_ALL + "` or one of "
+                    + new java.util.TreeSet<>(LifecycleStages.STAGES));
+            return;
+        }
+        EntityIntent source = null;
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null && entity.getName()
+                                                  .equals(report.getSource())) {
+                source = entity;
+            }
+        }
+        if (source == null) {
+            return; // a missing / unknown source is reported separately
+        }
+        RelationIntent status = LifecycleStages.statusRelation(source);
+        if (status == null) {
+            issues.add(subject + " requires the source [" + source.getName() + "] to declare a `function: EntityStatus` relation"
+                    + " - a scope restricts the query by the lifecycle status");
+            return;
+        }
+        if (LifecycleStages.SCOPE_ALL.equals(scope)) {
+            return;
+        }
+        if (status.isCrossModel()) {
+            issues.add(subject + " cannot resolve: the status nomenclature [" + status.getTo() + "] belongs to model [" + status.getModel()
+                    + "], so its stages are not declared here - use an explicit `filter` instead");
+            return;
+        }
+        Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+        if (stages.isEmpty()) {
+            issues.add(subject + " requires the seed rows of [" + status.getTo() + "] to declare `stage:` - without the"
+                    + " classification there is nothing to resolve the scope against");
+        } else if (!stages.containsKey(scope)) {
+            issues.add(subject + " matches no seed row - none of [" + status.getTo() + "] declares `stage: " + scope + "`");
         }
     }
 
@@ -4549,6 +4608,7 @@ public final class IntentParser {
                 byName.put(entity.getName(), entity);
             }
         }
+        Set<String> nomenclatures = statusNomenclatures(model);
         Set<String> seedNames = new HashSet<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
@@ -4587,8 +4647,74 @@ public final class IntentParser {
             }
             if (seed.isLanguageSeed()) {
                 validateLanguageSeed(seed, byName.get(seed.getEntity()), issues);
+            } else {
+                validateSeedStages(seed, byName.get(seed.getEntity()), nomenclatures, issues);
             }
         }
+    }
+
+    /**
+     * The names of the entities this model uses as a status nomenclature - the same-model targets of a
+     * {@code function: EntityStatus} relation. A cross-model status entity is excluded: its seeds live
+     * in the owning model, so nothing here can classify them.
+     */
+    private static Set<String> statusNomenclatures(IntentModel model) {
+        Set<String> nomenclatures = new HashSet<>();
+        for (EntityIntent entity : model.getEntities()) {
+            RelationIntent status = LifecycleStages.statusRelation(entity);
+            if (status != null && status.getTo() != null && !status.isCrossModel()) {
+                nomenclatures.add(status.getTo());
+            }
+        }
+        return nomenclatures;
+    }
+
+    /**
+     * A seed row's optional {@code stage:} marker classifies what that status MEANS to the lifecycle
+     * ({@code draft} / {@code live} / {@code cancelled} / {@code void}) so consumers - chiefly a
+     * report's {@code scope} - stop expressing "economically live" as a hand-written predicate over
+     * positional seed ids. It is metadata, never a column, so it must carry the row's {@code id} (what
+     * it classifies) and stay inside the vocabulary. A status nomenclature that declares its OWN
+     * {@code stage} property collides with the marker and is rejected: the row key cannot be both data
+     * and classification.
+     */
+    private static void validateSeedStages(SeedIntent seed, EntityIntent entity, Set<String> statusNomenclatures, List<String> issues) {
+        String subject = "seed [" + seed.getName() + "]";
+        boolean anyStage = false;
+        String idField = entity == null ? "id" : seedIdField(entity);
+        for (Map<String, Object> row : seed.getRows()) {
+            if (!row.containsKey(LifecycleStages.STAGE_KEY)) {
+                continue;
+            }
+            anyStage = true;
+            Object raw = row.get(LifecycleStages.STAGE_KEY);
+            String stage = raw == null ? ""
+                    : String.valueOf(raw)
+                            .trim()
+                            .toLowerCase(Locale.ROOT);
+            if (!LifecycleStages.STAGES.contains(stage)) {
+                issues.add(
+                        subject + " row declares stage [" + raw + "] - expected one of " + new java.util.TreeSet<>(LifecycleStages.STAGES));
+            }
+            if (row.get(idField) == null) {
+                issues.add(subject + " row declares a stage but no [" + idField + "] - the stage classifies a status seed id");
+            }
+        }
+        if (anyStage && entity != null && LifecycleStages.declaresStageProperty(entity) && statusNomenclatures.contains(entity.getName())) {
+            issues.add(subject + " uses the lifecycle stage marker but entity [" + entity.getName()
+                    + "] declares its own `stage` property - rename that property, the seed key cannot be both data and"
+                    + " lifecycle classification");
+        }
+    }
+
+    /** The field name a seed row keys the entity's primary key by ({@code id} by convention). */
+    private static String seedIdField(EntityIntent entity) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.isPrimaryKey() && field.getName() != null) {
+                return field.getName();
+            }
+        }
+        return "id";
     }
 
     /**

@@ -74,6 +74,16 @@
             .intent-issues li {
                 margin: 2px 0;
             }
+            .intent-warnings {
+                margin: 0;
+                padding: 8px 8px 8px 26px;
+                background: var(--sapWarningBackground, #fff8e5);
+                color: var(--sapCriticalTextColor, #b8500a);
+                font-size: 13px;
+            }
+            .intent-warnings li {
+                margin: 2px 0;
+            }
             .intent-chat-pane {
                 height: 100%;
                 display: flex;
@@ -170,6 +180,13 @@
 
         <ul class="intent-issues" ng-if="issues.length">
             <li ng-repeat="issue in issues">{{issue}}</li>
+        </ul>
+
+        <!-- Non-fatal generation notes: what Generate could NOT emit, or emitted with a modelling
+             caveat (a report aggregating over a lifecycle entity with no scope). The generation
+             succeeded, so this must not look like an error - but it must not be invisible either. -->
+        <ul class="intent-warnings" ng-if="warnings.length">
+            <li ng-repeat="warning in warnings">{{warning}}</li>
         </ul>
 
         <div class="bk-stretch" ng-if="!state.error">
