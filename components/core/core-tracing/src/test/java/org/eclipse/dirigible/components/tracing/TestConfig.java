@@ -21,7 +21,7 @@ import org.springframework.context.annotation.Bean;
  * core-tenants, so the context is given a mock tenant context that resolves to the default tenant.
  */
 @TestConfiguration
-public class TestConfig {
+class TestConfig {
 
     /** The default tenant id used across the tracing tests. */
     static final String DEFAULT_TENANT_ID = "default-tenant";

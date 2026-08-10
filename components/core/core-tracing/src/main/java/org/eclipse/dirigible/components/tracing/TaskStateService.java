@@ -93,6 +93,19 @@ public class TaskStateService {
     }
 
     /**
+     * Ensures the given task state belongs to the current tenant, otherwise fails as if it did not
+     * exist so that a tenant can neither read nor delete another tenant's task state.
+     *
+     * @param taskState the task state
+     * @param id the requested id, used for the failure message
+     */
+    private void ensureCurrentTenant(TaskState taskState, Long id) {
+        if (!getCurrentTenantId().equals(taskState.getTenant())) {
+            throw new IllegalArgumentException(this.getClass() + ": missing task state with [" + id + "]");
+        }
+    }
+
+    /**
      * Gets the all.
      *
      * @return the all
@@ -127,6 +140,7 @@ public class TaskStateService {
      * @param taskState the taskState
      */
     public void delete(TaskState taskState) {
+        ensureCurrentTenant(taskState, taskState.getId());
         getRepository().delete(taskState);
     }
 
@@ -148,9 +162,7 @@ public class TaskStateService {
                                              .orElseThrow(() -> new IllegalArgumentException(
                                                      this.getClass() + ": missing task state with [" + id + "]"));
 
-        if (!getCurrentTenantId().equals(taskState.getTenant())) {
-            throw new IllegalArgumentException(this.getClass() + ": missing task state with [" + id + "]");
-        }
+        ensureCurrentTenant(taskState, id);
 
         if (!TaskStatus.STARTED.equals(taskState.getStatus())) {
             Javers javers = JaversBuilder.javers()

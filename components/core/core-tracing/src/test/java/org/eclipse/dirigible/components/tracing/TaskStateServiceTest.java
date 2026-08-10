@@ -236,7 +236,15 @@ public class TaskStateServiceTest {
                                .size());
         assertEquals(1, service.findByExecution("execA1")
                                .size());
-        assertNotNull(service.findById(tenantAId));
+        TaskState tenantAState = service.findById(tenantAId);
+        assertNotNull(tenantAState);
+
+        // tenant B cannot delete tenant A's trace
+        when(tenantContext.getCurrentTenant()).thenReturn(tenantB);
+        assertThrows(IllegalArgumentException.class, () -> service.delete(tenantAState));
+        when(tenantContext.getCurrentTenant()).thenReturn(tenantA);
+        assertEquals(2, service.getAll()
+                               .size());
 
         // deleting under tenant A leaves tenant B's trace intact
         service.deleteAll();
