@@ -17,6 +17,7 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -27,18 +28,42 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * {@code @Listener} pastes in. Kept free of Spring/IO so the tricky bits are unit-tested directly.
  *
  * <p>
- * A value or {@code {placeholder}} is one of: a literal, a <b>direct field</b> of the event entity
- * (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a to-one
- * relation (rendered against a related entity the listener loads once by FK id - the same one-hop
- * mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop paths are
- * not supported. The {@code when} guard supports a single {@code field ==|!= literal} comparison on
- * a direct field.
+ * A value or {@code {placeholder}} is one of: the reserved <b>{@code appUrl}</b> config token (the
+ * application's external base URL, see {@link #APP_URL_TOKEN}), a <b>direct field</b> of the event
+ * entity (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a
+ * to-one relation (rendered against a related entity the listener loads once by FK id - the same
+ * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
+ * paths are not supported. The {@code when} guard supports a single {@code field ==|!= literal}
+ * comparison on a direct field.
  */
 public final class NotificationSupport {
 
     private static final Pattern PATH = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
     private static final Pattern SIMPLE_COMPARISON = Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*(.+?)\\s*");
+
+    /**
+     * The reserved {@code {appUrl}} placeholder name - a config-backed token, not an entity field or
+     * relation. Resolves to the application's external base URL ({@link DirigibleConfig#APP_BASE_URL},
+     * tenant-overridable), so a body can compose a deep link by hand, e.g. {@code "Review it here:
+     * {appUrl}/orders/{id}"}. Deliberately supplies only the origin - the concrete per-entity route is
+     * the template layer's knowledge, not the intent layer's (see the engine-intent guide's
+     * path-agnostic rule), so the author appends the rest of the path as plain text and other
+     * placeholders.
+     * <p>
+     * <b>Known limitation:</b> the tenant override is resolved through {@code Configuration}'s
+     * thread-scoped map, which today is populated only for HTTP request threads (see
+     * {@code TenantConfigurationInitFilter}) - a notify block always fires from an async message
+     * listener, which re-establishes the tenant's <i>identity</i> but not its configuration overrides.
+     * Until that dispatch-path gap is closed platform-wide, a tenant override of
+     * {@code DIRIGIBLE_APP_BASE_URL} will not take effect here; the generated expression still falls
+     * back correctly to the global environment/default value.
+     */
+    static final String APP_URL_TOKEN = "appUrl";
+
+    /** The Java expression {@link #APP_URL_TOKEN} resolves to - see its own javadoc for the caveat. */
+    private static final String APP_URL_EXPRESSION =
+            "org.eclipse.dirigible.sdk.core.Configurations.get(\"" + DirigibleConfig.APP_BASE_URL.getKey() + "\", \"\")";
 
     private NotificationSupport() {}
 
@@ -283,6 +308,9 @@ public final class NotificationSupport {
          * relation load when needed. Returns {@code null} for an unresolvable relation.field.
          */
         private String access(String path) {
+            if (APP_URL_TOKEN.equals(path)) {
+                return APP_URL_EXPRESSION;
+            }
             int dot = path.indexOf('.');
             if (dot < 0) {
                 return "entity." + IntentNaming.pascalCase(path);

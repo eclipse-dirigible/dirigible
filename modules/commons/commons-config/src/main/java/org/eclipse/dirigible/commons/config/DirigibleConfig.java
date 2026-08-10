@@ -70,6 +70,12 @@ public enum DirigibleConfig {
 
     HOME_URL("DIRIGIBLE_HOME_URL", "services/web/home/"), //
 
+    /**
+     * The application's externally-reachable base URL, used to build absolute links (e.g. in
+     * notification emails).
+     */
+    APP_BASE_URL("DIRIGIBLE_APP_BASE_URL", ""), //
+
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en"), //
 
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
