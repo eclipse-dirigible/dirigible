@@ -168,14 +168,31 @@ anti-pattern downstream. The same applies to the `custom/` stubs `ServiceTaskHan
 scaffolds. This leaked once (the #6356 send templates shipped `System.err.println` in review); the
 platform-wide rule and the single documented exception live in the root `CLAUDE.md`.
 
-**Documentation sync (normative).** A DSL change is not done until its human documentation lands
-in BOTH sites, in the same effort: the vendor-neutral **specification** at `intentfile.org` (repo
-`IntentFile/intentfile.github.io`) and the platform-branded docs at `dirigible.io` (under
-`/help/intent/`). Author two wordings - neutral for the spec (NO vendor/platform names), branded
-for `dirigible.io`. Open a PR to each. **Merge the `dirigible.io` PR; leave the `intentfile.org`
-PR OPEN** for the maintainer to review/merge. `intentfile.org` is THE spec - it carries only
-precise, normative documentation and NEVER a `CLAUDE.md` / `MEMORY.md` or any AI/meta file; this
-module (`engine-intent`) is its reference implementation.
+**Documentation sync (normative).** A DSL change is not done until its human documentation lands,
+in the same effort — never offered as an optional follow-up. **Three** repositories, because the
+specification and its website split in mid-2026:
+
+1. **`IntentFile/intent-specification`** — THE normative spec. A new construct or changed semantics
+   is a *specification change*: a PR against the current `versions/<version>.md` **including its
+   *Appendix A: DSL index* row**. (A larger design may start as a `proposals/` document.) Mark
+   rules a conforming file/generator must follow as **Normative**.
+2. **`IntentFile/intentfile.github.io`** — the rendered site (`intentfile.org`). Mirror the change
+   into `docs/spec/<chapter>.md` + `docs/reference.md`. The site's chapters sit one heading level
+   shallower than the spec's and use `::: info Normative` containers instead of blockquotes.
+3. **`dirigible-io/dirigible-io.github.io`** — the platform-branded docs under `/help/intent/`
+   (chiefly `dsl-reference.md`).
+
+Author two wordings — neutral for both IntentFile repos (NO vendor/platform names, and never a
+`CLAUDE.md` / `MEMORY.md` or any AI/meta file there), branded for `dirigible.io`. Open a PR to each.
+**Merge the `dirigible.io` PR; leave both IntentFile PRs OPEN** for the maintainer to review/merge.
+This module (`engine-intent`) is the spec's reference implementation, so the PR bodies should link
+the platform PR that proves the construct out.
+
+Both sites are VitePress: symlink the sibling checkout's `node_modules` into your worktree and run
+`npm run docs:build` — then **grep the built HTML for your new anchors** rather than trusting the
+heading, because VitePress collapses an em dash to ONE hyphen (`#stage-what-a-status-means…`) while
+GitHub's markdown keeps TWO (`#stage--what-a-status-means…`), so the same heading needs a different
+link in each repo.
 
 `IntentEditorLoadsIT` **clones [`dirigiblelabs/sample-intent-model`](https://github.com/dirigiblelabs/sample-intent-model)** (the library intent sample - same clone-a-real-repo pattern as the `SampleProjectRepositoryIT` subclasses; it replaced the old local `IntentEditorIT` fixture so the published sample stays the single source of truth), opens its `app.intent`, then asserts the mxGraph diagram renders (`.intent-diagram svg` is visible) **and** that the parsed `Book` entity's label appears inside `.intent-diagram` - so it fails on an empty or broken diagram, unlike the old "any `<svg>` exists" check that a Mermaid error bomb satisfied. It does not separately exercise a theme switch because the fixed-colour palette renders identically in both themes. Editing the sample's entities/process means the sample repo must change too (the IT clones its HEAD). `IntentEngineIT` stays self-contained (inline YAML) for fast, network-free coverage.
 
