@@ -263,8 +263,14 @@ document.addEventListener('alpine:init', () => {
             } else if (g.path && g.kind === 'SETTING') {
               // A standalone setting perspective declared with no navigation group.
               settings.push(g);
-            } else if (g.path && g.kind === 'PRIMARY') {
-              // A standalone (un-grouped) app entity perspective.
+            } else if (g.path && g.kind) {
+              // A standalone app perspective: declared with no navigation group (PRIMARY - the
+              // expected case), or one the aggregator could not place at all. Rescuing any kind, not
+              // just PRIMARY, is what keeps an unplaceable perspective visible: enumerating kinds let
+              // one fall off the end of this chain and vanish with no diagnostic anywhere (#6646).
+              if (g.kind !== 'PRIMARY') {
+                console.warn(`Perspective '${g.id}' (kind ${g.kind}, groupId '${g.groupId || ''}') matched no navigation group; showing it under "Other".`);
+              }
               ungrouped.push(g);
             }
           });

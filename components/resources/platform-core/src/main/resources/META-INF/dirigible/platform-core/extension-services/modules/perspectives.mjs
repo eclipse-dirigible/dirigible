@@ -60,27 +60,38 @@ export async function getPerspectives(extensionPoints = []) {
 		} else perspectives.push(perspective);
 	}
 
-	for (let i = 0; i < perspectives.length; i++) {
-		if (perspectives[i].groupId) {
-			let groupFound = false;
-			for (let g = 0; g < sidebarConfig.perspectives.length; g++) {
-				if (perspectives[i].groupId === sidebarConfig.perspectives[g].id) {
-					sidebarConfig.perspectives[g].items.push(perspectives[i]);
-					sidebarConfig.perspectives[g].items.sort(sortPerspectives);
-					groupFound = true;
-					break;
-				}
+	// The declared navigation groups, snapshotted before the placement loop so that a perspective
+	// handed back un-grouped below can never be mistaken for a group.
+	const groups = sidebarConfig.perspectives.filter(group => Array.isArray(group.items));
+	// A group may declare itself the default one of its extension point. A shell with a single
+	// well-known navigation group owns the placement, so its perspectives need not repeat the group
+	// id - and a rename of that group can never invalidate an already-generated module.
+	const defaultGroup = groups.find(group => group.isDefault);
+	// The platform's catch-all group, used only for a groupId that matches nothing.
+	const unknownGroup = groups.find(group => group.id === 'undefined-group');
+
+	for (const perspective of perspectives) {
+		let group;
+		if (perspective.groupId) {
+			group = groups.find(candidate => candidate.id === perspective.groupId);
+			if (!group) {
+				// A groupId matching no group is authoring/rename drift. Neither the perspective nor the
+				// diagnosis may be lost over it: a silently dropped perspective is indistinguishable from
+				// a module that contributes none.
+				console.error(`Perspective ['${perspective.id}'] with path ['${perspective.path}'] declares groupId ['${perspective.groupId}'], which matches no perspective group of this extension point.`);
+				group = defaultGroup ?? unknownGroup;
 			}
-			if (!groupFound) {
-				for (let g = 0; g < sidebarConfig.perspectives.length; g++) {
-					if (sidebarConfig.perspectives[g].id === 'undefined-group') {
-						sidebarConfig.perspectives[g].items.push(perspectives[i]);
-						sidebarConfig.perspectives[g].items.sort(sortPerspectives);
-						break;
-					}
-				}
-			}
-		} else sidebarConfig.perspectives.push(perspectives[i]);
+		} else {
+			group = defaultGroup;
+		}
+		if (group) {
+			group.items.push(perspective);
+			group.items.sort(sortPerspectives);
+		} else {
+			// Nothing to place it in: hand the perspective back standalone so the consuming shell can
+			// still render it, rather than dropping it here.
+			sidebarConfig.perspectives.push(perspective);
+		}
 	}
 	sidebarConfig.perspectives.sort(sortPerspectives);
 	sidebarConfig.utilities.sort(sortPerspectives);

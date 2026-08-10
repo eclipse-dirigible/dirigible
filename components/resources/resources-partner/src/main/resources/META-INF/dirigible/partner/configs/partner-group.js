@@ -10,15 +10,19 @@
  * SPDX-License-Identifier: EPL-2.0
  */
 /*
- * The single navigation group of the Partner shell: every partner perspective declares
- * groupId 'partner', defined once here (the same one-definition pattern as the application shell's
- * navigation groups).
+ * The single navigation group of the Partner shell, defined once here (the same one-definition
+ * pattern as the application shell's navigation groups). Being the DEFAULT group of the
+ * application-partner-perspectives extension point, it adopts every partner perspective the
+ * aggregator cannot place: one declaring no groupId (the generator leaves the placement to this
+ * shell) as well as one declaring a stale id, so renaming this group can never make an
+ * already-generated module's partner pages disappear.
  */
 exports.getPerspectiveGroup = () => ({
 	id: 'partner',
 	label: 'Partner',
 	order: 10,
-	// The service classifies a group by the presence of `items` - the aggregated personal
-	// perspectives are pushed into it by groupId.
+	isDefault: true,
+	// The service classifies a group by the presence of `items` - the aggregated partner
+	// perspectives are pushed into it.
 	items: []
 });

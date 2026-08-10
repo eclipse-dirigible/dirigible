@@ -13,7 +13,10 @@ const perspectiveData = {
 	tkey: '${projectName}:${tprefix}.t.${dataName}_plural',
 	path: '/services/web/${projectName}/gen/${genFolderName}/index.html?embedded=true#/my/${name}',
 	kind: 'PERSONAL',
-	groupId: 'personal',
+	// No navigation group is declared here: the Personal Shell has a single one, registered as the
+	// DEFAULT of its extension point, so the shell owns the placement. Repeating that group id in
+	// every generated artifact would be a platform constant they must agree with forever - and a
+	// rename of it could then only be repaired by regenerating every module.
 #if($perspectiveOrder)
 	order: ${perspectiveOrder},
 #end
