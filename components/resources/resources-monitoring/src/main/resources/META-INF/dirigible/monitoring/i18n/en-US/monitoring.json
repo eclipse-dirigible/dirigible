@@ -133,6 +133,7 @@
     "title": "Monitoring"
   },
   "system": {
+    "build": "Build",
     "colCollections": "Collections",
     "colCollector": "Collector",
     "colCommitted": "Committed",
@@ -144,22 +145,29 @@
     "colThread": "Thread",
     "colTime": "Time",
     "colUsed": "Used",
+    "commit": "Commit",
     "cpu": "CPU",
     "cpuOverTime": "CPU while this page is open",
     "cpuSystem": "System {{value}}",
+    "database": "Database",
     "deadlocked": "{{count}} deadlocked",
+    "engines": "Engines",
     "gc": "Garbage collection",
     "heap": "Heap",
     "heapOverTime": "Heap while this page is open",
+    "instance": "Instance",
     "loadFailed": "The JVM metrics are currently unavailable.",
     "ofMax": "{{used}} of {{max}}",
     "pools": "Memory pools",
+    "product": "Product",
+    "repository": "Repository",
     "runtime": "Runtime",
-    "subtitle": "The Java virtual machine this instance runs in.",
+    "subtitle": "The build this instance runs, and the Java virtual machine running it.",
     "threadFilter": "Filter by name or state",
     "threadList": "Live threads",
     "threads": "Threads",
     "threadsDetail": "{{daemon}} daemon, peak {{peak}}",
-    "title": "System"
+    "title": "System",
+    "version": "Version"
   }
 }
