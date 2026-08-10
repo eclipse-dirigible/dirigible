@@ -51,17 +51,15 @@ public final class NotificationSupport {
      * path-agnostic rule), so the author appends the rest of the path as plain text and other
      * placeholders.
      * <p>
-     * <b>Known limitation:</b> the tenant override is resolved through {@code Configuration}'s
-     * thread-scoped map, which today is populated only for HTTP request threads (see
-     * {@code TenantConfigurationInitFilter}) - a notify block always fires from an async message
-     * listener, which re-establishes the tenant's <i>identity</i> but not its configuration overrides.
-     * Until that dispatch-path gap is closed platform-wide, a tenant override of
-     * {@code DIRIGIBLE_APP_BASE_URL} will not take effect here; the generated expression still falls
-     * back correctly to the global environment/default value.
+     * Resolved per dispatch inside the sending tenant's own configuration scope - the generated
+     * listener (via {@code ListenerClassConsumer}) loads that tenant's overrides before invoking the
+     * handler, the same way {@code TenantConfigurationInitFilter} does for HTTP requests, so a tenant
+     * override of {@code DIRIGIBLE_APP_BASE_URL} takes effect here, falling back to the global
+     * environment/default value when the tenant has not set one.
      */
     static final String APP_URL_TOKEN = "appUrl";
 
-    /** The Java expression {@link #APP_URL_TOKEN} resolves to - see its own javadoc for the caveat. */
+    /** The Java expression {@link #APP_URL_TOKEN} resolves to. */
     private static final String APP_URL_EXPRESSION =
             "org.eclipse.dirigible.sdk.core.Configurations.get(\"" + DirigibleConfig.APP_BASE_URL.getKey() + "\", \"\")";
 
