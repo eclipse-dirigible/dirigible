@@ -11,6 +11,7 @@ package org.eclipse.dirigible.components.intent.model;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Report / aggregation. {@link #source} names the entity to aggregate; {@link #dimensions} are the
@@ -42,6 +43,16 @@ public class ReportIntent {
     private List<String> dimensions = new ArrayList<>();
     private List<String> measures = new ArrayList<>();
     private String filter;
+    /**
+     * Which lifecycle rows of the source this report counts, when the source carries a
+     * {@code function: EntityStatus}: a {@link LifecycleStages stage} name ({@code live} - the safe
+     * default for an aggregation - or {@code draft} / {@code cancelled} / {@code void}) restricts the
+     * query to the statuses classified with it, and {@code all} is the explicit opt-out a report that
+     * is ABOUT the lifecycle declares. Absent, an aggregating report over a stage-classified
+     * nomenclature defaults to {@code live} - so a draft or voided document cannot silently inflate a
+     * total - and one whose dimensions or {@code filter} already reference the status is left alone.
+     */
+    private String scope;
     private String description;
     /**
      * Whether this report gets a tile on the home dashboard. Absent (the default) → shown;
@@ -136,6 +147,21 @@ public class ReportIntent {
 
     public void setFilter(String filter) {
         this.filter = filter;
+    }
+
+    /** The authored lifecycle scope, trimmed and lower-cased, or {@code null} when none is declared. */
+    public String getNormalizedScope() {
+        return scope == null || scope.isBlank() ? null
+                : scope.trim()
+                       .toLowerCase(Locale.ROOT);
+    }
+
+    public String getScope() {
+        return scope;
+    }
+
+    public void setScope(String scope) {
+        this.scope = scope;
     }
 
     public String getDescription() {
