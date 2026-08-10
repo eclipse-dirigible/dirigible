@@ -2,8 +2,8 @@
  * Copyright (c) 2010-2026 Eclipse Dirigible contributors
  * SPDX-License-Identifier: EPL-2.0
  *
- * The System page: the JVM snapshot, restyled. Read-only - a thread dump is diagnosis, not
- * management.
+ * The System page: the build this instance runs and the JVM snapshot, restyled. Read-only - a thread
+ * dump is diagnosis, not management.
  */
 document.addEventListener('alpine:init', () => {
   Alpine.data('systemPage', () => ({
@@ -17,6 +17,16 @@ document.addEventListener('alpine:init', () => {
 
     get state() {
       return this.$store.system;
+    },
+
+    /** The build - read once by its own store, so it survives a failed metrics poll. */
+    get version() {
+      return this.$store.version;
+    },
+
+    /** An absent value is shown as a dash, like every other unavailable figure on this page. */
+    orDash(value) {
+      return value ? value : '—';
     },
 
     /** Bytes as MB - every memory figure on this page is in the same unit. */
