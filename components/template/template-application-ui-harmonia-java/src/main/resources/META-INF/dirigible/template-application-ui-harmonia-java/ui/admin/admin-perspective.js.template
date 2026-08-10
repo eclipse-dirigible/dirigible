@@ -12,7 +12,10 @@ const perspectiveData = {
 	label: '${appTitle}',
 	path: '/services/web/${projectName}/gen/${genFolderName}/admin/index.html',
 	kind: 'ADMIN',
-	groupId: 'admin',
+	// No navigation group is declared here: the Administration shell has a single one, registered as
+	// the DEFAULT of its extension point, so the shell owns the placement. Repeating that group id in
+	// every generated artifact would be a platform constant they must agree with forever - and a
+	// rename of it could then only be repaired by regenerating every module.
 	icon: 'wrench'
 };
 if (typeof exports !== 'undefined') {
