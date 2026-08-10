@@ -52,7 +52,10 @@ class TenantConfigurationKeyPolicy {
             // Whether the per-path CMS access grants are enforced at all. Per-tenant because whether
             // a tenant restricts folders by role is its own decision; the resolver reads it per
             // request, so switching it applies immediately.
-            "DIRIGIBLE_CMS_ROLES_ENABLED");
+            "DIRIGIBLE_CMS_ROLES_ENABLED", //
+            // The application's externally-reachable base URL (e.g. the {appUrl} notify token) -
+            // per-tenant because a tenant may be served from its own subdomain/host.
+            "DIRIGIBLE_APP_BASE_URL");
 
     /**
      * The full list of configuration keys a tenant may override, in display order.
