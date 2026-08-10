@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -1161,6 +1162,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
         assertTrue(myPerspective.contains("application-personal-perspectives"),
                 "the personal perspective must register on the Personal Shell's extension point");
+        // The Personal Shell has a single navigation group, declared as the DEFAULT of its extension
+        // point, so the shell owns the placement. A baked-in groupId would be a platform constant this
+        // artifact must agree with forever - and the platform-side rename that invalidated it made every
+        // personal page vanish silently (#6646).
+        assertFalse(contentOf("gen/emission/perspectives/my/Claim/perspective.js").contains("groupId"),
+                "a personal perspective must not bake in the shell's navigation group id");
 
         // partner: the EXTERNAL-partner surface - an ADDITIONAL scoped controller (identity match +
         // forced owner FK + sensitive strip) and a perspective on the DISJOINT Partner-shell point.
@@ -1174,6 +1181,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the partner perspective must register on the Partner shell's DISJOINT extension point");
         assertTrue(!partnerPerspective.contains("application-personal-perspectives"),
                 "the partner perspective must NOT register on the personal point (disjoint by construction)");
+        assertFalse(contentOf("gen/emission/perspectives/partner/PartnerTicket/perspective.js").contains("groupId"),
+                "a partner perspective must not bake in the shell's navigation group id (#6646)");
         String partnerList = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerListPage.js");
         assertTrue(partnerList.contains("PartnerTicketPartnerController"),
                 "the partner list page must talk to the scoped partner controller");
@@ -1492,8 +1501,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
         assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
         String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
-        assertTrue(adminPerspective.contains("kind: 'ADMIN'") && adminPerspective.contains("groupId: 'admin'"),
-                "the admin perspective must declare the ADMIN kind and group");
+        assertTrue(adminPerspective.contains("kind: 'ADMIN'"), "the admin perspective must declare the ADMIN kind");
+        assertFalse(adminPerspective.contains("groupId"), "an admin perspective must not bake in the shell's navigation group id (#6646)");
         assertTrue(contentOf("gen/emission/perspectives/admin/perspective.extension").contains("application-admin-perspectives"),
                 "the admin perspective must register on the admin extension point (never the application/my/partner ones)");
 
@@ -2131,11 +2140,15 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get("/services/web/personal/index.html")
                                                  .then()
                                                  .statusCode(200));
+        // Assert the perspective is INSIDE the shell's navigation group, not merely present somewhere in
+        // the response: the aggregator places perspectives by group, and one it cannot place used to be
+        // dropped, leaving the group rendered empty with no diagnostic anywhere (#6646).
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-personal-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString("emission-test-my-Claim")),
+                                                 .body("perspectives.find { it.id == 'personal' }.items.id",
+                                                         hasItem("emission-test-my-Claim")),
                 30);
 
         // partner: the partner controller scopes to the logged-in partner (admin -> Person 1); a
@@ -2163,7 +2176,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-admin-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString(PROJECT + "-admin")),
+                                                 .body("perspectives.find { it.id == 'admin' }.items.id", hasItem(PROJECT + "-admin")),
                 30);
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/web/" + PROJECT + "/gen/emission/admin/index.html")
@@ -2188,7 +2201,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-partner-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString("emission-test-partner-PartnerTicket")),
+                                                 .body("perspectives.find { it.id == 'partner' }.items.id",
+                                                         hasItem("emission-test-partner-PartnerTicket")),
                 30);
 
         // personalReadOnly: the scoped read serves 200 (the owner sees their own rows), but a write
