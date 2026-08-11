@@ -9,7 +9,9 @@
 
 - [1. The short answer](#1-the-short-answer)
 - [2. What counts against what — two different quotas](#2-what-counts-against-what--two-different-quotas)
-- [3. Every limit that applies](#3-every-limit-that-applies)
+- [3. Every limit that applies, and what the tokens contain](#3-every-limit-that-applies-and-what-the-tokens-contain)
+  - [Groups are not attributes](#groups-are-not-attributes--the-2048-byte-limit-does-not-apply-to-them)
+  - [What the tokens actually look like](#what-the-tokens-actually-look-like)
 - [4. Arithmetic of the current model](#4-arithmetic-of-the-current-model)
 - [5. Why the failure mode is the real problem](#5-why-the-failure-mode-is-the-real-problem)
 - [6. The options](#6-the-options)
@@ -47,9 +49,9 @@ A tenant *defining* 10 roles is harmless. A user *holding* many of them across m
 
 ---
 
-## 3. Every limit that applies
+## 3. Every limit that applies, and what the tokens contain
 
-All values from the [Amazon Cognito quotas page](https://docs.aws.amazon.com/cognito/latest/developerguide/limits.html). "Adjustable" means AWS can raise it on request.
+All values from the [Amazon Cognito quotas page](https://docs.aws.amazon.com/cognito/latest/developerguide/limits.html) unless marked otherwise. "Adjustable" means AWS can raise it on request.
 
 ### Storage-shaping quotas
 
@@ -85,6 +87,83 @@ Two consequences:
 
 1. **The 2,048-byte limit constrains Option 4 alone** — the packed custom attribute (§6) — which is exactly why that option tops out near 250 tenants. It says nothing about the group-based options.
 2. **Group names have ample room.** At 128 characters, a `t:<tenant>:<role>` scheme is nowhere near constrained; tenant and role names can be long and legible. **The wall in the group model is purely the count of 100, never the size.**
+
+### What the tokens actually look like
+
+Anna is a member of three tenants and holds different roles in each: `ADMINISTRATOR`, `order-manager` and `invoice-approver` in **acme**; `viewer` in **globex**; `order-manager` and `invoice-approver` in **initech**. Six group memberships in total.
+
+**ID token payload — the picker model (no pre-token Lambda; the token carries everything).** Claim names and envelope match Cognito's documented default payload:
+
+```json
+{
+  "sub": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
+  "cognito:groups": [
+    "t:acme:ADMINISTRATOR",
+    "t:acme:order-manager",
+    "t:acme:invoice-approver",
+    "t:globex:viewer",
+    "t:initech:order-manager",
+    "t:initech:invoice-approver"
+  ],
+  "email_verified": true,
+  "iss": "https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_EXAMPLE",
+  "cognito:username": "anna@example.com",
+  "origin_jti": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+  "aud": "1example23456789clientid",
+  "event_id": "64f513be-32db-42b0-b78e-b02127b4f463",
+  "token_use": "id",
+  "auth_time": 1785312777,
+  "exp": 1785316377,
+  "iat": 1785312777,
+  "jti": "cccccccc-dddd-eeee-ffff-000000000000",
+  "email": "anna@example.com"
+}
+```
+
+**Access token payload — same session, same groups, different envelope.** This is the point most people miss: `cognito:groups` is in **both** tokens, so the membership list is paid for twice per sign-in. Note there is no `email` here, and `client_id` carries what the ID token calls `aud`:
+
+```json
+{
+  "sub": "a1b2c3d4-5678-90ab-cdef-EXAMPLE11111",
+  "cognito:groups": [
+    "t:acme:ADMINISTRATOR",
+    "t:acme:order-manager",
+    "t:acme:invoice-approver",
+    "t:globex:viewer",
+    "t:initech:order-manager",
+    "t:initech:invoice-approver"
+  ],
+  "iss": "https://cognito-idp.eu-central-1.amazonaws.com/eu-central-1_EXAMPLE",
+  "version": 2,
+  "client_id": "1example23456789clientid",
+  "origin_jti": "bbbbbbbb-cccc-dddd-eeee-ffffffffffff",
+  "token_use": "access",
+  "scope": "openid email profile",
+  "auth_time": 1785312777,
+  "exp": 1785316377,
+  "iat": 1785312777,
+  "jti": "dddddddd-eeee-ffff-0000-111111111111",
+  "username": "anna@example.com"
+}
+```
+
+**The same person under the subdomain model** — the pre-token-generation Lambda keys on the app client (`acme`), filters the groups to that tenant's prefix, strips it, and adds the tenant assertion. Only the changed claims are shown:
+
+```json
+{
+  "cognito:groups": ["ADMINISTRATOR", "order-manager", "invoice-approver"],
+  "dirigible:tenant": "acme",
+  "aud": "acmeclientid00000000",
+  "token_use": "id"
+}
+```
+
+Four things this makes concrete:
+
+1. **`cognito:groups` is a flat array of name strings.** There is no nesting, no per-tenant object, no roles-within-tenant structure — the tenant dimension exists only because it is *encoded into the name*. That is the entire reason for the `t:<tenant>:<role>` convention, and it is why the application must parse prefixes to reconstruct "which roles do I have in acme?".
+2. **Both tokens carry it**, so the claim-size cost in §4.3 is doubled per sign-in.
+3. **`cognito:roles` and `cognito:preferred_role` are absent** in these examples because they appear only when groups have IAM role ARNs attached — that is the identity-pool use case, which this design does not use. A group here is a pure label.
+4. **Six entries are readable; three hundred are not.** At the stated scale that array runs to ~300 strings of ~25 characters — roughly 9 KB of JSON inside one claim, before the envelope, in both tokens. That is the shape of the problem the rest of this document quantifies. (It is also, per the note above, still not a *quota* violation — merely unwise.)
 
 ### Token-shaping quotas
 
