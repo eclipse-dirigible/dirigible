@@ -24,6 +24,15 @@ import org.springframework.stereotype.Component;
  * that are about to reappear as deleted. It therefore asks here whether a mutation was in flight,
  * rather than inferring it from "the registry changed" - the file-system watcher reports a genuine
  * deletion exactly the same way, and treating the two alike would delay every deletion by a pass.
+ *
+ * <p>
+ * <b>Marked by the publisher service itself, never by a URL.</b> This was first fed by a servlet
+ * filter mapped on the publisher and workspace endpoints, which left every other publish path
+ * invisible - and the most frequent publisher in practice is not that endpoint: the model-to-code
+ * generation service publishes through the JS {@code lifecycle} API from a {@code /services/js/...}
+ * URL the filter never saw, so passes kept walking into its holes (#6654). Marking the window where
+ * the write actually happens is correct for every caller by construction; enumerating callers is
+ * not. If you add another way to write the registry, bracket the write - do not add a mapping.
  */
 @Component
 public class RegistryMutationTracker {
