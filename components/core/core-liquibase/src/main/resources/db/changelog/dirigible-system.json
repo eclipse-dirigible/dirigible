@@ -4,6 +4,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_BPMN",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_BPMN"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -181,6 +195,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_CAMEL",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CAMEL"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -310,6 +338,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_CLIENT_REGISTRATIONS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CLIENT_REGISTRATIONS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -531,6 +573,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_COMPONENTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_COMPONENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -660,6 +716,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_CONFLUENCE",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CONFLUENCE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -789,6 +859,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_CSVIM",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CSVIM"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -924,6 +1008,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_CSV_FILE",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_CSV_FILE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1149,6 +1247,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_SCHEMAS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_SCHEMAS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1281,6 +1393,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_SOURCES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_SOURCES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1440,6 +1566,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_SOURCE_PROPERTIES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_SOURCE_PROPERTIES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1491,6 +1631,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1632,6 +1786,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_CHECKS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_CHECKS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1692,6 +1860,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_COLUMNS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_COLUMNS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1794,6 +1976,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_CONSTRAINTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_CONSTRAINTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1827,6 +2023,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_FOREIGNKEYS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_FOREIGNKEYS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1899,6 +2109,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_INDEXES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_INDEXES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -1974,6 +2198,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_PRIMARYKEYS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_PRIMARYKEYS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2028,6 +2266,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_TABLE_UNIQUES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_UNIQUES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2094,6 +2346,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DATA_VIEWS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DATA_VIEWS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2244,6 +2510,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_DEFINITIONS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_DEFINITIONS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2349,6 +2629,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ENTITIES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ENTITIES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2478,6 +2772,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_EXPORTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_EXPORTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2538,6 +2846,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_EXTENSIONS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_EXTENSIONS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2685,6 +3007,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_EXTENSION_POINTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_EXTENSION_POINTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2808,6 +3144,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_JAVA_FILES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_JAVA_FILES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -2949,6 +3299,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_JOBS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_JOBS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3147,6 +3511,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_JOB_EMAILS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_JOB_EMAILS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3288,6 +3666,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_JOB_LOGS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_JOB_LOGS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3471,6 +3863,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_JOB_PARAMETERS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_JOB_PARAMETERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3543,6 +3949,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_LISTENERS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_LISTENERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3684,6 +4104,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_MARKDOWN",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_MARKDOWN"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3813,6 +4247,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_NATIVE_APPS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_NATIVE_APPS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -3978,6 +4426,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ODATA",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ODATA"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4116,6 +4578,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ODATA_CONTAINER",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ODATA_CONTAINER"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4245,6 +4721,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ODATA_HANDLER",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ODATA_HANDLER"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4404,6 +4894,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ODATA_MAPPING",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ODATA_MAPPING"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4533,6 +5037,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_ODATA_SCHEMA",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_ODATA_SCHEMA"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4662,6 +5180,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_OPENAPI",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_OPENAPI"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4791,6 +5323,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_PROBLEMS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_PROBLEMS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -4935,6 +5481,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_PROXY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_PROXY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5067,6 +5627,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_SECURITY_ACCESS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ACCESS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5226,6 +5800,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_SECURITY_ROLES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ROLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5349,6 +5937,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_SECURITY_SCOPES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_SCOPES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5481,6 +6083,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_SECURITY_SCOPE_ROLES",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_SCOPE_ROLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5511,6 +6127,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_TASK_STATE",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TASK_STATE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5619,6 +6249,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_TASK_STATE_INPUT",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TASK_STATE_INPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5662,6 +6306,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_TASK_STATE_OUTPUT",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TASK_STATE_OUTPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5705,6 +6363,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_TENANTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_TENANTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5845,6 +6517,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_USERS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_USERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -5991,6 +6677,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_USER_ROLE_ASSIGNMENTS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -6030,6 +6730,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_WEBSOCKETS",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_WEBSOCKETS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -6177,6 +6891,20 @@
       "changeSet": {
         "id": "create-DIRIGIBLE_WEB_EXPOSE",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "tableExists": {
+                  "tableName": "DIRIGIBLE_WEB_EXPOSE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createTable": {
@@ -6312,6 +7040,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ODATA_CONTAINER_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ODATA_CONTAINER",
+                  "constraintName": "UK_DIRIGIBLE_ODATA_CONTAINER_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6327,6 +7070,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLE_UNIQUES_CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_UNIQUES",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLE_UNIQUES_CONSTRAINTS_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6342,6 +7100,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_JAVA_FILES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_JAVA_FILES",
+                  "constraintName": "UK_DIRIGIBLE_JAVA_FILES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6357,6 +7130,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_BPMN_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_BPMN",
+                  "constraintName": "UK_DIRIGIBLE_BPMN_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6372,6 +7160,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_SOURCES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_SOURCES",
+                  "constraintName": "UK_DIRIGIBLE_DATA_SOURCES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6387,6 +7190,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_PROXY_ARTEFACT_NAME",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_PROXY",
+                  "constraintName": "UK_DIRIGIBLE_PROXY_ARTEFACT_NAME"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6402,6 +7220,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_JOB_LOGS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_JOB_LOGS",
+                  "constraintName": "UK_DIRIGIBLE_JOB_LOGS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6417,6 +7250,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLE_PRIMARYKEYS_CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_PRIMARYKEYS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLE_PRIMARYKEYS_CONSTRAINTS_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6432,6 +7280,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_COMPONENTS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_COMPONENTS",
+                  "constraintName": "UK_DIRIGIBLE_COMPONENTS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6447,6 +7310,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ODATA_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ODATA",
+                  "constraintName": "UK_DIRIGIBLE_ODATA_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6462,6 +7340,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS_CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_FOREIGNKEYS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS_CONSTRAINTS_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6477,6 +7370,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ODATA_HANDLER_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ODATA_HANDLER",
+                  "constraintName": "UK_DIRIGIBLE_ODATA_HANDLER_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6492,6 +7400,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_WEBSOCKETS_WEBSOCKET_ENDPOINT_NAME",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_WEBSOCKETS",
+                  "constraintName": "UK_DIRIGIBLE_WEBSOCKETS_WEBSOCKET_ENDPOINT_NAME"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6507,6 +7430,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_TENANTS_TENANT_SUBDOMAIN",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_TENANTS",
+                  "constraintName": "UK_DIRIGIBLE_TENANTS_TENANT_SUBDOMAIN"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6522,6 +7460,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_JOBS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_JOBS",
+                  "constraintName": "UK_DIRIGIBLE_JOBS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6537,6 +7490,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_TENANTS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_TENANTS",
+                  "constraintName": "UK_DIRIGIBLE_TENANTS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6552,6 +7520,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_MARKDOWN_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_MARKDOWN",
+                  "constraintName": "UK_DIRIGIBLE_MARKDOWN_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6567,6 +7550,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_CONFLUENCE_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CONFLUENCE",
+                  "constraintName": "UK_DIRIGIBLE_CONFLUENCE_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6582,6 +7580,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_PROXY_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_PROXY",
+                  "constraintName": "UK_DIRIGIBLE_PROXY_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6597,6 +7610,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_WEB_EXPOSE_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_WEB_EXPOSE",
+                  "constraintName": "UK_DIRIGIBLE_WEB_EXPOSE_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6612,6 +7640,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_EXTENSION_POINTS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_EXTENSION_POINTS",
+                  "constraintName": "UK_DIRIGIBLE_EXTENSION_POINTS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6627,6 +7670,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_CSVIM_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CSVIM",
+                  "constraintName": "UK_DIRIGIBLE_CSVIM_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6642,6 +7700,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_CLIENT_REGISTRATIONS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CLIENT_REGISTRATIONS",
+                  "constraintName": "UK_DIRIGIBLE_CLIENT_REGISTRATIONS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6657,6 +7730,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_NATIVE_APPS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_NATIVE_APPS",
+                  "constraintName": "UK_DIRIGIBLE_NATIVE_APPS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6672,6 +7760,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_CSV_FILE_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CSV_FILE",
+                  "constraintName": "UK_DIRIGIBLE_CSV_FILE_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6687,6 +7790,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_USER_ID_ROLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS",
+                  "constraintName": "UK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_USER_ID_ROLE_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6702,6 +7820,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLE_CHECKS_CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_CHECKS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLE_CHECKS_CONSTRAINTS_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6717,6 +7850,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_WEBSOCKETS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_WEBSOCKETS",
+                  "constraintName": "UK_DIRIGIBLE_WEBSOCKETS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6732,6 +7880,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ODATA_SCHEMA_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ODATA_SCHEMA",
+                  "constraintName": "UK_DIRIGIBLE_ODATA_SCHEMA_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6747,6 +7910,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_LISTENERS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_LISTENERS",
+                  "constraintName": "UK_DIRIGIBLE_LISTENERS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6762,6 +7940,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLES",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6777,6 +7970,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_SCHEMAS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_SCHEMAS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_SCHEMAS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6792,6 +8000,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_JOB_EMAILS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_JOB_EMAILS",
+                  "constraintName": "UK_DIRIGIBLE_JOB_EMAILS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6807,6 +8030,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ENTITIES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ENTITIES",
+                  "constraintName": "UK_DIRIGIBLE_ENTITIES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6822,6 +8060,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_EXTENSIONS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_EXTENSIONS",
+                  "constraintName": "UK_DIRIGIBLE_EXTENSIONS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6837,6 +8090,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_CAMEL_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_CAMEL",
+                  "constraintName": "UK_DIRIGIBLE_CAMEL_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6852,6 +8120,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_SECURITY_ACCESS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ACCESS",
+                  "constraintName": "UK_DIRIGIBLE_SECURITY_ACCESS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6867,6 +8150,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_OPENAPI_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_OPENAPI",
+                  "constraintName": "UK_DIRIGIBLE_OPENAPI_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6882,6 +8180,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_TABLE_CONSTRAINTS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS_TABLE_ID"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6897,6 +8210,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_USERS_USER_TENANT_ID_USER_USERNAME",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_USERS",
+                  "constraintName": "UK_DIRIGIBLE_USERS_USER_TENANT_ID_USER_USERNAME"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6912,6 +8240,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DEFINITIONS_DEFINITION_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DEFINITIONS",
+                  "constraintName": "UK_DIRIGIBLE_DEFINITIONS_DEFINITION_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6927,6 +8270,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_ODATA_MAPPING_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_ODATA_MAPPING",
+                  "constraintName": "UK_DIRIGIBLE_ODATA_MAPPING_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6942,6 +8300,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_DATA_VIEWS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_DATA_VIEWS",
+                  "constraintName": "UK_DIRIGIBLE_DATA_VIEWS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6957,6 +8330,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_USERS_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_USERS",
+                  "constraintName": "UK_DIRIGIBLE_USERS_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6972,6 +8360,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_SECURITY_SCOPES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_SCOPES",
+                  "constraintName": "UK_DIRIGIBLE_SECURITY_SCOPES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -6987,6 +8390,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_SECURITY_ROLES_ARTEFACT_KEY",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_SECURITY_ROLES",
+                  "constraintName": "UK_DIRIGIBLE_SECURITY_ROLES_ARTEFACT_KEY"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -7002,6 +8420,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_NATIVE_APPS_NATIVE_APP_BASE_PATH",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_NATIVE_APPS",
+                  "constraintName": "UK_DIRIGIBLE_NATIVE_APPS_NATIVE_APP_BASE_PATH"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -7017,6 +8450,21 @@
       "changeSet": {
         "id": "UK_DIRIGIBLE_NATIVE_APPS_ARTEFACT_NAME",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "uniqueConstraintExists": {
+                  "tableName": "DIRIGIBLE_NATIVE_APPS",
+                  "constraintName": "UK_DIRIGIBLE_NATIVE_APPS_ARTEFACT_NAME"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addUniqueConstraint": {
@@ -7032,6 +8480,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_DATA_TABLE_INDEXES_TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_DATA_TABLE_INDEXES_TABLE_ID",
+                  "tableName": "DIRIGIBLE_DATA_TABLE_INDEXES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7054,6 +8517,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_DATA_TABLES_SCHEMA_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_DATA_TABLES_SCHEMA_ID",
+                  "tableName": "DIRIGIBLE_DATA_TABLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7076,6 +8554,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_USERS_USER_TENANT_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_USERS_USER_TENANT_ID",
+                  "tableName": "DIRIGIBLE_USERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7098,6 +8591,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_DATA_SOURCE_PROPERTIES_DS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_DATA_SOURCE_PROPERTIES_DS_ID",
+                  "tableName": "DIRIGIBLE_DATA_SOURCE_PROPERTIES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7120,6 +8628,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_TASK_STATE_INPUT_TASKSTATEIN_TASKSTATE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_TASK_STATE_INPUT_TASKSTATEIN_TASKSTATE_ID",
+                  "tableName": "DIRIGIBLE_TASK_STATE_INPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7142,6 +8665,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_CSV_FILE_CSVIM_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_CSV_FILE_CSVIM_ID",
+                  "tableName": "DIRIGIBLE_CSV_FILE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7164,6 +8702,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_DATA_TABLE_COLUMNS_TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_DATA_TABLE_COLUMNS_TABLE_ID",
+                  "tableName": "DIRIGIBLE_DATA_TABLE_COLUMNS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7186,6 +8739,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_USER_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_USER_ID",
+                  "tableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7208,6 +8776,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_DATA_VIEWS_SCHEMA_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_DATA_VIEWS_SCHEMA_ID",
+                  "tableName": "DIRIGIBLE_DATA_VIEWS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7230,6 +8813,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_TASK_STATE_OUTPUT_TASKSTATEOUT_TASKSTATE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_TASK_STATE_OUTPUT_TASKSTATEOUT_TASKSTATE_ID",
+                  "tableName": "DIRIGIBLE_TASK_STATE_OUTPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7252,6 +8850,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_JOB_PARAMETERS_JOB_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_JOB_PARAMETERS_JOB_ID",
+                  "tableName": "DIRIGIBLE_JOB_PARAMETERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7274,6 +8887,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_ROLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_USER_ROLE_ASSIGNMENTS_ROLE_ID",
+                  "tableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7296,6 +8924,21 @@
       "changeSet": {
         "id": "IX_DIRIGIBLE_SECURITY_SCOPE_ROLES_SCOPEROLE_SCOPE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "indexExists": {
+                  "indexName": "IX_DIRIGIBLE_SECURITY_SCOPE_ROLES_SCOPEROLE_SCOPE_ID",
+                  "tableName": "DIRIGIBLE_SECURITY_SCOPE_ROLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "createIndex": {
@@ -7318,6 +8961,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_INDEXES__TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_INDEXES__TABLE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_INDEXES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7340,6 +8998,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_CHECKS__CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_CHECKS__CONSTRAINTS_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_CHECKS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7362,6 +9035,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS__CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_FOREIGNKEYS__CONSTRAINTS_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_FOREIGNKEYS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7384,6 +9072,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLES__SCHEMA_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLES__SCHEMA_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7406,6 +9109,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_USERS__USER_TENANT_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_USERS__USER_TENANT_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_USERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7428,6 +9146,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_SOURCE_PROPERTIES__DS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_SOURCE_PROPERTIES__DS_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_SOURCE_PROPERTIES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7450,6 +9183,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_TASK_STATE_INPUT__TASKSTATEIN_TASKSTATE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_TASK_STATE_INPUT__TASKSTATEIN_TASKSTATE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_TASK_STATE_INPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7472,6 +9220,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_CSV_FILE__CSVIM_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_CSV_FILE__CSVIM_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_CSV_FILE"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7494,6 +9257,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_COLUMNS__TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_COLUMNS__TABLE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_COLUMNS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7516,6 +9294,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_PRIMARYKEYS__CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_PRIMARYKEYS__CONSTRAINTS_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_PRIMARYKEYS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7538,6 +9331,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS__USER_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS__USER_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7560,6 +9368,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_UNIQUES__CONSTRAINTS_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_UNIQUES__CONSTRAINTS_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_UNIQUES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7582,6 +9405,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_VIEWS__SCHEMA_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_VIEWS__SCHEMA_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_VIEWS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7604,6 +9442,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_TASK_STATE_OUTPUT__TASKSTATEOUT_TASKSTATE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_TASK_STATE_OUTPUT__TASKSTATEOUT_TASKSTATE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_TASK_STATE_OUTPUT"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7626,6 +9479,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS__TABLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_DATA_TABLE_CONSTRAINTS__TABLE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_DATA_TABLE_CONSTRAINTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7648,6 +9516,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_JOB_PARAMETERS__JOB_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_JOB_PARAMETERS__JOB_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_JOB_PARAMETERS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7670,6 +9553,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS__ROLE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_USER_ROLE_ASSIGNMENTS__ROLE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_USER_ROLE_ASSIGNMENTS"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
@@ -7692,6 +9590,21 @@
       "changeSet": {
         "id": "FK_DIRIGIBLE_SECURITY_SCOPE_ROLES__SCOPEROLE_SCOPE_ID",
         "author": "dirigible",
+        "preConditions": [
+          {
+            "onFail": "MARK_RAN"
+          },
+          {
+            "not": [
+              {
+                "foreignKeyConstraintExists": {
+                  "foreignKeyName": "FK_DIRIGIBLE_SECURITY_SCOPE_ROLES__SCOPEROLE_SCOPE_ID",
+                  "foreignKeyTableName": "DIRIGIBLE_SECURITY_SCOPE_ROLES"
+                }
+              }
+            ]
+          }
+        ],
         "changes": [
           {
             "addForeignKeyConstraint": {
