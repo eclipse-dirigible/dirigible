@@ -113,6 +113,12 @@
                 </a>
               </li>
             </ul>
+            <!-- Which build this is - the first question about an instance, so it is on every page.
+                 The System page carries the rest of it (commit, type, providers, engines). -->
+            <div id="monitoring-build" class="px-2 pb-1 pt-0.5" x-show="$store.version.summary" x-cloak>
+              <span x-h-text.muted class="text-xs" :title="$store.version.tooltip"
+                    x-text="$store.version.summary"></span>
+            </div>
           </div>
         </div>
       </div>
@@ -206,6 +212,7 @@
     <script src="./js/services/ops.js" defer></script>
     <!-- The BPMN visualizer itself is ~1 MB and loads on first use (see processDiagram.js). -->
     <script src="./js/services/processDiagram.js" defer></script>
+    <script src="./js/stores/version.js" defer></script>
     <script src="./js/stores/overview.js" defer></script>
     <script src="./js/stores/processes.js" defer></script>
     <script src="./js/stores/jobs.js" defer></script>

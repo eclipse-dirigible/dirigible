@@ -186,6 +186,12 @@
     "switch": {
       "title": "Switch to",
       "home": "Home"
+    },
+    "customActions": {
+      "confirmTitle": "Run action",
+      "confirmBody": "Run {{name}} for the selected record? This creates or changes data.",
+      "confirmCancel": "Cancel",
+      "confirmRun": "Run"
     }
   }
 }

@@ -14,6 +14,13 @@ window.MonitoringOps = (() => {
   const get = (url) => App.services.api.get(url, ABSOLUTE);
 
   return {
+    /**
+     * The build this instance runs: { productName, productVersion, productCommitId,
+     * productRepository, productType, instanceName, repositoryProvider, databaseProvider, engines }.
+     * The same payload the Workbench's About window reads.
+     */
+    version: () => get('/services/core/version'),
+
     /** Platform health: { status, currentStatus, jobs: { statuses: { <synchronizer>: <state> } } }. */
     health: () => get('/services/core/healthcheck'),
 

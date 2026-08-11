@@ -2,9 +2,10 @@
   Copyright (c) 2010-2026 Eclipse Dirigible contributors
   SPDX-License-Identifier: EPL-2.0
 
-  System - the JVM snapshot: CPU, memory, threads and GC, the platform's own counters, and the live
-  thread list. Read-only. The sparklines are filled while the page is open (there is no server-side
-  metric history); long-term dashboards remain the OpenTelemetry stack's job.
+  System - what this instance IS: the build it runs (the Workbench About window's figures), then the
+  JVM snapshot - CPU, memory, threads and GC, the platform's own counters, and the live thread list.
+  Read-only. The sparklines are filled while the page is open (there is no server-side metric
+  history); long-term dashboards remain the OpenTelemetry stack's job.
 -->
 <div id="monitoring-system-page" class="vbox size-full overflow-auto" x-data="systemPage">
   <div class="vbox gap-6 p-6">
@@ -12,12 +13,61 @@
     <div class="hbox items-start gap-3">
       <div class="vbox gap-1 flex-1">
         <h1 class="text-2xl font-bold" x-text="T('monitoring:system.title', 'System')"></h1>
-        <p x-h-text.muted x-text="T('monitoring:system.subtitle', 'The Java virtual machine this instance runs in.')"></p>
+        <p x-h-text.muted x-text="T('monitoring:system.subtitle', 'The build this instance runs, and the Java virtual machine running it.')"></p>
       </div>
       <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()">
         <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
         <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
       </button>
+    </div>
+
+    <!-- The build this instance runs - the Workbench About window's General panel, here because
+         "what is deployed on this instance?" is an operations question. Outside the metrics block
+         below on purpose: it must answer even when the JVM snapshot is unavailable. -->
+    <div id="monitoring-system-version" x-show="version.info" x-cloak x-h-card>
+      <div x-h-card-header>
+        <h2 x-h-card-title x-text="T('monitoring:system.build', 'Build')"></h2>
+      </div>
+      <div x-h-card-content class="vbox gap-4">
+        <div class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.product', 'Product')"></span>
+            <span class="text-sm" x-text="orDash(version.productName)"></span>
+          </div>
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.version', 'Version')"></span>
+            <span class="text-sm font-medium" x-text="orDash(version.productVersion)"></span>
+          </div>
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.commit', 'Commit')"></span>
+            <a x-show="version.commitUrl" class="text-sm underline" :href="version.commitUrl"
+               target="_blank" rel="noopener noreferrer" x-text="version.commitShort"></a>
+            <span x-show="!version.commitUrl" class="text-sm" x-text="orDash(version.commitShort)"></span>
+          </div>
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.instance', 'Instance')"></span>
+            <span class="text-sm" x-text="orDash(version.instanceName)"></span>
+          </div>
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.repository', 'Repository')"></span>
+            <span class="text-sm" x-text="orDash(version.value('repositoryProvider'))"></span>
+          </div>
+          <div class="vbox gap-0">
+            <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.database', 'Database')"></span>
+            <span class="text-sm" x-text="orDash(version.value('databaseProvider'))"></span>
+          </div>
+        </div>
+        <!-- The engines this assembly ships: a curated build carries fewer than a full one, which is
+             the answer to "why is that feature missing here?". -->
+        <div class="vbox gap-1" x-show="version.engines.length">
+          <span class="text-xs text-muted-foreground" x-text="T('monitoring:system.engines', 'Engines')"></span>
+          <div class="hbox flex-wrap gap-1">
+            <template x-for="engine in version.engines" :key="engine">
+              <span x-h-badge data-variant="outline" x-text="engine"></span>
+            </template>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div x-show="state.loading" x-cloak class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">

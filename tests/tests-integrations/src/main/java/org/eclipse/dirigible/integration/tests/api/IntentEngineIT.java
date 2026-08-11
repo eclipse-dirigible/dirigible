@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
@@ -2177,6 +2178,125 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+    }
+
+    /**
+     * Lifecycle-aware aggregates (#6645): a status nomenclature classified with {@code stage:} makes an
+     * aggregating report count the LIVE rows only - so a draft or voided document stops inflating every
+     * total - while a report that is about the lifecycle opts out with {@code scope: all}. Statuses are
+     * named symbolically throughout, which is what stops an id shift from silently retargeting a guard.
+     */
+    @Test
+    void lifecycle_aware_reports_scope_aggregates_to_the_live_statuses() {
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 40 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                transitions:
+                  - name: VoidInvoice
+                    forEntity: Invoice
+                    from: [ISSUED]
+                    setStatus: VOIDED
+                reports:
+                  # No scope: an aggregation over a stage-classified lifecycle defaults to live.
+                  - name: RevenueByMonth
+                    source: Invoice
+                    dimensions: ["month(issuedOn)"]
+                    measures: ["sum(total)"]
+                  # This one IS about the lifecycle, so it keeps every row.
+                  - name: InvoicesByStatus
+                    source: Invoice
+                    scope: all
+                    dimensions: [Status]
+                    measures: ["count(*)"]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT, stage: draft }
+                      - { id: 3, name: ISSUED, stage: live }
+                      - { id: 7, name: PAID, stage: live }
+                      - { id: 9, name: VOIDED, stage: void }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Everything resolved, so Generate reports no notes.
+                                                 .body("warnings", hasSize(0)));
+
+        String revenue = contentOf("RevenueByMonth.report");
+        assertTrue(revenue.contains("WHERE Invoice.\\\"INVOICE_STATUS\\\" IN (3, 7)"),
+                "the unscoped aggregation should be restricted to the live statuses, got: " + revenue);
+        String byStatus = contentOf("InvoicesByStatus.report");
+        assertFalse(byStatus.contains("INVOICE_STATUS\\\" IN"), "scope: all must keep every row, got: " + byStatus);
+
+        // The seed CSV carries data only - `stage` classifies the row, it is not a column.
+        assertEquals("""
+                INVOICE_STATUS_ID,INVOICE_STATUS_NAME
+                1,DRAFT
+                3,ISSUED
+                7,PAID
+                9,VOIDED
+                """, contentOf("invoice-statuses.csv"));
+        // Symbolic statuses reached the generated model as ids: the FK default and the transition guards.
+        assertTrue(contentOf("billing.edm").contains("dataDefaultValue=\"1\""),
+                "init: DRAFT should have resolved to the seed id on the status FK");
+        String glue = contentOf("billing.glue");
+        assertTrue(glue.contains("\"setStatus\": \"9\""), "setStatus: VOIDED should have resolved to the seed id, got: " + glue);
+        assertTrue(glue.contains("\"3\""), "from: [ISSUED] should have resolved to the seed id, got: " + glue);
+    }
+
+    /**
+     * The cheap half of #6645: with no {@code stage:} classification there is nothing to resolve a
+     * scope against, so Generate reports the lifecycle-blind aggregate as a note instead of silently
+     * emitting a query that counts drafts. This is the only signal the omission has - it must reach the
+     * API.
+     */
+    @Test
+    void generate_warns_when_an_aggregate_over_a_lifecycle_entity_has_no_scope() {
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 40 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                reports:
+                  - name: Revenue
+                    source: Invoice
+                    measures: ["sum(total)"]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 3, name: ISSUED }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", hasItem(containsString("neither declares `scope:` nor filters"))));
+        assertFalse(contentOf("Revenue.report").contains("WHERE"), "with nothing to resolve, the query stays exactly as authored");
     }
 
     private void writeIntent(String yaml) {

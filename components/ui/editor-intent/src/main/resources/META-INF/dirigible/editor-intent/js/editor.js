@@ -25,6 +25,10 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.text = '';
     $scope.model = { entities: [], processes: [], forms: [], reports: [], permissions: [], seeds: [], notifications: [], schedules: [], integrations: [], inbound: [], rollups: [] };
     $scope.issues = [];
+    // Non-fatal notes from the last Generate ("warnings" in its response): glue that could not be
+    // emitted, or a report aggregating over a lifecycle entity without a scope. Kept apart from
+    // `issues` (validation errors) because the generation itself succeeded.
+    $scope.warnings = [];
     let savedText = '';
     let parseTimer = null;
 
@@ -198,6 +202,8 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     };
 
     const refreshPreview = () => {
+        // The buffer changed, so the last Generate's notes describe a model that no longer exists.
+        $scope.warnings = [];
         return $http.post(PARSE_URL, $scope.text || '', { headers: { 'Content-Type': 'text/plain' } }).then((response) => {
             $scope.issues = [];
             $scope.model = normalize(response.data);
@@ -288,6 +294,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         $http.post(`${GENERATE_URL}?workspace=${encodeURIComponent(location.workspace)}&project=${encodeURIComponent(location.project)}&path=${encodeURIComponent(location.path)}`)
              .then((response) => {
                  $scope.issues = []; // a successful generate clears any pinned cross-model issue from a prior attempt
+                 $scope.warnings = response.data.warnings || [];
                  const written = (response.data.written || []).length;
                  const scrubbed = (response.data.scrubbed || []).length;
                  const plan = response.data.codeGenerations || [];

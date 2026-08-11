@@ -160,6 +160,12 @@
           <i role="img" x-h-lucide data-lucide="plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
         </button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
+          <i role="img" x-h-lucide data-lucide="calendar-plus"></i>
+          <span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span>
+        </button>
 #end
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
@@ -175,6 +181,12 @@
         <button x-h-button data-variant="primary" data-size="sm"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="openItem(null)">
           <i role="img" x-h-lucide data-lucide="plus"></i>
           <span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
+        </button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button x-h-button data-variant="outline" data-size="sm" x-show="#if($immutableStatusProperty || $immutableAlways)mutable && #{end}fillDateColumn()" @click="openFillMonth()">
+          <i role="img" x-h-lucide data-lucide="calendar-plus"></i>
+          <span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span>
         </button>
 #end
       </div>
@@ -324,10 +336,11 @@
   <div x-h-dialog-overlay :data-open="itemDialog">
     <div x-h-dialog style="width: 92vw; max-width: 640px;">
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></h2>
+        <h2 x-h-dialog-title x-text="(itemMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') + ' - ' : '') + (itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}')"></h2>
         <button type="button" x-h-dialog-close @click="itemDialog = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
+        <p x-h-text.muted x-show="itemMode === 'fill'" x-text="T('$projectName:${tprefix}.messages.fillMonthHint', 'One line is created for every working day (Mon-Fri) of the picked month; days that already have a line are skipped.')"></p>
         <div class="grid grid-cols-2 gap-4">
           <template x-for="col in itemColumns()" :key="col.name">
             <div x-h-field :class="col.kind === 'text' ? 'col-span-2' : ''">
@@ -346,10 +359,17 @@
               <template x-if="!col.readonly && !col.lookup && col.number">
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
               </template>
-              <template x-if="!col.readonly && !col.lookup && col.date">
+              <template x-if="!col.readonly && !col.lookup && col.widget === 'CHECKBOX'">
+                <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span>
+              </template>
+              <template x-if="!col.readonly && !col.lookup && col.date && !(itemMode === 'fill' && col.name === fillDateName())">
                 <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
               </template>
-              <template x-if="!col.readonly && !col.lookup && !col.date && !col.number">
+              <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
+              <template x-if="!col.readonly && !col.lookup && col.date && itemMode === 'fill' && col.name === fillDateName()">
+                <div x-h-month-picker><input type="text" /><button x-h-month-picker-trigger aria-label="Choose month"></button><div x-h-month-picker-popup x-model="draft[col.name]"></div></div>
+              </template>
+              <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
                 <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the
@@ -372,7 +392,7 @@
 #end
         <button x-h-button data-variant="transparent" @click="itemDialog = false" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
 #if(!$personalReadOnly)
-        <button x-h-button data-variant="primary" @click="saveItem()" x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></button>
+        <button x-h-button data-variant="primary" @click="saveItem()" x-text="itemMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') : T('$projectName:${tprefix}.defaults.save', 'Save')"></button>
 #end
       </div>
     </div>

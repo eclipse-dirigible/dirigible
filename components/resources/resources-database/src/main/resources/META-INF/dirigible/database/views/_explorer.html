@@ -1,0 +1,233 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Explorer: the metadata tree (datasource -> schema -> tables/views/procedures -> columns) on the
+  left, the selected object's contents or DDL on the right. The tree is a fixed four levels deep, so
+  plain nested x-for is enough - no recursive template.
+-->
+<div id="database-explorer-page" x-data="explorerPage" class="vbox size-full">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('database:explorer.title', 'Explorer')"></span>
+    <div x-h-toolbar-spacer></div>
+
+    <div x-h-select data-filter="contains" class="w-64" x-show="state.datasources.length">
+      <!-- x-model on x-h-select-input holds the VALUE; the input displays the matched option's
+           label. It writes straight onto the store, so the handler only reacts to the change. -->
+      <input x-h-select-input id="database-datasource" x-model="state.datasource"
+             @change="state.onDatasourceChanged()"
+             :aria-label="T('database:explorer.datasource', 'Datasource')"
+             :placeholder="T('database:explorer.datasource', 'Datasource')" />
+      <div x-h-select-content>
+        <template x-for="name in state.datasources" :key="name">
+          <div x-h-select-option="name" :data-value="name"></div>
+        </template>
+      </div>
+    </div>
+
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.refresh()"
+            :disabled="!state.datasource || state.loading">
+      <svg x-h-lucide role="presentation" data-lucide="refresh-cw" class="size-4"></svg>
+      <span x-text="T('database:explorer.refresh', 'Refresh')"></span>
+    </button>
+  </div>
+
+  <!-- No datasource at all: the shell has nothing to explore, and that is worth saying plainly. -->
+  <div x-show="!state.loading && !state.datasources.length" x-h-info-page class="p-4">
+    <div x-h-info-page-header>
+      <div x-h-info-page-media.icon><svg x-h-lucide role="presentation" data-lucide="database-zap"></svg></div>
+      <div x-h-info-page-title x-text="T('database:explorer.noDatasources', 'No datasources')"></div>
+      <div x-h-info-page-description
+           x-text="state.errors.datasources === 'forbidden'
+             ? T('database:errors.forbidden', 'You do not have permission to read this.')
+             : T('database:explorer.noDatasourcesHint', 'This instance has no datasource configured.')"></div>
+    </div>
+  </div>
+
+  <div x-show="state.datasources.length" x-h-split class="bk-stretch flex-1"
+       data-orientation="horizontal" data-variant="border">
+
+    <!-- The metadata tree -->
+    <div x-h-split-panel data-size="35%" data-min="260">
+      <div class="vbox size-full overflow-auto p-2">
+        <div x-show="state.loading" class="p-2"><div x-h-spinner></div></div>
+
+        <div x-show="!state.loading && !state.schemas.length" class="p-2">
+          <span x-h-text.muted x-text="T('database:explorer.noSchemas', 'No schemas in this datasource.')"></span>
+        </div>
+
+        <!--
+          Expansion belongs to the tree component: an item detects its own children and owns its
+          expanded state, so the handlers here only LOAD - they never toggle, which would fight it.
+          An unloaded schema/object renders one placeholder child so the row is expandable from the
+          start; without children it would look and behave like a leaf and never offer the chevron
+          whose first click is what triggers the read.
+        -->
+        <ul x-h-tree :aria-label="T('database:explorer.title', 'Explorer')" x-show="state.schemas.length">
+          <template x-for="schema in state.schemas" :key="schema.name">
+            <li x-h-tree-item @tree-item-click.self="state.loadSchema(schema)">
+              <div x-h-tree-row>
+                <svg x-h-lucide role="presentation" data-lucide="folder"></svg>
+                <span x-h-tree-label x-text="schema.name"></span>
+              </div>
+
+              <template x-if="!schema.loaded">
+                <ul x-h-tree.sub data-line="true">
+                  <li x-h-tree-item>
+                    <div x-h-tree-row>
+                      <span x-h-tree-label class="text-muted-foreground"
+                            x-text="T('database:explorer.loading', 'Loading...')"></span>
+                    </div>
+                  </li>
+                </ul>
+              </template>
+
+              <template x-if="schema.loaded && schema.groups.length">
+                <ul x-h-tree.sub data-line="true">
+                  <template x-for="group in schema.groups" :key="group.kind">
+                    <li x-h-tree-item>
+                      <div x-h-tree-row>
+                        <svg x-h-lucide role="presentation" data-lucide="folder"></svg>
+                        <span x-h-tree-label x-text="group.label"></span>
+                        <span x-h-tree-indicator x-text="group.objects.length"></span>
+                      </div>
+
+                        <ul x-h-tree.sub data-line="true">
+                          <template x-for="object in group.objects" :key="object.name">
+                            <li x-h-tree-item @tree-item-click.self="state.loadObject(object)">
+                              <div x-h-tree-row>
+                                <svg x-h-lucide role="presentation" :data-lucide="iconFor(object.kind)"></svg>
+                                <span x-h-tree-label x-text="object.name"></span>
+                                <div x-h-tree-actions.autohide>
+                                  <button x-h-tree-action x-show="canShowContents(object)"
+                                          :aria-label="T('database:explorer.showContents', 'Show contents')"
+                                          @click="state.showContents(object)">
+                                    <svg x-h-lucide role="presentation" data-lucide="table-2"></svg>
+                                  </button>
+                                  <button x-h-tree-action
+                                          :aria-label="T('database:explorer.showDdl', 'Show DDL')"
+                                          @click="state.showDefinition(object)">
+                                    <svg x-h-lucide role="presentation" data-lucide="file-code"></svg>
+                                  </button>
+                                  <button x-h-tree-action x-show="canShowContents(object)"
+                                          :aria-label="T('database:explorer.generateSelect', 'Generate SELECT')"
+                                          @click="selectInConsole(object)">
+                                    <svg x-h-lucide role="presentation" data-lucide="square-terminal"></svg>
+                                  </button>
+                                  <button x-h-tree-action
+                                          :aria-label="T('database:explorer.copyName', 'Copy name')"
+                                          @click="copyName(object)">
+                                    <svg x-h-lucide role="presentation" data-lucide="copy"></svg>
+                                  </button>
+                                </div>
+                              </div>
+
+                              <template x-if="!object.loaded">
+                                <ul x-h-tree.sub data-line="true">
+                                  <li x-h-tree-item>
+                                    <div x-h-tree-row>
+                                      <span x-h-tree-label class="text-muted-foreground"
+                                            x-text="T('database:explorer.loading', 'Loading...')"></span>
+                                    </div>
+                                  </li>
+                                </ul>
+                              </template>
+
+                              <template x-if="object.loaded && object.columns.length">
+                                <ul x-h-tree.sub data-line="true">
+                                  <template x-for="column in object.columns" :key="column.name">
+                                    <li x-h-tree-item>
+                                      <div x-h-tree-row>
+                                        <svg x-h-lucide role="presentation" data-lucide="columns-3"></svg>
+                                        <span x-h-tree-label x-text="column.name"></span>
+                                        <span x-h-text.muted class="text-xs" x-text="columnType(column)"></span>
+                                      </div>
+                                    </li>
+                                  </template>
+                                </ul>
+                              </template>
+                            </li>
+                          </template>
+                        </ul>
+                    </li>
+                  </template>
+                </ul>
+              </template>
+            </li>
+          </template>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Contents / DDL. Collapsed until something is selected. -->
+    <div x-h-split-panel data-size="65%" :data-hidden="!state.pane">
+      <div class="vbox size-full">
+        <div x-h-toolbar data-variant="transparent" data-size="sm" x-show="state.subject">
+          <span x-h-toolbar-title class="shrink-0" x-text="qualifiedName(state.subject)"></span>
+          <span x-h-badge data-variant="outline"
+                x-text="state.pane === 'ddl' ? T('database:explorer.ddl', 'DDL') : T('database:explorer.contents', 'Contents')"></span>
+          <div x-h-toolbar-spacer></div>
+          <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.closePane()"
+                  :aria-label="T('database:explorer.close', 'Close')">
+            <svg x-h-lucide role="presentation" data-lucide="x"></svg>
+          </button>
+        </div>
+
+        <div x-show="state.paneLoading" class="p-4"><div x-h-spinner></div></div>
+
+        <div x-show="state.paneError" x-h-alert data-variant="negative" role="alert" class="m-4">
+          <div x-h-alert-description x-text="state.paneError"></div>
+        </div>
+
+        <!-- Contents -->
+        <div x-show="state.pane === 'contents' && !state.paneLoading && !state.paneError"
+             class="vbox flex-1 overflow-hidden">
+          <div x-show="!state.rows.length" class="p-4">
+            <span x-h-text.muted x-text="T('database:explorer.noRows', 'No rows.')"></span>
+          </div>
+          <div x-show="state.rows.length" x-h-table-container.scroll class="flex-1" data-border="true">
+            <table x-h-table data-borders="rows">
+              <thead x-h-table-header>
+                <tr x-h-table-row>
+                  <template x-for="column in state.rowColumns" :key="column">
+                    <th x-h-table-head scope="col" x-text="column"></th>
+                  </template>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="(row, index) in state.rows" :key="index">
+                  <tr x-h-table-row data-hoverable="true">
+                    <template x-for="column in state.rowColumns" :key="column">
+                      <td x-h-table-cell x-text="cellText(row[column])"></td>
+                    </template>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+          <!-- The server caps a read and puts nothing in the payload to say so - so the page does. -->
+          <div class="p-2" x-show="state.rows.length">
+            <span x-h-text.muted class="text-xs"
+                  x-text="contentsCapped
+                    ? T('database:explorer.rowsCapped', 'Showing {{count}} rows - the server caps results, so there may be more.', { count: state.rows.length })
+                    : T('database:explorer.rowsShown', 'Showing {{count}} rows.', { count: state.rows.length })"></span>
+          </div>
+        </div>
+
+        <!-- DDL -->
+        <div x-show="state.pane === 'ddl' && !state.paneLoading && !state.paneError" class="flex-1 overflow-auto p-4">
+          <pre class="text-sm whitespace-pre-wrap" x-text="state.ddl"></pre>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Copy feedback: quiet and self-clearing, no notification for a one-word action. -->
+  <div x-show="copied" x-cloak class="p-2">
+    <span x-h-text.muted class="text-xs"
+          x-text="T('database:explorer.copied', 'Copied {{name}}', { name: copied })"></span>
+  </div>
+
+</div>

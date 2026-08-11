@@ -336,6 +336,75 @@ class GlueGeneratesTest {
     }
 
     /**
+     * An item default naming a TO-ONE RELATION of the item target (a required classifier the map has no
+     * source for - a line's TaxRate) is a foreign-key ID: it must stay a bare integer literal. The
+     * decimal-column BigDecimal wrap would not compile against the generated Integer FK field - the
+     * exact miss that made invoice-from-timesheet emit header-only invoices (every line insert violated
+     * the NOT NULL tax-rate column, uncoverable by the map).
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void relationItemDefaultStaysAnIntegerForeignKey() {
+        IntentModel model = IntentParser.parse("""
+                name: work
+                entities:
+                  - name: Sheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: Line
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Sheet, kind: manyToOne, to: Sheet, required: true }
+                  - name: TaxRate
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: price, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: TaxRate, kind: manyToOne, to: TaxRate, required: true }
+                generates:
+                  - name: invoice-from-sheet
+                    from: Sheet
+                    to: Invoice
+                    forEntity: Sheet
+                    items:
+                      from: Line
+                      to: InvoiceItem
+                      map:
+                        name: number
+                        price: amount
+                      defaults:
+                        quantity: 1
+                        TaxRate: 1
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(true, g.get("hasItems"));
+
+        List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
+        // The decimal default keeps the BigDecimal wrap...
+        assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+        // ...but the relation default is the FK id, assigned as the bare integer.
+        assertTrue(itemFields.contains(Map.of("targetProp", "TaxRate", "expr", "1")));
+    }
+
+    /**
      * The computed line-items form (issue #6555): a list-valued {@code items:} builds a fixed set of
      * synthetic target lines whose cells are expressions over the SOURCE master - a numeric cell runs
      * through {@code Calc} rounded to the target field's scale (a bare literal is a trivial

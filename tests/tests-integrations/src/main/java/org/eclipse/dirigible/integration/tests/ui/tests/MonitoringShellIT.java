@@ -51,7 +51,22 @@ public class MonitoringShellIT extends UserInterfaceIntegrationTest {
         openSection("jobs", "Jobs");
         openSection("logs", "Live");
         openSection("messaging", "Queues");
-        openSection("system", "The Java virtual machine this instance runs in.");
+        openSection("system", "The build this instance runs, and the Java virtual machine running it.");
+    }
+
+    /**
+     * The build is the first thing asked of an instance ("what is deployed here?"), so it is asserted
+     * on its own: the System page's card, filled from {@code /services/core/version}.
+     */
+    @Test
+    void systemNamesTheDeployedBuild() {
+        ide.openPath(MONITORING_PATH);
+
+        browser.clickOnElementById("monitoring-nav-system");
+        browser.assertElementExistsByIdAndContainsText("monitoring-system-version", "Product");
+        browser.assertElementExistsByIdAndContainsText("monitoring-system-version", "Version");
+        // The same figures condensed onto the sidebar, where every page shows them.
+        browser.assertElementExistsByIdAndContainsText("monitoring-build", "Eclipse Dirigible");
     }
 
     /**

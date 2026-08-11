@@ -16,8 +16,10 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 import org.awaitility.Awaitility;
+import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
+import org.eclipse.dirigible.components.ide.workspace.service.PublisherService;
 import org.eclipse.dirigible.components.initializers.synchronizer.SynchronizationProcessor;
 import org.eclipse.dirigible.engine.java.service.JavaFileService;
 import org.eclipse.dirigible.repository.api.IRepository;
@@ -67,6 +69,13 @@ class SynchronizerCleanupRaceIT extends IntegrationTest {
             }
             """;
 
+    /** The project published through the service (not the HTTP endpoint) by the contract test below. */
+    private static final String WORKSPACE = "workspace";
+
+    private static final String PUBLISH_PROJECT = "cleanup-race-publish-it";
+
+    private static final String PUBLISH_SOURCE_PATH = "/Published.java";
+
     /** How long to keep driving passes while the publish is in flight, waiting for one to complete. */
     private static final long PASS_TIMEOUT_SECONDS = 120;
 
@@ -84,6 +93,9 @@ class SynchronizerCleanupRaceIT extends IntegrationTest {
 
     @Autowired
     private RegistryMutationTracker registryMutationTracker;
+
+    @Autowired
+    private PublisherService publisherService;
 
     @Test
     void an_artefact_survives_a_pass_that_races_a_publish() {
@@ -106,6 +118,39 @@ class SynchronizerCleanupRaceIT extends IntegrationTest {
 
         assertThat(javaFileService.findByLocation(LOCATION)).as("a genuinely deleted source is still cleaned up")
                                                             .isEmpty();
+    }
+
+    /**
+     * The deferral above is only as good as what feeds the tracker. It used to be fed by a servlet
+     * filter mapped on the publisher and workspace endpoints - so a publish performed by anything else
+     * was invisible, and the most common publisher in practice is NOT that endpoint: the model-to-code
+     * generation service publishes through the JS {@code lifecycle} API, from a
+     * {@code /services/js/...} URL the filter never sees. A pass racing that publish deleted the
+     * artefacts of the files it was about to copy back, the client-Java batch then compiled a
+     * half-empty codebase to ZERO class files, and no controller was left registered (#6654).
+     *
+     * <p>
+     * The tracker is therefore marked by {@code PublisherService} itself. This asserts that contract at
+     * the only place it can be asserted without racing anything: a publish that never touches the HTTP
+     * layer must still register as a completed registry mutation, because that count is exactly what
+     * the pass compares to decide whether to defer.
+     */
+    @Test
+    void a_publish_that_bypasses_the_http_layer_still_marks_the_registry_as_mutating() {
+        String user = UserFacade.getName();
+        String workspacePath = IRepositoryStructure.PATH_USERS + "/" + user + "/" + WORKSPACE + "/" + PUBLISH_PROJECT + PUBLISH_SOURCE_PATH;
+        repository.createResource(workspacePath, SOURCE.getBytes(StandardCharsets.UTF_8), false, "text/plain", true);
+
+        long publishesBefore = registryMutationTracker.completedMutations();
+        publisherService.publish(user, WORKSPACE, PUBLISH_PROJECT, "");
+        assertThat(registryMutationTracker.completedMutations()).as(
+                "a publish through the service - the path the generation service uses - must mark the registry mutation")
+                                                                .isGreaterThan(publishesBefore);
+
+        long unpublishesBefore = registryMutationTracker.completedMutations();
+        publisherService.unpublish(PUBLISH_PROJECT);
+        assertThat(registryMutationTracker.completedMutations()).as("so must the unpublish that opens the hole")
+                                                                .isGreaterThan(unpublishesBefore);
     }
 
     /**
@@ -133,7 +178,8 @@ class SynchronizerCleanupRaceIT extends IntegrationTest {
     @AfterEach
     void removeSourcesFromRegistry() {
         boolean removed = false;
-        for (String path : List.of(REGISTRY_PATH, PROBE_REGISTRY_PATH)) {
+        for (String path : List.of(REGISTRY_PATH, PROBE_REGISTRY_PATH,
+                IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PUBLISH_PROJECT + PUBLISH_SOURCE_PATH)) {
             if (repository.hasResource(path)) {
                 repository.removeResource(path);
                 removed = true;

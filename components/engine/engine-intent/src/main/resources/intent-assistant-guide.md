@@ -1202,6 +1202,77 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
 
+#### reports[].scope - which lifecycle rows an aggregate counts
+
+**Use when:** the report aggregates over an entity that carries a `function: EntityStatus`, i.e. one
+with drafts, cancellations and voided documents in its table.
+
+An aggregate over such an entity is **wrong by default**: a draft nobody has issued, a cancelled and
+a voided document all land in the sum. So classify the status nomenclature once, where it is seeded,
+with the closed `stage:` vocabulary — `draft | live | cancelled | void`:
+
+```yaml
+seeds:
+  - name: sales-invoice-statuses
+    entity: SalesInvoiceStatus
+    rows:
+      - { id: 1, name: DRAFT, stage: draft }
+      - { id: 3, name: ISSUED, stage: live }
+      - { id: 7, name: PAID, stage: live }
+      - { id: 8, name: CANCELLED, stage: cancelled }
+      - { id: 9, name: VOIDED, stage: void }      # анулиране - retired, keeps its number
+```
+
+`stage` is metadata, never a column — it does not appear in the imported CSV. With it in place a
+report needs no magic-number predicate:
+
+```yaml
+reports:
+  - name: RevenueByMonth
+    source: SalesInvoice
+    # no scope: an aggregation over a stage-classified lifecycle defaults to `live`
+    dimensions: ["month(date)"]
+    measures: ["sum(total)"]
+
+  - name: InvoicesByStatus
+    source: SalesInvoice
+    scope: all                              # explicit opt-out: this report is ABOUT the lifecycle
+    dimensions: [Status]
+    measures: ["count(*)"]
+
+  - name: VoidedInvoices
+    source: SalesInvoice
+    scope: void                             # a stage name selects that stage
+    measures: ["count(*)", "sum(total)"]
+```
+
+**Rules:** `scope` is `all` or one stage name, and requires the source to declare a
+`function: EntityStatus` relation. A stage scope needs that nomenclature seeded **in this model** with
+`stage:` markers (a cross-model status entity is seeded in its owner model, so use an explicit
+`filter` there). Without an explicit `scope`, a report defaults to `live` only when it aggregates
+(has `measures`, or `kind: balance`) AND its dimensions/`filter` do not already reference the status —
+a breakdown BY status keeps every row. **Always classify a status nomenclature with `stage:`**: when it
+is unclassified, Generate reports the aggregate as lifecycle-blind and the total silently counts drafts.
+
+#### Statuses may be named, not numbered
+
+Everywhere the intent names a status - `transitions[].from` / `setStatus`, a relation's `init:`, a
+`setRelationField` `value:`, `abortOn.status`, a check's `status`/`setStatus`, `immutableWhen`, a
+posting's `event.when`, a report's `filter` - use the **seeded name** instead of the id:
+
+```yaml
+transitions:
+  - { name: VoidSalesInvoice, forEntity: SalesInvoice, from: [ISSUED, SENT], setStatus: VOIDED, when: "Paid == 0" }
+reports:
+  - { name: OverdueInvoices, source: SalesInvoice, filter: "due <= CURRENT_DATE AND Status != VOIDED", measures: ["sum(total)"] }
+```
+
+Prefer names: an id is **positional**, so inserting a status into the middle of a nomenclature shifts
+every later id and silently retargets every guard authored against the old numbering, while an unknown
+name is a generation error. Numeric ids keep working. Names have no ordering, so `Status >= ISSUED` is
+rejected - express "live rows" as a `scope`, not as an id range. A cross-model status must still be
+referenced by its numeric id (its seeds live in the other model).
+
 #### reports[].kind: balance - the accounting balance report
 
 **Use when:** the user needs a trial balance, general ledger summary, or any opening / period /
@@ -1346,6 +1417,11 @@ seeds:
 
 **Rules:** `entity` must be declared; integer `id`s stay integral. A row may set a to-one relation's
 FK by the relation's authored name (e.g. `Country: 34` on a City row).
+
+**A status nomenclature must also classify each row with `stage:`** (`draft | live | cancelled | void`)
+— what that status MEANS to the lifecycle. It is metadata, not a column, and it is what makes an
+aggregating report count only the economically live rows instead of silently including drafts and
+voided documents. See `reports[].scope`.
 
 **Large data sets - reference a CSV file instead of inline rows.** Small configuration sets and
 statuses belong inline (their values are part of the flows and UX); a countries/currencies-sized list
