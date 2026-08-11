@@ -41,6 +41,13 @@ document.addEventListener('alpine:init', () => {
     dialogOpen: false,
     dialogUrl: '',
     dialogTitle: '',
+    // Confirm-before-run state for `endpoint` actions: a generate/create-from mutates data the moment
+    // it is POSTed, so the shell interposes an explicit confirmation the user can cancel - a bare
+    // button click must never be the point of no return.
+    confirmOpen: false,
+    confirmAction: null,
+    confirmId: null,
+    confirmBusy: false,
     serverUnavailable: false,   // set once the backend is unreachable; stops re-fetching until a reload
 
     init() {
@@ -96,14 +103,17 @@ document.addEventListener('alpine:init', () => {
 
     // Trigger a contributed action. Two flavours, decided by the descriptor:
     //   - `endpoint` present: POST the selected record's id to a server endpoint (a create-from /
-    //     generate action), then toast the result and raise `harmonia:action-done`. No dialog opens.
+    //     generate action) AFTER an explicit confirmation, then toast the result and raise
+    //     `harmonia:action-done`. No iframe dialog opens.
     //   - otherwise (`path`): open the contributed page in the app-wide dialog.
     // An entity action carries the selected record's primary key as `id`; the view knows its own primary
     // key so it passes the id value here rather than the whole row.
     trigger(action, id) {
       if (!action) return;
       if (action.endpoint) {
-        this.runEndpoint(action, id);
+        this.confirmAction = action;
+        this.confirmId = (id !== undefined && id !== null && id !== '') ? id : null;
+        this.confirmOpen = true;
         return;
       }
       if (!action.path) return;
@@ -114,6 +124,27 @@ document.addEventListener('alpine:init', () => {
       this.dialogUrl = url;
       this.dialogTitle = action.label || 'Action';
       this.dialogOpen = true;
+    },
+
+    // The confirm dialog's Run/Cancel pair. Run stays disabled while the POST is in flight so a
+    // double-click cannot fire the mutation twice.
+    async confirmRun() {
+      if (!this.confirmAction || this.confirmBusy) return;
+      this.confirmBusy = true;
+      try {
+        await this.runEndpoint(this.confirmAction, this.confirmId);
+      } finally {
+        this.confirmBusy = false;
+        this.confirmOpen = false;
+        this.confirmAction = null;
+        this.confirmId = null;
+      }
+    },
+    cancelConfirm() {
+      if (this.confirmBusy) return;
+      this.confirmOpen = false;
+      this.confirmAction = null;
+      this.confirmId = null;
     },
 
     // POST { id } to the action's endpoint (a generated create-from controller). The server clones the
