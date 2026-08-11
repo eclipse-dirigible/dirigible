@@ -82,6 +82,16 @@ class HttpSecurityURIConfiguratorTest {
     }
 
     /**
+     * The data transfer websocket has no {@code @RolesAllowed} of its own, so this gate is the whole of
+     * its authorization - a regression here does not degrade the defense, it removes it.
+     */
+    @Test
+    void theDataTransferWebsocketIsGated() {
+        assertEquals(OPERATIONS_ROLES, requiredRoles("/websockets/data/transfer"),
+                "the data transfer websocket has no method-level check - this gate is all there is");
+    }
+
+    /**
      * The gates are evaluated in order and the monitoring patterns are all sub-paths of the DEVELOPER
      * ones - reordering them silently reinstates the 403.
      */

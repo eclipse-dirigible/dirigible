@@ -123,11 +123,23 @@ public class HttpSecurityURIConfigurator {
      * <p>
      * The gate therefore uses the WIDEST legitimate set: it must not reject anyone the endpoints allow,
      * and the finer per-endpoint {@code @RolesAllowed} checks stay in place to enforce the stricter
-     * half. This is defense in depth, not the authorization itself.
+     * half. For the REST endpoints this is defense in depth, not the authorization itself.
+     * <p>
+     * For the data transfer WEBSOCKET it is the only authorization there is.
+     * {@code DataTransferWebsocketHandler} declares no roles at all, and being registered outside
+     * {@code /websockets/ide/} it matched nothing but the {@code /websockets/**} catch-all - so any
+     * authenticated user, including one with no platform role, could drive a transfer between
+     * datasources. The role set is the trio rather than the stricter ADMINISTRATOR + OPERATOR that
+     * guards export / import, because the feature's only UI is the Transfer view of the IDE's Database
+     * perspective and it populates itself from {@code /services/data/definition/}, which the trio may
+     * read; narrowing it here would take the tool away from the developers it was built for. Whether a
+     * DEVELOPER should be able to copy data between datasources at all is a policy question, and a
+     * separate one from closing this hole.
      */
     private static final String[] DATA_MANAGEMENT_PATTERNS = { //
             "/services/data", //
-            "/services/data/**"};
+            "/services/data/**", //
+            "/websockets/data/transfer"};
 
     /** The roles allowed on the monitoring, native-app management and data management surfaces. */
     private static final String[] OPERATIONS_ROLES = { //
