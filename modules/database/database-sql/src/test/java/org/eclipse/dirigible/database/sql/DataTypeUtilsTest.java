@@ -96,6 +96,30 @@ public class DataTypeUtilsTest {
     }
 
     /**
+     * PostgreSQL JDBC metadata reports a boolean column as java.sql.Types.BIT, so BIT (and the BOOL
+     * alias) must unify with the BOOLEAN a table definition declares - otherwise every alter over a
+     * table with a boolean column fails as an incompatible change.
+     */
+    @Test
+    public void bitUnifiesWithBoolean() {
+        assertEquals("BOOLEAN", DataTypeUtils.getUnifiedDatabaseType("BIT"));
+        assertEquals("BOOLEAN", DataTypeUtils.getUnifiedDatabaseType("BOOL"));
+        assertEquals("BOOLEAN", DataTypeUtils.getUnifiedDatabaseType(DataTypeUtils.getDatabaseTypeName(Types.BIT)));
+    }
+
+    /**
+     * DECIMAL is an alias of NUMERIC in PostgreSQL (and interchangeable per the SQL standard), so a
+     * DECIMAL model column reported back by the metadata as NUMERIC is the same column, not an
+     * incompatible change.
+     */
+    @Test
+    public void numericUnifiesWithDecimal() {
+        assertEquals(DataTypeUtils.getUnifiedDatabaseType("DECIMAL"), DataTypeUtils.getUnifiedDatabaseType("NUMERIC"));
+        assertEquals(DataTypeUtils.getUnifiedDatabaseType("DECIMAL"),
+                DataTypeUtils.getUnifiedDatabaseType(DataTypeUtils.getDatabaseTypeName(Types.NUMERIC)));
+    }
+
+    /**
      * The character types are one family, aliases included - a CLOB column reported back as VARCHAR (or
      * CHARACTER VARYING) holds the same kind of value.
      */

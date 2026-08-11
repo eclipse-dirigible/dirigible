@@ -288,8 +288,13 @@ public class DataTypeUtils {
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(DOUBLE_PRECISION, DOUBLE);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(FLOAT4, REAL);
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(FLOAT8, DOUBLE);
-        // booleans
+        // booleans - PostgreSQL JDBC reports a boolean column as java.sql.Types.BIT, so a
+        // BOOLEAN model column must unify with BIT or every alter over it fails as incompatible
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(BOOL, BOOLEAN);
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(BIT, BOOLEAN);
+        // decimals - DECIMAL is an alias of NUMERIC in PostgreSQL (and interchangeable per the SQL
+        // standard), so a DECIMAL model column comes back from the metadata as NUMERIC
+        UNIFIED_STRING_FROM_DATABASE_TYPE.put(NUMERIC, DECIMAL);
         // clobs
         UNIFIED_STRING_FROM_DATABASE_TYPE.put(CHARACTER_LARGE_OBJECT, CLOB);
         // blobs
