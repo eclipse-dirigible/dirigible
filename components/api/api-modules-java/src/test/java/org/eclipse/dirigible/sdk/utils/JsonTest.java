@@ -47,6 +47,21 @@ class JsonTest {
         assertEquals(holder.name, back.name);
     }
 
+    /**
+     * An {@code inbound:} webhook parses whatever shape the external system emits — a near-ISO
+     * date-time ("2026-08-10 12:30") must bind instead of failing the whole ingest, and a full ISO
+     * instant aimed at a date-only field contributes its date part as written (see LenientJavaTime).
+     */
+    @Test
+    void parses_near_iso_date_time_strings_an_inbound_webhook_receives() {
+        Holder back = Json.parse(
+                "{\"instant\":\"2026-08-10 12:30\",\"date\":\"2026-08-10T00:00:00.000Z\"," + "\"dateTime\":\"2026-08-10 12:30\"}",
+                Holder.class);
+        assertEquals(Instant.parse("2026-08-10T12:30:00Z"), back.instant);
+        assertEquals(LocalDate.of(2026, 8, 10), back.date);
+        assertEquals(LocalDateTime.of(2026, 8, 10, 12, 30), back.dateTime);
+    }
+
     static class Holder {
         public LocalDate date;
         public LocalDateTime dateTime;

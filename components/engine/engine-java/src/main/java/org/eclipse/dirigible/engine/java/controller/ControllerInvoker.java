@@ -58,9 +58,15 @@ public class ControllerInvoker {
         // java.time.* handlers by default, so a raw Spring mapper rejects LocalDate / Instant fields
         // with REQUIRE_HANDLERS_FOR_JAVA8_TIMES; this ensures generated entities with audit / date
         // fields bind cleanly from @Body JSON.
+        //
+        // On top of jsr310, @Body binding accepts near-ISO date/time strings ("2026-08-10 12:30",
+        // zoneless T-forms, bare dates) — an inbound webhook receives whatever the external system
+        // emits, and a browser can pass a user-typed value through verbatim. Registered AFTER the
+        // discovered modules so its per-type deserializers win; see LenientJavaTimeModule.
         this.objectMapper = objectMapperProvider.getIfAvailable(ObjectMapper::new)
                                                 .copy()
-                                                .findAndRegisterModules();
+                                                .findAndRegisterModules()
+                                                .registerModule(new LenientJavaTimeModule());
     }
 
     /** Test-friendly constructor — bypasses Spring's ObjectProvider. */

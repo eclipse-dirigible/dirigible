@@ -64,6 +64,10 @@
 
   const pad = (n) => String(n).padStart(2, '0');
 
+  // "2026-08-10 12:30" -> "2026-08-10T12:30": the single space separating date and time becomes the
+  // ISO 'T', so both new Date() (WebKit rejects the space form) and 'T'-splitting consumers accept it.
+  const isoT = (s) => (s.length > 10 && s[10] === ' ' ? s.slice(0, 10) + 'T' + s.slice(11) : s);
+
   const firstOf = (p, chars) => {
     for (const c of chars) {
       if (p.indexOf(c) >= 0) return c;
@@ -209,7 +213,10 @@
         if (isNaN(d.getTime())) return '';
         y = d.getFullYear(); mo = d.getMonth() + 1; da = d.getDate(); h = d.getHours(); mi = d.getMinutes();
       } else {
-        const s = String(value);
+        // A backend/user string may separate date and time with a space ("2026-08-10 12:30:00");
+        // normalize to the ISO 'T' so the slice below yields a value the datetime input (and the
+        // picker's 'T'-splitting seed logic) accepts.
+        const s = isoT(String(value));
         switch (w) {
           case 'DATETIME-LOCAL': return s.slice(0, 16);
           case 'TIME': return s.slice(0, 5);
@@ -237,7 +244,9 @@
       if (value === null || value === undefined || value === '') return null;
       const w = String(widget || 'DATE').toUpperCase();
       if (w === 'TIME' || w === 'MONTH' || w === 'WEEK') return value;
-      const d = new Date(value);
+      // Normalize a space-separated date-time before parsing: WebKit's new Date() rejects
+      // "2026-08-10 12:30" (a shape a user can type), which would pass the raw string through.
+      const d = new Date(typeof value === 'string' ? isoT(value) : value);
       return isNaN(d.getTime()) ? value : d.toISOString();
     },
   };
