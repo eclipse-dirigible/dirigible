@@ -113,6 +113,23 @@ class EndpointAuthorizationIT extends IntegrationTest {
     }
 
     /**
+     * Data transfer copies data between datasources, and its websocket handler declares no roles at all
+     * - so until it was gated at the URL layer, any authenticated user could drive one. The handshake
+     * is an ordinary HTTP request, so it passes the security filter chain and a role-less caller is
+     * rejected there, before any upgrade is attempted.
+     */
+    @Test
+    void data_transfer_is_not_drivable_without_a_platform_role() {
+        securityUtil.createUserInDefaultTenant(PLAIN_USER, PASSWORD);
+
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get("/websockets/data/transfer")
+                                                 .then()
+                                                 .statusCode(403),
+                PLAIN_USER, PASSWORD);
+    }
+
+    /**
      * A task's variables carry its business payload, so reading them is scoped to the caller's own
      * inbox exactly like acting on the task - a bare task id must not address them.
      */
