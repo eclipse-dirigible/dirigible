@@ -16,9 +16,11 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
+import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.configurations.tenant.TenantConfigurationService;
 import org.eclipse.dirigible.components.listeners.config.ActiveMQConnectionArtifactsFactory;
 import org.eclipse.dirigible.components.listeners.service.TenantPropertyManager;
 import org.eclipse.dirigible.engine.java.component.ComponentContainer;
@@ -66,18 +68,21 @@ public class ListenerClassConsumer implements JavaClassConsumer {
     private final TenantContext tenantContext;
     private final TenantPropertyManager tenantPropertyManager;
     private final Tenant defaultTenant;
+    private final TenantConfigurationService tenantConfigurationService;
 
     /** fqn → open JMS Connections (one per subscription) for teardown. */
     private final ConcurrentMap<String, List<Connection>> connections = new ConcurrentHashMap<>();
 
     @Autowired
     public ListenerClassConsumer(ComponentContainer componentContainer, ActiveMQConnectionArtifactsFactory connectionFactory,
-            TenantContext tenantContext, TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant) {
+            TenantContext tenantContext, TenantPropertyManager tenantPropertyManager, @DefaultTenant Tenant defaultTenant,
+            TenantConfigurationService tenantConfigurationService) {
         this.componentContainer = componentContainer;
         this.connectionFactory = connectionFactory;
         this.tenantContext = tenantContext;
         this.tenantPropertyManager = tenantPropertyManager;
         this.defaultTenant = defaultTenant;
+        this.tenantConfigurationService = tenantConfigurationService;
     }
 
     @Override
@@ -211,7 +216,18 @@ public class ListenerClassConsumer implements JavaClassConsumer {
         }
         try {
             tenantContext.execute(tenantId, () -> {
-                dispatcher.onMessage(text);
+                // Re-establishing the tenant's identity above is not enough: Configuration's tenant
+                // override lookup depends on a thread-scoped map that only TenantConfigurationInitFilter
+                // populates for HTTP requests. A listener dispatch is not a request, so without this the
+                // handler would silently read the global default instead of this tenant's own override
+                // (e.g. a generated notification's {appUrl} token) - load it here the same way, and clear
+                // it so it never leaks onto the pooled broker thread.
+                Configuration.setThreadConfiguration(tenantConfigurationService.resolveInjectableForCurrentTenant());
+                try {
+                    dispatcher.onMessage(text);
+                } finally {
+                    Configuration.removeThreadConfiguration();
+                }
                 return null;
             });
         } catch (Exception e) {
