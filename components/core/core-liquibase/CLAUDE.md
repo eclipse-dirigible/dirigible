@@ -97,7 +97,7 @@ If you change the sentinel-detection logic (e.g. add a new precondition, change 
 
 ## Regenerating the baseline
 
-You shouldn't need to regenerate the existing 131 changesets — appending new ones is the workflow. If you ever do (e.g. for a schema rewrite), the process is:
+You shouldn't need to regenerate the existing changesets (136 as of the intent-conversation tables) — appending new ones is the workflow. If you ever do (e.g. for a schema rewrite), the process is:
 
 1. Boot the app fresh against an empty H2 with the current `@Entity` set and `hbm2ddl=update` (no `core-liquibase` on the classpath, or temporarily skip the BFPP).
 2. Run `liquibase generate-changelog --url=jdbc:h2:file:./target/dirigible/h2/SystemDB --changelog-file=baseline.json --include-objects='table:DIRIGIBLE_.*' --default-schema-name=PUBLIC`.

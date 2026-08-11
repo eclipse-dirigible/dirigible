@@ -43,7 +43,7 @@ document.addEventListener('alpine:init', () => {
       if (last && intent.apps.includes(last)) {
         await intent.open(last);
       }
-      Alpine.store('conversation').restore();
+      await Alpine.store('conversation').restore();
 
       // The canvas re-renders whenever the model changes - the conversation raises this after every
       // applied proposal, and the publish panel after it is dismissed.
@@ -109,7 +109,7 @@ document.addEventListener('alpine:init', () => {
       Alpine.store('publish').state = 'idle';
       if (await intent.open(project)) {
         this.rememberProject();
-        Alpine.store('conversation').restore();
+        await Alpine.store('conversation').restore();
         this.renderDiagrams();
       }
     },

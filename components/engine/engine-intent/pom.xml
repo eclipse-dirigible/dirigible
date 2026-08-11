@@ -31,6 +31,11 @@
 			<groupId>org.eclipse.dirigible</groupId>
 			<artifactId>dirigible-components-ide-workspace</artifactId>
 		</dependency>
+		<!-- The logged-in user each stored conversation message is attributed to -->
+		<dependency>
+			<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-api-security</artifactId>
+		</dependency>
 		<!-- Test: parse-validate the generated .print templates with the document-template parser -->
 		<dependency>
 			<groupId>org.eclipse.dirigible</groupId>

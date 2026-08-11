@@ -45,6 +45,12 @@
   const ws = () => App.config.workspace;
   const seg = encodeURIComponent;
 
+  // A conversation is identified by the app and the surface it was held in - never by the workspace or
+  // the user, so a teammate opening the same app on another machine restores the same dialogue.
+  const CONVERSATION_SURFACE = 'builder';
+  const conversationQuery = (project) =>
+    `project=${seg(project)}&surface=${CONVERSATION_SURFACE}&path=${seg(App.config.intentFile)}`;
+
   /** Encode a file path segment by segment - the slashes are structural and must survive. */
   const encodePath = (path) => String(path).split('/').map(seg).join('/');
 
@@ -140,6 +146,33 @@
         body: JSON.stringify({ template: entry.templateId, parameters: entry.parameters || {} }),
         contentType: 'application/json',
         timeoutMs: 5 * 60 * 1000,
+      });
+    },
+
+    // ----- Conversation history -----------------------------------------------
+
+    /**
+     * The stored conversation of one app: `{messages, turns}` - everything that was said
+     * (`[{sequence, role, content, createdBy, createdAt}]`) plus the alternating user/assistant
+     * transcript to send upstream on the next turn, which the SERVER derives (a failed turn's
+     * unanswered message is kept in the record but must never be replayed). Both are empty when
+     * nothing has been said about the app yet - the endpoint answers 200 with empty lists rather than
+     * 404, so "no history" is never an error path.
+     */
+    async conversation(project) {
+      const result = await call('GET', `${INTENT_BASE}/conversations?${conversationQuery(project)}`);
+      const data = result.data || {};
+      return { messages: data.messages || [], turns: data.turns || [] };
+    },
+
+    /**
+     * Append the messages of one completed turn, as `[{role, content}]`. Starts the conversation when
+     * this is its first message; the server stamps the author and the time.
+     */
+    async appendConversation(project, messages) {
+      await call('POST', `${INTENT_BASE}/conversations/messages?${conversationQuery(project)}`, {
+        body: JSON.stringify({ messages }),
+        contentType: 'application/json',
       });
     },
 

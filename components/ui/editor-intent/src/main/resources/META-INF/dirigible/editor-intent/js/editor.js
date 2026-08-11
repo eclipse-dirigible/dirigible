@@ -18,6 +18,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     const PARSE_URL = '/services/ide/intent/parse';
     const GENERATE_URL = '/services/ide/intent/generate';
     const AGENT_URL = '/services/ide/intent/agent';
+    const CONVERSATIONS_URL = '/services/ide/intent/conversations';
 
     $scope.state = { isBusy: true, error: false };
     $scope.errorMessage = '';
@@ -55,6 +56,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                 $scope.state.isBusy = false;
                 refreshPreview();
                 mountEditor();
+                restoreConversation();
             });
         }, (response) => {
             console.error(response);
@@ -345,6 +347,8 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
     $scope.chat = { open: false, busy: false, input: '', messages: [], turns: [], proposalPending: false };
     let proposedYaml = null;
     let diffEditor = null;
+    // How many of chat.messages the server has accepted; everything past it is still unsaved.
+    let persistedMessages = 0;
 
     $scope.toggleChat = () => { $scope.chat.open = !$scope.chat.open; };
 
@@ -353,6 +357,58 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
             const list = document.getElementById('intent-chat-messages');
             if (list) list.scrollTop = list.scrollHeight;
         }, 0);
+    };
+
+    // ----- Conversation history --------------------------------------------------
+    // The conversation is the record of WHY the intent looks the way it does, so it is persisted
+    // server-side (tenant-aware, append-only) instead of living in this controller until the tab
+    // closes. It is keyed by project + surface + intent file - never by workspace or user, so the same
+    // app opened on another machine, or by a teammate, restores the same dialogue.
+
+    const conversationQuery = () => {
+        const location = fileLocation();
+        return `?project=${encodeURIComponent(location.project)}&surface=intent-editor&path=${encodeURIComponent(location.path)}`;
+    };
+
+    /** Load the stored conversation of this intent file into the chat pane. */
+    const restoreConversation = () => {
+        $http.get(CONVERSATIONS_URL + conversationQuery())
+             .then((response) => {
+                 const stored = response.data || {};
+                 $scope.chat.messages = (stored.messages || []).map((m) => ({ role: m.role, text: m.content }));
+                 // The transcript is DERIVED from the stored roles rather than stored a second time, so
+                 // the two lists cannot drift - and it is derived SERVER-side, because "which messages
+                 // may be replayed" is a property of the roles: a failed turn keeps the message that was
+                 // sent (support needs it) but replaying that unanswered turn would break the model
+                 // API's alternation.
+                 $scope.chat.turns = (stored.turns || []).map((t) => ({ role: t.role, content: t.content }));
+                 persistedMessages = $scope.chat.messages.length;
+                 scrollChatToBottom();
+             }, (response) => {
+                 // No history is a degraded pane, never a broken editor.
+                 console.error(response);
+             });
+    };
+
+    /**
+     * Append whatever this file's conversation has said but not yet saved. Called once per turn, after
+     * it has fully resolved - a failed turn's error bubble is part of the record too.
+     *
+     * On failure the count is deliberately left where it is, so the next turn re-sends this tail and a
+     * transient outage costs nothing.
+     */
+    const flushConversation = () => {
+        const pending = $scope.chat.messages.slice(persistedMessages);
+        if (!pending.length) return;
+        const messages = pending.map((m) => ({ role: m.role, content: m.text }));
+        $http.post(CONVERSATIONS_URL + '/messages' + conversationQuery(), { messages: messages })
+             .then(() => {
+                 // Advance by what was actually sent - a message typed while the call was in flight has
+                 // not been saved yet.
+                 persistedMessages += messages.length;
+             }, (response) => {
+                 console.error(response);
+             });
     };
 
     const disposeDiff = () => {
@@ -412,6 +468,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                      setTimeout(showDiff, 0); // defer until ng-if renders the diff container
                  }
                  scrollChatToBottom();
+                 flushConversation();
              }, (response) => {
                  $scope.chat.busy = false;
                  // The turn never completed - drop its unanswered user turn so the transcript stays alternating.
@@ -422,6 +479,7 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
                  } else console.error(response);
                  $scope.chat.messages.push({ role: 'error', text: text });
                  scrollChatToBottom();
+                 flushConversation();
              });
     };
 
@@ -437,9 +495,12 @@ editorView.controller('IntentEditorController', ($scope, $http, ViewParameters, 
         if (!$scope.chat.proposalPending || proposedYaml === null) return;
         if (monacoEditor) monacoEditor.setValue(proposedYaml); // fires onDidChangeModelContent -> $scope.text, dirty, re-parse
         else { $scope.text = proposedYaml; handleTextChanged(); }
-        $scope.chat.messages.push({ role: 'assistant', text: 'Applied to the editor. Review, then Save and Generate.' });
+        // A UI note, NOT an assistant turn: it is displayed and recorded, but the model never sees it -
+        // which is exactly what the `note` role means to the restored transcript.
+        $scope.chat.messages.push({ role: 'note', text: 'Applied to the editor. Review, then Save and Generate.' });
         $scope.rejectProposal();
         scrollChatToBottom();
+        flushConversation();
     };
 
     $scope.rejectProposal = () => {
