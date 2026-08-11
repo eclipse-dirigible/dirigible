@@ -57,8 +57,9 @@ All values from the [Amazon Cognito quotas page](https://docs.aws.amazon.com/cog
 | --- | --- | --- | --- |
 | **Groups to which each user can belong** | **100** | **No** | Groups as membership storage — **the binding limit** |
 | Groups per user pool | 10,000 | No | Total (tenants × roles defined) |
+| Characters in a group **name** † | 1–128 | No | Group naming schemes — the *only* size limit on the group side |
 | Custom attributes per user pool | 50 | No | Attribute-based storage (how many you can shard across) |
-| **Characters per attribute** | **2,048 bytes** | **No** | Attribute-based storage — the payload ceiling |
+| **Characters per attribute** | **2,048 bytes** | **No** | Attribute-based storage **only** — see the note below: this quota does **not** apply to groups |
 | Characters in custom attribute name | 20 | No | Attribute naming schemes |
 | Scopes per resource server | 100 | No | Scope-based (M2M) role modelling |
 | Scopes per app client | 50 | No | Scope-based (M2M) role modelling |
@@ -68,6 +69,22 @@ All values from the [Amazon Cognito quotas page](https://docs.aws.amazon.com/cog
 | Identity providers per user pool | 300 | Yes → 1,000 | Per-tenant federation |
 | Users per user pool | 40,000,000 | Yes | Not a constraint here |
 | Identities linked to a user | 5 | No | Federated identity linking |
+
+† Every value above comes from the quotas page **except the 128-character group-name bound**, which is a `CreateGroup` API constraint (`GroupName`: minimum length 1, maximum length 128, pattern `[\p{L}\p{M}\p{S}\p{N}\p{P}]+`) and does not appear on the quotas page at all.
+
+### Groups are not attributes — the 2,048-byte limit does not apply to them
+
+Worth stating plainly, because the two are easy to conflate and the consequences are opposite:
+
+- **Attributes** are name/value pairs stored on the user record — the standard ones (`email`, `name`) and custom ones (`custom:tenant`). The **2,048-byte** quota bounds a single attribute *value*.
+- **Groups** are a separate first-class user-pool resource, created with `CreateGroup` and assigned with `AdminAddUserToGroup`. The `cognito:groups` claim is **computed at token-issuance time** from the user's memberships — it is never read from a stored attribute, so the attribute quota never touches it.
+
+**Is there an aggregate size limit on a user's groups? No — AWS publishes none.** The group side is bounded only by *counts* (100 per user, 10,000 per pool) and by the length of each individual *name* (128 characters). The theoretical worst case is therefore 100 × 128 ≈ **12.8 KB** of names plus JSON overhead, and there is neither a documented cap on the claim as a whole nor a published token-size quota (§4.3 explains what does bound it in practice).
+
+Two consequences:
+
+1. **The 2,048-byte limit constrains Option 4 alone** — the packed custom attribute (§6) — which is exactly why that option tops out near 250 tenants. It says nothing about the group-based options.
+2. **Group names have ample room.** At 128 characters, a `t:<tenant>:<role>` scheme is nowhere near constrained; tenant and role names can be long and legible. **The wall in the group model is purely the count of 100, never the size.**
 
 ### Token-shaping quotas
 
@@ -140,7 +157,7 @@ A group name `t:<tenant>:<role>` with a ~10-character tenant id and a ~12-charac
 | 90 | ~2.7 KB | ~3.6 KB | ID + access token |
 | 300 | **~9 KB** | **~12 KB** | ID + access token (≈ 24 KB combined) |
 
-No Cognito quota is breached (the pre-token Lambda's 5,000 limit is a *count*), and Dirigible's server-side code flow means these tokens never travel in browser headers. But a 12 KB token per request-issuance, twice, is a design smell — and it is fatal for any future consumer that puts a token in a cookie (4 KB) or through a gateway with an 8–10 KB header cap.
+**These figures are a practical concern, not a quota violation.** No Cognito quota is breached at any size: the pre-token Lambda's 5,000 limit is a *count* of claims, the 2,048-byte attribute quota does not apply to groups (§3), and no aggregate `cognito:groups` or token-size cap is published. The size dimension of groups is effectively unbounded by Cognito — what bounds it is whatever carries the token. Dirigible's server-side code flow means these tokens never travel in browser headers, which softens the concern here; even so, a 12 KB token minted twice per sign-in is a design smell, and it is fatal for any future consumer that puts a token in a cookie (4 KB) or through a gateway with an 8–10 KB header cap.
 
 ### 4.4 Membership administration throughput
 
@@ -224,7 +241,7 @@ One group per tenant, carrying membership and nothing else; roles live in an ext
 
 Encode the whole graph into one custom attribute, e.g. `custom:tenroles = "a1:3ff,b7:005,c2:180"` — a short tenant id and a hex bitmask of that tenant's roles (10 roles = 10 bits = 3 hex characters).
 
-- **Arithmetic:** ~7–8 characters per tenant → 30 tenants ≈ **210–240 bytes**, against 2,048 bytes ⇒ fits, up to **~250–290 tenants** in a single attribute; shardable across up to 50 attributes.
+- **Arithmetic:** ~7–8 characters per tenant → 30 tenants ≈ **210–240 bytes**, against the **2,048-byte per-attribute ceiling** ⇒ fits, up to **~250–290 tenants** in a single attribute; shardable across up to 50 attributes. (This is the one option that quota governs — it does not apply to any of the group-based options; see §3.)
 - **Pros:** no group-count ceiling at all; one compact claim; no extra store or Lambda; survives the stated scale with room to spare.
 - **Cons:** **opaque** — support and audit require decoding; needs a versioned registry mapping tenant → short id and role → bit position, and any role added or removed in a tenant re-numbers bits; updates are **read-modify-write with no atomicity**, so two concurrent grants silently clobber each other; **no reverse query** at all (§4.5); writes still bounded by the 25 RPS UserUpdate quota; custom attributes **cannot be deleted or renamed** once added to a pool (verify — §10).
 - **Verdict:** ⚠️ Fits the numbers, but **operationally hostile.** Document it, do not ship it unless an external store is genuinely impossible.
@@ -310,7 +327,7 @@ Recorded as implications only — no document is changed by this analysis.
 
 1. **Re-read the quotas page** at decision time — <https://docs.aws.amazon.com/cognito/latest/developerguide/limits.html>. All figures here were read on 2026-07-29; the non-adjustable ones (100 groups/user, 2,048 bytes/attribute, 50 custom attributes, 25 RPS UserUpdate) are the ones that matter.
 2. **Prove the ceiling in your own pool:** create a test user, add 100 groups, attempt the 101st, and record the exact error and where it surfaces in your onboarding flow.
-3. **Measure a real token** with a representative membership set — decode it and check the `cognito:groups` claim size against whatever will carry it.
+3. **Measure a real token** with a representative membership set — decode it and check the `cognito:groups` claim size against whatever will carry it. While there, confirm the two group-side bounds in your own Region: the **128-character group-name** constraint (`CreateGroup`), and that **no aggregate `cognito:groups` size cap** exists — the count of 100 should be the only thing that stops you.
 4. **Confirm the custom-attribute constraints** if Option 4 is under serious consideration: that attributes cannot be deleted or renamed after creation, and that `ListUsers` cannot filter on the packed value (both are the basis of that option's ❌ on reverse queries).
 5. **Time a bulk grant** against the 25 RPS UserUpdate quota in a non-production account, and confirm what else in your estate shares that quota.
 6. **Decide the granularity question explicitly** — whether users genuinely need arbitrary role combinations per tenant, or whether 3–4 personas per tenant would do. That single answer decides between Option 2 and Option 5.
