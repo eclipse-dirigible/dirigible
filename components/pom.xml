@@ -254,6 +254,7 @@
         <module>resources/resources-partner</module>
         <module>resources/resources-admin</module>
         <module>resources/resources-monitoring</module>
+        <module>resources/resources-database</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
@@ -1379,6 +1380,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-monitoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-database</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -13,6 +13,7 @@ public enum HtmlElementType {
     PARAGRAPH("p"), //
     BUTTON("button"), //
     INPUT("input"), //
+    TEXTAREA("textarea"), //
     ANCHOR("a"), //
     HEADER1("h1"), //
     HEADER2("h2"), //

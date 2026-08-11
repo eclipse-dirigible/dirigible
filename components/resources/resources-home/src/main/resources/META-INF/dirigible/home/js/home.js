@@ -18,13 +18,14 @@
 document.addEventListener('alpine:init', () => {
     // Fallbacks for shells that do not declare their own icon/description (older registrations).
     const ICONS = { applicationShell: 'layout-grid', personalShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
-        monitoringShell: 'activity', shellIde: 'code' };
+        monitoringShell: 'activity', databaseShell: 'database', shellIde: 'code' };
     const DESCRIPTIONS = {
         applicationShell: 'All business applications in one workspace.',
         personalShell: 'Your tasks and your records - the personal workspace.',
         partnerShell: 'The portal for external partners.',
         adminShell: 'Every record as a plain table and form - one level above the database.',
         monitoringShell: 'Is the system healthy - and if not, what broke.',
+        databaseShell: 'Browse the schema, look at the data, run a SQL fix.',
         builderShell: 'Describe an application in plain language and publish it.',
         shellIde: 'The development workbench for building on the platform.',
     };
@@ -46,12 +47,14 @@ document.addEventListener('alpine:init', () => {
      *  - adminShell: an operator tool. Everything it shows is reachable through the applications
      *    themselves; it is the way in only when someone needs the plain, every-column view.
      *  - monitoringShell: an operations tool - opened when something looks wrong, not every morning.
+     *  - databaseShell: the same kind of tool one level lower - opened to look at the data behind a
+     *    problem, or to fix it. Support essentials only; the Workbench remains the deep tool.
      *  - builderShell: like the Workbench, a way of BUILDING applications rather than working in
      *    one, and gated to developers/administrators - so it belongs next to it, not above.
      *  - shellIde: a developer tool. Every developer is also an employee, so it must stay visible,
      *    but it should not compete with the two shells the rest of the company opens every morning.
      */
-    const SECONDARY = ['partnerShell', 'adminShell', 'monitoringShell', 'builderShell', 'shellIde'];
+    const SECONDARY = ['partnerShell', 'adminShell', 'monitoringShell', 'databaseShell', 'builderShell', 'shellIde'];
 
     Alpine.data('home', () => ({
         branding: { name: '', subtitle: '', logo: '' },

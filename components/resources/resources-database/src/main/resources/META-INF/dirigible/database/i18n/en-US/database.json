@@ -1,0 +1,47 @@
+{
+  "errors": {
+    "forbidden": "You do not have permission to read this."
+  },
+  "explorer": {
+    "close": "Close",
+    "contents": "Contents",
+    "copied": "Copied {{name}}",
+    "copyName": "Copy name",
+    "datasource": "Datasource",
+    "ddl": "DDL",
+    "generateSelect": "Generate SELECT",
+    "loading": "Loading...",
+    "noDatasources": "No datasources",
+    "noDatasourcesHint": "This instance has no datasource configured.",
+    "noRows": "No rows.",
+    "noSchemas": "No schemas in this datasource.",
+    "refresh": "Refresh",
+    "rowsCapped": "Showing {{count}} rows - the server caps results, so there may be more.",
+    "rowsShown": "Showing {{count}} rows.",
+    "showContents": "Show contents",
+    "showDdl": "Show DDL",
+    "title": "Explorer"
+  },
+  "shell": {
+    "nav": {
+      "explorer": "Explorer",
+      "group": "Database",
+      "sql": "SQL Console",
+      "workbench": "Open in Workbench"
+    },
+    "title": "Database"
+  },
+  "sql": {
+    "cancel": "Cancel",
+    "capped": "The server caps results, so there may be more rows than shown.",
+    "clear": "Clear",
+    "confirmBody": "This statement is not a read. It will be executed against {{datasource}}.",
+    "confirmTitle": "Run a write statement?",
+    "placeholder": "SELECT * FROM ...   (Ctrl/Cmd+Enter to run)",
+    "rowsReturned": "Rows: {{count}}",
+    "rowsUpdated": "Rows updated: {{count}}",
+    "run": "Run",
+    "statementExecuted": "The statement was executed.",
+    "title": "SQL Console"
+  }
+}

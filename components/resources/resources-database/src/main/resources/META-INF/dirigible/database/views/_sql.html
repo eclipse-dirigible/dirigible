@@ -1,0 +1,121 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  SQL console: a statement area over a results grid, with a messages strip between them. Deliberately
+  a textarea rather than an editor - see js/components/pages/sqlPage.js.
+-->
+<div id="database-sql-page" x-data="sqlPage" class="vbox size-full">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('database:sql.title', 'SQL Console')"></span>
+    <div x-h-toolbar-spacer></div>
+
+    <div x-h-select data-filter="contains" class="w-64" x-show="$store.explorer.datasources.length">
+      <input x-h-select-input id="database-sql-datasource" x-model="$store.explorer.datasource"
+             @change="$store.explorer.onDatasourceChanged()"
+             :aria-label="T('database:explorer.datasource', 'Datasource')"
+             :placeholder="T('database:explorer.datasource', 'Datasource')" />
+      <div x-h-select-content>
+        <template x-for="name in $store.explorer.datasources" :key="name">
+          <div x-h-select-option="name" :data-value="name"></div>
+        </template>
+      </div>
+    </div>
+
+    <button id="database-sql-run" x-h-button data-variant="primary" data-size="sm" @click="run()"
+            :disabled="!datasource || !state.statement.trim() || state.running">
+      <span x-show="state.running" x-h-spinner data-size="sm"></span>
+      <svg x-h-lucide role="presentation" x-show="!state.running" data-lucide="play" class="size-4"></svg>
+      <span x-text="T('database:sql.run', 'Run')"></span>
+    </button>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.clear()"
+            :disabled="state.running">
+      <span x-text="T('database:sql.clear', 'Clear')"></span>
+    </button>
+  </div>
+
+  <div x-h-split class="bk-stretch flex-1" data-orientation="vertical" data-variant="border">
+
+    <!-- The statement -->
+    <div x-h-split-panel data-size="40%" data-min="120">
+      <div class="vbox size-full p-2">
+        <textarea id="database-sql-statement" class="size-full font-mono text-sm rounded-md border border-border bg-transparent p-2"
+                  spellcheck="false"
+                  :placeholder="T('database:sql.placeholder', 'SELECT * FROM ...   (Ctrl/Cmd+Enter to run)')"
+                  :aria-label="T('database:sql.title', 'SQL Console')"
+                  x-model="state.statement"
+                  @input.debounce.300ms="state.persist()"
+                  @keydown="onKeydown"></textarea>
+      </div>
+    </div>
+
+    <!-- Results + messages -->
+    <div x-h-split-panel data-size="60%">
+      <div class="vbox size-full">
+
+        <div class="px-2 py-1" x-show="state.error || message">
+          <div x-show="state.error" x-h-alert data-variant="negative" role="alert">
+            <div x-h-alert-description x-text="state.error"></div>
+          </div>
+          <span x-show="!state.error && message" id="database-sql-message" x-h-text.muted class="text-xs"
+                x-text="message"></span>
+        </div>
+
+        <div x-show="state.running" class="p-4"><div x-h-spinner></div></div>
+
+        <div x-show="!state.running && state.rows.length" x-h-table-container.scroll class="flex-1" data-border="true">
+          <table id="database-sql-results" x-h-table data-borders="rows">
+            <thead x-h-table-header>
+              <tr x-h-table-row>
+                <template x-for="column in state.columns" :key="column">
+                  <th x-h-table-head scope="col" x-text="column"></th>
+                </template>
+              </tr>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="(row, index) in state.rows" :key="index">
+                <tr x-h-table-row data-hoverable="true">
+                  <template x-for="column in state.columns" :key="column">
+                    <td x-h-table-cell x-text="cellText(row[column])"></td>
+                  </template>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- The server caps a read and puts nothing in the payload to say so - so the page does. -->
+        <div class="p-2" x-show="!state.running && capped">
+          <span x-h-text.muted class="text-xs"
+                x-text="T('database:sql.capped', 'The server caps results, so there may be more rows than shown.')"></span>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- The one confirmation. Everything that is not a read goes to /update, including DDL. -->
+  <div x-h-dialog-overlay :data-open="confirmOpen">
+    <div x-h-dialog>
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="T('database:sql.confirmTitle', 'Run a write statement?')"></h2>
+        <p x-h-dialog-description></p>
+        <button x-h-dialog-close @click="confirmOpen = false" :aria-label="T('database:explorer.close', 'Close')">
+          <svg x-h-lucide role="presentation" data-lucide="x"></svg>
+        </button>
+      </div>
+      <div x-h-dialog-content>
+        <p x-text="T('database:sql.confirmBody', 'This statement is not a read. It will be executed against {{datasource}}.', { datasource: datasource })"></p>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="outline" @click="confirmOpen = false"
+                x-text="T('database:sql.cancel', 'Cancel')"></button>
+        <button id="database-sql-confirm" x-h-button data-variant="negative" @click="confirmRun()"
+                x-text="T('database:sql.run', 'Run')"></button>
+      </div>
+    </div>
+  </div>
+
+</div>
