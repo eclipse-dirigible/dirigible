@@ -11,6 +11,12 @@
  * The agent endpoint answers 200 even when its proposal STILL fails validation (the server's bounded
  * self-correction gave up), signalling it only as trailing prose in `reply`. So every proposal is
  * re-validated here through /parse before it is allowed anywhere near the buffer.
+ *
+ * The conversation is persisted SERVER-side, in a tenant-aware table, keyed by app + surface: it is the
+ * record of why an application looks the way it does, so it has to survive a different browser, a
+ * cleared profile and a teammate opening the same app - and it is the only audit trail linking an
+ * assistant proposal to the request that produced it. Persistence is append-only and never blocking: a
+ * failed save leaves the turn pending so the next one carries it, and the chat itself keeps working.
  */
 document.addEventListener('alpine:init', () => {
   Alpine.store('conversation', {
@@ -18,6 +24,8 @@ document.addEventListener('alpine:init', () => {
     messages: [],
     /** The clean transcript sent upstream: { role: 'user' | 'assistant', content }. */
     turns: [],
+    /** How many of `messages` the server has accepted. Everything past it is still unsaved. */
+    persistedCount: 0,
     input: '',
     busy: false,
     /** Set when the assistant is not configured (412) - a persistent banner, not a transient bubble. */
@@ -46,31 +54,53 @@ document.addEventListener('alpine:init', () => {
       this.notConfigured = !(await App.services.intentApi.agentConfigured());
     },
 
-    /** The localStorage key holding this app's conversation (per project; a fresh app has its own). */
-    storageKey() {
-      return 'dirigible.builder.chat.' + (Alpine.store('intent').project || 'new');
-    },
-
-    /** Restore the conversation of the currently open app. */
-    restore() {
+    /** Restore the conversation of the currently open app from the server. */
+    async restore() {
       this.messages = [];
       this.turns = [];
+      this.persistedCount = 0;
+      const project = Alpine.store('intent').project;
+      // A brand-new app has no project to key a conversation on yet, so there is nothing to restore.
+      if (!project) return;
+      let stored;
       try {
-        const raw = localStorage.getItem(this.storageKey());
-        if (!raw) return;
-        const saved = JSON.parse(raw);
-        this.messages = Array.isArray(saved.messages) ? saved.messages : [];
-        this.turns = Array.isArray(saved.turns) ? saved.turns : [];
+        stored = await App.services.intentApi.conversation(project);
       } catch (e) {
+        // The history is unavailable; the chat still works, it just starts from a blank pane.
         console.error('builder: could not restore the conversation', e);
+        return;
       }
+      this.messages = stored.messages.map(m => ({ role: m.role, text: m.content }));
+      // The transcript is DERIVED from the stored roles rather than stored a second time, so the two
+      // lists cannot drift - and it is derived SERVER-side, because "which messages may be replayed"
+      // is a property of the roles: a failed turn keeps the message that was sent (support needs it)
+      // but replaying that unanswered turn would break the model API's alternation.
+      this.turns = stored.turns.map(t => ({ role: t.role, content: t.content }));
+      this.persistedCount = this.messages.length;
     },
 
-    /** Persist the conversation. The agent endpoint is stateless, so the browser is the only keeper. */
-    persist() {
+    /**
+     * Append everything this app's conversation has said but not yet saved. Called once per turn, after
+     * the turn is fully resolved - including a failed one, whose error bubble is part of the record.
+     *
+     * A failure is deliberately silent apart from the console: the count is left where it is, so the
+     * next turn re-sends this tail and a transient outage costs nothing.
+     */
+    async flush() {
+      const project = Alpine.store('intent').project;
+      // The very first turn happens before the project exists (it is created by the proposal that
+      // follows). Its messages stay pending and are carried by the next flush.
+      if (!project) return;
+      const pending = this.messages.slice(this.persistedCount);
+      if (!pending.length) return;
       try {
-        localStorage.setItem(this.storageKey(), JSON.stringify({ messages: this.messages, turns: this.turns }));
-      } catch (e) { /* storage full or unavailable - the conversation simply is not restored */ }
+        await App.services.intentApi.appendConversation(project, pending.map(m => ({ role: m.role, content: m.text })));
+        // Advance by what was actually sent, not to the current length - a message the user typed while
+        // this call was in flight has not been saved yet.
+        this.persistedCount += pending.length;
+      } catch (e) {
+        console.error('builder: could not save the conversation', e);
+      }
     },
 
     startPhases() {
@@ -110,35 +140,39 @@ document.addEventListener('alpine:init', () => {
       this.busy = true;
       this.startPhases();
 
-      let reply;
+      // The whole turn is bracketed so the conversation is saved exactly once, at the end - by which
+      // point an applied proposal has created the project the conversation is keyed on.
       try {
-        reply = await App.services.intentApi.agent(intent.yaml, text, history);
-        this.notConfigured = false;
-      } catch (e) {
-        // The turn never completed - drop its unanswered user turn so the transcript stays alternating.
-        this.turns.pop();
-        if (e.status === 412) {
-          this.notConfigured = true;
-          this.say('error', 'The AI assistant is not configured on this instance. Set DIRIGIBLE_INTENT_AI_API_KEY and reload.');
-        } else if (e.status === 0) {
-          this.say('error', 'The assistant did not answer in time. Please try again.');
-        } else {
-          this.say('error', 'The assistant could not be reached. Please try again.');
+        let reply;
+        try {
+          reply = await App.services.intentApi.agent(intent.yaml, text, history);
+          this.notConfigured = false;
+        } catch (e) {
+          // The turn never completed - drop its unanswered user turn so the transcript stays alternating.
+          this.turns.pop();
+          if (e.status === 412) {
+            this.notConfigured = true;
+            this.say('error', 'The AI assistant is not configured on this instance. Set DIRIGIBLE_INTENT_AI_API_KEY and reload.');
+          } else if (e.status === 0) {
+            this.say('error', 'The assistant did not answer in time. Please try again.');
+          } else {
+            this.say('error', 'The assistant could not be reached. Please try again.');
+          }
+          return;
+        } finally {
+          this.busy = false;
+          this.stopPhases();
         }
-        return;
+
+        if (reply.reply) {
+          this.say('assistant', reply.reply);
+          this.turns.push({ role: 'assistant', content: reply.reply });
+        }
+
+        if (reply.proposedYaml) await this.adopt(reply.proposedYaml);
       } finally {
-        this.busy = false;
-        this.stopPhases();
-        this.persist();
+        await this.flush();
       }
-
-      if (reply.reply) {
-        this.say('assistant', reply.reply);
-        this.turns.push({ role: 'assistant', content: reply.reply });
-      }
-
-      if (reply.proposedYaml) await this.adopt(reply.proposedYaml);
-      this.persist();
     },
 
     /**
@@ -161,10 +195,14 @@ document.addEventListener('alpine:init', () => {
       document.dispatchEvent(new CustomEvent('builder:model-changed'));
     },
 
-    /** Drop the conversation of the current app (used when switching apps or starting a new one). */
+    /**
+     * Forget the conversation currently on screen (used when switching apps or starting a new one).
+     * Nothing stored is touched - the history of an app is append-only and outlives every session.
+     */
     clear() {
       this.messages = [];
       this.turns = [];
+      this.persistedCount = 0;
       this.input = '';
     },
   });

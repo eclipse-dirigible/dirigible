@@ -196,6 +196,15 @@ public class IntentBuilderShellIT extends UserInterfaceIntegrationTest {
         Assertions.assertTrue(repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + "/" + PROJECT + "/app.intent")
                                         .exists(),
                 "Publish did not copy the project into the registry");
+
+        // Continuity: the conversation is the record of WHY the app looks the way it does, so it has to
+        // outlive the browser session. Nothing in the shell reads the transcript from the browser any
+        // more, so a reload that shows the dialogue again can only have restored it from the server.
+        openBuilder();
+        Selenide.$(By.xpath("//div[contains(@class, 'builder-message') and contains(text(), 'I need an expense tracker.')]"))
+                .shouldBe(Condition.visible, Duration.ofSeconds(60));
+        Selenide.$(By.xpath("//div[contains(@class, 'builder-message') and contains(text(), 'Added an Expense entity')]"))
+                .shouldBe(Condition.visible);
     }
 
     private void openBuilder() {
