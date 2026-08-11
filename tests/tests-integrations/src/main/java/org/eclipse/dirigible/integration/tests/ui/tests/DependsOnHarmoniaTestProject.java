@@ -80,10 +80,15 @@ class DependsOnHarmoniaTestProject extends BaseTestProject {
         // watcher that re-filters the City options.
         browser.assertElementExistByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Bulgaria");
 
-        // City depends on Country: opening it now must offer only Bulgaria's cities.
+        // City depends on Country: opening it now must offer only Bulgaria's cities. The offered
+        // options are asserted on the option element itself, not on a <span>: since Harmonia 2.7 an
+        // option renders its label inside a text COLUMN (a span wrapping the label span, so a
+        // description can sit under it), so a bare "one span contains Sofia" is two matches - which
+        // the ExistsByTypeAndContainsText finder rejects. div[role="option"] is the stable anchor,
+        // and it is what the Country selection above already clicks.
         browser.clickOnElementByAttributePatternAndText(HtmlElementType.SPAN, HtmlAttribute.ROLE, "combobox", "Select City...");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Sofia");
-        browser.assertElementExistsByTypeAndContainsText(HtmlElementType.SPAN, "Varna");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Sofia");
+        browser.assertElementExistByAttributePatternAndText(HtmlElementType.DIV, HtmlAttribute.ROLE, "option", "Varna");
         browser.assertElementDoesNotExistsByTypeAndContainsText(HtmlElementType.SPAN, "Milano");
     }
 }
