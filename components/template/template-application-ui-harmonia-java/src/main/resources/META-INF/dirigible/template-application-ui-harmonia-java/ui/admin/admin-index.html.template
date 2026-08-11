@@ -95,8 +95,8 @@
                             <span class="opacity-60 text-xs" x-show="p.fk" x-text="'-> ' + p.fk"></span>
                         </label>
                         <template x-if="p.lookup">
-                            <div x-h-select data-filter="contains" :data-disabled="p.readonly">
-                                <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :placeholder="'Select ' + p.name + '...'" />
+                            <div x-h-select data-filter="contains">
+                                <input x-h-select-input :id="'a_' + p.name" x-model="draft[p.name]" :disabled="p.readonly" :placeholder="'Select ' + p.name + '...'" />
                                 <div x-h-select-content>
                                     <div x-h-select-search></div>
                                     <template x-for="opt in (options[p.name] || [])" :key="opt.value">

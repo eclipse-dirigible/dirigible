@@ -121,8 +121,8 @@
              dialog) and a Refresh button. -->
 #if($lookup)
         <div class="hbox gap-1 items-center">
-          <div x-h-select data-filter="contains" class="grow" :data-disabled="isPreview">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
               <template x-for="opt in options${property.name}" :key="opt.value">
@@ -134,9 +134,9 @@
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
-        <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#else :data-disabled="isPreview"#end>
+        <div x-h-select data-filter="contains">
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
-                 :aria-invalid="!!errors.${property.name}"
+                 :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end
                  :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>

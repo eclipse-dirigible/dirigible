@@ -40,8 +40,11 @@
     <!--
       Harmonia 2.5+ - the slot picker renders only the day grid; the date-navigation toolbar is composed
       here from the x-h-slot-picker-* control directives (they must be descendants of x-h-slot-picker).
+      The `responsive` modifier (Harmonia 2.7) keeps the day columns stacking into one on a narrow
+      screen - since 2.7 that is opt-in rather than the default. No x-model is bound on purpose: a slot
+      is an action that routes to the create form, never a selection the picker should hold.
     -->
-    <div x-h-slot-picker="slotCfg" @slot-click="onSlotClick">
+    <div x-h-slot-picker.responsive="slotCfg" @slot-click="onSlotClick">
       <div x-h-toolbar data-variant="transparent">
         <div x-h-button-group>
           <button x-h-button data-variant="outline" data-size="icon" x-h-slot-picker-previous
