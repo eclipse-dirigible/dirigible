@@ -13,11 +13,36 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.sql.Date;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.Calendar;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class DateTimeUtilsTest {
+
+    /**
+     * A "Z"-suffixed value names a real instant, independent of the JVM's default time zone -
+     * datetimeFormatter's {@code ['Z']} used to be a literal character to strip, leaving a zone-less
+     * LocalDateTime that {@code Timestamp.valueOf} then anchored to the JVM's default zone, silently
+     * shifting the value by that zone's UTC offset.
+     */
+    @Test
+    void parseDateTimeWithUtcMarkerPreservesTheInstant() {
+        Timestamp timestamp = DateTimeUtils.parseDateTime("2024-11-21T13:15:10Z");
+
+        assertThat(timestamp.toInstant()).isEqualTo(Instant.parse("2024-11-21T13:15:10Z"));
+    }
+
+    /**
+     * An explicit numeric offset must resolve the same way as "Z" - to the real instant, not the JVM's
+     * default zone.
+     */
+    @Test
+    void parseDateTimeWithExplicitOffsetPreservesTheInstant() {
+        Timestamp timestamp = DateTimeUtils.parseDateTime("2024-11-21T13:15:10+02:00");
+
+        assertThat(timestamp.toInstant()).isEqualTo(Instant.parse("2024-11-21T11:15:10Z"));
+    }
 
     @Test
     void testOptionallyParseDateTime() {
