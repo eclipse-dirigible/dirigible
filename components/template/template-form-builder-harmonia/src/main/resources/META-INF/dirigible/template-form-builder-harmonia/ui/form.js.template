@@ -252,8 +252,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).
+    // A space-separated "YYYY-MM-DD HH:mm" (user-typed) is normalized first — WebKit's new Date()
+    // rejects the space form, which would pass the raw string through to the backend.
     toInstant(value) {
-      const d = new Date(String(value));
+      const s = String(value);
+      const d = new Date(s.length > 10 && s[10] === ' ' ? s.slice(0, 10) + 'T' + s.slice(11) : s);
       return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 

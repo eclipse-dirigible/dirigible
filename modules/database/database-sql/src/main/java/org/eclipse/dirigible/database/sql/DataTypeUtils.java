@@ -185,6 +185,13 @@ public class DataTypeUtils {
         STRING_TO_DATABASE_TYPE.put("TIMESTAMP WITHOUT TIME ZONE", Types.TIMESTAMP);
         STRING_TO_DATABASE_TYPE.put("DATETIME", Types.TIMESTAMP);
 
+        // PostgreSQL's JDBC driver reports a `timestamptz` column's TYPE_NAME as "TIMESTAMPTZ"
+        // (and some drivers/tools use the SQL-standard spelling) - map both to the same plain
+        // TIMESTAMP handling used above, otherwise CSVIM refuses to import into ANY table that
+        // has such a column, regardless of what the CSV actually puts in it.
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMPTZ", Types.TIMESTAMP);
+        STRING_TO_DATABASE_TYPE.put("TIMESTAMP WITH TIME ZONE", Types.TIMESTAMP);
+
         STRING_TO_DATABASE_TYPE.put("DATETIME2", Types.TIMESTAMP); // MSSQL
 
         // ints
