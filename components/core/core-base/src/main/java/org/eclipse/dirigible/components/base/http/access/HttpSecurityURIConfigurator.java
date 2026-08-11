@@ -113,7 +113,23 @@ public class HttpSecurityURIConfigurator {
             "/services/native-apps", //
             "/services/native-apps/**"};
 
-    /** The roles allowed on the monitoring and native-app management surfaces. */
+    /**
+     * Data management surface. Every controller under {@code /services/data/} declares roles drawn from
+     * {ADMINISTRATOR, DEVELOPER, OPERATOR} - the metadata, definition and execution endpoints allow all
+     * three, while export / import / anonymize / datasource CRUD are the stricter ADMINISTRATOR +
+     * OPERATOR. Without a gate of its own the whole prefix falls through to
+     * {@link #AUTHENTICATED_PATTERNS}, leaving method security as the only thing standing between an
+     * ordinary authenticated user and the database.
+     * <p>
+     * The gate therefore uses the WIDEST legitimate set: it must not reject anyone the endpoints allow,
+     * and the finer per-endpoint {@code @RolesAllowed} checks stay in place to enforce the stricter
+     * half. This is defense in depth, not the authorization itself.
+     */
+    private static final String[] DATA_MANAGEMENT_PATTERNS = { //
+            "/services/data", //
+            "/services/data/**"};
+
+    /** The roles allowed on the monitoring, native-app management and data management surfaces. */
     private static final String[] OPERATIONS_ROLES = { //
             Roles.ADMINISTRATOR.getRoleName(), //
             Roles.DEVELOPER.getRoleName(), //
@@ -128,7 +144,8 @@ public class HttpSecurityURIConfigurator {
             new RoleGate(MONITORING_PATTERNS, OPERATIONS_ROLES), //
             new RoleGate(DEVELOPER_PATTERNS, new String[] {Roles.DEVELOPER.getRoleName()}), //
             new RoleGate(OPERATOR_PATTERNS, new String[] {Roles.OPERATOR.getRoleName()}), //
-            new RoleGate(NATIVE_APPS_MANAGEMENT_PATTERNS, OPERATIONS_ROLES));
+            new RoleGate(NATIVE_APPS_MANAGEMENT_PATTERNS, OPERATIONS_ROLES), //
+            new RoleGate(DATA_MANAGEMENT_PATTERNS, OPERATIONS_ROLES));
 
     /**
      * A role gate - the URI patterns it covers and the roles any of which grants access to them.

@@ -67,6 +67,21 @@ class HttpSecurityURIConfiguratorTest {
     }
 
     /**
+     * The data management surface has a URL gate of its own, so it no longer falls through to "any
+     * authenticated user" with method security as the only check. The gate carries the widest set the
+     * endpoints declare - narrowing it here would reject callers the controllers allow, while the
+     * stricter half (export / import / anonymize / datasource CRUD, which are ADMINISTRATOR + OPERATOR)
+     * stays enforced by their own {@code @RolesAllowed}.
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {"/services/data", "/services/data/metadata", "/services/data/metadata/DefaultDB/PUBLIC",
+            "/services/data/definition/DefaultDB/PUBLIC/VABLE", "/services/data/DefaultDB/query", "/services/data/DefaultDB/update",
+            "/services/data/DefaultDB/procedure", "/services/data/sources", "/services/data/export/DefaultDB", "/services/data/import"})
+    void dataManagementIsGatedAtTheUrlLayer(String uri) {
+        assertEquals(OPERATIONS_ROLES, requiredRoles(uri), "the data surface must be gated to the operational roles at " + uri);
+    }
+
+    /**
      * The gates are evaluated in order and the monitoring patterns are all sub-paths of the DEVELOPER
      * ones - reordering them silently reinstates the 403.
      */
