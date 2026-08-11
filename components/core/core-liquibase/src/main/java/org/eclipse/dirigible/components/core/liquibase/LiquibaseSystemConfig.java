@@ -59,7 +59,11 @@ public class LiquibaseSystemConfig {
 
     /**
      * Sentinel table from the very first changeset — if it exists, the schema has been bootstrapped
-     * before.
+     * before. The sentinel drives the WHOLE-ledger changeLogSync recovery only; a PARTIAL state (some
+     * tables present, ledger gone, sentinel possibly among the missing — the integration suite's
+     * teardown race produces exactly that) is covered per changeset instead: every changeset in the
+     * changelog carries a {@code preConditions onFail=MARK_RAN} guard, so an object that already exists
+     * marks its changeset ran rather than failing the boot. See {@code SystemChangelogIdempotencyTest}.
      */
     private static final String SENTINEL_TABLE = "DIRIGIBLE_SECURITY_ACCESS";
 
