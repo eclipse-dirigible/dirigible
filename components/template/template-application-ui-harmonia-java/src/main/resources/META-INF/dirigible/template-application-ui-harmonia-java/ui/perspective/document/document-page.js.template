@@ -557,10 +557,7 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.isDateType && $property.aggregate != "true")
-      if (payload.${property.name} != null) {
-        const _d${property.name} = new Date(payload.${property.name});
-        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
-      }
+      payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
 #end
       return payload;
@@ -1043,7 +1040,7 @@ document.addEventListener('alpine:init', () => {
       for (const col of this.editColumns) {
         let v = this.draft[col.name];
         if (v === '') v = null;
-        if (col.date && v != null) { const d = new Date(v); if (!isNaN(d.getTime())) v = d.toISOString(); }
+        if (col.date && v != null) v = window.HarmoniaFormat.toPayload(v, col.widget || 'DATETIME-LOCAL');
         payload[col.name] = v;
       }
       return payload;

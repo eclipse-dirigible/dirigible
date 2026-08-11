@@ -551,9 +551,11 @@ document.addEventListener('alpine:init', () => {
     //     as ProcessId null on create, so a process trigger's `ProcessId != null` guard fires (an
     //     empty string would trip it and the process would never start); on edit a populated value
     //     round-trips unchanged.
-    //  2. Date/time widgets -> the backend java.time format: an HTML date/datetime value (local, no
-    //     zone) becomes a full ISO instant (…Z) so an Instant/Timestamp binds; a bare TIME ("16:04",
-    //     not a valid Date) passes through so a LocalTime still parses.
+    //  2. Date/time widgets -> the backend java.time format via HarmoniaFormat.toPayload: an HTML
+    //     date/datetime value (local, no zone) becomes a full ISO instant (…Z) so an Instant/Timestamp
+    //     binds — including a space-separated "2026-08-10 12:30" (normalized before parsing; WebKit's
+    //     new Date() rejects the space form); a bare TIME ("16:04", not a valid Date) passes through
+    //     so a LocalTime still parses.
     toPayload() {
       const payload = { ...this.form };
       for (const _k of Object.keys(payload)) {
@@ -561,10 +563,7 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.isDateType)
-      if (payload.${property.name} != null) {
-        const _d${property.name} = new Date(payload.${property.name});
-        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
-      }
+      payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
 #end
       return payload;

@@ -77,6 +77,20 @@ public final class Json {
                         return null;
                     }
                     String text = in.nextString();
+                    // The entity date/time types tolerate near-ISO input (an inbound webhook receives
+                    // whatever the external system emits — see LenientJavaTime); every other
+                    // java.time type keeps the strict parse-only contract.
+                    Object lenient = null;
+                    if (raw == java.time.Instant.class) {
+                        lenient = LenientJavaTime.parseInstant(text);
+                    } else if (raw == java.time.LocalDate.class) {
+                        lenient = LenientJavaTime.parseLocalDate(text);
+                    } else if (raw == java.time.LocalDateTime.class) {
+                        lenient = LenientJavaTime.parseLocalDateTime(text);
+                    }
+                    if (lenient != null) {
+                        return (T) lenient;
+                    }
                     try {
                         return (T) parse.invoke(null, text);
                     } catch (ReflectiveOperationException e) {
