@@ -36,7 +36,14 @@ class EndpointAuthorizationIT extends IntegrationTest {
     private static final String ADMIN_USER = "endpoint-authz-it-admin";
     private static final String PASSWORD = "endpoint-authz-it-password";
 
-    /** Administrative surfaces that must never answer a role-less but authenticated caller. */
+    /**
+     * Administrative surfaces that must never answer a role-less but authenticated caller.
+     * <p>
+     * The two {@code /services/data/} entries are now rejected by the URL layer as well (that prefix
+     * gained a role gate), so they assert the outcome rather than which layer produced it. The three
+     * below them have no URL rule and are therefore the ones that still prove method security is
+     * switched on - keep at least one such path here.
+     */
     private static final String[] PRIVILEGED_ENDPOINTS = { //
             "/services/data/metadata/", // database metadata (the Database perspective)
             "/services/data/sources", // data source definitions - carry credentials
