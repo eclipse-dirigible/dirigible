@@ -87,6 +87,36 @@ class NotificationSupportTest {
     }
 
     @Test
+    void appUrlResolvesToTheConfigBackedTokenNotAnEntityField() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Order {id} total {total}. Review it here: {appUrl}/orders/{id}"),
+                        byName.get("Order"), byName, Map.of());
+
+        assertTrue(plan.loads()
+                       .isEmpty(),
+                "appUrl is a config token, not a relation - it must not register a relation load");
+        assertEquals("\"Order \" + entity.Id + \" total \" + entity.Total + \". Review it here: \""
+                + " + org.eclipse.dirigible.sdk.core.Configurations.get(\"DIRIGIBLE_APP_BASE_URL\", \"\")" + " + \"/orders/\""
+                + " + entity.Id", plan.subjectExpression());
+    }
+
+    @Test
+    void appUrlWorksAlongsideARelationFieldInTheSameBody() {
+        Map<String, EntityIntent> byName = libraryModel();
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("customer.email", "Hi {customer.name}, review it here: {appUrl}/orders/{id}"),
+                        byName.get("Order"), byName, Map.of());
+
+        assertEquals(1, plan.loads()
+                            .size(),
+                "the relation.field placeholder still registers its own load");
+        assertEquals("\"Hi \" + (customer == null ? null : customer.Name) + \", review it here: \""
+                + " + org.eclipse.dirigible.sdk.core.Configurations.get(\"DIRIGIBLE_APP_BASE_URL\", \"\")" + " + \"/orders/\""
+                + " + entity.Id", plan.subjectExpression());
+    }
+
+    @Test
     void oneHopRelationFieldLoadsTheRelatedEntity() {
         Map<String, EntityIntent> byName = libraryModel();
         NotificationSupport.Plan plan = NotificationSupport.plan(notification("customer.email", "Order for {customer.name}"),
@@ -101,6 +131,34 @@ class NotificationSupportTest {
         assertEquals("Customer", load.fkProperty());
         assertEquals("(customer == null ? null : customer.Email)", plan.toExpression());
         assertEquals("\"Order for \" + (customer == null ? null : customer.Name)", plan.subjectExpression());
+    }
+
+    @Test
+    void settingEntityRelationLoadsFromTheSettingsPerspective() {
+        // Signal --Status--> SignalStatus (function: Setting): the DAO/entity of a setting entity are
+        // generated under data/settings, so the load's perspective must be "Settings" - the entity-named
+        // perspective produced imports of a non-existent gen.<model>.data.<entityname> package and the
+        // whole client-Java batch failed to compile (the Sofia city-signals first-use failure).
+        EntityIntent status = new EntityIntent();
+        status.setName("SignalStatus");
+        status.setFunction("Setting");
+        status.setFields(List.of(field("id"), field("name")));
+        EntityIntent signal = new EntityIntent();
+        signal.setName("Signal");
+        signal.setFields(List.of(field("id"), field("title")));
+        signal.setRelations(List.of(toOne("Status", "SignalStatus")));
+        Map<String, EntityIntent> byName = new LinkedHashMap<>();
+        byName.put("SignalStatus", status);
+        byName.put("Signal", signal);
+
+        NotificationSupport.Plan plan =
+                NotificationSupport.plan(notification("ops@x.com", "Signal is now {Status.name}"), byName.get("Signal"), byName, Map.of());
+
+        assertEquals(1, plan.loads()
+                            .size());
+        assertEquals("Settings", plan.loads()
+                                     .get(0)
+                                     .targetPerspective());
     }
 
     @Test

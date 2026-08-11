@@ -44,7 +44,7 @@ import org.springframework.web.context.WebApplicationContext;
 /**
  * The Class DataExportEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

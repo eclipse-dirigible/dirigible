@@ -3,6 +3,13 @@
 Research and implementation plan for a parallel, fully-embedded runtime UI stack.
 Framework swap only; behaviour parity.
 
+> **Status: done — and no longer parallel.** The AngularJS/TypeScript application templates
+> ([#6588](https://github.com/eclipse-dirigible/dirigible/issues/6588)) and the AngularJS Dashboard
+> shell `resources-dashboard` ([#6589](https://github.com/eclipse-dirigible/dirigible/issues/6589))
+> have been removed, so Harmonia + client Java is the platform's only application stack. The
+> "parallel stack", "parity with the AngularJS views" and "replaces `resources-dashboard`" framing
+> below is the historical plan, kept as the design record.
+
 ## Goal
 
 Keep the **IDE** (Workbench, Monaco editors, entity/form/intent modelers) on **AngularJS + BlimpKit**.

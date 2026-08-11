@@ -64,6 +64,12 @@ Treat it as the contract: anything you propose must parse and validate against i
   `to` / `subject` / `body` (+ `channel: email`), with `{field}` / `{relation.field}` interpolation in
   the subject and body, plus the optional **`attach: print`** that mails the record's own rendered
   document - see *send a document by e-mail*.
+- **`{appUrl}` is a reserved config token, not a field.** It resolves to the application's external
+  base URL (`DIRIGIBLE_APP_BASE_URL`, tenant-overridable), so a body can compose a deep link by hand,
+  e.g. `body: "Review it here: {appUrl}/orders/{id}"`. It supplies only the origin - the intent layer
+  does not know the generated app's routes, so the rest of the path is plain text plus other
+  placeholders, same as any other literal. Because `appUrl` is reserved, an entity must not declare a
+  field literally named `appUrl` (it would be shadowed in every notify block).
 - **A recipient that cannot be resolved is surfaced, not silent.** If `to` names a field/relation that
   does not exist, that notification or schedule is dropped and reported in the generate response's
   `warnings` (as well as the server log) - fix the reference so the glue is emitted.
@@ -222,7 +228,7 @@ composition is opt-in.
   target (childless nodes), depth-indents the options, and the generated REST validation rejects an
   FK to a node with children (e.g. a journal line references an analytical account, never a
   synthetic one). The target entity must declare `hierarchy`. Canonical pair:
-    `- { name: Account, kind: manyToOne, to: Account, model: kf-accounts, required: true, leafOnly: true }`
+    `- { name: Account, kind: manyToOne, to: Account, model: accounts, required: true, leafOnly: true }`
 - `checks:` (entity-level) - **declarative cross-field / cross-line validations**:
   - `{ kind: exactlyOne, fields: [debit, credit], message: "..." }` (row-level): exactly one of the
     listed own fields is non-null - enforced on every user write (400).
@@ -242,16 +248,21 @@ composition is opt-in.
   ```yaml
   postings:
     - name: salesInvoicePosting
-      event: { onTransition: SalesInvoice, model: kf-mod-sales-invoices, when: "Status == 3" }
+      event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 3" }
       creates: JournalEntry            # a LOCAL document entity owning a composition items child
       backReference: SalesInvoice      # creates' to-one back to the source = the at-most-once guard
       map: { entryDate: date, customer: Customer, reason: "Sales invoice {number}" }
       rule: { entity: PostingRule, match: { documentType: "Sales Invoice" } }
       items:
-        - { Account: rule(receivableAccount), debit: "Net + Vat" }
+        - { Account: rule(receivableAccount), debit: "Net + Vat", Customer: Customer }  # copy the source FK
         - { Account: rule(revenueAccount),    credit: "Net" }
         - { Account: rule(vatAccount),        credit: "Vat", when: "Vat != 0" }
   ```
+  A to-one relation item cell whose value is a bare SOURCE relation name copies that FK id onto the
+  line (`Customer: Customer` above, or a rename `Counterparty: Supplier`) - the counterparty
+  dimension that makes an auto-posted line appear in the subledger balances (by customer/supplier).
+  The item relation and the copied source relation must be to-one to the same entity; a null source
+  FK copies null.
   The trigger is `onTransition` (a status write; the `when` status guard is mandatory) or
   `onCreate` (the source's INSERT - the trigger for a source with no status lifecycle at all, e.g.
   a booked payment whose only event is being created; `when` stays optional there as a plain
@@ -275,23 +286,37 @@ composition is opt-in.
   generateNumber -> markIssued): "the transition is final" then also means "the document is
   complete"; `map` values are a source
   property (copy), a literal, or a `{sourceProperty}` template; item values are `rule(<column>)`
-  references or arithmetic over the SOURCE's fields; a row `when` is `<SourceField> ==|!= <number>`.
+  references, arithmetic over the SOURCE's fields, or - for a to-one relation cell - a bare SOURCE
+  relation name whose FK is copied onto the line; a row `when` is `<SourceField> ==|!= <number>`.
   A missing rule row or null referenced column SKIPS the posting (the unposted worklist = final-status
-  documents with no back-referencing target), never throws. All writes go through the generated
+  documents with no back-referencing target), never throws.
+  **Conditional rule column** - when the account must be chosen by a source value (a payment posts to
+  the bank account for a transfer, the cash account for cash), a single row selects the rule column by
+  a classifier instead of duplicating the row per case (the `by`/`cases`/`default` shape the
+  conditional `dependsOn` `valueFrom` uses). Quote it - it carries colons and braces:
+  ```yaml
+    items:
+      - { Account: "rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)", debit: "Amount" }
+  ```
+  `by` is a source field/relation (compared as a number, like `when`); `cases` keys are the classifier's
+  seed ids, values are columns of the rule entity; `default` (optional) is the fallback column. No match
+  and no default - or a null selected column - skips the posting to the unposted worklist. A conditional
+  cell already branches the account, so it cannot also carry a row `when`. All writes go through the generated
   repositories, so numbering/status-init/`checks:` fire on the created document.
   **Reversal mode (red storno):** a posting with `reverses: <sibling posting name>` undoes the
   sibling's document when the source is voided/cancelled - pair it with a `transitions:` void:
   ```yaml
     - name: invoiceStorno
-      event: { onTransition: SalesInvoice, model: kf-billing, when: "Status == 8" }   # the void status
+      event: { onTransition: SalesInvoice, model: sales-invoices, when: "Status == 8" }   # the void status
       reverses: salesInvoicePosting     # sibling posting in this block
       storno: Storno                    # the created entity's to-one SELF-relation to the original
   ```
   `creates`/`backReference`/`rule`/`map`/`items` are inherited from the sibling and must not be
   declared. Semantics: locate the ORIGINAL (back-reference = this source, storno link empty) - none
   -> skip fail-soft; create the negated copy (every item amount expression negated on the SAME
-  debit/credit side - never swapped) with the `storno` link stamped; idempotent (rows carrying the
-  link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
+  debit/credit side - never swapped; a copied source-FK dimension carries through UNCHANGED, so the
+  reversal nets the same counterparty's balance) with the `storno` link stamped; idempotent (rows
+  carrying the link are the reversal's own; the sibling's guard symmetrically counts only rows without it). The
   reversal lands as a normal new document (DRAFT status init, numbering, checks), dated by its own
   `map`-inherited header - corrections post into the open period.
 - `calculatedOnCreate` / `calculatedOnUpdate` - an expression the generated repository assigns to the
@@ -325,7 +350,11 @@ gives the field a platform-allocated, gap-free document number. The intent decla
   business object**: its shape (a literal prefix + the sequence zero-padded to a total width, e.g.
   `SI00000042`) is declared once per module in a **`.numbers` artefact** at the project root
   (authored by hand, not generated - like `.roles`):
-  `{"series": [{"name": "Sales Invoice", "prefix": "SI", "size": 10}]}`. The declaration only
+  `{"series": [{"name": "Sales Invoice", "prefix": "SI", "size": 10}]}` - a partitioned series
+  (`per:`) may add `"partitions": {"table": "<TABLE>", "key": "<KEY_COL>", "label": "<LABEL_COL>"}`
+  naming the physical table its partition values come from, so the tenant's Document Numbering
+  settings can label each partition row ("Sales Invoice - ACME Ltd.") and seed a partition's
+  starting number before its first document. The declaration only
   provisions a tenant that has no such series yet; each tenant then configures prefix, width and the
   next value in the application shell's **Document Numbering** settings. Sequences are continuous
   and never auto-reset - a jurisdiction that restarts numbering each January does it by setting the
@@ -377,8 +406,9 @@ the entity.
 **Display labels (`label:` on an entity):** `label: "{number} - {date|yyyy MMMM} - {Customer.name}"`
 generates a stored, read-only `Name` property recomputed on every write - lookups and dropdowns
 then show it everywhere. Tokens: own fields or ONE-hop to-one relation properties; `|format` is a
-date pattern for temporal values; deeper paths are rejected - compose by referencing the related
-entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
+date pattern for temporal values - a `month` field's `YYYY-MM` string formats through it too
+(`{period|yyyy MMMM}` renders "2026 July"); deeper paths are rejected - compose by referencing the
+related entity's own generated label (`{Parent.Name}`). Not allowed next to an authored `name` field, and
 a token must never reference a `sensitive` field. Prefer a label for every document-ish entity a
 user will pick in a dropdown (a raw id is what renders otherwise).
 
@@ -526,6 +556,22 @@ existing breaks.
 | `List` | plain searchable list | had no composition children |
 | `Setting` | nomenclature under Settings | `kind: setting` |
 | `Calendar` | records as events on the Harmonia calendar | `view: calendar` (the role alias; the `calendar:` block is required either way) |
+| `Attachment` | uploaded files of the master (a composition child; file metadata columns injected) | - |
+| `Snapshot` | generated, immutable, versioned PDF copies of a document master (minted by the process's `generateSnapshot` delegate; served read-only) | - |
+
+A `function: Snapshot` child may declare the **render language** of its minted copies: a literal
+`language: bg`, or `languageFrom: <relation.field>` - a one-hop path on its document MASTER whose
+string field holds the language code (`languageFrom: customer.language` - the customer decides the
+invoice's language). The two are mutually exclusive; absent both, the mint uses the first entry of the
+tenant's application language set. A null/blank `languageFrom` value falls back the same way.
+
+```yaml
+  - name: SalesInvoiceCopy
+    function: Snapshot
+    languageFrom: customer.language      # the master's relation . a string field of its target
+    relations:
+      - { name: salesInvoice, kind: manyToOne, to: SalesInvoice, composition: true }
+```
 
 **Field `function`:** `DocumentTitle` (the document's title/number). **Relation `function`:**
 `EntityStatus` (the read-only status badge, valid on any entity).
@@ -590,6 +636,14 @@ bookings, day allocations, anything keyed by a date. Set `view:` on the entity (
 the role alias for `view: calendar`) and add the matching config block. The generated REST controller
 and form are reused unchanged; only the presentation differs.
 
+**A view is an ADDITIONAL page, never a replacement.** `view: calendar` / `range` / `slots` leave the
+entity's own layout (list / master / document) fully in place: the view becomes the landing browse page
+`/<Entity>`, the layout's own browse page moves to `/<Entity>/list`, both offer a switch to the other,
+and create / edit / preview stay the layout's own routes. So `function: Document` + `view: calendar`
+(or `view: slots`) is a valid, useful combination - the documents are browsed on a calendar, or booked
+from a slot picker, and still edited on the document page with their line items, Print and inline
+process tasks.
+
 - **`view: calendar`** (or `function: Calendar`) + a `calendar:` block renders the records as events on
   the Harmonia calendar. **`view: range`** uses the same block for start/end spans.
   ```yaml
@@ -614,6 +668,13 @@ and form are reused unchanged; only the presentation differs.
   master's detail pane instead of a standalone page. A `scope:` to-one relation filters the events to
   the parent whose id arrives as `?<Scope>=<id>` and prefills that FK on create - so e.g. a timesheet's
   day allocations show only that timesheet's entries.
+
+  When that composition child is the document's **line-items** entity, the document's items **pane** is
+  the calendar (instead of the row grid): clicking an event edits that line in the usual line dialog,
+  clicking an empty day adds one with that date preset, and Delete moves into the dialog. This is the
+  shape for a day-grained line - booked days, allocated hours. Declare it on the CHILD (`view:
+  calendar` + its `calendar:` block), never as a layout on the master; it cannot be combined with
+  `documentItemsLayout: chat`, which claims the same pane.
 
 - **`view: slots`** + a `slots:` block renders an appointment/booking picker (a 3-day grid of
   selectable time slots); a free slot opens the create form prefilled with the chosen date + time.
@@ -650,11 +711,54 @@ processes:
       - { name: managerReview, kind: userTask, args: { assignee: manager, form: ApproveLoan } }
 ```
 
-**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` / `end`.
-A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name a declared step or
-the literal `end`. The `trigger` fires on exactly one lifecycle event of a declared entity -
-`onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only when the
-guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+**Rules:** step `kind` is one of `userTask` / `serviceTask` / `decision` / `script` / `wait` /
+`parallel` / `end`. A `decision` must have `if` + `then`; `else` is optional. `then` / `else` must name
+a declared step or the literal `end` (or, inside a parallel branch, `join` - see below). The `trigger` fires on exactly one lifecycle event of a declared
+entity - `onCreate`, `onUpdate` or `onDelete` - and may carry a `when` guard so the process starts only
+when the guard holds, e.g. `trigger: { onUpdate: Loan, when: "status == 'OVERDUE'" }`.
+
+**Parallel branches (`kind: parallel`).** When two steps should run **concurrently** and rejoin before
+the next step - e.g. a technical and a commercial review of the same order - use a `parallel` step. It
+lists its `branches` (declared steps run at the same time) and the `next` step to continue at once every
+branch is done; it emits a BPMN parallel-gateway fork/join.
+
+```yaml
+    steps:
+      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }
+      - { name: techReview,       kind: userTask, args: { assignee: engineer, form: ReviewOrder } }
+      - { name: commercialReview, kind: userTask, args: { assignee: sales,    form: ReviewOrder } }
+      - { name: consolidate,      kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+      - { name: done, kind: end }
+```
+
+A branch is a **chain**, not a single step: it starts at the branch step and continues through that
+step's own routing (`next`, a decision's `then`/`else`, a boundary `timeout`/`expire`), and it may
+itself be a nested `parallel`. Everything reachable that way belongs to the branch and runs
+concurrently with the sibling branches.
+
+```yaml
+    steps:
+      - { name: reviews, kind: parallel, args: { branches: [techReview, commercial], next: consolidate } }
+      # branch 1 - a two-step chain: the second step declares no routing, so it joins
+      - { name: techReview,  kind: userTask,    args: { assignee: engineer, form: ReviewOrder, next: techSignoff } }
+      - { name: techSignoff, kind: serviceTask, args: { setRelationField: TechStatus, value: 2 } }
+      # branch 2 - a nested fork; it declares no `next`, so its join flows into the outer join
+      - { name: commercial,  kind: parallel,    args: { branches: [pricing, legal] } }
+      - { name: pricing,     kind: decision,    args: { if: "amount > 1000", then: escalate, else: join } }
+      - { name: escalate,    kind: userTask,    args: { assignee: manager, form: ReviewOrder } }
+      - { name: legal,       kind: userTask,    args: { assignee: legal,   form: ReviewOrder } }
+      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+```
+
+Rules: at least two `branches`, each a declared step. Inside a branch there is **no positional
+fall-through** - a step routes explicitly (`next` / `then` / `else`), or, declaring no routing at all,
+it is a branch terminal and flows into the join. Route to the literal **`join`** to converge on the
+enclosing join explicitly - needed when a decision inside a branch must rejoin from both arms (`else:
+join` above); `join` means nothing outside a branch, and no step may be named `join`. A branch must
+never route to `end`: the join would wait forever for a token that ended. A step may belong to only one
+branch, and only its fork may route into a branch - in particular a branch converges on `join`, never
+on the fork's own `next` directly. A top-level fork needs a `next` (a declared step or `end`); a
+**nested** fork may omit it, and then joins into its own enclosing join.
 
 **Business key on the trigger.** By default a started process instance's BPM business key is the
 record's primary key (a bare number in the Processes admin view). Name a more readable trigger-entity
@@ -867,9 +971,13 @@ paths / relations.
   snapshot). To see a related record's name, list `relation.field` (e.g. `customer.name`), not the bare
   FK.
 - **`editable: [Field, ...]`** opts fields back to editable; the reviewer's edits are written back to the
-  entity on completion. **Any field type may be editable** - the generated Writer coerces the value to
-  the field's Java type (date, timestamp, number, boolean, string). An editable field must also appear in
-  `fields`; a `relation.field` can never be editable.
+  entity on completion. `editable` may list ONLY **plain entity fields** of `forEntity` (string, text,
+  number, date, timestamp, boolean - the generated Writer coerces the value to the field's Java type)
+  that are **also listed in `fields`** - a field that is not displayed cannot be edited, so add it to
+  `fields` first. Neither a **relation** (a dropdown FK like `Category` or `Status` - even though
+  relations are legal in `fields`) nor a **`relation.field`** path can EVER be editable; to change a
+  related value during the flow, use `setRelationField` on a step instead (a `serviceTask` on the
+  decision branch, or the `userTask` itself for a single-action task).
 - **`actions` are the task's choices.** A **`close`** button (just closes the form, does not complete the
   task) is always added automatically - never list it yourself.
 - **Multiple completing actions REQUIRE a decision right after the task** (this is enforced at parse
@@ -960,7 +1068,8 @@ source view that, on click, clones the selected record on the server and toasts 
 ```yaml
 generates:
   - name: invoice-from-timesheet   # unique id; also names the contribution files + the controller class
-    from: ProjectTimesheet         # source entity in THIS model (loaded by the selected record's id)
+    from: ProjectTimesheet         # source entity (loaded by the selected record's id); in THIS model
+                                   #   unless `fromUses` names the model that owns it
     to: SalesInvoice               # target entity to create
     uses: sales                    # model alias (from uses:) the target lives in; omit if same model
     forEntity: ProjectTimesheet    # view that shows the button (defaults to `from`)
@@ -973,8 +1082,8 @@ generates:
     defaults:                      # target property <- now | literal (string / integer / decimal / boolean)
       InvoiceDate: now
       Note: "Generated from timesheet"
-    items:                         # optional: clone the source document's composition items too
-      from: ProjectTimesheetItem
+    items:                         # optional MIRROR form (an OBJECT): clone each source item row
+      from: ProjectTimesheetItem   #   1:1 into a target item row (map = copy, defaults = now/literal)
       to: SalesInvoiceItem
       map:
         Description: Description
@@ -983,11 +1092,83 @@ generates:
                                    # after the target is created (e.g. proforma -> INVOICED)
 ```
 
-**Rules:** unique `name`; `from` must be a declared entity in this model; `to` must be a declared
-entity (add a `uses:` alias when the target lives in another model); `forEntity` must be a declared
-entity; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
+**Cross-model SOURCE (`fromUses:`) - author the create-from on the TARGET's module.** By default the
+`from` entity is local and the target may be foreign (`uses:`). `fromUses:` mirrors that: the SOURCE is
+owned by another model and the TARGET is the local one. Both directions describe the same button; they
+differ only in which module OWNS the generated controller - and that choice decides which module's
+compiled code references which.
+
+```yaml
+# authored in `delivery-notes`, whose DeliveryNote already references inventory's GoodsIssue
+generates:
+  - name: delivery-note-from-goods-issue
+    from: GoodsIssue               # the SOURCE, owned by...
+    fromUses: inventory            # ...the `inventory` model (declare the alias under uses:)
+    to: DeliveryNote               # the TARGET, local to this model
+    forEntity: GoodsIssue          # must BE the source entity (see below)
+    map:
+      Customer: Customer
+      GoodsIssue: id
+```
+
+**Use it when the two modules would otherwise reference each other.** "A generates into B" authored in
+A puts a reference to B's entities inside A's generated controller; if B already holds a foreign key
+back into A (which is usually WHY the create-from exists), the two modules' generated Java is mutually
+dependent - neither compiles, or packages as a jar, before the other. Authoring the same create-from in
+B with `fromUses: A` leaves exactly one edge, B -> A, and the pair is a DAG again. The same reasoning
+made a schedule's source addressable across models (#6532).
+
+**Rules specific to a cross-model source:**
+- `fromUses` must be a declared `uses:` alias; the source entity, its items and its status relation are
+  resolved from that owner's `.model` (the same two-source, order-independent resolution a cross-model
+  target uses) - nothing about it is checked against this model.
+- `forEntity` **must equal `from`**. The button is contributed onto the source's view, which the owner
+  project generates; it cannot be hosted on a local view, because no record of a local view carries the
+  source id the endpoint needs.
+- The button registers on the **owner's** `<owner-project>-custom-action` extension point (the point
+  that view reads) while the descriptor file and the controller stay in this project. Contributing to
+  another module's action point is an ordinary, supported use of that point.
+- `sourceStatus:` works: the flip writes through the source's cross-model repository and publishes on
+  the OWNER's `<owner-project>-<perspective>-<Entity>-transitioned` topic, so the owner's postings and
+  integrations observe it exactly as for a local generate. Generation fails loudly if the owner entity
+  declares no `function: EntityStatus` relation.
+- A cross-model source may be combined with a cross-model target (both `fromUses:` and `uses:`); the
+  controller then simply references two foreign models and neither of them references it.
+
+**Computed line-items (the `items:` LIST form).** When the target's lines are not a 1:1 mirror of a
+source child but must be **computed** from the source record (e.g. one invoice line carrying a
+period's rolled-up total), give `items:` a **list** of synthetic rows instead of the object above.
+The target's line-items child is resolved automatically (never named). Each cell value is an
+expression over the SOURCE record - the same conventions as calculated fields and posting item
+amounts:
+
+```yaml
+    items:                         # LIST form => computed synthetic lines over the SOURCE record
+      - name: "Services for {period}"   # string cell: {field} interpolates a source property
+        quantity: 1                     # numeric cell: a Calc arithmetic expression over the source,
+        price: BillableAmount           #   rounded to the target field's scale (a literal is trivial)
+        when: "BillableAmount != 0"     # optional guard: `<SourceField> ==|!= <number>` (Calc, null-safe)
+```
+
+- A **numeric** target field (decimal/double/integer/long) takes a `Calc` arithmetic expression -
+  identifiers are **PascalCase** source field names (`BillableAmount`, `Hours * Rate`), exactly as
+  posting item amounts are authored; a null field reads as 0.
+- A **string** field takes `{field}` interpolation of source properties, a bare source-property name
+  (a copy), or a plain quoted literal (a caption is not mistaken for a field).
+- A **to-one relation** cell copies the raw source foreign key (a bare source relation name) - the
+  counterparty/dimension the line carries; it is never arithmetic-evaluated.
+- A `when` cell guards the whole line (the line is created only when the guard holds).
+- The two forms are **mutually exclusive** - a `generates` uses either the object mirror or the list.
+  The list form is not available on a scheduled generate.
+
+**Rules:** unique `name`; `from` must be a declared entity in this model (add a `fromUses:` alias when
+the source lives in another model); `to` must be a declared entity (add a `uses:` alias when the target
+lives in another model); `forEntity` must be a declared entity - and must be `from` itself when the
+source is cross-model; `scope` is `entity` or `page` (default `entity`). Every `map` value must be a **field or
 to-one relation** of the source entity - one-hop `relation.field` paths are not yet supported. `map`
-copies a source value; `defaults` sets a constant (`now` = today's date, or a literal). Do **not** map
+copies a source value; `defaults` sets a constant (`now` = today, rendered in the target field's own
+shape - a `date` field gets today's date, a `month` field the current `YYYY-MM`, a `week` field the
+current `YYYY-Www` - or a literal). Do **not** map
 the target's identity, document number, status or the item->master foreign key: they are left for the
 target to mint - the clone is saved through the **target's** generated repository, so its create-time
 logic (numbering, status init, calculated fields) fires naturally. `sourceStatus` (optional) flips the
@@ -1020,6 +1201,77 @@ A dimension may bucket a date for aggregation: `month(field)` (a sortable YYYYMM
 202607) or `year(field)` — e.g. `dimensions: ["month(date)"]` with `measures: ["sum(total)", "sum(vat)"]`
 for monthly income/VAT. (Uses standard-SQL `EXTRACT` — H2/PostgreSQL; not SQL Server.)
 `relation.field` joins to a related field, `field` is a plain column.
+
+#### reports[].scope - which lifecycle rows an aggregate counts
+
+**Use when:** the report aggregates over an entity that carries a `function: EntityStatus`, i.e. one
+with drafts, cancellations and voided documents in its table.
+
+An aggregate over such an entity is **wrong by default**: a draft nobody has issued, a cancelled and
+a voided document all land in the sum. So classify the status nomenclature once, where it is seeded,
+with the closed `stage:` vocabulary — `draft | live | cancelled | void`:
+
+```yaml
+seeds:
+  - name: sales-invoice-statuses
+    entity: SalesInvoiceStatus
+    rows:
+      - { id: 1, name: DRAFT, stage: draft }
+      - { id: 3, name: ISSUED, stage: live }
+      - { id: 7, name: PAID, stage: live }
+      - { id: 8, name: CANCELLED, stage: cancelled }
+      - { id: 9, name: VOIDED, stage: void }      # анулиране - retired, keeps its number
+```
+
+`stage` is metadata, never a column — it does not appear in the imported CSV. With it in place a
+report needs no magic-number predicate:
+
+```yaml
+reports:
+  - name: RevenueByMonth
+    source: SalesInvoice
+    # no scope: an aggregation over a stage-classified lifecycle defaults to `live`
+    dimensions: ["month(date)"]
+    measures: ["sum(total)"]
+
+  - name: InvoicesByStatus
+    source: SalesInvoice
+    scope: all                              # explicit opt-out: this report is ABOUT the lifecycle
+    dimensions: [Status]
+    measures: ["count(*)"]
+
+  - name: VoidedInvoices
+    source: SalesInvoice
+    scope: void                             # a stage name selects that stage
+    measures: ["count(*)", "sum(total)"]
+```
+
+**Rules:** `scope` is `all` or one stage name, and requires the source to declare a
+`function: EntityStatus` relation. A stage scope needs that nomenclature seeded **in this model** with
+`stage:` markers (a cross-model status entity is seeded in its owner model, so use an explicit
+`filter` there). Without an explicit `scope`, a report defaults to `live` only when it aggregates
+(has `measures`, or `kind: balance`) AND its dimensions/`filter` do not already reference the status —
+a breakdown BY status keeps every row. **Always classify a status nomenclature with `stage:`**: when it
+is unclassified, Generate reports the aggregate as lifecycle-blind and the total silently counts drafts.
+
+#### Statuses may be named, not numbered
+
+Everywhere the intent names a status - `transitions[].from` / `setStatus`, a relation's `init:`, a
+`setRelationField` `value:`, `abortOn.status`, a check's `status`/`setStatus`, `immutableWhen`, a
+posting's `event.when`, a report's `filter` - use the **seeded name** instead of the id:
+
+```yaml
+transitions:
+  - { name: VoidSalesInvoice, forEntity: SalesInvoice, from: [ISSUED, SENT], setStatus: VOIDED, when: "Paid == 0" }
+reports:
+  - { name: OverdueInvoices, source: SalesInvoice, filter: "due <= CURRENT_DATE AND Status != VOIDED", measures: ["sum(total)"] }
+```
+
+Prefer names: an id is **positional**, so inserting a status into the middle of a nomenclature shifts
+every later id and silently retargets every guard authored against the old numbering, while an unknown
+name is a generation error. Numeric ids keep working. Names have no ordering, so `Status >= ISSUED` is
+rejected - express "live rows" as a `scope`, not as an id range. A cross-model status must still be
+referenced by its numeric id (its seeds live in the other model).
 
 #### reports[].kind: balance - the accounting balance report
 
@@ -1166,6 +1418,11 @@ seeds:
 **Rules:** `entity` must be declared; integer `id`s stay integral. A row may set a to-one relation's
 FK by the relation's authored name (e.g. `Country: 34` on a City row).
 
+**A status nomenclature must also classify each row with `stage:`** (`draft | live | cancelled | void`)
+— what that status MEANS to the lifecycle. It is metadata, not a column, and it is what makes an
+aggregating report count only the economically live rows instead of silently including drafts and
+voided documents. See `reports[].scope`.
+
 **Large data sets - reference a CSV file instead of inline rows.** Small configuration sets and
 statuses belong inline (their values are part of the flows and UX); a countries/currencies-sized list
 is just data and would bloat the intent. Point the seed at an authored CSV in a **subfolder** (root
@@ -1227,7 +1484,8 @@ due date.
       subject: "Invoice {number}"        # {field} / {relation.field} interpolation
       body: "Dear {Customer.name}, please find invoice {number} attached."
       attach: print                      # render this record's .print template to PDF and attach it
-      language: bg                       # optional print-template language (default en)
+      language: bg                       # optional FIXED print-template language
+      # or: languageFrom: Customer.locale  # per-record - a one-hop relation.field holding the code
 ```
 
 **One message per related row: `forEach`.** Some sends are naturally per-row rather than per-record -
@@ -1267,7 +1525,9 @@ Where the block can sit - the three places an intent acts, plus the standalone `
 **Rules:** `attach`'s only value is `print`, and the entity the block is about must be a **document**
 (a header with a line-items child) - that is what has a print template and a generated print feeder to
 assemble its data. Attaching the print of a plain entity is a validation error, not a silent
-plain-text mail. `language` names a print-template language.
+plain-text mail. The render language: `language:` names a FIXED print-template language,
+`languageFrom: <relation.field>` reads it per record off a one-hop to-one path (mutually exclusive);
+absent both, the first entry of the tenant's application language set is used at send time.
 
 **Behavior worth knowing:**
 - **The attachment is the same PDF the Print button produces** - the generated `<Entity>PrintFeeder`
@@ -1328,7 +1588,8 @@ EmployeeTimesheet for each active employee". Per matching row, a new target reco
 saved through the target's generated repository, so its create-time logic (document numbering, status
 init, calculated fields) fires. The **row is the source**, so `from` is implicit (the schedule's
 `entity`); `map` copies a field or to-one relation of the row onto a target property, `defaults` sets
-`now` or a literal. The target may live in another model via `uses:` (same as `generates`).
+`now` (rendered in the target field's own shape - date / `YYYY-MM` month / `YYYY-Www` week) or a
+literal. The target may live in another model via `uses:` (same as `generates`).
 
 ```yaml
 schedules:
@@ -1369,11 +1630,54 @@ schedules:
           dayField: day
 ```
 
-**Rules:** unique name, a `cron`, a declared `entity`, `where` operators from the allowed list, and
-**exactly one** of `notify` (valid recipient) / `generate` (a declared/cross-model `to`, a `map` over
-the row's fields/to-one relations, optional `children`). Composition-item cloning via `items:` is
-**not** available on a schedule (it needs a selected document) - use an on-demand `generates` action
-for document-to-document cloning, or `generate.children` for the fan-out shape above.
+**Cross-model source (`model:`).** By default the `entity` is a **local** entity of this model. When
+the module that owns the CREATED rows is not where the source entity lives, add `model: <uses alias>`
+to read the source from another model - so the schedule can live with the consumer (the module it
+generates into) instead of being forced into the source's module with a back-reference. The source is
+**read-only** (a schedule never writes it). A `forEach` collection may likewise be cross-model with its
+own `model:` alias. Both aliases must be declared under the model's `uses:`.
+
+```yaml
+# lives in the module that owns the created rows (e.g. timesheets), which already uses: projects
+uses:
+  - { model: projects }
+
+schedules:
+  - name: monthlyProjectTimesheets
+    cron: "0 0 2 1 * ?"
+    entity: Project
+    model: projects                       # the source Project lives in the projects model
+    where:
+      - { field: Status, op: eq, value: 2 }
+    generate:
+      to: ProjectTimesheet                # now LOCAL (no uses: needed)
+      map: { Project: id, Customer: Customer }
+      defaults: { Period: now }
+      children:
+        - to: EmployeeTimesheet
+          parent: ProjectTimesheet
+          forEach:
+            entity: EmployeeProjectAssignment
+            model: projects               # the forEach collection is also cross-model
+            match: { Project: id }
+          map: { Employee: Employee }
+```
+
+- **v1 scope: `generate` only.** A cross-model source with a `notify` action is rejected at parse
+  (notify needs the source's relation metadata, which only a local entity carries) - keep such a
+  schedule in the source's model, or drop `model:`.
+- **Validation split** (the same one relations use): that `model:` names a declared `uses:` alias is
+  checked at parse; the source entity's existence and the `where` / `map` / `match` field references
+  are checked at **generation** against the owner's `.model` (generate the owner model first, or
+  install/publish its prebuilt module). A missing owner or a mistyped field drops that schedule with a
+  warning in the generate response - it never emits a job that cannot compile.
+
+**Rules:** unique name, a `cron`, a declared `entity` (local, or a cross-model source via `model:`),
+`where` operators from the allowed list, and **exactly one** of `notify` (valid recipient; local source
+only) / `generate` (a declared/cross-model `to`, a `map` over the row's fields/to-one relations,
+optional `children`). Composition-item cloning via `items:` is **not** available on a schedule (it needs
+a selected document) - use an on-demand `generates` action for document-to-document cloning, or
+`generate.children` for the fan-out shape above.
 
 ### integrations - outbound HTTP on a data change
 

@@ -187,5 +187,15 @@ document.addEventListener('alpine:init', () => {
       this.printRows(this.sortedItems, this.exportColumns, (r, c) => this.exportCell(r, c),
         window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}');
     },
+#if($calendarView)
+
+    // Switch to the additional calendar page (intent `view: calendar|range`), which owns /${name}.
+    goCalendar() { window.PineconeRouter.navigate('/${name}'); },
+#end
+#if($slotsView)
+
+    // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
+    goSlots() { window.PineconeRouter.navigate('/${name}'); },
+#end
   }));
 }, { once: true });

@@ -29,11 +29,15 @@
 
 // Self-contained fetch client (no window.App): every form URL is absolute (/services/...).
 const harmoniaHttp = {
-  async request(method, url, body) {
+  // Returns { data, status }. The status matters to the AngularJS $http shim below, whose callers
+  // branch on it (`if (response.status != 202)`), so it cannot be dropped on the success path.
+  async exchange(method, url, body) {
     const r = await fetch(url, {
       method,
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: body != null ? JSON.stringify(body) : undefined,
+      // A string body is already serialized - AngularJS $http passes strings through untouched, and
+      // legacy .form code posts JSON.stringify(model). Re-encoding it would send a quoted string.
+      body: body == null ? undefined : (typeof body === 'string' ? body : JSON.stringify(body)),
       credentials: 'same-origin',
     });
     if (!r.ok) {
@@ -46,10 +50,14 @@ const harmoniaHttp = {
     }
     // A success can carry an empty body (204, or a 200 from an action endpoint such as task
     // complete) — don't call r.json() on it, that throws "Unexpected end of JSON input".
-    if (r.status === 204) return null;
+    if (r.status === 204) return { data: null, status: r.status };
     const text = await r.text();
-    if (!text) return null;
-    try { return JSON.parse(text); } catch (_) { return text; }
+    if (!text) return { data: null, status: r.status };
+    try { return { data: JSON.parse(text), status: r.status }; } catch (_) { return { data: text, status: r.status }; }
+  },
+  // The neutral ctx.http contract resolves the parsed body itself.
+  async request(method, url, body) {
+    return (await this.exchange(method, url, body)).data;
   },
   get(url)        { return this.request('GET', url, undefined); },
   post(url, body) { return this.request('POST', url, body); },
@@ -64,13 +72,16 @@ function formController(ctx) {
   // onto the neutral ctx, so AngularJS-authored forms run unchanged in this standalone runtime.
   const $scope = ctx;                 // $scope.model and $scope.onXClicked = fn land on ctx
   $scope.model = ctx.model;
-  const wrap = (p) => p.then((d) => ({ data: d }))
+  // AngularJS resolves $http with { data, status, statusText, ... } and legacy .form code branches
+  // on the status (`if (response.status != 202)`), so the success path must carry it too - not just
+  // the rejection path. ctx.http resolves the body alone, hence the exchange() call here.
+  const wrap = (p) => p.then((r) => ({ data: r.data, status: r.status }))
                        .catch((e) => { throw { data: { message: e && e.message }, status: e && e.httpStatus }; });
   const $http = {
-    get:    (url)       => wrap(ctx.http.get(url)),
-    post:   (url, data) => wrap(ctx.http.post(url, data)),
-    put:    (url, data) => wrap(ctx.http.put(url, data)),
-    delete: (url)       => wrap(ctx.http.delete(url)),
+    get:    (url)       => wrap(harmoniaHttp.exchange('GET', url, undefined)),
+    post:   (url, data) => wrap(harmoniaHttp.exchange('POST', url, data)),
+    put:    (url, data) => wrap(harmoniaHttp.exchange('PUT', url, data)),
+    delete: (url)       => wrap(harmoniaHttp.exchange('DELETE', url, undefined)),
   };
   function NotificationHub() {
     return { show: (o) => ctx.notify(((o && o.title) ? o.title + ': ' : '') + ((o && o.description) || '')) };
@@ -241,8 +252,11 @@ document.addEventListener('alpine:init', () => {
     },
 
     // An HTML datetime-local value ("YYYY-MM-DDTHH:mm", local, no zone) -> a full ISO instant (…Z).
+    // A space-separated "YYYY-MM-DD HH:mm" (user-typed) is normalized first — WebKit's new Date()
+    // rejects the space form, which would pass the raw string through to the backend.
     toInstant(value) {
-      const d = new Date(String(value));
+      const s = String(value);
+      const d = new Date(s.length > 10 && s[10] === ' ' ? s.slice(0, 10) + 'T' + s.slice(11) : s);
       return isNaN(d.getTime()) ? String(value) : d.toISOString();
     },
 

@@ -175,6 +175,10 @@ document.addEventListener('alpine:init', () => {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (id) window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(id) + '/edit');
     },
-    newEntity() { window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope('')#{else}''#end); }
+    newEntity() { window.PineconeRouter.navigate('/${name}/create' + #if($calendarScopeProperty)this.withScope('')#{else}''#end); },
+
+    // Switch to the entity's own browse page (list / master / document list). The calendar took over
+    // /${name}, so that layout browses at /${name}/list.
+    goList() { window.PineconeRouter.navigate('/${name}/list'); }
   }));
 }, { once: true });

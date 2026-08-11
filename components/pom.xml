@@ -83,7 +83,6 @@
         <module>engine/engine-intent</module>
         <module>engine/engine-document</module>
         <module>engine/engine-numbering</module>
-        <module>engine/engine-odata</module>
         <module>engine/engine-open-telemetry</module>
         <module>engine/engine-camel</module>
         <module>engine/engine-ftp</module>
@@ -137,7 +136,6 @@
         <module>api/api-redis</module>
         <module>api/api-qldb</module>
         <module>api/api-pdf</module>
-        <module>api/api-junit</module>
         <module>api/api-component</module>
 
         <!-- Platform UI -->
@@ -220,7 +218,6 @@
         <module>ui/editor-csv</module>
         <module>ui/editor-csvim</module>
         <module>ui/editor-form-builder</module>
-        <module>ui/ext-documents-content-type-ms</module>
 
         <module>ui/menu-bpm</module>
         <module>ui/menu-camel</module>
@@ -250,37 +247,24 @@
         <module>resources/resources-theme-classic</module>
         <module>resources/resources-theme-high-contrast</module>
         <module>resources/resources-theme-mystic</module>
-        <module>resources/resources-dashboard</module>
         <module>resources/resources-application</module>
         <module>resources/resources-home</module>
-        <module>resources/resources-my</module>
+        <module>resources/resources-personal</module>
+        <module>resources/resources-builder</module>
         <module>resources/resources-partner</module>
         <module>resources/resources-admin</module>
+        <module>resources/resources-monitoring</module>
+        <module>resources/resources-database</module>
         <module>resources/resources-inbox</module>
         <module>resources/resources-documents</module>
         <module>resources/resources-karavan-libs</module>
         <module>resources/resources-locale</module>
 
         <!-- Templates -->
-        <module>template/template-application-angular</module>
-        <module>template/template-application-angular-java</module>
-        <module>template/template-application-angular-v2</module>
-        <module>template/template-application-dao</module>
         <module>template/template-application-dao-java</module>
-        <module>template/template-application-dao-v2</module>
-        <module>template/template-application-data</module>
-        <module>template/template-application-data-v2</module>
         <module>template/template-application-events-java</module>
-        <module>template/template-application-feed</module>
-        <module>template/template-application-feed-v2</module>
-        <module>template/template-application-odata</module>
-        <module>template/template-application-rest</module>
         <module>template/template-application-rest-java</module>
-        <module>template/template-application-rest-v2</module>
         <module>template/template-application-schema</module>
-        <module>template/template-application-ui-angular</module>
-        <module>template/template-application-ui-angular-java</module>
-        <module>template/template-application-ui-angular-v2</module>
         <module>template/template-application-ui-harmonia-java</module>
         <module>template/template-bpm</module>
         <module>template/template-camel</module>
@@ -290,10 +274,8 @@
         <module>template/template-database-table</module>
         <module>template/template-database-view</module>
         <module>template/template-form</module>
-        <module>template/template-form-builder-angularjs</module>
         <module>template/template-form-builder-harmonia</module>
         <module>template/template-hello-world</module>
-        <module>template/template-react</module>
         <module>template/template-html</module>
         <module>template/template-http-client</module>
         <module>template/template-job</module>
@@ -304,6 +286,7 @@
         <module>template/template-editor</module>
         <module>template/template-perspective</module>
         <module>template/template-mapping-javascript</module>
+        <module>template/template-mapping-java</module>
 
         <!-- Groups -->
         <module>group/group-api-core</module>
@@ -1240,12 +1223,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-ui-ext-documents-content-type-ms</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-ui-menu-bpm</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1372,11 +1349,6 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-dashboard</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-application</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -1387,7 +1359,12 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-resources-my</artifactId>
+                <artifactId>dirigible-components-resources-personal</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-builder</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1398,6 +1375,16 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-resources-admin</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-monitoring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-resources-database</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1500,42 +1487,7 @@
 
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-angular</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-angular-java</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-angular-v2</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-dao</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-dao-java</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-dao-v2</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-data</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-data-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1545,52 +1497,12 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-feed</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-feed-v2</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-odata</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-rest</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-rest-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-rest-v2</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-application-schema</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-ui-angular</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-ui-angular-java</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-application-ui-angular-v2</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1640,22 +1552,12 @@
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-form-builder-angularjs</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-form-builder-harmonia</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-hello-world</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.eclipse.dirigible</groupId>
-                <artifactId>dirigible-components-template-react</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -1706,6 +1608,11 @@
             <dependency>
                 <groupId>org.eclipse.dirigible</groupId>
                 <artifactId>dirigible-components-template-mapping-javascript</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.eclipse.dirigible</groupId>
+                <artifactId>dirigible-components-template-mapping-java</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

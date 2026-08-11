@@ -34,6 +34,11 @@
     <!-- Status pill is right-aligned: the spacer above pushes it (and the Back button) to the far end. -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
 #end
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- Immutability pre-check: the document refuses user edits/deletes in its current status, so the
+         page renders read-only and says so (the controller's 409 stays authoritative). -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
     <button type="button" x-h-button data-variant="transparent" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
@@ -93,8 +98,8 @@
         <!-- Non-setting association: combobox + Add new (opens the target's own create page in an iframe
              dialog) + Refresh, all on one full-width row. -->
         <div class="hbox gap-1 items-center">
-          <div x-h-select data-filter="contains" class="grow" :data-disabled="isPreview">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
               <template x-for="opt in options${property.name}" :key="opt.value">
@@ -106,8 +111,8 @@
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
-        <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#else :data-disabled="isPreview"#end>
-          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+        <div x-h-select data-filter="contains">
+          <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
             <template x-for="opt in options${property.name}" :key="opt.value">
@@ -222,6 +227,23 @@
         </div>
       </div>
     </div>
+#elseif($documentItemsLayout == "calendar")
+    <!-- ===== Line items on a calendar (the items child declares view: calendar) — only once the
+         document exists. Same rows and the same add/edit dialog as the table pane, just placed on a
+         timeline: clicking an event edits that line, clicking an empty day adds one with that date
+         preset. The document header, status, totals and process tasks are untouched. -->
+    <div class="vbox gap-2 w-full" x-show="itemsEnabled">
+      <div x-h-toolbar data-variant="transparent">
+        <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
+        <div x-h-toolbar-spacer></div>
+        <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button type="button" x-h-button data-variant="outline" data-size="sm" x-show="!isPreview && fillDateColumn()" @click="openFillDialog()"><i role="img" x-h-lucide data-lucide="calendar-plus"></i><span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span></button>
+      </div>
+      <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
+      <div x-h-calendar="itemsCalCfg" style="height: 420px" @event-click="onItemsEventClick" @date-click="onItemsDateClick"></div>
+    </div>
 #else
     <!-- ===== Line items (read-only table; add/edit via dialog) — only once the document exists ===== -->
     <div class="vbox gap-2 w-full" x-show="itemsEnabled">
@@ -229,21 +251,37 @@
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
         <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button type="button" x-h-button data-variant="outline" data-size="sm" x-show="!isPreview && fillDateColumn()" @click="openFillDialog()"><i role="img" x-h-lucide data-lucide="calendar-plus"></i><span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
+      <!-- The container gives an over-wide table its OWN horizontal scrollbar (w-full overflow-x-auto),
+           so it can never grow past the page column and render under the status stepper. -->
+      <div x-h-table-container>
       <table x-h-table data-borders="rows" class="w-full">
         <thead x-h-table-header>
           <tr x-h-table-row>
-            <template x-for="col in editColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
+            <template x-for="col in tableColumns" :key="col.name"><th x-h-table-head scope="col" :class="col.number ? 'text-right' : ''" x-text="T(col.tkey, col.label)"></th></template>
             <th x-h-table-head scope="col" x-show="!isPreview"></th>
           </tr>
         </thead>
         <tbody x-h-table-body>
           <template x-for="(row, idx) in items" :key="row[itemsDef.primaryKey] != null ? row[itemsDef.primaryKey] : idx">
             <tr x-h-table-row data-hoverable="true">
-              <template x-for="col in editColumns" :key="col.name">
-                <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellDisplay(col, row)"></td>
+              <template x-for="col in tableColumns" :key="col.name">
+                <!-- x-h-table-cell bakes whitespace-nowrap; a sentence-long item name is NORMAL
+                     invoice data, so text cells wrap - AT WORD BOUNDARIES, inside a bounded block.
+                     (overflow-wrap:anywhere on the cell let the column collapse to ~one character
+                     per line: it reduces the column's min-content to a single character. The block's
+                     break-word keeps min-content = the longest word; max-width caps the paragraph.) -->
+                <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                  <template x-if="col.number"><span x-text="cellDisplay(col, row)"></span></template>
+                  <template x-if="!col.number">
+                    <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellDisplay(col, row)"></div>
+                  </template>
+                </td>
               </template>
               <td x-h-table-cell data-row-actions x-show="!isPreview" @click.stop>
                 <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions">
@@ -258,10 +296,11 @@
             </tr>
           </template>
           <tr x-show="items.length === 0">
-            <td x-h-table-cell :colspan="editColumns.length + (isPreview ? 0 : 1)" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
+            <td x-h-table-cell :colspan="tableColumns.length + (isPreview ? 0 : 1)" class="text-center" x-text="T('$projectName:${tprefix}.messages.noData', 'No line items yet.')"></td>
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
 #end
 
@@ -341,6 +380,9 @@
                         <span class="text-sm truncate" x-text="row.FileName"></span>
                         <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
                       </div>
+                      <template x-if="filesReadOnly">
+                        <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" aria-label="Print"><i role="img" x-h-lucide data-lucide="printer"></i></a>
+                      </template>
                       <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
                       <template x-if="!isPreview &amp;&amp; !filesReadOnly">
                         <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
@@ -366,7 +408,12 @@
                 <template x-for="row in rows" :key="row[def.primaryKey]">
                   <tr x-h-table-row data-hoverable="true">
                     <template x-for="col in def.columns" :key="col.name">
-                      <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                      <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                        <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                        <template x-if="!col.number">
+                          <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                        </template>
+                      </td>
                     </template>
                     <td x-h-table-cell data-row-actions x-show="!isPreview">
                       <button x-h-button data-variant="transparent" data-size="sm" aria-label="Delete" @click="askDelete(row)"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
@@ -386,7 +433,7 @@
               <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
               <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
             </div>
-            <div x-h-dialog-content><p>Are you sure? This cannot be undone. The document totals will be recalculated.</p></div>
+            <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteItemsRecalc', 'Are you sure? This cannot be undone. The document totals will be recalculated.')"></p></div>
             <div x-h-dialog-footer>
               <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
               <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
@@ -402,7 +449,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
         </button>
       </template>
 #end
@@ -429,7 +476,7 @@
       </template>
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="backToList()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-      <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
+      <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="goEdit()">
         <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="backToList()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
@@ -503,18 +550,21 @@
   <div x-h-dialog-overlay :data-open="rowDialogOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : T('$projectName:${tprefix}.defaults.add', 'Add line')"></h2>
+        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : (draftMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') : T('$projectName:${tprefix}.defaults.add', 'Add line'))"></h2>
         <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="draftError"></div></div>
+        <p x-h-text.muted x-show="draftMode === 'fill'" x-text="T('$projectName:${tprefix}.messages.fillMonthHint', 'One line is created for every working day (Mon-Fri) of the picked month; days that already have a line are skipped.')"></p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <template x-for="col in editColumns" :key="col.name">
-            <div x-h-field>
+            <!-- Text and lookup fields span the whole dialog row (long names must be readable while
+                 typing); only the short paired widgets - numbers, checkboxes, date/time - share one. -->
+            <div x-h-field :style="['NUMBER','CHECKBOX','DATE','DATETIME-LOCAL'].includes(col.widget) ? '' : 'grid-column: 1 / -1'">
               <label x-h-label x-text="T(col.tkey, col.label)"></label>
               <template x-if="!col.readonly && col.widget === 'DROPDOWN'">
                 <div>
-                  <div x-h-select data-filter="contains" :data-disabled="col.readonly">
+                  <div x-h-select data-filter="contains">
                     <input x-h-select-input x-model="draft[col.name]" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select...', { name: '' })" />
                     <div x-h-select-content>
                       <div x-h-select-search></div>
@@ -526,7 +576,7 @@
                   </div>
                   <!-- Non-setting association: Add new (opens the target's create page in a dialog) + Refresh. -->
                   <div class="hbox gap-1 mt-1" x-show="col.lookup && col.lookup.creatable && !col.readonly">
-                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="'New ' + (col.lookup && col.lookup.entity)"></span></button>
+                    <button type="button" x-h-button data-variant="outline" @click="addRelatedItem(col)"><i x-h-lucide data-lucide="plus" class="size-4"></i> <span x-text="T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup && col.lookup.entity })"></span></button>
                     <button type="button" x-h-button data-variant="transparent" aria-label="Refresh" @click="refreshItemOptions(col)"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
                   </div>
                 </div>
@@ -537,11 +587,19 @@
               <template x-if="!col.readonly && col.widget === 'CHECKBOX'">
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>
               </template>
-              <template x-if="!col.readonly && col.widget === 'DATE'">
+              <template x-if="!col.readonly && col.widget === 'DATE' && !(draftMode === 'fill' && col.name === fillDateName())">
                 <div x-h-date-picker.table>
                   <input type="text" :disabled="col.readonly" />
                   <button x-h-date-picker-trigger aria-label="Choose date"></button>
                   <div x-h-date-picker-popup x-model="draft[col.name]"></div>
+                </div>
+              </template>
+              <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
+              <template x-if="!col.readonly && col.widget === 'DATE' && draftMode === 'fill' && col.name === fillDateName()">
+                <div x-h-month-picker>
+                  <input type="text" />
+                  <button x-h-month-picker-trigger aria-label="Choose month"></button>
+                  <div x-h-month-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
               <template x-if="!col.readonly && col.widget === 'DATETIME-LOCAL'">
@@ -565,9 +623,15 @@
         </div>
       </div>
       <div x-h-dialog-footer>
+#if($documentItemsLayout == "calendar")
+        <!-- The calendar pane has no per-row menu, so Delete lives here (edit mode only), pushed away
+             from Cancel/Save so it cannot be hit by accident. The margin is an inline style, not a
+             utility class: the shipped Harmonia CSS only carries the classes its own source scanned. -->
+        <button x-h-button data-variant="negative" style="margin-right: auto" x-show="draftMode === 'edit' &amp;&amp; !isPreview" @click="askDeleteDraft()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
+#end
         <button x-h-button data-variant="transparent" @click="closeRowDialog()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="primary" @click="saveDraft()" :disabled="draftSaving">
-          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
+          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : (draftMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') : T('$projectName:${tprefix}.defaults.add', 'Add'))"></span>
         </button>
       </div>
     </div>
@@ -577,13 +641,13 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog role="alertdialog">
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete line</h2>
-        <p x-h-dialog-description>Delete this line item? This cannot be undone.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteLine', 'Delete line')"></h2>
+        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.deleteLineConfirm', 'Delete this line item? This cannot be undone.')"></p>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-footer>
-        <button x-h-button data-variant="transparent" @click="deleteOpen = false">Cancel</button>
-        <button x-h-button data-variant="negative" @click="confirmDeleteRow()">Delete</button>
+        <button x-h-button data-variant="transparent" @click="deleteOpen = false" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="negative" @click="confirmDeleteRow()" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       </div>
     </div>
   </div>
@@ -593,8 +657,8 @@
   <div x-h-dialog-overlay :data-open="printLangOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Print</h2>
-        <p x-h-dialog-description>Choose the template language.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></h2>
+        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.')"></p>
         <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>

@@ -1,0 +1,128 @@
+{
+    "triggers": [
+        {
+            "process": "OrderApproval",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "topicSuffix": "",
+            "guardExpression": "",
+            "relationLinks": [
+                {
+                    "fkProperty": "Customer",
+                    "labelField": "Name",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                },
+                {
+                    "fkProperty": "Currency",
+                    "labelField": "Code",
+                    "crossModel": true,
+                    "targetProject": "codbex-currencies",
+                    "targetModel": "currencies",
+                    "targetEntity": "Currency",
+                    "targetPerspective": "Currencies"
+                }
+            ]
+        }
+    ],
+    "notifications": [
+        {
+            "name": "orderApproved",
+            "className": "OrderApprovedNotification",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "topicSuffix": "-transitioned",
+            "guardExpression": "\"APPROVED\".equals(status)",
+            "toExpression": "customer.Email",
+            "subjectExpression": "\"Order approved\"",
+            "bodyExpression": "\"Your order has been approved.\"",
+            "relationLoads": [
+                {
+                    "fkProperty": "Customer",
+                    "local": "customer",
+                    "targetEntity": "Customer",
+                    "targetPerspective": "Partners"
+                },
+                {
+                    "fkProperty": "Currency",
+                    "local": "currency",
+                    "crossModel": true,
+                    "targetModel": "currencies",
+                    "targetEntity": "Currency",
+                    "targetPerspective": "Currencies"
+                }
+            ]
+        }
+    ],
+    "rollups": [
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "",
+            "op": "sum",
+            "sumField": "Amount",
+            "countField": "Total"
+        },
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "",
+            "op": "count",
+            "countField": "LineCount"
+        },
+        {
+            "className": "SalesOrderItemRollup",
+            "childEntity": "SalesOrderItem",
+            "childPerspective": "Sales Orders",
+            "parentEntity": "SalesOrder",
+            "parentPerspective": "Sales Orders",
+            "fkProperty": "SalesOrder",
+            "topicSuffix": "-deleted",
+            "op": "sum",
+            "sumField": "Amount",
+            "countField": "Total"
+        }
+    ],
+    "aggregates": [
+        {
+            "className": "CustomerRevenue",
+            "op": "sum",
+            "sourceEntity": "SalesOrder",
+            "sourcePerspective": "Sales Orders",
+            "targetEntity": "CustomerRevenue",
+            "targetPerspective": "Analytics",
+            "targetField": "Revenue",
+            "targetPk": "Id",
+            "sumField": "Total",
+            "keys": [
+                {
+                    "key": "Customer"
+                },
+                {
+                    "key": "Year"
+                }
+            ]
+        }
+    ],
+    "setters": [
+        {
+            "process": "OrderApproval",
+            "className": "SetOrderApproved",
+            "entity": "SalesOrder",
+            "perspective": "Sales Orders",
+            "keyProperty": "Id",
+            "keyAccessor": "getId",
+            "field": "Status",
+            "value": "APPROVED"
+        }
+    ]
+}

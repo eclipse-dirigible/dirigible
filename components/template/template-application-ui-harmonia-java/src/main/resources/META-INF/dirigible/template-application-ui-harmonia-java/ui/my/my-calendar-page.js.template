@@ -147,6 +147,9 @@ document.addEventListener('alpine:init', () => {
       const id = e && e.detail && e.detail.event ? e.detail.event.id : null;
       if (id) window.PineconeRouter.navigate('/my/${name}/' + encodeURIComponent(id) + '/edit');
     },
-    newEntity() { window.PineconeRouter.navigate('/my/${name}/create'); }
+    newEntity() { window.PineconeRouter.navigate('/my/${name}/create'); },
+
+    // Switch to the personal list; the calendar took over /my/${name}.
+    goList() { window.PineconeRouter.navigate('/my/${name}/list'); }
   }));
 }, { once: true });

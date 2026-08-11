@@ -17,24 +17,26 @@
  */
 document.addEventListener('alpine:init', () => {
     // Fallbacks for shells that do not declare their own icon/description (older registrations).
-    const ICONS = { applicationShell: 'layout-grid', myShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
-        shellIde: 'code' };
+    const ICONS = { applicationShell: 'layout-grid', personalShell: 'inbox', partnerShell: 'handshake', adminShell: 'shield',
+        monitoringShell: 'activity', databaseShell: 'database', shellIde: 'code' };
     const DESCRIPTIONS = {
         applicationShell: 'All business applications in one workspace.',
-        myShell: 'Your tasks and your records - the personal workspace.',
+        personalShell: 'Your tasks and your records - the personal workspace.',
         partnerShell: 'The portal for external partners.',
         adminShell: 'Every record as a plain table and form - one level above the database.',
+        monitoringShell: 'Is the system healthy - and if not, what broke.',
+        databaseShell: 'Browse the schema, look at the data, run a SQL fix.',
+        builderShell: 'Describe an application in plain language and publish it.',
         shellIde: 'The development workbench for building on the platform.',
     };
 
     /*
-     * Registered shells that are deliberately not offered as a Home destination. They stay
-     * registered on `platform-shells` (the IDE's Window menu still lists them) and remain
-     * reachable by their own URL - Home simply is not the way in. Only the legacy
-     * AngularJS/BlimpKit dashboard, superseded by the Harmonia shells; its module stays, because
-     * the generated AngularJS apps still load its services.
+     * Registered shells that are deliberately not offered as a Home destination. Empty today: the
+     * legacy AngularJS/BlimpKit dashboard used to be hidden here, but it is no longer registered on
+     * `platform-shells` at all (its module stays for the services the generated views load), so
+     * nothing has to be filtered out of a list that is now exactly the shells this stack ships.
      */
-    const HIDDEN = ['dashboardShell'];
+    const HIDDEN = [];
 
     /*
      * Shells that belong on Home but are not where the working day starts - rendered as quiet rows
@@ -44,10 +46,15 @@ document.addEventListener('alpine:init', () => {
      *    not their way in - it is here for the employees who need to see what a partner sees.
      *  - adminShell: an operator tool. Everything it shows is reachable through the applications
      *    themselves; it is the way in only when someone needs the plain, every-column view.
+     *  - monitoringShell: an operations tool - opened when something looks wrong, not every morning.
+     *  - databaseShell: the same kind of tool one level lower - opened to look at the data behind a
+     *    problem, or to fix it. Support essentials only; the Workbench remains the deep tool.
+     *  - builderShell: like the Workbench, a way of BUILDING applications rather than working in
+     *    one, and gated to developers/administrators - so it belongs next to it, not above.
      *  - shellIde: a developer tool. Every developer is also an employee, so it must stay visible,
      *    but it should not compete with the two shells the rest of the company opens every morning.
      */
-    const SECONDARY = ['partnerShell', 'adminShell', 'shellIde'];
+    const SECONDARY = ['partnerShell', 'adminShell', 'monitoringShell', 'databaseShell', 'builderShell', 'shellIde'];
 
     Alpine.data('home', () => ({
         branding: { name: '', subtitle: '', logo: '' },

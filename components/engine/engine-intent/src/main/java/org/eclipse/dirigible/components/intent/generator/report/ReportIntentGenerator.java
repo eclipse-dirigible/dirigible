@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -28,6 +29,7 @@ import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
@@ -60,6 +62,12 @@ import org.springframework.stereotype.Component;
  * names rewritten to their qualified physical columns (so {@code dueOn <= CURRENT_DATE} ->
  * {@code Loan."LOAN_DUE_ON" <= CURRENT_DATE}); non-field tokens (operators, {@code CURRENT_DATE},
  * literals) pass through untouched.
+ *
+ * <p>
+ * {@link ReportIntent#getScope()} adds the <b>lifecycle</b> predicate on top of that - see
+ * {@link #scopePredicate}: an aggregation over an entity carrying a {@code function: EntityStatus}
+ * counts only the statuses classified {@code stage: live} unless it says otherwise, so a draft or a
+ * voided document cannot silently inflate a total.
  *
  * <p>
  * Physical table and column identifiers in the generated {@code query} are double-quoted (table
@@ -243,6 +251,10 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
         }
 
         String where = buildWhere(context, model, source, baseAlias, joins, report.getFilter());
+        String scope = scopePredicate(context, model, source, baseAlias, report, aggregated);
+        if (scope != null) {
+            where = where == null || where.isBlank() ? scope : "(" + where + ") AND " + scope;
+        }
         String query = buildQuery(baseTable, baseAlias, joins, selectParts, where, aggregated ? groupParts : List.of());
 
         Map<String, Object> document = new LinkedHashMap<>();
@@ -662,6 +674,86 @@ public class ReportIntentGenerator implements IntentTargetGenerator {
                .append(String.join(", ", groupParts));
         }
         return sql.toString();
+    }
+
+    /**
+     * The lifecycle predicate a report is restricted by:
+     * {@code <alias>."<STATUS FK>" IN (<stage ids>)}.
+     *
+     * <p>
+     * An aggregate over an entity that carries a {@code function: EntityStatus} is wrong by default -
+     * drafts nobody has issued, cancelled and voided rows all land in the sum unless the author
+     * remembers a status predicate. So a report whose source is stage-classified (see
+     * {@link LifecycleStages}) and which aggregates defaults to {@code live}: {@code scope: all} is the
+     * explicit opt-out, an explicit stage name selects that stage, and a report whose dimensions or
+     * {@code filter} already speak about the status is left exactly as authored (its own predicate is
+     * authoritative, and a breakdown BY status must not lose its draft rows).
+     *
+     * <p>
+     * When the nomenclature carries no stage classification at all there is nothing to default to - the
+     * omission is then reported as a generation warning rather than silently producing an inflated
+     * total, which is the whole point of this feature (dirigible #6645).
+     *
+     * @return the predicate, or {@code null} when the report counts every row
+     */
+    private static String scopePredicate(IntentGenerationContext context, IntentModel model, EntityIntent source, String baseAlias,
+            ReportIntent report, boolean aggregated) {
+        RelationIntent status = LifecycleStages.statusRelation(source);
+        if (status == null || status.getTo() == null) {
+            return null;
+        }
+        String declared = report.getNormalizedScope();
+        if (LifecycleStages.SCOPE_ALL.equals(declared)) {
+            return null;
+        }
+        // A cross-model nomenclature is seeded in its owner model, so no stage is resolvable here; the
+        // parser rejects an explicit scope in that case and the warning below still covers the omission.
+        Map<String, List<Integer>> stages = status.isCrossModel() ? Map.of() : LifecycleStages.stagesOf(model, status.getTo());
+        String stage = declared;
+        if (stage == null) {
+            if (!aggregated || referencesStatus(report, status.getName())) {
+                return null;
+            }
+            if (stages.isEmpty()) {
+                context.addIssue("report [" + report.getName() + "] aggregates over [" + source.getName()
+                        + "], which carries a lifecycle status [" + status.getName()
+                        + "], but neither declares `scope:` nor filters on that status - draft, cancelled and voided rows are"
+                        + " counted in every total. Classify the seed rows of [" + status.getTo()
+                        + "] with `stage:` (draft/live/cancelled/void), or declare `scope: all` to count them deliberately.");
+                return null;
+            }
+            stage = LifecycleStages.LIVE;
+        }
+        List<Integer> ids = stages.get(stage);
+        if (ids == null || ids.isEmpty()) {
+            context.addIssue("report [" + report.getName() + "] scope [" + stage + "] matches no seed row of [" + status.getTo()
+                    + "] - the report is generated over every status");
+            return null;
+        }
+        return baseAlias + "." + quote(column(source.getName(), status.getName())) + " IN (" + ids.stream()
+                                                                                                  .map(String::valueOf)
+                                                                                                  .collect(Collectors.joining(", "))
+                + ")";
+    }
+
+    /**
+     * Whether the report already speaks about its source's status - as a dimension (a breakdown BY
+     * status) or inside its {@code filter} (a hand-written predicate). Either way the authored intent
+     * wins over the implicit {@code live} default.
+     */
+    private static boolean referencesStatus(ReportIntent report, String relationName) {
+        if (relationName == null || relationName.isBlank()) {
+            return false;
+        }
+        Pattern token = Pattern.compile("\\b" + Pattern.quote(relationName) + "\\b");
+        for (String dimension : report.getDimensions()) {
+            if (dimension != null && token.matcher(dimension)
+                                          .find()) {
+                return true;
+            }
+        }
+        return report.getFilter() != null && token.matcher(report.getFilter())
+                                                  .find();
     }
 
     /**

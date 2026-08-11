@@ -11,6 +11,7 @@ package org.eclipse.dirigible.sdk.print;
 
 import java.io.IOException;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.engine.document.PrintFacade;
 import org.eclipse.dirigible.sdk.component.Beans;
 
@@ -45,5 +46,25 @@ public final class Print {
         } catch (IOException e) {
             throw new IllegalStateException("Failed to render the print for [" + entity + "] / [" + language + "]", e);
         }
+    }
+
+    /**
+     * The language a server-initiated render defaults to when nothing more specific was declared: the
+     * first entry of the application language set ({@code DIRIGIBLE_APPLICATION_LANGUAGES}). The set is
+     * tenant-overridable, so inside a tenant scope this is the TENANT's primary language, not the
+     * platform's.
+     *
+     * @return the first configured language code, {@code en} when the set is empty
+     */
+    public static String defaultLanguage() {
+        String configured = DirigibleConfig.APPLICATION_LANGUAGES.getStringValue();
+        if (configured != null) {
+            for (String code : configured.split(",")) {
+                if (!code.isBlank()) {
+                    return code.trim();
+                }
+            }
+        }
+        return "en";
     }
 }

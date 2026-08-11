@@ -87,6 +87,10 @@ public class ${className}PrintFeeder {
 #end
 
         List<Object> items = new ArrayList<>();
+#foreach($n in $itemNodes)
+        // ${n.entity} lookups (via the items' ${n.fkProperty}): one load per DISTINCT key, not per row.
+        Map<Object, gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Entity> ${n.entityVar}Cache = new LinkedHashMap<>();
+#end
         for (gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Entity item : new gen.${javaGenFolderName}.data.${itemsJavaPerspective}.${itemsEntity}Repository().findAll(Criteria.create().eq("${itemsFkProperty}", id))) {
             Map<String, Object> im = new LinkedHashMap<>();
 #foreach($s in $itemScalars)
@@ -95,6 +99,44 @@ public class ${className}PrintFeeder {
 #else
             im.put("${s.name}", item.${s.name});
 #end
+#end
+#foreach($n in $itemNodes)
+
+            // ${n.entity} (via ${n.fkProperty}) - so an items column renders {{${n.keyInParent}}} (the
+            // label) or descends into {{${n.keyInParent}.<Field>}}, exactly as the header relations do.
+            gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Entity ${n.entityVar} = null;
+            if (item.${n.fkProperty} != null) {
+                ${n.entityVar} = ${n.entityVar}Cache.get(item.${n.fkProperty});
+                if (${n.entityVar} == null) {
+                    ${n.entityVar} = new gen.${n.genFolder}.data.${n.javaPerspective}.${n.entity}Repository().findById(item.${n.fkProperty});
+                    if (${n.entityVar} != null) {
+                        ${n.entityVar}Cache.put(item.${n.fkProperty}, ${n.entityVar});
+                    }
+                }
+            }
+            Map<String, Object> ${n.mapVar} = new LinkedHashMap<>();
+            if (${n.entityVar} != null) {
+#if($n.crossModel)
+                // ${n.model} owns this record, so its fields are copied as they are TODAY rather than
+                // named here (dirigible #6422).
+                copyRecordFields(${n.entityVar}, ${n.mapVar});
+#if($n.labelField != "")
+                ${n.mapVar}.put("__label", ${n.mapVar}.get("${n.labelField}"));
+#end
+#else
+#if($n.labelField != "")
+                ${n.mapVar}.put("__label", ${n.entityVar}.${n.labelField});
+#end
+#foreach($s in $n.scalars)
+#if($s.date)
+                ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name} == null ? null : ${n.entityVar}.${s.name}.toString());
+#else
+                ${n.mapVar}.put("${s.name}", ${n.entityVar}.${s.name});
+#end
+#end
+#end
+            }
+            im.put("${n.keyInParent}", ${n.mapVar});
 #end
             items.add(im);
         }

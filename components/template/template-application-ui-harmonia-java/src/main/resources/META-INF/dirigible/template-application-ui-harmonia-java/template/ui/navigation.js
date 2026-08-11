@@ -19,14 +19,19 @@
  * One perspective per top-level entity across every primary layout plus settings, so reference data
  * (settings) can sit as first-class grouped entries (e.g. UoM/Country/Currency under "Master Data").
  */
+/*
+ * One entry per LAYOUT collection - deliberately NOT uiCalendarModels / uiSlotsModels. Those two are
+ * additional-page collections: since #6547 a calendar / slots entity keeps its own layout, so it is
+ * already a member of exactly one of the collections below. Listing them here as well emitted that
+ * entity's perspective TWICE (the same rename path generated twice, and a duplicate contribution to
+ * the application-perspectives extension point).
+ */
 const PERSPECTIVE_COLLECTIONS = [
     "uiListModels",
     "uiManageModels",
     "uiManageMasterModels",
     "uiListMasterModels",
     "uiDocumentModels",
-    "uiCalendarModels",
-    "uiSlotsModels",
     "uiSettingModels"
 ];
 

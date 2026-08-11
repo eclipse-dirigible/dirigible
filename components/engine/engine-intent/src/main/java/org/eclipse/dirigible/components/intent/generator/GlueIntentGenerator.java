@@ -30,13 +30,16 @@ import org.eclipse.dirigible.components.intent.model.InboundIntent;
 import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
+import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.ExpansionIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
+import org.eclipse.dirigible.components.intent.model.ScheduleConditionIntent;
 import org.eclipse.dirigible.components.intent.model.ScheduleIntent;
 import org.eclipse.dirigible.components.intent.model.SettlementIntent;
 import org.eclipse.dirigible.components.intent.model.UsesIntent;
+import org.eclipse.dirigible.components.intent.parser.IntentValidationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.annotation.Order;
@@ -103,7 +106,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
         List<Map<String, Object>> posts = buildPosts(model, byName, compositionParents);
         List<Map<String, Object>> aggregates = buildAggregates(model, byName, compositionParents);
         List<Map<String, Object>> printFeeders = PrintFeederSupport.buildPrintFeeders(model, byName, compositionParents, context);
-        List<Map<String, Object>> snapshots = SnapshotSupport.buildSnapshots(model, byName, compositionParents);
+        List<Map<String, Object>> snapshots =
+                SnapshotSupport.buildSnapshots(model, byName, compositionParents, crossModelLookup(model, context));
         List<Map<String, Object>> numbering = NumberingSupport.buildNumbering(model, compositionParents);
 
         if (triggers.isEmpty() && resolvers.isEmpty() && fieldLoaders.isEmpty() && timerLoaders.isEmpty() && waits.isEmpty()
@@ -167,7 +171,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             Map<String, Object> trigger = new LinkedHashMap<>();
             trigger.put("process", process.getName());
             trigger.put("entity", entity);
-            trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            trigger.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             trigger.put("keyProperty", IntentEntities.keyFieldName(byName.get(entity)));
             // The BPM business key: the flagged trigger field's property, or the primary key when none
             // is flagged (preserving the historical default). keyProperty stays the PK - the listener
@@ -202,10 +206,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * The template-ready child blocks of a scheduled generation, up to two levels. A child target
      * resolves in the SAME model as the generation target (the {@code uses} alias, or locally); the
-     * {@code forEach} collection entity is always LOCAL. The row variable is {@code r<depth>}; field
-     * assignments are pre-rendered against it, defaults against literals.
+     * {@code forEach} collection entity is LOCAL by default, or cross-model when the child's
+     * {@code forEach} carries a {@code model:} alias (resolved through {@link CrossModelSupport}). The
+     * row variable is {@code r<depth>}; field assignments are pre-rendered against it, defaults against
+     * literals.
      */
-    private static List<Map<String, Object>> buildGenerateChildren(List<GenerateChildIntent> children, UsesIntent uses,
+    private static List<Map<String, Object>> buildGenerateChildren(List<GenerateChildIntent> children, UsesIntent uses, IntentModel model,
             Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, int depth) {
         List<Map<String, Object>> result = new ArrayList<>();
         for (GenerateChildIntent child : children) {
@@ -215,8 +221,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("toEntity", child.getTo());
             entry.put("toCrossModel", crossModel);
             entry.put("toModel", crossModel ? uses.getModel() : "");
-            entry.put("toPerspective",
-                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(child.getTo(), compositionParents));
+            entry.put("toPerspective", target != null ? target.perspectiveName()
+                    : IntentEntities.resolvePerspective(child.getTo(), compositionParents, model));
             entry.put("toPk", target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(child.getTo())));
             entry.put("parentFkProperty", IntentNaming.pascalCase(child.getParent()));
             Object days = child.getForEach()
@@ -225,13 +231,32 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (days != null) {
                 entry.put("kind", "days");
                 entry.put("dayField", IntentNaming.pascalCase(child.getDayField()));
-                entry.put("fieldAssignments", childAssignments(java.util.Map.of(), child.getDefaults(), rowVar));
+                entry.put("fieldAssignments",
+                        childAssignments(java.util.Map.of(), child.getDefaults(), rowVar,
+                                temporalKinds(crossModel ? null : byName.get(child.getTo()), target),
+                                relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             } else {
                 entry.put("kind", "entity");
                 String collection = String.valueOf(child.getForEach()
                                                         .get("entity"));
+                Object forEachModelObj = child.getForEach()
+                                              .get("model");
+                boolean forEachCrossModel = forEachModelObj != null && !String.valueOf(forEachModelObj)
+                                                                              .isBlank();
                 entry.put("forEachEntity", collection);
-                entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents));
+                entry.put("forEachCrossModel", forEachCrossModel);
+                entry.put("forEachModel", forEachCrossModel ? String.valueOf(forEachModelObj) : "");
+                if (forEachCrossModel) {
+                    // The collection lives in another model; its perspective comes from the owner's
+                    // .model (already validated resolvable in firstUnresolvableScheduleRef, so this
+                    // resolve does not fail for a schedule that reached here).
+                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModelObj));
+                    CrossModelSupport.TargetInfo collectionTarget =
+                            collectionUses == null ? null : CrossModelSupport.resolve(context, collectionUses, collection);
+                    entry.put("forEachPerspective", collectionTarget != null ? collectionTarget.perspectiveName() : collection);
+                } else {
+                    entry.put("forEachPerspective", IntentEntities.resolvePerspective(collection, compositionParents, model));
+                }
                 @SuppressWarnings("unchecked")
                 Map<String, Object> match = (Map<String, Object>) child.getForEach()
                                                                        .get("match");
@@ -240,12 +265,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                            .next();
                 entry.put("matchProperty", IntentNaming.pascalCase(condition.getKey()));
                 entry.put("matchSourceExpression", "entity." + IntentNaming.pascalCase(String.valueOf(condition.getValue())));
-                entry.put("fieldAssignments", childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar));
+                entry.put("fieldAssignments",
+                        childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar,
+                                temporalKinds(crossModel ? null : byName.get(child.getTo()), target),
+                                relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             }
             entry.put("rowVar", rowVar);
             if (child.getChildren() != null && !child.getChildren()
                                                      .isEmpty()) {
-                entry.put("children", buildGenerateChildren(child.getChildren(), uses, byName, compositionParents, context, depth + 1));
+                entry.put("children",
+                        buildGenerateChildren(child.getChildren(), uses, model, byName, compositionParents, context, depth + 1));
             }
             result.add(entry);
         }
@@ -285,10 +314,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 link.put("targetProject", "");
                 link.put("targetModel", "");
                 // A setting entity's controller lives under the shared "Settings" perspective, not its
-                // own name (the template routes SETTING entities there); resolvePerspective only handles
-                // composition nesting, so special-case settings or the FK URL 404s.
-                link.put("targetPerspective", target != null && target.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                // own name - the settings-aware resolvePerspective handles it, or the FK URL 404s.
+                link.put("targetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
                 link.put("labelField", nameField(target));
             }
             links.add(link);
@@ -329,8 +356,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 trigger.put("personalTargetModel", "");
                 trigger.put("personalIdentityProperty",
                         target != null && target.getIdentity() != null ? IntentNaming.pascalCase(target.getIdentity()) : "Email");
-                trigger.put("personalTargetPerspective", target != null && target.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+                trigger.put("personalTargetPerspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             }
             return;
         }
@@ -381,8 +407,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         + "] is not a resolvable field or relation.field of [" + entity + "] - the notification was NOT generated");
                 continue;
             }
-            NotifySupport.PrintAttachment attachment =
-                    printAttachment(notification, byName.get(entity), model, context, "Notification [" + notification.getName() + "]");
+            NotifySupport.PrintAttachment attachment = printAttachment(notification, byName.get(entity), model, byName, compositionParents,
+                    context, "Notification [" + notification.getName() + "]");
             if (attachment == null && NotifySupport.attachesPrint(notification)) {
                 continue; // asked for the document but it cannot be rendered - reported above
             }
@@ -390,7 +416,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", notification.getName());
             entry.put("className", IntentNaming.pascalCase(notification.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             // The PK property an `attach: print` hands to the generated print feeder. Deliberately
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
@@ -475,13 +501,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             // imports gen.<mod>.data.<entityname> (which does not exist) instead of ...data.settings
             // and the whole client-Java batch fails to compile (a setting-entity roll-up, e.g.
             // Currency <- CurrencyRate, is the case that exposed it).
-            base.put("childPerspective",
-                    child.isSetting() ? "Settings" : IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents));
+            base.put("childPerspective", IntentEntities.resolvePerspective(rollup.getEntity(), compositionParents, model));
             base.put("parentEntity", via.getTo());
             // A cross-model parent's perspective comes from the owner's model (resolved above); a local
             // one from this model's own composition/setting layout.
             base.put("parentPerspective", crossModelParent ? parentTarget.perspectiveName()
-                    : parent.isSetting() ? "Settings" : IntentEntities.resolvePerspective(via.getTo(), compositionParents));
+                    : IntentEntities.resolvePerspective(via.getTo(), compositionParents, model));
             // Empty for a local parent - generateUtils then falls back to this project's gen folder.
             base.put("parentModel", crossModelParent ? via.getModel() : "");
             base.put("parentCrossModel", crossModelParent);
@@ -570,7 +595,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("match", pascalList(s.getMatch()));
             // invoice (this project)
             e.put("invoiceEntity", s.getInvoice());
-            e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents));
+            e.put("invoicePerspective", IntentEntities.resolvePerspective(s.getInvoice(), compositionParents, model));
             e.put("invoicePk", IntentEntities.keyFieldName(invoice));
             e.put("invoiceTotal", IntentNaming.pascalCase(s.getTotal()));
             e.put("invoicePaid", IntentNaming.pascalCase(s.getPaid()));
@@ -579,7 +604,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("payableCondition", payableCondition(s.getPayableStatuses()));
             // junction (this project)
             e.put("junctionEntity", s.getJunction());
-            e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents));
+            e.put("junctionPerspective", IntentEntities.resolvePerspective(s.getJunction(), compositionParents, model));
             e.put("junctionFkInvoice", IntentNaming.pascalCase(fkInvoice.getName()));
             e.put("junctionFkPayment", IntentNaming.pascalCase(fkPayment.getName()));
             e.put("junctionAmount", IntentNaming.pascalCase(s.getAmount()));
@@ -615,8 +640,16 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                         .isBlank()) {
                 continue;
             }
-            EntityIntent source = byName.get(g.getFrom());
-            if (source == null) {
+            // The SOURCE is normally a local entity; with `fromUses:` it is owned by another model and
+            // resolved from that model's .model exactly as a cross-model TARGET is. Authoring the
+            // create-from on the TARGET's module is what keeps the two modules' generated Java a DAG:
+            // otherwise "A generates into B" puts a reference to B inside A while B already references
+            // A, and neither can be compiled - or packaged as a jar - before the other.
+            boolean crossModelSource = g.isCrossModelSource();
+            UsesIntent fromUses = crossModelSource ? findUses(model, g.getFromUses()) : null;
+            CrossModelSupport.TargetInfo sourceInfo = fromUses == null ? null : CrossModelSupport.resolve(context, fromUses, g.getFrom());
+            EntityIntent source = crossModelSource ? null : byName.get(g.getFrom());
+            if (source == null && !crossModelSource) {
                 continue; // parser already reported the bad reference
             }
             if (!settings.shouldGenerate("generates", g.getName())) {
@@ -628,27 +661,50 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
             CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
             String toPerspective =
-                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+                    target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents, model);
             String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
+            String fromPerspective = sourceInfo != null ? sourceInfo.perspectiveName()
+                    : IntentEntities.resolvePerspective(g.getFrom(), compositionParents, model);
 
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", g.getName());
             e.put("className", IntentNaming.pascalIdentifier(g.getName()));
             e.put("crossModel", crossModel);
             e.put("fromEntity", g.getFrom());
-            e.put("fromPerspective", IntentEntities.resolvePerspective(g.getFrom(), compositionParents));
+            e.put("fromPerspective", fromPerspective);
+            // Cross-model source: the gen folder and the project that owns the source's topics/views.
+            e.put("crossModelSource", crossModelSource);
+            e.put("fromModel", crossModelSource ? g.getFromUses() : "");
+            e.put("fromProject", crossModelSource ? fromUses.resolveProject() : "");
             e.put("toEntity", g.getTo());
             e.put("toModel", crossModel ? g.getUses() : "");
             e.put("toPerspective", toPerspective);
             e.put("toPk", toPk);
-            e.put("fieldAssignments", assignments(g.getMap(), g.getDefaults(), "source"));
+            e.put("fieldAssignments",
+                    assignments(g.getMap(), g.getDefaults(), "source", temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
             // Completion hook: the SOURCE's EntityStatus FK is set to this seed id after the target
-            // is created (empty = no hook). Pre-resolved to the PascalCase FK property.
+            // is created (empty = no hook). Pre-resolved to the PascalCase FK property - locally off
+            // the relation, cross-model off the owner .model's DOCUMENT_STATUS widget.
             String sourceStatusProperty = "";
             if (g.getSourceStatus() != null) {
-                for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
-                    if (relation.isEntityStatus()) {
-                        sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
+                if (crossModelSource) {
+                    // Never guess the property name: the status FK is author-named (Status / Stage /
+                    // State), so a wrong guess would emit an updateProperty against a column that does
+                    // not exist - a failure visible only at run time, on the button's first click.
+                    if (sourceInfo == null || sourceInfo.statusProperty() == null) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(List.of("generates ["
+                                + g.getName()
+                                + "] declares sourceStatus but the function: EntityStatus relation of its cross-model source ["
+                                + g.getFrom() + "] (model [" + g.getFromUses() + "]) could not be read: either the owner entity declares "
+                                + "none, or its model was not resolvable here. Generate the [" + g.getFromUses()
+                                + "] model first, or publish its module so its .model is in the registry."));
+                    }
+                    sourceStatusProperty = sourceInfo.statusProperty();
+                } else {
+                    for (org.eclipse.dirigible.components.intent.model.RelationIntent relation : source.getRelations()) {
+                        if (relation.isEntityStatus()) {
+                            sourceStatusProperty = IntentNaming.pascalCase(relation.getName());
+                        }
                     }
                 }
             }
@@ -661,7 +717,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                                  .isBlank()
                     && items.getTo() != null && !items.getTo()
                                                       .isBlank();
+            List<Map<String, String>> lineRows = g.getItemLines();
+            // Computed-line form (issue #6555). Mutually exclusive with the mirror form - the parser
+            // rejects declaring both; here the mirror wins defensively if both slipped through.
+            boolean hasItemLines = !hasItems && lineRows != null && !lineRows.isEmpty();
             e.put("hasItems", hasItems);
+            e.put("hasItemLines", hasItemLines);
             if (hasItems) {
                 e.put("fromItemEntity", items.getFrom());
                 e.put("toItemEntity", items.getTo());
@@ -672,14 +733,68 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // its OWN package - the template must qualify srcItem with this, not the source
                 // document's perspective. (The TARGET item stays on toPerspective: a create-from
                 // always writes into the target document's own composition-item table.)
-                e.put("fromItemPerspective", IntentEntities.resolvePerspective(items.getFrom(), compositionParents));
+                // A cross-model source's items are owned by the same foreign model as the source.
+                e.put("fromItemPerspective", crossModelSource ? CrossModelSupport.resolve(context, fromUses, items.getFrom())
+                                                                                 .perspectiveName()
+                        : IntentEntities.resolvePerspective(items.getFrom(), compositionParents, model));
                 // A document child's FK back to its master is, by convention, the master entity's name.
                 e.put("srcFkProperty", IntentNaming.pascalCase(g.getFrom()));
                 e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
                 // childAssignments (not assignments) so a numeric item default renders as BigDecimal -
                 // line-item columns (quantity/price/amount) are decimal, and a bare int literal does
-                // not convert to the generated BigDecimal field.
-                e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem"));
+                // not convert to the generated BigDecimal field. The item target lives in the SAME
+                // model as the header target, so a cross-model header implies a resolvable item.
+                // A default naming a TO-ONE RELATION of the item target (a required classifier the map
+                // has no source for, e.g. a SalesInvoiceItem's TaxRate) is a foreign-key id, not an
+                // amount - it must stay an integer literal, so the relation names are passed alongside.
+                CrossModelSupport.TargetInfo itemTarget = uses == null ? null : CrossModelSupport.resolve(context, uses, items.getTo());
+                e.put("itemFieldAssignments",
+                        childAssignments(items.getMap(), items.getDefaults(), "srcItem",
+                                temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget),
+                                relationProperties(crossModel ? null : byName.get(items.getTo()), itemTarget)));
+                e.put("itemLines", new ArrayList<>());
+            } else if (hasItemLines) {
+                // The synthetic lines write into the TARGET document's composition line-items child,
+                // resolved automatically (never named in the intent): same-model from this model,
+                // cross-model from the owner .model. Its perspective == the header target's (a document
+                // renders its items there), so toJavaPerspective/toGenFolder/toPk carry over unchanged;
+                // only the item ENTITY name and its per-cell field TYPES are new. Cells are expressions
+                // over the loaded `source` master (Calc arithmetic / {} string interpolation / FK copy),
+                // the postings item-cell conventions applied to a create-from.
+                String itemEntityName;
+                Map<String, CellMeta> itemMetas;
+                if (crossModel) {
+                    CrossModelSupport.ItemsChildInfo child = CrossModelSupport.resolveItemsChild(context, uses, g.getTo());
+                    if (!child.resolved()) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                                List.of("generates [" + g.getName() + "] declares computed item lines but the cross-model target ["
+                                        + g.getTo() + "] (model [" + g.getUses() + "]) has no composition line-items child"));
+                    }
+                    itemEntityName = child.childEntity();
+                    itemMetas = crossModelCellMetas(child);
+                } else {
+                    EntityIntent itemEntity = compositionChild(byName.get(g.getTo()), byName);
+                    if (itemEntity == null) {
+                        throw new org.eclipse.dirigible.components.intent.parser.IntentValidationException(
+                                List.of("generates [" + g.getName() + "] declares computed item lines but the target [" + g.getTo()
+                                        + "] has no composition line-items child"));
+                    }
+                    itemEntityName = itemEntity.getName();
+                    itemMetas = localCellMetas(itemEntity);
+                }
+                e.put("fromItemEntity", "");
+                e.put("toItemEntity", itemEntityName);
+                e.put("fromItemPerspective", "");
+                e.put("srcFkProperty", "");
+                e.put("toFkProperty", IntentNaming.pascalCase(g.getTo()));
+                e.put("itemFieldAssignments", new ArrayList<>());
+                // Cell expressions are written over the SOURCE record, so the known-property set comes
+                // from wherever the source is defined - locally, or the owner .model for a cross-model
+                // source (an unresolved owner yields an empty set, i.e. no local name check).
+                java.util.Set<String> knownSourceProperties = crossModelSource
+                        ? (sourceInfo != null && sourceInfo.propertyNames() != null ? sourceInfo.propertyNames() : java.util.Set.of())
+                        : sourceProperties(source);
+                e.put("itemLines", computedItemLines(lineRows, itemMetas, knownSourceProperties));
             } else {
                 e.put("fromItemEntity", "");
                 e.put("toItemEntity", "");
@@ -687,6 +802,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 e.put("srcFkProperty", "");
                 e.put("toFkProperty", "");
                 e.put("itemFieldAssignments", new ArrayList<>());
+                e.put("itemLines", new ArrayList<>());
             }
             out.add(e);
         }
@@ -731,7 +847,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("name", t.getName());
             e.put("className", IntentNaming.pascalIdentifier(t.getName()));
             e.put("entity", t.getForEntity());
-            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents));
+            e.put("perspective", IntentEntities.resolvePerspective(t.getForEntity(), compositionParents, model));
             e.put("statusProperty", statusProperty);
             e.put("setStatus", String.valueOf(t.getSetStatus()));
             List<String> terms = new ArrayList<>();
@@ -800,7 +916,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             reportDroppedGlue(context, subject + " recipient [" + notify.getTo() + "] is not a resolvable field or relation.field of ["
                     + (about == null ? "?" : about.getName()) + "] - the mail was NOT generated");
         }
-        NotifySupport.PrintAttachment attachment = plan == null ? null : printAttachment(notify, about, model, context, subject);
+        NotifySupport.PrintAttachment attachment =
+                plan == null ? null : printAttachment(notify, about, model, byName, compositionParents, context, subject);
         boolean send = plan != null && (attachment != null || !NotifySupport.attachesPrint(notify));
         fields.put("notify", String.valueOf(send));
         fields.put("notifyRelationLoads", send ? relationLoads(plan) : new ArrayList<>());
@@ -898,7 +1015,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("step", sender.step());
             e.put("className", sender.className());
             e.put("entity", sender.entity());
-            e.put("perspective", IntentEntities.resolvePerspective(sender.entity(), compositionParents));
+            e.put("perspective", IntentEntities.resolvePerspective(sender.entity(), compositionParents, model));
             e.put("keyProperty", sender.keyProperty());
             e.put("keyAccessor", sender.keyAccessor());
             e.putAll(fields);
@@ -923,8 +1040,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.PostIntent}). Each descriptor drives a
      * generated event handler that, on the source document's {@code event:} event, emits mapped rows
      * into the {@code into:} target (per {@code forEach:} line item), idempotently by
-     * {@code idempotentBy}. See kf-catalog PROPOSAL_EVENT_POSTING.md. This is the structural glue; the
-     * handler template + BPMN/listener wiring is the next stage.
+     * {@code idempotentBy}. This is the structural glue; the handler template + BPMN/listener wiring is
+     * the next stage.
      */
     private static List<Map<String, Object>> buildPosts(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
@@ -994,14 +1111,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 }
                 itemsEntity = child.getName();
                 itemsFk = fk;
-                itemsPerspective = IntentEntities.resolvePerspective(child.getName(), compositionParents);
+                itemsPerspective = IntentEntities.resolvePerspective(child.getName(), compositionParents, model);
             }
 
             Map<String, Object> e = new LinkedHashMap<>();
             e.put("name", p.getName());
             e.put("className", IntentNaming.pascalIdentifier(p.getName()));
             e.put("entity", p.getForEntity());
-            e.put("sourcePerspective", IntentEntities.resolvePerspective(p.getForEntity(), compositionParents));
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(p.getForEntity(), compositionParents, model));
             e.put("sourceKeyField", IntentEntities.keyFieldName(source));
             e.put("isCreate", isCreate);
             e.put("event", p.getEvent());
@@ -1012,7 +1129,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("itemsFk", itemsFk);
             e.put("itemsPerspective", itemsPerspective);
             e.put("into", p.getInto());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(p.getInto(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(p.getInto(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(target));
             e.put("backRef", p.getIdempotentBy() == null ? "" : IntentNaming.pascalCase(p.getIdempotentBy()));
             e.put("guard", p.getGuard() == null ? "" : p.getGuard());
@@ -1078,7 +1195,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * ({@link org.eclipse.dirigible.components.intent.model.AggregateIntent}). Each drives a generated
      * handler that maintains a running sum/count of a source entity's field, grouped by its to-one
      * relations, upserted into a separate target entity keyed by that group. Structural glue; the
-     * keyed-upsert handler template is the next stage. See kf-catalog PROPOSAL_AGGREGATE_CHECKS.md.
+     * keyed-upsert handler template is the next stage.
      */
     private static List<Map<String, Object>> buildAggregates(IntentModel model, Map<String, EntityIntent> byName,
             Map<String, String> compositionParents) {
@@ -1130,12 +1247,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("className", IntentNaming.pascalIdentifier(a.getName()));
             e.put("op", op);
             e.put("sourceEntity", a.getOf());
-            e.put("sourcePerspective", IntentEntities.resolvePerspective(a.getOf(), compositionParents));
+            e.put("sourcePerspective", IntentEntities.resolvePerspective(a.getOf(), compositionParents, model));
             e.put("sourceKeyField", IntentEntities.keyFieldName(source));
             e.put("sumField", a.getSum() == null ? "" : IntentNaming.pascalCase(a.getSum()));
             e.put("keys", keys);
             e.put("targetEntity", a.getInto());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(a.getInto(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(a.getInto(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(target));
             e.put("targetField", IntentNaming.pascalCase(a.getField()));
             out.add(e);
@@ -1243,7 +1360,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             } else {
                 sourceProject = ""; // resolved to the own project name at template time
                 sourceGenFolder = "";
-                sourcePerspective = IntentEntities.resolvePerspective(sourceEntity, compositionParents);
+                sourcePerspective = IntentEntities.resolvePerspective(sourceEntity, compositionParents, model);
                 EntityIntent local = byName.get(sourceEntity);
                 if (local != null) {
                     sourceKeyField = IntentEntities.keyFieldName(local);
@@ -1279,10 +1396,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             e.put("guardProperty", guardProperty);
             e.put("guardValue", guardValue);
             e.put("targetEntity", creates.getName());
-            e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents));
+            e.put("targetPerspective", IntentEntities.resolvePerspective(creates.getName(), compositionParents, model));
             e.put("targetPk", IntentEntities.keyFieldName(creates));
             e.put("itemsEntity", itemsEntity.getName());
-            e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents));
+            e.put("itemsPerspective", IntentEntities.resolvePerspective(itemsEntity.getName(), compositionParents, model));
             e.put("itemsFk", IntentNaming.pascalCase(creates.getName()));
             e.put("backRefProperty", IntentNaming.pascalCase(effective.getBackReference()));
             // Reversal coordinates: the reversal handler locates the original through the empty
@@ -1295,14 +1412,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                                       .get("entity") != null;
             e.put("hasRule", hasRule);
             java.util.Set<String> usedRuleColumns = new java.util.LinkedHashSet<>();
+            // Conditional rule(by:...) cells (#6534): the selected column is a RUNTIME choice, so it
+            // cannot join the static usedRuleColumns null-skip (that would skip whenever ANY case column
+            // is null). Each collected expression is instead null-checked as a whole after the rule row
+            // is resolved - an unmatched/undetermined account skips the posting fail-soft.
+            List<String> conditionalRuleGuards = new ArrayList<>();
             if (hasRule) {
                 String ruleEntityName = String.valueOf(effective.getRule()
                                                                 .get("entity"));
                 e.put("ruleEntity", ruleEntityName);
                 // A setting rule entity (the normal case) lives under the global Settings perspective.
-                EntityIntent ruleEntityIntent = byName.get(ruleEntityName);
-                e.put("rulePerspective", ruleEntityIntent != null && ruleEntityIntent.isSetting() ? "Settings"
-                        : IntentEntities.resolvePerspective(ruleEntityName, compositionParents));
+                e.put("rulePerspective", IntentEntities.resolvePerspective(ruleEntityName, compositionParents, model));
                 Map<?, ?> match = (Map<?, ?>) effective.getRule()
                                                        .get("match");
                 Map.Entry<?, ?> selector = match.entrySet()
@@ -1341,14 +1461,31 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                         }
                         continue;
                     }
-                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
-                                                                             .matcher(value);
                     Map<String, Object> assign = new LinkedHashMap<>();
                     assign.put("targetProp", IntentNaming.pascalCase(cell.getKey()));
-                    if (ruleRef.matches()) {
+                    java.util.Optional<PostingRuleSelector> ruleSelector = PostingRuleSelector.parse(value);
+                    java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("rule\\((\\w+)\\)")
+                                                                             .matcher(value);
+                    if (ruleSelector.isPresent()) {
+                        // Conditional rule column (#6534): a null-safe classifier ternary that reads the
+                        // rule row's column chosen by the source's `by` value. Not a static usedRuleColumn
+                        // (the choice is per-row at runtime); its resolved value is null-guarded below.
+                        String ternary = conditionalRuleExpression(ruleSelector.get());
+                        conditionalRuleGuards.add(ternary);
+                        assign.put("expr", ternary);
+                    } else if (ruleRef.matches()) {
                         String column = IntentNaming.pascalCase(ruleRef.group(1));
                         usedRuleColumns.add(column);
                         assign.put("expr", "ruleRow." + column);
+                    } else if (toOneRelation(itemsEntity, cell.getKey()) != null) {
+                        // Source-FK copy (issue #6533): the item cell's key is a to-one relation of the
+                        // items entity, so the value names a source relation whose FK id is copied
+                        // verbatim onto the line - the counterparty dimension (Customer/Supplier) that
+                        // makes an auto-posted line show up in the subledger balances. The raw Long FK is
+                        // copied (no re-resolution); a null source FK copies null (the line simply carries
+                        // no dimension). NOT negated under reversal: a red-storno line must carry the SAME
+                        // dimension as the original, or it would not net the counterparty's balance.
+                        assign.put("expr", "source." + IntentNaming.pascalCase(value));
                     } else {
                         FieldIntent target = fieldOf(itemsEntity, cell.getKey());
                         int scale = target != null && target.getScale() != null ? target.getScale() : 2;
@@ -1364,6 +1501,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             }
             e.put("itemRows", itemRows);
             e.put("usedRuleColumns", new ArrayList<>(usedRuleColumns));
+            e.put("conditionalRuleGuards", conditionalRuleGuards);
             out.add(e);
         }
         return out;
@@ -1410,6 +1548,29 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * A posting header assignment: a bare source property name copies it; a value containing
      * {@code {prop}} placeholders becomes a Java string concatenation; anything else is a literal.
      */
+    /**
+     * The Java expression for a conditional {@code rule(by: ..., cases: ..., default: ...)} account
+     * reference (#6534): a null-safe classifier ternary that reads the resolved {@code ruleRow}'s
+     * column chosen by the source's {@code by} value. The classifier is read through the SDK
+     * {@code Calc} evaluator (null-safe, the same reader the {@code when} guard uses), each case key
+     * compared as a {@code BigDecimal}; an unmatched value falls to the {@code default} column, or to
+     * {@code null} (which the generated handler null-guards → the posting skips to the unposted
+     * worklist).
+     */
+    private static String conditionalRuleExpression(PostingRuleSelector selector) {
+        String classifier = IntentNaming.pascalCase(selector.by());
+        String expr = selector.defaultColumn() != null ? "ruleRow." + IntentNaming.pascalCase(selector.defaultColumn()) : "null";
+        List<Map.Entry<String, String>> entries = new ArrayList<>(selector.cases()
+                                                                          .entrySet());
+        for (int i = entries.size() - 1; i >= 0; i--) {
+            Map.Entry<String, String> caseEntry = entries.get(i);
+            String condition =
+                    "Calc.eval(\"" + classifier + "\", source, 6).compareTo(new java.math.BigDecimal(\"" + caseEntry.getKey() + "\")) == 0";
+            expr = condition + " ? ruleRow." + IntentNaming.pascalCase(caseEntry.getValue()) + " : " + expr;
+        }
+        return "(" + expr + ")";
+    }
+
     private static Map<String, Object> postingAssignment(String targetProperty, String value) {
         Map<String, Object> a = new LinkedHashMap<>();
         a.put("targetProp", IntentNaming.pascalCase(targetProperty));
@@ -1466,10 +1627,12 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     /**
      * Pre-render the target field assignments for a generate mapping: a {@code map} entry copies a
      * source property ({@code <sourceVar>.<Prop>}); a {@code defaults} entry sets {@code now} (today's
-     * date) or a literal. The expression is rendered here (in Java, testable) so the Velocity template
-     * only emits {@code target.<prop> = <expr>;} - no expression logic in the template.
+     * date, in the target field's own shape - see {@code literalExpression}) or a literal. The
+     * expression is rendered here (in Java, testable) so the Velocity template only emits
+     * {@code target.<prop> = <expr>;} - no expression logic in the template.
      */
-    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+    private static List<Map<String, Object>> assignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds) {
         List<Map<String, Object>> list = new ArrayList<>();
         if (map != null) {
             for (Map.Entry<String, String> entry : map.entrySet()) {
@@ -1486,7 +1649,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                      .isBlank()) {
                     continue;
                 }
-                list.add(assignment(entry.getKey(), literalExpression(entry.getValue())));
+                list.add(assignment(entry.getKey(),
+                        literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())))));
             }
         }
         return list;
@@ -1497,24 +1661,372 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * child shapes (hours, amounts) are decimal columns, and a bare int literal does not convert to the
      * generated {@code BigDecimal} field.
      */
-    private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar) {
+    private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
+            java.util.function.Function<String, String> temporalKinds, java.util.Set<String> relationProperties) {
         Map<String, String> typedDefaults = new LinkedHashMap<>();
         if (defaults != null) {
             typedDefaults.putAll(defaults);
         }
-        List<Map<String, Object>> list = assignments(map, java.util.Map.of(), sourceVar);
+        List<Map<String, Object>> list = assignments(map, java.util.Map.of(), sourceVar, temporalKinds);
         for (Map.Entry<String, String> entry : typedDefaults.entrySet()) {
             if (entry.getValue() == null || entry.getValue()
                                                  .isBlank()) {
                 continue;
             }
-            String expression = literalExpression(entry.getValue());
-            if (expression.matches("-?\\d+(\\.\\d+)?")) {
+            String expression = literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())));
+            // A to-one relation default is a foreign-key ID - the generated field is Integer, so the
+            // decimal-column convenience wrap below would not even compile against it.
+            boolean relation = relationProperties != null && relationProperties.contains(IntentNaming.pascalCase(entry.getKey()));
+            if (!relation && expression.matches("-?\\d+(\\.\\d+)?")) {
                 expression = "new java.math.BigDecimal(\"" + expression + "\")";
             }
             list.add(assignment(entry.getKey(), expression));
         }
         return list;
+    }
+
+    /**
+     * The pascal-cased names of the item target's to-one relations - locally from its intent relations,
+     * cross-model from the owner {@code .model}'s widget types (the edm generator gives every to-one FK
+     * the DROPDOWN - or, for the EntityStatus one, DOCUMENT_STATUS - widget, so the owner model carries
+     * the fact without a new attribute).
+     */
+    private static java.util.Set<String> relationProperties(EntityIntent local, CrossModelSupport.TargetInfo target) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        if (local != null && local.getRelations() != null) {
+            for (RelationIntent relation : local.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null) {
+                    names.add(IntentNaming.pascalCase(relation.getName()));
+                }
+            }
+        }
+        if (target != null && target.propertyWidgets() != null) {
+            for (Map.Entry<String, String> widget : target.propertyWidgets()
+                                                          .entrySet()) {
+                if ("DROPDOWN".equals(widget.getValue()) || "DOCUMENT_STATUS".equals(widget.getValue())) {
+                    names.add(widget.getKey());
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * The rendering-relevant type of a target line-items cell: its logical {@code kind} ({@code string}
+     * / {@code decimal} / {@code double} / {@code integer} / {@code long} / {@code boolean} /
+     * {@code date} / {@code timestamp} / {@code month} / {@code week} / {@code unknown}), the decimal
+     * {@code scale} (for the {@code Calc} rounding of a numeric cell) and whether the cell is a to-one
+     * {@code relation} (a foreign-key copy, not an arithmetic value).
+     */
+    private record CellMeta(String kind, int scale, boolean relation) {
+    }
+
+    /**
+     * The cell metas of a SAME-model target items child, read from its intent fields / to-one
+     * relations.
+     */
+    private static Map<String, CellMeta> localCellMetas(EntityIntent itemEntity) {
+        Map<String, CellMeta> metas = new LinkedHashMap<>();
+        if (itemEntity.getRelations() != null) {
+            for (RelationIntent relation : itemEntity.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null) {
+                    metas.put(IntentNaming.pascalCase(relation.getName()), new CellMeta("relation", 0, true));
+                }
+            }
+        }
+        if (itemEntity.getFields() != null) {
+            for (FieldIntent field : itemEntity.getFields()) {
+                if (field.getName() == null || field.getType() == null) {
+                    continue;
+                }
+                int scale = field.getScale() != null ? field.getScale() : 2;
+                metas.put(IntentNaming.pascalCase(field.getName()), new CellMeta(kindOfIntentType(field.getType()), scale, false));
+            }
+        }
+        return metas;
+    }
+
+    /** The cell metas of a CROSS-model target items child, read from the owner {@code .model}. */
+    private static Map<String, CellMeta> crossModelCellMetas(CrossModelSupport.ItemsChildInfo child) {
+        Map<String, CellMeta> metas = new LinkedHashMap<>();
+        for (Map.Entry<String, String> property : child.propertyTypes()
+                                                       .entrySet()) {
+            String name = property.getKey(); // owner .model property names are already PascalCase
+            if (child.relationProperties()
+                     .contains(name)) {
+                metas.put(name, new CellMeta("relation", 0, true));
+                continue;
+            }
+            String widget = child.propertyWidgets()
+                                 .get(name);
+            String kind;
+            if ("MONTH".equals(widget)) {
+                kind = "month";
+            } else if ("WEEK".equals(widget)) {
+                kind = "week";
+            } else {
+                kind = kindOfJdbcType(property.getValue());
+            }
+            int scale = child.propertyScales()
+                             .getOrDefault(name, 2);
+            metas.put(name, new CellMeta(kind, scale, false));
+        }
+        return metas;
+    }
+
+    /** Logical cell kind for an intent field type (same-model target). */
+    private static String kindOfIntentType(String type) {
+        return switch (type.toLowerCase(java.util.Locale.ROOT)) {
+            case "string", "text", "uuid" -> "string";
+            case "integer", "int" -> "integer";
+            case "long" -> "long";
+            case "decimal" -> "decimal";
+            case "double" -> "double";
+            case "boolean" -> "boolean";
+            case "date" -> "date";
+            case "timestamp" -> "timestamp";
+            case "month" -> "month";
+            case "week" -> "week";
+            default -> "unknown";
+        };
+    }
+
+    /**
+     * Logical cell kind for a JDBC {@code dataType} (cross-model target, read from the owner .model).
+     */
+    private static String kindOfJdbcType(String dataType) {
+        return switch (dataType == null ? "" : dataType.toUpperCase(java.util.Locale.ROOT)) {
+            case "VARCHAR", "CHAR", "CLOB", "LONGVARCHAR", "NVARCHAR" -> "string";
+            case "DECIMAL", "NUMERIC" -> "decimal";
+            case "DOUBLE", "REAL", "FLOAT" -> "double";
+            case "INTEGER", "SMALLINT", "TINYINT" -> "integer";
+            case "BIGINT" -> "long";
+            case "BOOLEAN", "BIT" -> "boolean";
+            case "DATE" -> "date";
+            case "TIMESTAMP", "TIME" -> "timestamp";
+            default -> "unknown";
+        };
+    }
+
+    /**
+     * PascalCase names of the source entity's fields + to-one relations (drives string-cell
+     * copy/interpolation).
+     */
+    private static java.util.Set<String> sourceProperties(EntityIntent source) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        if (source == null) {
+            return names;
+        }
+        if (source.getFields() != null) {
+            for (FieldIntent field : source.getFields()) {
+                if (field.getName() != null) {
+                    names.add(IntentNaming.pascalCase(field.getName()));
+                }
+            }
+        }
+        if (source.getRelations() != null) {
+            for (RelationIntent relation : source.getRelations()) {
+                if (relation.getName() != null) {
+                    names.add(IntentNaming.pascalCase(relation.getName()));
+                }
+            }
+        }
+        return names;
+    }
+
+    /**
+     * Render the computed line-items ({@code itemLines}, issue #6555): one entry per synthetic line,
+     * each {@code {guard, assigns:[{targetProp, expr}]}} - the same pre-rendered shape a posting item
+     * row uses, so the template stays logic-free. Every {@code expr} runs over the loaded
+     * {@code source} master. A {@code when} cell becomes the row guard.
+     */
+    private static List<Map<String, Object>> computedItemLines(List<Map<String, String>> rows, Map<String, CellMeta> metas,
+            java.util.Set<String> sourceProps) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        for (Map<String, String> row : rows) {
+            Map<String, Object> rendered = new LinkedHashMap<>();
+            List<Map<String, Object>> assigns = new ArrayList<>();
+            String guard = "";
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                if ("when".equalsIgnoreCase(cell.getKey())) {
+                    guard = computedGuard(value);
+                    continue;
+                }
+                CellMeta meta = metas.get(IntentNaming.pascalCase(cell.getKey()));
+                assigns.add(assignment(cell.getKey(), computedCellExpression(value, meta, sourceProps)));
+            }
+            rendered.put("guard", guard);
+            rendered.put("assigns", assigns);
+            out.add(rendered);
+        }
+        return out;
+    }
+
+    /**
+     * A single computed-line cell as a Java expression over {@code source}: a to-one relation copies
+     * the source foreign key ({@code source.<Prop>}, issue #6533 parity); a numeric field is a
+     * {@code Calc} arithmetic expression rounded to its scale (integer/long narrowed off the
+     * {@code BigDecimal}); a string field is a {@code {field}}-interpolated concatenation, a bare
+     * source-property copy, or a quoted literal; a {@code month}/{@code week}/date/boolean field takes
+     * {@code now} / a literal.
+     */
+    private static String computedCellExpression(String value, CellMeta meta, java.util.Set<String> sourceProps) {
+        String v = value == null ? "" : value.trim();
+        if (meta != null && meta.relation()) {
+            return "source." + IntentNaming.pascalCase(v);
+        }
+        String kind = meta == null ? "unknown" : meta.kind();
+        int scale = meta == null ? 2 : meta.scale();
+        switch (kind) {
+            case "decimal":
+                return calcExpression(v, scale);
+            case "double":
+                return calcExpression(v, scale) + ".doubleValue()";
+            case "integer":
+                return calcExpression(v, 0) + ".intValue()";
+            case "long":
+                return calcExpression(v, 0) + ".longValue()";
+            case "boolean":
+            case "date":
+            case "timestamp":
+            case "month":
+            case "week": {
+                // A bare source property copies it (e.g. a date carried over from the source); otherwise
+                // `now` / a literal in the field's own shape (month -> YYYY-MM, week -> YYYY-Www, else
+                // LocalDate / boolean / quoted string).
+                String copy = bareSourceCopy(v, sourceProps);
+                String temporalKind = "month".equals(kind) || "week".equals(kind) ? kind : null;
+                return copy != null ? copy : literalExpression(v, temporalKind);
+            }
+            case "string":
+                return stringCellExpression(v, sourceProps);
+            default:
+                // unknown: only when a cross-model item child is unresolved (null-context unit tests);
+                // best effort - an arithmetic-looking value is numeric, otherwise a string.
+                return v.matches("[\\w.]*[-+*/()][\\w.+\\-*/() ]*") ? calcExpression(v, scale) : stringCellExpression(v, sourceProps);
+        }
+    }
+
+    /**
+     * {@code Calc.eval("<expr>", source, <scale>)} - the calculated-field / posting-amount convention.
+     */
+    private static String calcExpression(String expr, int scale) {
+        return "Calc.eval(\"" + expr.replace("\\", "\\\\")
+                                    .replace("\"", "\\\"")
+                + "\", source, " + scale + ")";
+    }
+
+    /**
+     * A string cell: {@code {field}} placeholders become a Java concatenation over {@code source}; a
+     * bare identifier that IS a source property copies it ({@code source.<Prop>}); anything else is a
+     * quoted literal (so a plain caption like {@code "Consulting services"} is NOT read as a field).
+     */
+    private static String stringCellExpression(String v, java.util.Set<String> sourceProps) {
+        if (v.contains("{")) {
+            StringBuilder expr = new StringBuilder();
+            java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                               .matcher(v);
+            int last = 0;
+            while (m.find()) {
+                if (m.start() > last) {
+                    appendConcat(expr, '"' + v.substring(last, m.start())
+                                              .replace("\"", "\\\"")
+                            + '"');
+                }
+                appendConcat(expr, "String.valueOf(source." + IntentNaming.pascalCase(m.group(1)) + ")");
+                last = m.end();
+            }
+            if (last < v.length()) {
+                appendConcat(expr, '"' + v.substring(last)
+                                          .replace("\"", "\\\"")
+                        + '"');
+            }
+            return expr.length() == 0 ? "\"\"" : expr.toString();
+        }
+        String copy = bareSourceCopy(v, sourceProps);
+        if (copy != null) {
+            return copy;
+        }
+        return "\"" + v.replace("\\", "\\\\")
+                       .replace("\"", "\\\"")
+                       .replace("\n", "\\n")
+                       .replace("\r", "\\r")
+                + "\"";
+    }
+
+    /**
+     * {@code source.<Prop>} when {@code v} is a bare identifier naming a source property, else null.
+     */
+    private static String bareSourceCopy(String v, java.util.Set<String> sourceProps) {
+        if (v.matches("[A-Za-z_]\\w*") && sourceProps.contains(IntentNaming.pascalCase(v))) {
+            return "source." + IntentNaming.pascalCase(v);
+        }
+        return null;
+    }
+
+    private static void appendConcat(StringBuilder expr, String term) {
+        if (expr.length() > 0) {
+            expr.append(" + ");
+        }
+        expr.append(term);
+    }
+
+    /**
+     * A computed-line {@code when} guard as a null-safe {@code Calc} comparison over {@code source} -
+     * the postings item-row guard convention ({@code <field> ==|!= <n>}); an unparseable guard yields
+     * no guard (the line is always created).
+     */
+    private static String computedGuard(String value) {
+        java.util.regex.Matcher guard = java.util.regex.Pattern.compile("\\s*(\\w+)\\s*([!=]=)\\s*(\\d+(?:\\.\\d+)?)\\s*")
+                                                               .matcher(value);
+        if (guard.matches()) {
+            return "Calc.eval(\"" + IntentNaming.pascalCase(guard.group(1)) + "\", source, 6).compareTo(new java.math.BigDecimal(\""
+                    + guard.group(3) + "\")) " + ("==".equals(guard.group(2)) ? "==" : "!=") + " 0";
+        }
+        return "";
+    }
+
+    /**
+     * The logical temporal kind of the TARGET entity's fields, for the type-aware {@code now} default:
+     * PascalCase property name -> {@code month} / {@code week}; anything else absent (null). A
+     * same-model target reads its intent fields directly; a cross-model target reads the owner model's
+     * widget types through {@link CrossModelSupport.TargetInfo#propertyWidgets()} - the {@code .model}
+     * is the only cross-model carrier of the LOGICAL type, since month/week are plain VARCHAR at the
+     * JDBC level. An unresolved target (unit test / convention fallback) keeps the untyped behavior.
+     */
+    private static java.util.function.Function<String, String> temporalKinds(EntityIntent local, CrossModelSupport.TargetInfo target) {
+        Map<String, String> kinds = new LinkedHashMap<>();
+        if (local != null && local.getFields() != null) {
+            for (FieldIntent field : local.getFields()) {
+                if (field.getName() == null || field.getType() == null) {
+                    continue;
+                }
+                String type = field.getType()
+                                   .toLowerCase(java.util.Locale.ROOT);
+                if ("month".equals(type) || "week".equals(type)) {
+                    kinds.put(IntentNaming.pascalCase(field.getName()), type);
+                }
+            }
+        }
+        if (target != null && target.propertyWidgets() != null) {
+            for (Map.Entry<String, String> widget : target.propertyWidgets()
+                                                          .entrySet()) {
+                if ("MONTH".equals(widget.getValue())) {
+                    kinds.put(widget.getKey(), "month");
+                } else if ("WEEK".equals(widget.getValue())) {
+                    kinds.put(widget.getKey(), "week");
+                }
+            }
+        }
+        return kinds::get;
     }
 
     private static Map<String, Object> assignment(String targetProperty, String expression) {
@@ -1525,12 +2037,23 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     }
 
     /**
-     * A Java expression for a {@code defaults} value: {@code now} -> today's {@code LocalDate}; an
-     * integer / decimal / boolean literal -> its Java form; anything else -> a quoted Java string.
+     * A Java expression for a {@code defaults} value: {@code now} -> today's value in the TARGET
+     * field's own shape - a {@code month} field gets the {@code YYYY-MM} string, a {@code week} field
+     * the {@code YYYY-Www} ISO-week string, anything else today's {@code LocalDate} (month/week are
+     * plain {@code String} properties on the generated entity, so the untyped {@code LocalDate.now()}
+     * would not even compile against them); an integer / decimal / boolean literal -> its Java form;
+     * anything else -> a quoted Java string.
      */
-    private static String literalExpression(String value) {
+    private static String literalExpression(String value, String temporalKind) {
         String v = value.trim();
         if ("now".equals(v)) {
+            if ("month".equals(temporalKind)) {
+                return "java.time.YearMonth.now().toString()";
+            }
+            if ("week".equals(temporalKind)) {
+                return "String.format(\"%04d-W%02d\", java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_BASED_YEAR), "
+                        + "java.time.LocalDate.now().get(java.time.temporal.IsoFields.WEEK_OF_WEEK_BASED_YEAR))";
+            }
             return "java.time.LocalDate.now()";
         }
         if ("true".equals(v) || "false".equals(v)) {
@@ -1649,10 +2172,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             String fkProperty = IntentNaming.pascalCase(back.getName());
             Map<String, Object> base = new LinkedHashMap<>();
             base.put("masterEntity", expansion.getFrom());
-            base.put("masterPerspective", IntentEntities.resolvePerspective(expansion.getFrom(), compositionParents));
+            base.put("masterPerspective", IntentEntities.resolvePerspective(expansion.getFrom(), compositionParents, model));
             base.put("masterPk", IntentEntities.keyFieldName(master));
             base.put("childEntity", expansion.getInto());
-            base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents));
+            base.put("childPerspective", IntentEntities.resolvePerspective(expansion.getInto(), compositionParents, model));
             base.put("fkProperty", fkProperty);
             base.put("startProperty", IntentNaming.pascalCase(expansion.getBetween()
                                                                        .getStart()));
@@ -1801,7 +2324,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", webhook.getName());
             entry.put("className", IntentNaming.pascalCase(webhook.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             entry.put("path", webhook.getPath());
             inbound.add(entry);
         }
@@ -1828,7 +2351,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("name", integration.getName());
             entry.put("className", IntentNaming.pascalCase(integration.getName()));
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents, model));
             entry.put("topicSuffix", EventBinding.topicSuffix(EventBinding.kind(integration.getEvent())));
             entry.put("clientMethod", IntegrationSupport.clientMethod(integration.getMethod()));
             entry.put("hasBody", IntegrationSupport.hasBody(integration.getMethod()));
@@ -1847,7 +2370,27 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             String entity = schedule.getEntity();
-            if (entity == null || !byName.containsKey(entity)) {
+            // The source entity may live in another model (model: <uses alias>). It is resolved against
+            // the owner's .model through CrossModelSupport (workspace first, registry fallback) - the
+            // same two-tier, order-independent resolution relations / dependsOn / leafOnly use. A null
+            // context (unit test) yields the naming-convention defaults so the shape can be asserted
+            // without a repository.
+            boolean sourceCrossModel = schedule.getModel() != null && !schedule.getModel()
+                                                                               .isBlank();
+            CrossModelSupport.TargetInfo sourceTarget = null;
+            if (sourceCrossModel) {
+                UsesIntent sourceUses = findUses(model, schedule.getModel());
+                if (sourceUses == null) {
+                    continue; // parser already reported the undeclared alias
+                }
+                try {
+                    sourceTarget = CrossModelSupport.resolve(context, sourceUses, entity);
+                } catch (IntentValidationException ex) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] source entity [" + entity + "] in model ["
+                            + schedule.getModel() + "] cannot be resolved: " + ex.getMessage() + " - the schedule was NOT generated");
+                    continue;
+                }
+            } else if (entity == null || !byName.containsKey(entity)) {
                 continue;
             }
             boolean generates = schedule.getGenerate() != null;
@@ -1858,6 +2401,19 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 LOGGER.info("Settings opt-out: keeping existing job for schedule [{}] (not generated)", schedule.getName());
                 continue;
             }
+            // Never emit a job that cannot compile: for a cross-model source, validate every reference
+            // that resolves against the source row (where fields, generate.map sources, child match
+            // sources) - and, for a cross-model forEach collection, its own match/map references -
+            // against the owner's properties, dropping the schedule loudly on a miss. Skipped when the
+            // owner model was not resolved (convention fallback), the same rule dependsOn uses.
+            if (sourceCrossModel) {
+                String missingRef = firstUnresolvableScheduleRef(model, schedule, sourceTarget, context);
+                if (missingRef != null) {
+                    reportDroppedGlue(context, "Schedule [" + schedule.getName() + "] " + missingRef + " does not resolve against the ["
+                            + schedule.getModel() + "] source - the schedule was NOT generated");
+                    continue;
+                }
+            }
 
             Map<String, Object> entry = new LinkedHashMap<>();
             entry.put("name", schedule.getName());
@@ -1865,11 +2421,17 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             entry.put("className", IntentNaming.pascalIdentifier(schedule.getName()));
             entry.put("cron", schedule.getCron());
             entry.put("entity", entity);
-            entry.put("perspective", IntentEntities.resolvePerspective(entity, compositionParents));
+            // A cross-model source's generated job imports the OWNER's gen classes (the leafOnly
+            // precedent); sourceModel drives the sanitized gen folder in the template, and the
+            // perspective / key come from the owner's .model.
+            entry.put("sourceCrossModel", sourceCrossModel);
+            entry.put("sourceModel", sourceCrossModel ? schedule.getModel() : "");
+            entry.put("perspective", sourceCrossModel ? sourceTarget.perspectiveName()
+                    : IntentEntities.resolvePerspective(entity, compositionParents, model));
             // The PK property an `attach: print` hands to the generated print feeder. Deliberately
             // NOT named keyProperty: that key marks a TRIGGER entry (its process variable), and the
             // engine IT keys "no trigger was generated" on trigger-only keys being absent.
-            entry.put("attachKeyProperty", IntentEntities.keyFieldName(byName.get(entity)));
+            entry.put("attachKeyProperty", sourceCrossModel ? sourceTarget.keyField() : IntentEntities.keyFieldName(byName.get(entity)));
             entry.put("criteriaExpression", ScheduleSupport.criteriaExpression(schedule));
             // The attachment keys are always present (empty for a generate schedule): an undefined
             // Velocity variable renders as its own name, so a template must never rely on absence.
@@ -1886,7 +2448,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 UsesIntent uses = crossModel ? findUses(model, g.getUses()) : null;
                 CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, g.getTo());
                 String toPerspective =
-                        target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents);
+                        target != null ? target.perspectiveName() : IntentEntities.resolvePerspective(g.getTo(), compositionParents, model);
                 String toPk = target != null ? target.keyField() : IntentEntities.keyFieldName(byName.get(g.getTo()));
                 entry.put("action", "generate");
                 entry.put("genCrossModel", crossModel);
@@ -1894,13 +2456,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 entry.put("genToModel", crossModel ? g.getUses() : "");
                 entry.put("genToPerspective", toPerspective);
                 entry.put("genToPk", toPk);
-                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity"));
+                entry.put("genFieldAssignments", assignments(g.getMap(), g.getDefaults(), "entity",
+                        temporalKinds(crossModel ? null : byName.get(g.getTo()), target)));
                 if (g.getChildren() != null && !g.getChildren()
                                                  .isEmpty()) {
                     // Collection-driven children: one row per element of a source collection, saved
                     // under the just-generated parent. Everything is pre-rendered here (the
                     // expansions convention) - the job template stays shape-only.
-                    entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, byName, compositionParents, context, 1));
+                    entry.put("genChildren", buildGenerateChildren(g.getChildren(), uses, model, byName, compositionParents, context, 1));
                 }
             } else {
                 // The per-row action reuses the notification machinery against the queried row entity.
@@ -1912,8 +2475,8 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                             + "] is not a resolvable field or relation.field of [" + entity + "] - the schedule was NOT generated");
                     continue;
                 }
-                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, context,
-                        "Schedule [" + schedule.getName() + "] notify");
+                NotifySupport.PrintAttachment attachment = printAttachment(schedule.getNotify(), byName.get(entity), model, byName,
+                        compositionParents, context, "Schedule [" + schedule.getName() + "] notify");
                 if (attachment == null && NotifySupport.attachesPrint(schedule.getNotify())) {
                     continue; // asked for the document but it cannot be rendered - reported above
                 }
@@ -1937,6 +2500,108 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
     static List<Map<String, Object>> buildSchedulesForTest(IntentModel model) {
         return buildSchedules(model, IntentEntities.byName(model), IntentEntities.compositionParents(model), IntentSettings.parse("{}"),
                 null);
+    }
+
+    /**
+     * The first cross-model schedule reference that does not resolve against its owner model, or
+     * {@code null} when every reference resolves. Validates the references that read the source row
+     * (each {@code where} field, each {@code generate.map} source, and recursively each child
+     * {@code forEach.match} source) against the source's properties, and - for a cross-model
+     * {@code forEach} collection - its own match-key + child-map references against the collection
+     * owner's properties. Skips a source/collection whose owner model was not resolved
+     * ({@code propertyNames() == null}, the convention fallback), the same tolerance {@code dependsOn}
+     * uses.
+     */
+    private static String firstUnresolvableScheduleRef(IntentModel model, ScheduleIntent schedule,
+            CrossModelSupport.TargetInfo sourceTarget, IntentGenerationContext context) {
+        java.util.Set<String> sourceProps = sourceTarget == null ? null : sourceTarget.propertyNames();
+        if (sourceProps != null) {
+            for (ScheduleConditionIntent condition : schedule.getWhere()) {
+                if (isMissing(sourceProps, condition.getField())) {
+                    return "where field [" + condition.getField() + "]";
+                }
+            }
+            for (Map.Entry<String, String> mapping : schedule.getGenerate()
+                                                             .getMap()
+                                                             .entrySet()) {
+                if (isMissing(sourceProps, mapping.getValue())) {
+                    return "generate map source [" + mapping.getValue() + "]";
+                }
+            }
+        }
+        return firstUnresolvableChildRef(model, schedule.getGenerate()
+                                                        .getChildren(),
+                sourceProps, context);
+    }
+
+    /**
+     * Recursive helper for {@link #firstUnresolvableScheduleRef}: validates every child's
+     * {@code forEach.match} source against the (cross-model) source row, and - for a cross-model
+     * {@code forEach} collection - its match-key + this child's {@code map} sources against the
+     * collection owner's properties.
+     */
+    private static String firstUnresolvableChildRef(IntentModel model, List<GenerateChildIntent> children,
+            java.util.Set<String> sourceProps, IntentGenerationContext context) {
+        if (children == null) {
+            return null;
+        }
+        for (GenerateChildIntent child : children) {
+            Object matchObject = child.getForEach()
+                                      .get("match");
+            if (matchObject instanceof Map) {
+                Map<?, ?> match = (Map<?, ?>) matchObject;
+                if (sourceProps != null) {
+                    for (Map.Entry<?, ?> condition : match.entrySet()) {
+                        if (isMissing(sourceProps, String.valueOf(condition.getValue()))) {
+                            return "generate child forEach match source [" + condition.getValue() + "]";
+                        }
+                    }
+                }
+                Object forEachModel = child.getForEach()
+                                           .get("model");
+                if (forEachModel != null && !String.valueOf(forEachModel)
+                                                   .isBlank()) {
+                    String collection = String.valueOf(child.getForEach()
+                                                            .get("entity"));
+                    UsesIntent collectionUses = findUses(model, String.valueOf(forEachModel));
+                    if (collectionUses != null) {
+                        CrossModelSupport.TargetInfo collectionTarget;
+                        try {
+                            collectionTarget = CrossModelSupport.resolve(context, collectionUses, collection);
+                        } catch (IntentValidationException ex) {
+                            return "forEach collection [" + collection + "] in model [" + forEachModel + "] (" + ex.getMessage() + ")";
+                        }
+                        java.util.Set<String> collectionProps = collectionTarget.propertyNames();
+                        if (collectionProps != null) {
+                            for (Map.Entry<?, ?> condition : match.entrySet()) {
+                                if (isMissing(collectionProps, String.valueOf(condition.getKey()))) {
+                                    return "generate child forEach match field [" + condition.getKey() + "]";
+                                }
+                            }
+                            for (String mapSource : child.getMap()
+                                                         .values()) {
+                                if (isMissing(collectionProps, mapSource)) {
+                                    return "generate child map source [" + mapSource + "]";
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            String nested = firstUnresolvableChildRef(model, child.getChildren(), sourceProps, context);
+            if (nested != null) {
+                return nested;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Whether an authored field reference is absent from a set of (PascalCase) owner property names,
+     * applying the same PascalCase mapping the criteria / assignment renderers use.
+     */
+    private static boolean isMissing(java.util.Set<String> properties, String authoredName) {
+        return authoredName != null && !authoredName.isBlank() && !properties.contains(IntentNaming.pascalCase(authoredName));
     }
 
     /**
@@ -1989,8 +2654,15 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * @return the attachment, or {@code null} when none was asked for or it cannot be rendered
      */
     private static NotifySupport.PrintAttachment printAttachment(NotificationIntent notify, EntityIntent entity, IntentModel model,
-            IntentGenerationContext context, String subject) {
-        NotifySupport.PrintAttachment attachment = NotifySupport.printAttachment(notify, entity, model);
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context, String subject) {
+        NotifySupport.PrintAttachment attachment;
+        try {
+            attachment = NotifySupport.printAttachment(notify, entity, model, byName, compositionParents, crossModelLookup(model, context));
+        } catch (IllegalArgumentException ex) {
+            // A declared languageFrom that does not resolve - report the precise reason and drop.
+            reportDroppedGlue(context, subject + " " + ex.getMessage() + " - the mail was NOT generated");
+            return null;
+        }
         if (attachment == null && NotifySupport.attachesPrint(notify)) {
             reportDroppedGlue(context, subject + " asks to attach the print of [" + (entity == null ? "?" : entity.getName())
                     + "], which is not a document (header + line-items child) and has no print template - NOT generated");

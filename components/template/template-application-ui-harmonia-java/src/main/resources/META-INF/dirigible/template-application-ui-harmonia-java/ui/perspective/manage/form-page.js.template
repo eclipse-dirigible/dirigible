@@ -173,6 +173,14 @@ document.addEventListener('alpine:init', () => {
     // Controller path for ${name}, relative to App.config.restBase
     // (the default base api.* prepends): <restBase>/<perspective>/<Entity>Controller.
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
+    // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
+    // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
+    // (an outage must not lock the UI - the server still refuses the write).
+    mutable: true,
+#end
 #if($hasPrint == "true")
 
     // Print (document master rendered through this shared form): renders the CMS-seeded .print
@@ -227,6 +235,17 @@ document.addEventListener('alpine:init', () => {
           // which keeps the full set for label resolution alongside the filtered chooser set).
           await this.ensureFilteredCurrent('${property.name}', '${property.widgetDropdownControllerUrl}', '${property.widgetDropDownKey}', '${property.widgetDropDownValue}');
 #end
+#end
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}FormPage] mutable pre-check failed', e);
+          }
+          // An immutable record opened on the /edit route renders as preview - the whole form is
+          // read-only, exactly as if Preview had been chosen (or the URL typed said /preview).
+          if (!this.mutable && this.isEdit) this.mode = 'preview';
 #end
           this.state = 'ready';
         } catch (e) {
@@ -381,7 +400,7 @@ document.addEventListener('alpine:init', () => {
     // on save, reload that field's options and select the new id. appUrl is the target app's raw
     // web index.html (the generator resolves the correct - unsanitized - gen folder).
     addRelated(field, appUrl, entity) {
-      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), 'New ' + entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(appUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
         await this.loadOptions();
         if (id != null) this.form[field] = String(id);
       });
@@ -493,6 +512,12 @@ document.addEventListener('alpine:init', () => {
         const payload = this.toPayload();
         if (this.isEdit) {
           await App.services.api.put(this.apiPath + '/' + encodeURIComponent(this.id), payload);
+          // Opened as a detail-panel iframe dialog: report the save to the opener (it closes the
+          // dialog and reloads the panel) instead of navigating this iframe to a list nobody sees.
+          if (this.isDialog) {
+            this.emitSaved(this.id);
+            return;
+          }
         } else {
           const created = await App.services.api.post(this.apiPath, payload);
           // Only when opened as an FK "Add" iframe dialog: report the new record to the opener and stop
@@ -526,9 +551,11 @@ document.addEventListener('alpine:init', () => {
     //     as ProcessId null on create, so a process trigger's `ProcessId != null` guard fires (an
     //     empty string would trip it and the process would never start); on edit a populated value
     //     round-trips unchanged.
-    //  2. Date/time widgets -> the backend java.time format: an HTML date/datetime value (local, no
-    //     zone) becomes a full ISO instant (…Z) so an Instant/Timestamp binds; a bare TIME ("16:04",
-    //     not a valid Date) passes through so a LocalTime still parses.
+    //  2. Date/time widgets -> the backend java.time format via HarmoniaFormat.toPayload: an HTML
+    //     date/datetime value (local, no zone) becomes a full ISO instant (…Z) so an Instant/Timestamp
+    //     binds — including a space-separated "2026-08-10 12:30" (normalized before parsing; WebKit's
+    //     new Date() rejects the space form); a bare TIME ("16:04", not a valid Date) passes through
+    //     so a LocalTime still parses.
     toPayload() {
       const payload = { ...this.form };
       for (const _k of Object.keys(payload)) {
@@ -536,64 +563,22 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.isDateType)
-      if (payload.${property.name} != null) {
-        const _d${property.name} = new Date(payload.${property.name});
-        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
-      }
+      payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
 #end
       return payload;
     },
 #if($hasPrint == "true")
 
-    // The read-only Snapshot child (intent `function: Snapshot`), when this entity declares one - a files
-    // def is a Snapshot exactly when it is read-only (an editable one is a user Attachment).
-    get snapshotDef() { return (this.detailDefs || []).find(d => d.files && d.files.readOnly) || null; },
-
-    // The stored copy Print must serve: the highest-Version row, `null` when there provably is none, or
-    // `{ failed: true }` when it could not be determined (in which case printing must not silently fall
-    // back to a live render - that would defeat the guardrail).
-    async storedSnapshot() {
-      const def = this.snapshotDef;
-      if (!def || this.id == null) return null;
-      try {
-        const rows = await App.services.api.get(
-          def.apiPath + '?' + encodeURIComponent(def.masterEntityId) + '=' + encodeURIComponent(this.id));
-        if (!Array.isArray(rows) || !rows.length) return null;
-        return rows.reduce((best, row) => (Number(row.Version || 0) > Number(best.Version || 0) ? row : best));
-      } catch (e) {
-        console.error('[${name}FormPage] could not determine whether a stored copy exists', e);
-        return { failed: true };
-      }
-    },
-
-    openStoredSnapshot(row) {
-      const def = this.snapshotDef;
-      const base = (App.config && App.config.restBase) || '';
-      window.open(base + def.apiPath + '/' + encodeURIComponent(row[def.primaryKey]) + '/download', '_blank');
-    },
-
     // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
     // can be customized via the Documents perspective. One language prints directly; several ask.
     //
-    // GUARDRAIL: the same rule as the document layout - a record that already carries a generated
-    // Snapshot prints THAT copy. The print feeder dereferences LIVE master data, so re-rendering an
-    // issued record would silently rewrite its history on paper. Guarding only the document page would
-    // leave this surface as a way around it.
+    // Print always renders LIVE, the same rule as the document layout. The immutable issued copy
+    // stays first-class on its own surface: the read-only Snapshot panel serves every stored version
+    // (Open + Download), so a live re-render after master-data changes is acceptable.
     async openPrint() {
       this.printError = null;
       this.printBusy = true;
-      const stored = await this.storedSnapshot();
-      if (stored && stored.failed) {
-        this.printBusy = false;
-        this.printError = 'Could not verify whether an issued copy exists - printing was not attempted.';
-        return;
-      }
-      if (stored) {
-        this.printBusy = false;
-        this.openStoredSnapshot(stored);
-        return;
-      }
       let languages = [];
       try {
         languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];
@@ -638,8 +623,21 @@ document.addEventListener('alpine:init', () => {
         }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        // The object URL must outlive the tab that renders it: a timed revoke kills the PDF
+        // viewer's reload/print the moment it fires (observed live - the blob tab worked once,
+        // then "the file was removed"). The URL is released when THIS page unloads, which is the
+        // blob's natural owner lifetime; a print-sized PDF held until then costs nothing.
+        const opened = window.open(url, '_blank');
+        if (!opened) {
+          // Popup blocked - the open runs after async work, outside the click's gesture stack.
+          // Fall back to a download, which the browser always allows.
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = '${name}-' + this.id + '.pdf';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
       } catch (e) {
         console.error('Print failed', e);
         this.printError = 'Print failed';
@@ -659,8 +657,14 @@ document.addEventListener('alpine:init', () => {
       this.navigateBack('/${name}');
     },
 
-    // Preview -> the editable form for the same record (returnTo carried over).
+    // Preview -> the editable form for the same record (returnTo carried over). Inside a detail
+    // dialog the edit stays IN the dialog (embedded + dialog mode carried), so its save still
+    // reports to the opener instead of navigating the iframe to a list.
     goEdit() {
+      if (this.isDialog) {
+        window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit?embedded=1&dialog=1');
+        return;
+      }
       const ret = this.returnToParam();
       window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(this.id) + '/edit' + (ret ? '?returnTo=' + encodeURIComponent(ret) : ''));
     },

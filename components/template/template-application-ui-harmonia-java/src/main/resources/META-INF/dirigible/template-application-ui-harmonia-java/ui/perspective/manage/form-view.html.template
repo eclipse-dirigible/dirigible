@@ -29,6 +29,11 @@
          status resolves (edit/preview - a new record has no status until the DB default applies). -->
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="(isEdit || isPreview) && statusText()" x-text="statusText()"></span>
 #end
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- Immutability pre-check: the record refuses user edits/deletes in its current status, so the
+         page renders read-only and says so (the controller's 409 stays authoritative). -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
     <button type="button" x-h-button data-variant="transparent" @click="navigateBack('/${name}')" x-text="T('$projectName:${tprefix}.defaults.backToList', 'Back to list')"></button>
   </div>
 
@@ -84,7 +89,11 @@
 ## editable inputs here - they render in the read-only details block below, above the buttons. They
 ## still stay in the form model so they round-trip on edit. Calculated fields remain inline (read-only).
 ## The EntityStatus FK (DOCUMENT_STATUS) is excluded too - it renders as the title-bar badge above.
-#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && !($property.auditType && $property.auditType != "NONE"))
+## The COMPOSITION-parent FK is never an input: a detail is created from its master's panel, which
+## presets the FK via the create query param (and an edit round-trips it) - exactly like every other
+## master-detail surface (items dialog, detail tables). Offering the parent as a dropdown invites
+## re-parenting by accident and is redundant inside the detail dialog.
+#if(!$property.dataAutoIncrement && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS" && $property.relationshipType != "COMPOSITION" && !($property.auditType && $property.auditType != "NONE"))
 #set($readonly = ($property.isCalculatedProperty == "true"))
 ## A non-setting association dropdown gets an inline "Add new / Refresh" control and spans the full row.
 #set($lookup = ($property.widgetType == "DROPDOWN" && $property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings" && !$readonly))
@@ -112,8 +121,8 @@
              dialog) and a Refresh button. -->
 #if($lookup)
         <div class="hbox gap-1 items-center">
-          <div x-h-select data-filter="contains" class="grow" :data-disabled="isPreview">
-            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
+          <div x-h-select data-filter="contains" class="grow">
+            <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}" :aria-invalid="!!errors.${property.name}" :disabled="isPreview" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
             <div x-h-select-content>
               <div x-h-select-search></div>
               <template x-for="opt in options${property.name}" :key="opt.value">
@@ -125,9 +134,9 @@
           <button type="button" x-h-button data-variant="transparent" class="shrink-0" x-show="!isPreview" aria-label="Refresh" @click="loadOptions()"><i x-h-lucide data-lucide="refresh-cw" class="size-4"></i></button>
         </div>
 #else
-        <div x-h-select data-filter="contains"#if($readonly) data-disabled="true"#else :data-disabled="isPreview"#end>
+        <div x-h-select data-filter="contains">
           <input x-h-select-input id="f_${property.name}" x-model="form.${property.name}"
-                 :aria-invalid="!!errors.${property.name}"
+                 :aria-invalid="!!errors.${property.name}"#if($readonly) disabled#else :disabled="isPreview"#end
                  :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select ${label}...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '${label}') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
@@ -269,6 +278,9 @@
                           <span class="text-sm truncate" x-text="row.FileName"></span>
                           <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
                         </div>
+                        <template x-if="filesReadOnly">
+                          <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" aria-label="Print"><i role="img" x-h-lucide data-lucide="printer"></i></a>
+                        </template>
                         <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
                         <template x-if="!isPreview &amp;&amp; !filesReadOnly">
                           <button type="button" x-h-button data-variant="transparent" data-size="sm" @click="askDelete(row)" aria-label="Remove"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
@@ -294,7 +306,12 @@
                   <template x-for="row in rows" :key="row[def.primaryKey]">
                     <tr x-h-table-row data-hoverable="true">
                       <template x-for="col in def.columns" :key="col.name">
-                        <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                        <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                          <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                          <template x-if="!col.number">
+                            <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                          </template>
+                        </td>
                       </template>
                       <td x-h-table-cell data-row-actions x-show="!isPreview">
                         <button type="button" x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
@@ -320,7 +337,7 @@
                 <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete') + ' ' + T(def.tkey, def.label)"></h2>
                 <button type="button" x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
               </div>
-              <div x-h-dialog-content><p>Are you sure? This cannot be undone.</p></div>
+              <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete {{name}}? This action cannot be undone.', { name: T(def.tkey, def.label) })"></p></div>
               <div x-h-dialog-footer>
                 <button type="button" x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
                 <button type="button" x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
@@ -339,7 +356,7 @@
       <!-- Actionable BPM user-task buttons (edit only, hidden in read-only preview), left-aligned. -->
       <template x-for="task in $store.processTasks.getTasks(form)" :key="task.id">
         <button type="button" x-h-button data-variant="primary" x-show="!isPreview" @click="$store.processTasks.openTask(task)">
-          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+          <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
         </button>
       </template>
 #end
@@ -356,7 +373,7 @@
 #end
       <!-- Preview footer: Close + Edit instead of Cancel + Save. -->
       <button type="button" x-h-button data-variant="transparent" x-show="isPreview" @click="cancel()" x-text="T('$projectName:${tprefix}.defaults.close', 'Close')"></button>
-      <button type="button" x-h-button data-variant="primary" x-show="isPreview" @click="goEdit()">
+      <button type="button" x-h-button data-variant="primary" x-show="isPreview#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="goEdit()">
         <i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span>
       </button>
       <button type="button" x-h-button data-variant="transparent" x-show="!isPreview" @click="cancel()" :disabled="state === 'saving'" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
@@ -405,8 +422,8 @@
   <div x-h-dialog-overlay :data-open="printLangOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Print</h2>
-        <p x-h-dialog-description>Choose the template language.</p>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.print', 'Print')"></h2>
+        <p x-h-dialog-description x-text="T('$projectName:${tprefix}.messages.printLanguage', 'Choose the template language.')"></p>
         <button x-h-dialog-close @click="printLangOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>

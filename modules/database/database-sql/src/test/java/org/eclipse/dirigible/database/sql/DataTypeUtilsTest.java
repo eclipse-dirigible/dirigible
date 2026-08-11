@@ -83,6 +83,19 @@ public class DataTypeUtilsTest {
     }
 
     /**
+     * TIMESTAMPTZ is what PostgreSQL's JDBC driver reports as a column's TYPE_NAME for a
+     * {@code timestamptz} column (e.g. a {@code java.time.Instant} field). CSVIM's CsvProcessor
+     * resolves every column of the target table through this string-keyed lookup - independently of
+     * whether the CSV touches that column's value - so a missing entry here failed the import of any
+     * table with such a column with "Type [TIMESTAMPTZ] not supported", regardless of the actual data.
+     */
+    @Test
+    public void timestampTzStringResolvesToTimestamp() {
+        assertEquals(Types.TIMESTAMP, (int) DataTypeUtils.getSqlTypeByDataType("TIMESTAMPTZ"));
+        assertEquals(Types.TIMESTAMP, (int) DataTypeUtils.getSqlTypeByDataType("TIMESTAMP WITH TIME ZONE"));
+    }
+
+    /**
      * The character types are one family, aliases included - a CLOB column reported back as VARCHAR (or
      * CHARACTER VARYING) holds the same kind of value.
      */

@@ -28,6 +28,13 @@ export function generate(model, parameters) {
     // Custom dashboard widgets (top-level intent `widgets:` — REST KPIs and embedded pages) ride the
     // .model root and are baked into the dashboard page directly.
     parameters.customWidgets = model.widgets || [];
+    // BPM user-task translation keys: the .model root `processTaskLabels` maps the authored step
+    // name to the humanized runtime task name ({ managerReview: "Manager Review" }); config.js gets
+    // the REVERSE map so the views resolve an inbox task's name to its catalog key by exact match
+    // ({"Manager Review": "managerReview"}). The task set is part of the process definition, so
+    // everything is known here at generation time - no runtime key derivation.
+    parameters.processTaskKeys = JSON.stringify(
+        Object.fromEntries(Object.entries(model.processTaskLabels || {}).map(([key, label]) => [label, key])));
     return generateUtils.generateFiles(model, parameters, templateSources);
 };
 

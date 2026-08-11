@@ -22,11 +22,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import jakarta.annotation.security.RolesAllowed;
+
 /**
  * The Class ExposeEndpoint.
  */
 @RestController
 @RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURED + "exposes")
+@RolesAllowed({"ADMINISTRATOR", "DEVELOPER", "OPERATOR"})
 public class ExposeEndpoint extends BaseEndpoint {
 
     /**

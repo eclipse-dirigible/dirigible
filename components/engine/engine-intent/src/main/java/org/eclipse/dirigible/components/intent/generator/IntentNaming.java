@@ -9,8 +9,9 @@
  */
 package org.eclipse.dirigible.components.intent.generator;
 
+import org.eclipse.dirigible.commons.api.helpers.NamingHelper;
+
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * Naming conventions shared by every intent generator. The physical table name in particular is
@@ -23,18 +24,6 @@ public final class IntentNaming {
     private IntentNaming() {}
 
     /**
-     * Identifiers whose human-readable singular form cannot be produced by case-boundary splitting -
-     * acronyms and mixed-case domain terms (keyed lower-case). {@code UoM} -> {@code Unit of Measure}.
-     */
-    private static final Map<String, String> HUMANIZE_OVERRIDES = Map.of("uom", "Unit of Measure");
-
-    /**
-     * Plural overrides for (humanized) labels whose last word must not be naively pluralized (keyed
-     * lower-case). Both the humanized singular and the raw identifier map to the same plural.
-     */
-    private static final Map<String, String> PLURALIZE_OVERRIDES = Map.of("unit of measure", "Units of Measure", "uom", "Units of Measure");
-
-    /**
      * The intent's base name used for single-file outputs ({@code <base>.edm}, {@code <base>.roles})
      * and as the physical table-name prefix. The YAML document's own {@code name:} field wins - the
      * file is conventionally called {@code app.intent}, so the name derived from the file name
@@ -44,6 +33,33 @@ public final class IntentNaming {
      * @param context the generation context
      * @return the base name, never blank
      */
+    /**
+     * A custom action's (transition / generate) display label: the authored {@code label:}, else the
+     * humanized action name. One rule for the descriptor AND the translation catalog, so the catalog
+     * entry always matches what the button falls back to.
+     *
+     * @param name the action name
+     * @param label the authored label, may be {@code null}/blank
+     * @return the display label
+     */
+    public static String customActionLabel(String name, String label) {
+        return label == null || label.isBlank() ? humanize(name) : label;
+    }
+
+    /**
+     * The i18n catalog key of a custom action's label: {@code <project>:<model>-model.actions.<name>} -
+     * the same {@code <model>-model} namespace the generated translation catalog is emitted under
+     * (mirrors the template engine's translation prefix for the {@code .model} file).
+     *
+     * @param project the project name
+     * @param context the generation context (for the model base name)
+     * @param name the action name
+     * @return the translation key
+     */
+    public static String customActionTranslationKey(String project, IntentGenerationContext context, String name) {
+        return project + ":" + baseName(context) + "-model.actions." + name;
+    }
+
     public static String baseName(IntentGenerationContext context) {
         String declaredName = context.getModel()
                                      .getName();
@@ -230,35 +246,7 @@ public final class IntentNaming {
      * @return the spaced Title Case label, empty for null/empty input
      */
     public static String humanize(String name) {
-        if (name == null || name.isEmpty()) {
-            return "";
-        }
-        String override = HUMANIZE_OVERRIDES.get(name.toLowerCase(Locale.ROOT));
-        if (override != null) {
-            return override;
-        }
-        if (name.indexOf('-') >= 0 || name.indexOf('_') >= 0) {
-            StringBuilder joined = new StringBuilder(name.length() + 8);
-            for (String segment : name.split("[-_]+")) {
-                if (segment.isEmpty()) {
-                    continue;
-                }
-                if (joined.length() > 0) {
-                    joined.append(' ');
-                }
-                joined.append(humanize(segment));
-            }
-            return joined.toString();
-        }
-        StringBuilder out = new StringBuilder(name.length() + 8);
-        for (int i = 0; i < name.length(); i++) {
-            char c = name.charAt(i);
-            if (i > 0 && Character.isUpperCase(c) && !Character.isUpperCase(name.charAt(i - 1))) {
-                out.append(' ');
-            }
-            out.append(i == 0 ? Character.toUpperCase(c) : c);
-        }
-        return out.toString();
+        return NamingHelper.humanizeName(name);
     }
 
     /**
@@ -271,28 +259,6 @@ public final class IntentNaming {
      * @return the label with its last word pluralized, empty for null/empty input
      */
     public static String pluralize(String label) {
-        if (label == null || label.isEmpty()) {
-            return "";
-        }
-        String override = PLURALIZE_OVERRIDES.get(label.toLowerCase(Locale.ROOT));
-        if (override != null) {
-            return override;
-        }
-        int sp = label.lastIndexOf(' ');
-        String head = sp >= 0 ? label.substring(0, sp + 1) : "";
-        String last = sp >= 0 ? label.substring(sp + 1) : label;
-        if (last.isEmpty()) {
-            return label;
-        }
-        String lower = last.toLowerCase(Locale.ROOT);
-        String plural;
-        if (lower.length() > 1 && lower.endsWith("y") && "aeiou".indexOf(lower.charAt(lower.length() - 2)) < 0) {
-            plural = last.substring(0, last.length() - 1) + "ies";
-        } else if (lower.endsWith("s") || lower.endsWith("x") || lower.endsWith("z") || lower.endsWith("ch") || lower.endsWith("sh")) {
-            plural = last + "es";
-        } else {
-            plural = last + "s";
-        }
-        return head + plural;
+        return NamingHelper.pluralizeLabel(label);
     }
 }

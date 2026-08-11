@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  The Monitoring shell - insight into what the running system is doing (health, artefacts, jobs,
+  processes, messaging, JVM) without opening the IDE. Pure Harmonia over the SHARED shell runtime
+  served from /services/web/application-core/shell; every page reads an existing, role-gated platform
+  endpoint. The deep and destructive tooling (SQL console, terminal, message purging, log levels,
+  process-variable editing) deliberately stays in the Workbench.
+-->
+<!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
+<html lang="en" data-brand-title>
+
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Monitoring</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
+    <link href="./css/app.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+  </head>
+
+  <body class="vbox size-full" x-data="app">
+
+    <!-- Narrow-viewport drawer host. -->
+    <div x-h-sheet-overlay="isOpen">
+      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    </div>
+
+    <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
+    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+
+      <!-- Sidebar -->
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
+           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar">
+          <div x-h-sidebar-header>
+            <div class="hbox items-center gap-2 p-1">
+              <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
+              <div class="vbox gap-0">
+                <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
+                <span x-h-text.muted class="text-xs leading-tight" x-text="T('monitoring:shell.title', 'Monitoring')"></span>
+              </div>
+            </div>
+          </div>
+
+          <div x-h-sidebar-content>
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label x-text="T('monitoring:shell.nav.group', 'Monitoring')"></div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-overview" x-h-sidebar-menu-button :data-active="isActive('/overview')" @click="navigate('/overview')">
+                      <i role="img" x-h-lucide data-lucide="activity"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.overview', 'Overview')"></span>
+                      <!-- The problem count doubles as the shell's alarm: it is visible from every page. -->
+                      <span x-show="$store.overview.problemCount > 0" x-h-badge data-variant="negative"
+                            x-text="$store.overview.problemCount"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-processes" x-h-sidebar-menu-button :data-active="isActive('/processes')" @click="navigate('/processes')">
+                      <i role="img" x-h-lucide data-lucide="workflow"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.processes', 'Processes')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-jobs" x-h-sidebar-menu-button :data-active="isActive('/jobs')" @click="navigate('/jobs')">
+                      <i role="img" x-h-lucide data-lucide="alarm-clock"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.jobs', 'Jobs')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-logs" x-h-sidebar-menu-button :data-active="isActive('/logs')" @click="navigate('/logs')">
+                      <i role="img" x-h-lucide data-lucide="scroll-text"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.logs', 'Logs')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-messaging" x-h-sidebar-menu-button :data-active="isActive('/messaging')" @click="navigate('/messaging')">
+                      <i role="img" x-h-lucide data-lucide="mails"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.messaging', 'Messaging')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="monitoring-nav-system" x-h-sidebar-menu-button :data-active="isActive('/system')" @click="navigate('/system')">
+                      <i role="img" x-h-lucide data-lucide="server"></i>
+                      <span class="flex-1" x-text="T('monitoring:shell.nav.system', 'System')"></span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- The deep tooling lives in the Workbench; the shell links to it rather than cloning it. -->
+          <div x-h-sidebar-footer>
+            <ul x-h-sidebar-menu>
+              <li x-h-sidebar-menu-item>
+                <a x-h-sidebar-menu-button href="/services/web/shell-ide/" target="_blank" rel="noopener">
+                  <i role="img" x-h-lucide data-lucide="external-link"></i>
+                  <span x-text="T('monitoring:shell.nav.workbench', 'Open in Workbench')"></span>
+                </a>
+              </li>
+            </ul>
+            <!-- Which build this is - the first question about an instance, so it is on every page.
+                 The System page carries the rest of it (commit, type, providers, engines). -->
+            <div id="monitoring-build" class="px-2 pb-1 pt-0.5" x-show="$store.version.summary" x-cloak>
+              <span x-h-text.muted class="text-xs" :title="$store.version.tooltip"
+                    x-text="$store.version.summary"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main panel -->
+      <div x-h-split-panel>
+        <div class="vbox size-full">
+          <div x-h-toolbar data-variant="transparent" x-cloak>
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <i role="img" x-h-lucide data-lucide="menu"></i>
+            </button>
+            <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:shell.title', 'Monitoring')"></span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
+              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            </button>
+
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="$store.currentUser.name || 'Account'">
+              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+            </button>
+            <ul x-h-menu aria-label="User menu" data-align="bottom-end">
+              <div x-h-tile class="mb-1">
+                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
+                <div x-h-tile-content>
+                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                </div>
+              </div>
+              <div x-h-menu-separator></div>
+              <!-- Switch shells without the detour through Home: the same `platform-shells` list the
+                   launchpad renders, minus this one (the shared `shells` store). -->
+              <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
+              <li x-h-menu-item @click="$store.shells.openHome()">
+                <i role="img" x-h-lucide data-lucide="house"></i>
+                <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
+              </li>
+              <template x-for="shell in $store.shells.items" :key="shell.id">
+                <li x-h-menu-item @click="$store.shells.open(shell)">
+                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
+                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
+                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <span x-text="shell.label"></span>
+                </li>
+              </template>
+              <div x-h-menu-separator></div>
+              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
+                <i role="img" x-h-lucide data-lucide="log-out"></i>
+                <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Pinecone Router renders the matched view fragment here. -->
+          <div id="app" class="size-full overflow-auto flex-1"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Routes -->
+    <template x-route="/" x-template.target.app="./views/_overview.html"></template>
+    <template x-route="/overview" x-template.target.app="./views/_overview.html"></template>
+    <template x-route="/processes" x-template.target.app="./views/_processes.html"></template>
+    <template x-route="/jobs" x-template.target.app="./views/_jobs.html"></template>
+    <template x-route="/logs" x-template.target.app="./views/_logs.html"></template>
+    <template x-route="/messaging" x-template.target.app="./views/_messaging.html"></template>
+    <template x-route="/system" x-template.target.app="./views/_system.html"></template>
+    <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
+
+    <!-- 1. Plugins -->
+    <script src="/webjars/pinecone-router/dist/router.min.js"></script>
+
+    <!-- 2. Shared Harmonia runtime (served from application-core) + local config/pages (defer keeps order) -->
+    <script src="/services/web/application-core/shell/js/app.js" defer></script>
+    <script src="./js/config.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- Instance branding (the DIRIGIBLE_BRANDING_* env vars): the platform service sets
+         top.PlatformBranding; the adapter applies the favicon/title and exposes the `branding` store. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
+    <script src="./js/services/ops.js" defer></script>
+    <!-- The BPMN visualizer itself is ~1 MB and loads on first use (see processDiagram.js). -->
+    <script src="./js/services/processDiagram.js" defer></script>
+    <script src="./js/stores/version.js" defer></script>
+    <script src="./js/stores/overview.js" defer></script>
+    <script src="./js/stores/processes.js" defer></script>
+    <script src="./js/stores/jobs.js" defer></script>
+    <script src="./js/stores/logs.js" defer></script>
+    <script src="./js/stores/messaging.js" defer></script>
+    <script src="./js/stores/system.js" defer></script>
+    <script src="./js/components/pages/overviewPage.js" defer></script>
+    <script src="./js/components/pages/processesPage.js" defer></script>
+    <script src="./js/components/pages/jobsPage.js" defer></script>
+    <script src="./js/components/pages/logsPage.js" defer></script>
+    <script src="./js/components/pages/messagingPage.js" defer></script>
+    <script src="./js/components/pages/systemPage.js" defer></script>
+    <script src="./js/appShell.js" defer></script>
+
+    <!-- 3. Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <!-- 4. Lucide icons (x-h-lucide renders and keeps them in sync, incl. router-swapped views) -->
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+  </body>
+
+</html>

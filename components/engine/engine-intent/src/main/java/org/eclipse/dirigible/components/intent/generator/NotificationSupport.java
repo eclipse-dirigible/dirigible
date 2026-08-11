@@ -13,9 +13,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import org.eclipse.dirigible.commons.config.DirigibleConfig;
 import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
@@ -26,18 +28,40 @@ import org.eclipse.dirigible.components.intent.model.RelationIntent;
  * {@code @Listener} pastes in. Kept free of Spring/IO so the tricky bits are unit-tested directly.
  *
  * <p>
- * A value or {@code {placeholder}} is one of: a literal, a <b>direct field</b> of the event entity
- * (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a to-one
- * relation (rendered against a related entity the listener loads once by FK id - the same one-hop
- * mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop paths are
- * not supported. The {@code when} guard supports a single {@code field ==|!= literal} comparison on
- * a direct field.
+ * A value or {@code {placeholder}} is one of: the reserved <b>{@code appUrl}</b> config token (the
+ * application's external base URL, see {@link #APP_URL_TOKEN}), a <b>direct field</b> of the event
+ * entity (rendered {@code entity.<PascalField>}), or a one-hop <b>{@code relation.field}</b> of a
+ * to-one relation (rendered against a related entity the listener loads once by FK id - the same
+ * one-hop mechanism the decision resolvers use, see {@link ProcessResolverSupport}). Multi-hop
+ * paths are not supported. The {@code when} guard supports a single {@code field ==|!= literal}
+ * comparison on a direct field.
  */
 public final class NotificationSupport {
 
     private static final Pattern PATH = Pattern.compile("[A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?");
     private static final Pattern PLACEHOLDER = Pattern.compile("\\{([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_][A-Za-z0-9_]*)?)\\}");
     private static final Pattern SIMPLE_COMPARISON = Pattern.compile("\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(==|!=)\\s*(.+?)\\s*");
+
+    /**
+     * The reserved {@code {appUrl}} placeholder name - a config-backed token, not an entity field or
+     * relation. Resolves to the application's external base URL ({@link DirigibleConfig#APP_BASE_URL},
+     * tenant-overridable), so a body can compose a deep link by hand, e.g. {@code "Review it here:
+     * {appUrl}/orders/{id}"}. Deliberately supplies only the origin - the concrete per-entity route is
+     * the template layer's knowledge, not the intent layer's (see the engine-intent guide's
+     * path-agnostic rule), so the author appends the rest of the path as plain text and other
+     * placeholders.
+     * <p>
+     * Resolved per dispatch inside the sending tenant's own configuration scope - the generated
+     * listener (via {@code ListenerClassConsumer}) loads that tenant's overrides before invoking the
+     * handler, the same way {@code TenantConfigurationInitFilter} does for HTTP requests, so a tenant
+     * override of {@code DIRIGIBLE_APP_BASE_URL} takes effect here, falling back to the global
+     * environment/default value when the tenant has not set one.
+     */
+    static final String APP_URL_TOKEN = "appUrl";
+
+    /** The Java expression {@link #APP_URL_TOKEN} resolves to. */
+    private static final String APP_URL_EXPRESSION =
+            "org.eclipse.dirigible.sdk.core.Configurations.get(\"" + DirigibleConfig.APP_BASE_URL.getKey() + "\", \"\")";
 
     private NotificationSupport() {}
 
@@ -215,6 +239,7 @@ public final class NotificationSupport {
         private final EntityIntent entity;
         private final Map<String, EntityIntent> byName;
         private final Map<String, String> compositionParents;
+        private final Set<String> settingEntities;
         private final CrossModelLookup crossModel;
         private final Map<String, RelationLoad> loads = new LinkedHashMap<>();
 
@@ -223,6 +248,7 @@ public final class NotificationSupport {
             this.entity = entity;
             this.byName = byName;
             this.compositionParents = compositionParents;
+            this.settingEntities = IntentEntities.settingEntities(byName.values());
             this.crossModel = crossModel;
         }
 
@@ -280,6 +306,9 @@ public final class NotificationSupport {
          * relation load when needed. Returns {@code null} for an unresolvable relation.field.
          */
         private String access(String path) {
+            if (APP_URL_TOKEN.equals(path)) {
+                return APP_URL_EXPRESSION;
+            }
             int dot = path.indexOf('.');
             if (dot < 0) {
                 return "entity." + IntentNaming.pascalCase(path);
@@ -314,8 +343,10 @@ public final class NotificationSupport {
             if (target == null || fieldOf(target, fieldName) == null) {
                 return null;
             }
-            loads.computeIfAbsent(relationName, name -> new RelationLoad(name, relation.getTo(),
-                    IntentEntities.resolvePerspective(relation.getTo(), compositionParents), IntentNaming.pascalCase(name), false, "", ""));
+            loads.computeIfAbsent(relationName,
+                    name -> new RelationLoad(name, relation.getTo(),
+                            IntentEntities.resolvePerspective(relation.getTo(), compositionParents, settingEntities),
+                            IntentNaming.pascalCase(name), false, "", ""));
             // The listener loads the related entity into a local named after the relation.
             return "(" + relationName + " == null ? null : " + relationName + "." + pascalField + ")";
         }

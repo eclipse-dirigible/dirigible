@@ -144,6 +144,18 @@ public class RepositoryService {
     }
 
     /**
+     * Exports the content under the given path as a zip archive. The last segment of the path is kept
+     * as the archive's root folder, so a collection unpacks as the folder itself with all its
+     * subfolders beneath it.
+     *
+     * @param path the path
+     * @return the zip content
+     */
+    public byte[] exportZip(String path) {
+        return getRepository().exportZip(path, true);
+    }
+
+    /**
      * Gets the uri.
      *
      * @param path the path

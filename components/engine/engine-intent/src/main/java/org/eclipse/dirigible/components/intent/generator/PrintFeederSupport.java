@@ -94,11 +94,11 @@ final class PrintFeederSupport {
         Map<String, Object> feeder = new LinkedHashMap<>();
         feeder.put("className", master.getName());
         feeder.put("entity", master.getName());
-        feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents));
+        feeder.put("perspective", IntentEntities.resolvePerspective(master.getName(), compositionParents, model));
         feeder.put("rootScalars", scalarDescriptors(master));
 
         feeder.put("itemsEntity", items.getName());
-        feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents));
+        feeder.put("itemsPerspective", IntentEntities.resolvePerspective(items.getName(), compositionParents, model));
         feeder.put("itemsFkProperty", masterFkProperty(items, master.getName()));
         feeder.put("itemScalars", scalarDescriptors(items));
 
@@ -110,10 +110,70 @@ final class PrintFeederSupport {
             addNode(relation, "root", "document", 1, model, byName, compositionParents, context, nodes, usedVars, visited);
         }
         feeder.put("nodes", nodes);
+        feeder.put("itemNodes", buildItemNodes(items, master, model, byName, compositionParents, context, usedVars));
         // Drives the one reflective copy helper the template emits - only when a cross-model node needs it.
-        feeder.put("hasCrossModel", nodes.stream()
-                                         .anyMatch(node -> Boolean.TRUE.equals(node.get("crossModel"))));
+        feeder.put("hasCrossModel", hasCrossModel(feeder));
         return feeder;
+    }
+
+    /**
+     * One node per to-one relation of the LINE-ITEMS entity (its composition back-reference to the
+     * master excluded - that is the document itself), so an items-table column can render the
+     * relation's label ({@code {{Unit}}} - "1 month") or descend into its fields
+     * ({@code {{Unit.Name}}}), exactly as the header relations resolve. Depth 1: an item relation feeds
+     * its target's own record, not the target's further graph.
+     */
+    private static List<Map<String, Object>> buildItemNodes(EntityIntent items, EntityIntent master, IntentModel model,
+            Map<String, EntityIntent> byName, Map<String, String> compositionParents, IntentGenerationContext context,
+            Set<String> usedVars) {
+        List<Map<String, Object>> itemNodes = new ArrayList<>();
+        for (RelationIntent relation : items.getRelations()) {
+            if (!isToOne(relation) || relation.getName() == null || relation.getTo() == null) {
+                continue;
+            }
+            if (relation.isComposition() && master.getName()
+                                                  .equals(relation.getTo())) {
+                continue; // the back-reference to the document - the header, not an item lookup
+            }
+            boolean crossModel = relation.getModel() != null && !relation.getModel()
+                                                                         .isBlank();
+            // Prefixed so an item relation named like a header one (Customer on both) cannot collide.
+            String entityVar = uniqueVar("item" + IntentNaming.pascalCase(relation.getName()), usedVars);
+            Map<String, Object> node = new LinkedHashMap<>();
+            node.put("entityVar", entityVar);
+            node.put("mapVar", entityVar + "Map");
+            node.put("fkProperty", IntentNaming.pascalCase(relation.getName()));
+            node.put("keyInParent", IntentNaming.pascalCase(relation.getName()));
+            node.put("entity", relation.getTo());
+            node.put("crossModel", crossModel);
+            if (crossModel) {
+                UsesIntent uses = findUses(model, relation.getModel());
+                CrossModelSupport.TargetInfo target = uses == null ? null : CrossModelSupport.resolve(context, uses, relation.getTo());
+                node.put("model", relation.getModel());
+                node.put("perspective", target != null ? target.perspectiveName() : relation.getTo());
+                node.put("labelField", target != null ? target.labelField() : "Name");
+                // No `scalars`: the template copies the owner's fields reflectively (see the class note).
+                node.put("scalars", List.of());
+            } else {
+                EntityIntent target = byName.get(relation.getTo());
+                node.put("model", "");
+                node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
+                node.put("labelField", nameField(target));
+                node.put("scalars", scalarDescriptors(target));
+            }
+            itemNodes.add(node);
+        }
+        return itemNodes;
+    }
+
+    /** Whether any header or item node is cross-model - drives the one reflective copy helper. */
+    @SuppressWarnings("unchecked")
+    private static boolean hasCrossModel(Map<String, Object> feeder) {
+        boolean header = ((List<Map<String, Object>>) feeder.get("nodes")).stream()
+                                                                          .anyMatch(node -> Boolean.TRUE.equals(node.get("crossModel")));
+        boolean item = ((List<Map<String, Object>>) feeder.get("itemNodes")).stream()
+                                                                            .anyMatch(node -> Boolean.TRUE.equals(node.get("crossModel")));
+        return header || item;
     }
 
     /**
@@ -155,8 +215,7 @@ final class PrintFeederSupport {
         } else {
             EntityIntent target = byName.get(relation.getTo());
             node.put("model", "");
-            node.put("perspective", target != null && target.isSetting() ? "Settings"
-                    : IntentEntities.resolvePerspective(relation.getTo(), compositionParents));
+            node.put("perspective", IntentEntities.resolvePerspective(relation.getTo(), compositionParents, model));
             node.put("labelField", nameField(target));
             node.put("scalars", scalarDescriptors(target));
             nodes.add(node);
@@ -210,19 +269,15 @@ final class PrintFeederSupport {
     }
 
     /**
-     * The same-model to-one target's label property: its {@code name} field (PascalCased), or empty
-     * when the target has none — the template then omits the {@code __label} put rather than emit an
-     * accessor for a field that does not exist (which would fail {@code javac}).
+     * The same-model to-one target's label property, resolved by the shared
+     * {@link IntentEntities#labelFieldOf(EntityIntent)} - an authored {@code name} field, the stored
+     * {@code Name} a {@code label:} generates, or the {@code DocumentTitle} field (so a document
+     * back-reference labels as its number). Empty when nothing resolves - the template then omits the
+     * {@code __label} put rather than emit an accessor for a field that does not exist (which would
+     * fail {@code javac}).
      */
     private static String nameField(EntityIntent target) {
-        if (target != null) {
-            for (FieldIntent field : target.getFields()) {
-                if (field.getName() != null && "name".equalsIgnoreCase(field.getName())) {
-                    return IntentNaming.pascalCase(field.getName());
-                }
-            }
-        }
-        return "";
+        return IntentEntities.labelFieldOf(target);
     }
 
     private static UsesIntent findUses(IntentModel model, String alias) {

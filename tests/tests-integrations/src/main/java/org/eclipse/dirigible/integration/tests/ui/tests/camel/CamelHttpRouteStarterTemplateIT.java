@@ -48,7 +48,7 @@ public class CamelHttpRouteStarterTemplateIT extends UserInterfaceIntegrationTes
                              .get("/services/integrations/http-route")
                              .then()
                              .statusCode(200)
-                             .body(containsString("Set by handler.ts")),
+                             .body(containsString("Set by Handler.java")),
                 15);
     }
 

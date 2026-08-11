@@ -77,7 +77,7 @@ document.addEventListener('alpine:init', () => {
 
     get pageTitle() {
       const trail = this.breadcrumbTrail;
-      return trail.length ? trail[trail.length - 1].label : 'Home';
+      return trail.length ? trail[trail.length - 1].label : (window.T ? T('application-core:shell.nav.home', 'Home') : 'Home');
     },
 
     get isDashboard() {

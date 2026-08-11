@@ -199,7 +199,7 @@
             </div>
 
             <!-- Logged-in user: avatar; the dropdown shows the user name and Log out. -->
-            <button x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
                     :aria-label="$store.currentUser.name || 'Account'">
               <i role="img" x-h-lucide data-lucide="circle-user"></i>
             </button>
@@ -210,6 +210,22 @@
                   <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
                 </div>
               </div>
+              <div x-h-menu-separator></div>
+              <!-- Switch shells without the detour through Home: the same `platform-shells` list the
+                   launchpad renders, minus this one (the shared `shells` store). -->
+              <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
+              <li x-h-menu-item @click="$store.shells.openHome()">
+                <i role="img" x-h-lucide data-lucide="house"></i>
+                <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
+              </li>
+              <template x-for="shell in $store.shells.items" :key="shell.id">
+                <li x-h-menu-item @click="$store.shells.open(shell)">
+                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
+                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
+                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <span x-text="shell.label"></span>
+                </li>
+              </template>
               <div x-h-menu-separator></div>
               <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
                 <i role="img" x-h-lucide data-lucide="log-out"></i> <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
@@ -258,6 +274,27 @@
         <div x-h-dialog-content>
           <iframe x-show="$store.customActions.dialogOpen" :src="$store.customActions.dialogUrl"
                   title="Action" style="width:100%; height:70vh; border:0;"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation for an `endpoint` custom action (a generate / create-from): the POST mutates
+         data the moment it fires, so the user gets an explicit chance to cancel before it runs. -->
+    <div x-h-dialog-overlay :data-open="$store.customActions.confirmOpen">
+      <div x-h-dialog data-size="sm" role="alertdialog">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.label) || T('application-core:shell.customActions.confirmTitle', 'Run action')"></h2>
+          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        </div>
+        <div x-h-dialog-content>
+          <p x-h-text.muted x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"></p>
+        </div>
+        <div x-h-dialog-footer>
+          <button x-h-button data-variant="transparent" @click="$store.customActions.cancelConfirm()" :disabled="$store.customActions.confirmBusy" x-text="T('application-core:shell.customActions.confirmCancel', 'Cancel')"></button>
+          <button x-h-button data-variant="primary" @click="$store.customActions.confirmRun()" :disabled="$store.customActions.confirmBusy">
+            <span x-show="$store.customActions.confirmBusy" x-h-spinner></span>
+            <span x-text="T('application-core:shell.customActions.confirmRun', 'Run')"></span>
+          </button>
         </div>
       </div>
     </div>
@@ -320,6 +357,7 @@
     <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
     <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/inboxPage.js" defer></script>
     <script src="/services/web/application-core/shell/js/components/pages/documentsPage.js" defer></script>
     <script src="./js/appShell.js" defer></script>

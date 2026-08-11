@@ -1,5 +1,0 @@
-{
-	"module": "ext-documents-content-type-ms/extensions/content-type.js",
-	"extensionPoint": "ui-documents-content-type",
-	"description": "Content Type Extension for MS Documents"
-}

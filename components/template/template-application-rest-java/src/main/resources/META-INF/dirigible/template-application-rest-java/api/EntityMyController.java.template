@@ -91,6 +91,14 @@ public class ${name}MyController {
     public ${name}Entity getById(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
         return scrub(requireMine(id));
     }
+#if($immutableAlways || $immutableStatusProperty)
+
+    @Get("/{id}/mutable")
+    @Documentation("Whether my ${name} {id} currently accepts edits/deletes - the immutability pre-check the generated UI gates its Edit affordances on (the PUT/DELETE 409 stays authoritative)")
+    public Map<String, Boolean> mutable(@PathParam("id") #foreach($property in $properties)#if($property.dataPrimaryKey)${property.dataTypeJavaClass}#end#end id) {
+        return Map.of("mutable", isMutable(requireMine(id)));
+    }
+#end
 
 #if($personalReadOnly)
     // See-only personal surface (intent personalReadOnly): the owner may read their own records but
@@ -178,11 +186,12 @@ public class ${name}MyController {
 
     /**
      * The current user's identity record id: the ${personalIdentityProperty} of the identity entity
-     * matched against the logged-in username. Null when no record maps (the personal surface is then
-     * empty, never an error).
+     * matched against the EFFECTIVE username - the acting identity when an entitled user armed
+     * "act as" (delegated entry), else the real login. Null when no record maps (the personal
+     * surface is then empty, never an error). Audit stamping stays on the real login.
      */
     private #if($personalParent)${personalParent.personalFkJavaClass}#else${personalFkJavaClass}#end me() {
-        String username = User.getName();
+        String username = User.getEffectiveName();
         if (username == null || username.isBlank()) {
             return null;
         }
@@ -191,15 +200,17 @@ public class ${name}MyController {
     }
 
     /**
-     * The logged-in user's own display name (the identity record's ${personalIdentityLabel}), for the
-     * personal pages' "New/Edit ... for &lt;owner&gt;" title. Falls back to the username when no
-     * identity record maps. Exposes only the display name - never the whole identity record.
+     * The EFFECTIVE user's own display name (the identity record's ${personalIdentityLabel}), for
+     * the personal pages' "New/Edit ... for &lt;owner&gt;" title - under "act as" this is the
+     * acting identity's name, which is exactly what the pages must show. Falls back to the
+     * username when no identity record maps. Exposes only the display name - never the whole
+     * identity record.
      */
     @Get("/me")
-    @Documentation("The logged-in user's own display name")
+    @Documentation("The effective user's own display name")
     public Map<String, Object> currentIdentity() {
         Map<String, Object> result = new LinkedHashMap<>();
-        String username = User.getName();
+        String username = User.getEffectiveName();
         result.put("name", username);
         if (username != null && !username.isBlank()) {
             var matches = identityRepository.findAll(Criteria.create().eq("${personalIdentityProperty}", username));
@@ -247,21 +258,36 @@ public class ${name}MyController {
 #if($immutableAlways)
 
     private void requireMutable(${name}Entity existing) {
+        if (isMutable(existing)) {
+            return;
+        }
         throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "This ${name} is append-only - records can neither be edited nor deleted");
+    }
+
+    private static boolean isMutable(${name}Entity existing) {
+        return false;
     }
 #elseif($immutableStatusProperty)
 
     private void requireMutable(${name}Entity existing) {
-        if (existing.${immutableStatusProperty} == null) {
+        if (isMutable(existing)) {
             return;
+        }
+        throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "This ${name} is immutable in its current status - corrections go through the workflow");
+    }
+
+    private static boolean isMutable(${name}Entity existing) {
+        if (existing.${immutableStatusProperty} == null) {
+            return true;
         }
         for (String immutable : "${immutableStatusValues}".split(",")) {
             if (immutable.equals(String.valueOf(existing.${immutableStatusProperty}))) {
-                throw new ResponseStatusException(HttpStatus.CONFLICT,
-                        "This ${name} is immutable in its current status - corrections go through the workflow");
+                return false;
             }
         }
+        return true;
     }
 #end
 

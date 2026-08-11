@@ -115,6 +115,39 @@ class EdmIntentGeneratorTest {
         assertNull(pfNumber.get("numberScope"), "the model must not carry a scope/token list");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void processUserTasksEmitTheirLabelCatalogMap() {
+        String yaml = """
+                name: orders
+                entities:
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal }
+                processes:
+                  - name: OrderApproval
+                    trigger: { onCreate: Order }
+                    steps:
+                      - name: managerReview
+                        kind: userTask
+                        args: { assignee: manager, form: ApproveOrder }
+                forms:
+                  - name: ApproveOrder
+                    forEntity: Order
+                    fields: [total]
+                    actions: [approve]
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "orders");
+        Map<String, Object> body = (Map<String, Object>) model.get("model");
+        // Keyed by the authored step name (the customActionLabels convention); the value is the
+        // humanized runtime task name, so the reverse map baked into config.js lets a view resolve
+        // an inbox task's name to <project>:<model>-model.processes.<step name> by exact match.
+        Map<String, String> labels = (Map<String, String>) body.get("processTaskLabels");
+        assertNotNull(labels, "a process with user tasks must put processTaskLabels on the .model root");
+        assertEquals("Manager Review", labels.get("managerReview"));
+    }
+
     @Test
     void crossModelProjectionCellIsMarkedProjectionInTheEdmDiagram() {
         IntentModel parsed = IntentParser.parse(readResource("/billing/customers.intent"));
@@ -449,11 +482,11 @@ class EdmIntentGeneratorTest {
     }
 
     @Test
-    void documentMasterWithACalendarViewStillCarriesThePrintFlag() {
-        // A document (header-items) master whose UI is overridden to a range calendar: the layout
-        // becomes MANAGE_CALENDAR (the document page is replaced by the calendar + the shared manage
-        // form for edit), but it still gets a .print template + feeder - so it must keep hasPrint, which
-        // is what lets that reused manage form show a Print button.
+    void documentMasterWithACalendarViewKeepsTheDocumentLayoutAndAddsTheCalendar() {
+        // #6547: a calendar/range view is an ADDITIONAL page - it must NOT replace the layout. A document
+        // (header-items) master browsed on a calendar keeps MANAGE_DOCUMENT (so create/edit open the
+        // document editor with its line items, Print and inline process tasks) and merely carries
+        // calendarView + the calendar* metadata for the extra page.
         String yaml = """
                 name: leave
                 entities:
@@ -475,9 +508,13 @@ class EdmIntentGeneratorTest {
         Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "leave");
         List<Map<String, Object>> entities = entities(model);
         Map<String, Object> request = entityByName(entities, "LeaveRequest");
-        assertEquals("MANAGE_CALENDAR", request.get("layoutType"), "view: range overrides the document layout with the calendar");
-        assertEquals("true", request.get("hasPrint"),
-                "a document master keeps its Print flag even when the calendar view replaces the document page");
+        assertEquals("MANAGE_DOCUMENT", request.get("layoutType"), "view: range no longer overrides the document layout");
+        assertEquals("LeaveRequestItem", request.get("documentItemsEntity"));
+        assertEquals("true", request.get("calendarView"), "the calendar rides alongside the layout as an additional page");
+        assertEquals("FromDate", request.get("calendarStartProperty"));
+        assertEquals("ToDate", request.get("calendarEndProperty"));
+        assertEquals("true", request.get("calendarRange"));
+        assertEquals("true", request.get("hasPrint"), "a document master keeps its Print flag");
     }
 
     @Test
@@ -1067,10 +1104,88 @@ class EdmIntentGeneratorTest {
         assertEquals("Day", child.get("calendarStartProperty"));
         assertEquals("Note", child.get("calendarTitleProperty"));
 
-        // A PRIMARY calendar entity keeps the standalone calendar page as before.
+        // A PRIMARY calendar entity gets the standalone calendar page as an ADDITIONAL page (#6547): its
+        // own layout stays (here MANAGE - no composition children of its own), so the create/edit form
+        // and the table browse page it brings are all still generated.
         Map<String, Object> primary = entityByName(entities, "Meeting");
-        assertEquals("MANAGE_CALENDAR", primary.get("layoutType"));
+        assertEquals("MANAGE", primary.get("layoutType"));
+        assertEquals("true", primary.get("calendarView"));
         assertEquals(null, primary.get("detailCalendar"));
+    }
+
+    @Test
+    void documentMasterWithASlotsViewKeepsTheDocumentLayoutAndAddsThePicker() {
+        // #6547, same rule as the calendar: a slot picker is how a booking is CREATED, the document page
+        // is how it is worked with afterwards - so the picker rides alongside the layout instead of
+        // replacing it, and slot-click lands on the document editor.
+        String yaml = """
+                name: clinic
+                entities:
+                  - name: Appointment
+                    function: Document
+                    view: slots
+                    slots: { start: startsAt, open: "09:00", close: "17:00", step: 15 }
+                    fields:
+                      - { name: id,       type: integer, primaryKey: true, generated: true }
+                      - { name: startsAt, type: timestamp, required: true }
+                  - name: AppointmentItem
+                    function: DocumentItem
+                    fields:
+                      - { name: id,   type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, length: 100 }
+                    relations:
+                      - { name: Appointment, kind: manyToOne, to: Appointment, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "clinic");
+        Map<String, Object> appointment = entityByName(entities(model), "Appointment");
+        assertEquals("MANAGE_DOCUMENT", appointment.get("layoutType"), "view: slots no longer overrides the document layout");
+        assertEquals("true", appointment.get("slotsView"), "the picker rides alongside the layout as an additional page");
+        assertEquals("StartsAt", appointment.get("slotStartProperty"));
+        assertEquals("09:00", appointment.get("slotOpen"));
+        assertEquals("17:00", appointment.get("slotClose"));
+        assertEquals("15", appointment.get("slotStep"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void documentWhoseItemsChildIsACalendarRendersTheItemsPaneAsACalendar() {
+        // #6482: the line-items child declaring `view: calendar` used to emit its calendar metadata and
+        // then be filtered out of the document's secondary panels, so nothing rendered. The master now
+        // carries documentItemsLayout: calendar, which is what makes the items PANE the calendar.
+        String yaml = """
+                name: booking
+                entities:
+                  - name: Booking
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: reference, type: string }
+                  - name: BookingItem
+                    view: calendar
+                    calendar: { start: day, title: note, initialView: month }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: day, type: date, required: true }
+                      - { name: note, type: string }
+                    relations:
+                      - { name: Booking, kind: manyToOne, to: Booking, composition: true, required: true }
+                """;
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(IntentParser.parse(yaml), "booking");
+        List<Map<String, Object>> entities = entities(model);
+
+        Map<String, Object> master = entityByName(entities, "Booking");
+        assertEquals("MANAGE_DOCUMENT", master.get("layoutType"));
+        assertEquals("BookingItem", master.get("documentItemsEntity"));
+        assertEquals("calendar", master.get("documentItemsLayout"), "the items pane renders as a calendar");
+
+        // The child stays an ordinary detail: its registration is what carries the calendar's own
+        // configuration (start / title / view) to the document page at runtime.
+        Map<String, Object> child = entityByName(entities, "BookingItem");
+        assertEquals("MANAGE_DETAILS", child.get("layoutType"));
+        assertEquals("true", child.get("detailCalendar"));
+        assertEquals("Day", child.get("calendarStartProperty"));
+        assertEquals("Note", child.get("calendarTitleProperty"));
+        assertEquals("month", child.get("calendarInitialView"));
     }
 
     @Test

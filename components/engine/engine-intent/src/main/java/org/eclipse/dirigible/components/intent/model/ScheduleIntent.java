@@ -37,6 +37,15 @@ public class ScheduleIntent {
     private String name;
     private String cron;
     private String entity;
+
+    /**
+     * Optional model alias (from the model's {@code uses:} list) the {@link #entity} source lives in.
+     * Blank means the source is a local entity of this model (the default, fully backward compatible).
+     * A cross-model source is read-only and supports the {@code generate} action only; its
+     * {@code where}/{@code map}/{@code match} field references are validated at generation time against
+     * the owner's {@code .model}.
+     */
+    private String model;
     private List<ScheduleConditionIntent> where = new ArrayList<>();
     private NotificationIntent notify;
     private GeneratesIntent generate;
@@ -63,6 +72,14 @@ public class ScheduleIntent {
 
     public void setEntity(String entity) {
         this.entity = entity;
+    }
+
+    public String getModel() {
+        return model;
+    }
+
+    public void setModel(String model) {
+        this.model = model;
     }
 
     public List<ScheduleConditionIntent> getWhere() {

@@ -1,0 +1,128 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Messaging - read-only. The broker's queues and topics with their counters, and a non-destructive
+  browse of a queue's pending messages. Purging, deleting a message and removing a destination stay
+  in the Workbench's Messaging perspective.
+
+  Topics show live counters but no message list: JMS topics do not retain non-persistent messages,
+  so there is nothing to browse.
+-->
+<div id="monitoring-messaging-page" class="vbox size-full" x-data="messagingPage">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:messaging.title', 'Messaging')"></span>
+    <span x-show="state.summary" x-cloak x-h-badge :data-variant="state.summary && state.summary.started ? 'positive' : 'negative'"
+          x-text="state.summary ? state.summary.brokerName : ''"></span>
+    <div x-h-toolbar-spacer></div>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
+      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+      <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
+    </button>
+  </div>
+
+  <div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
+
+    <div x-h-split-panel data-size="50%">
+      <div class="vbox size-full overflow-auto p-3 gap-4">
+        <div x-show="state.loading" x-cloak class="vbox gap-2">
+          <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-6 w-full"></div></template>
+        </div>
+        <div x-show="!state.loading && state.error" x-cloak x-h-text.muted class="text-sm"
+             x-text="T('monitoring:messaging.loadFailed', 'The message broker could not be reached.')"></div>
+
+        <div class="vbox gap-2" x-show="!state.loading && !state.error">
+          <h2 class="text-sm font-semibold" x-text="T('monitoring:messaging.queues', 'Queues')"></h2>
+          <div x-show="!state.queues.length" x-h-text.muted class="text-sm"
+               x-text="T('monitoring:messaging.noQueues', 'No queues.')"></div>
+          <table x-h-table x-show="state.queues.length">
+            <thead x-h-table-header>
+              <tr>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colName', 'Name')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colPending', 'Pending')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colConsumers', 'Consumers')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colEnqueued', 'Enqueued')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colDequeued', 'Dequeued')"></th>
+              </tr>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="queue in state.queues" :key="queue.name">
+                <tr x-h-table-row data-hoverable="true" class="cursor-pointer"
+                    :data-state="state.selectedQueue === queue.name ? 'selected' : ''" @click="state.selectQueue(queue)">
+                  <td x-h-table-cell x-text="queue.name"></td>
+                  <td x-h-table-cell>
+                    <span x-h-badge :data-variant="queueVariant(queue)" x-text="queue.size"></span>
+                  </td>
+                  <td x-h-table-cell x-text="queue.consumerCount"></td>
+                  <td x-h-table-cell x-text="queue.enqueueCount"></td>
+                  <td x-h-table-cell x-text="queue.dequeueCount"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="vbox gap-2" x-show="!state.loading && !state.error && state.topics.length">
+          <h2 class="text-sm font-semibold" x-text="T('monitoring:messaging.topics', 'Topics')"></h2>
+          <table x-h-table>
+            <thead x-h-table-header>
+              <tr>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colName', 'Name')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colConsumers', 'Consumers')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colEnqueued', 'Enqueued')"></th>
+                <th x-h-table-head scope="col" x-text="T('monitoring:messaging.colDispatched', 'Dispatched')"></th>
+              </tr>
+            </thead>
+            <tbody x-h-table-body>
+              <template x-for="topic in state.topics" :key="topic.name">
+                <tr x-h-table-row>
+                  <td x-h-table-cell x-text="topic.name"></td>
+                  <td x-h-table-cell x-text="topic.consumerCount"></td>
+                  <td x-h-table-cell x-text="topic.enqueueCount"></td>
+                  <td x-h-table-cell x-text="topic.dispatchCount"></td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Browsed messages of the selected queue. -->
+    <div x-h-split-panel data-size="50%" :data-hidden="!state.selectedQueue">
+      <div class="vbox size-full min-h-0">
+        <div x-h-toolbar data-size="sm">
+          <span x-h-toolbar-title class="shrink-0" x-text="state.selectedQueue"></span>
+          <div x-h-toolbar-spacer></div>
+          <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.clearSelection()"
+                  aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        </div>
+        <div class="flex-1 min-h-0 overflow-auto p-3 vbox gap-3">
+          <div x-show="state.messagesLoading" x-cloak><div x-h-spinner></div></div>
+          <div x-show="!state.messagesLoading && !state.messages.length" x-cloak x-h-text.muted class="text-sm"
+               x-text="T('monitoring:messaging.noMessages', 'This queue holds no pending messages.')"></div>
+          <template x-for="message in state.messages" :key="message.id">
+            <div x-h-card>
+              <div x-h-card-header>
+                <div class="hbox items-center gap-2 text-xs text-muted-foreground">
+                  <span x-text="message.id"></span>
+                  <span x-text="timeText(message.timestamp)"></span>
+                  <span x-h-badge data-variant="outline" x-text="message.bodyKind"></span>
+                  <span x-show="message.redeliveryCounter > 0" x-h-badge data-variant="warning"
+                        x-text="T('monitoring:messaging.redelivered', 'redelivered {{count}}x', { count: message.redeliveryCounter })"></span>
+                </div>
+              </div>
+              <div x-h-card-content>
+                <pre class="font-mono text-xs whitespace-pre-wrap break-all" x-text="shorten(message.body)"></pre>
+                <p x-show="message.bodyTruncated" x-h-text.muted class="text-xs"
+                   x-text="T('monitoring:messaging.truncated', 'The payload is truncated.')"></p>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

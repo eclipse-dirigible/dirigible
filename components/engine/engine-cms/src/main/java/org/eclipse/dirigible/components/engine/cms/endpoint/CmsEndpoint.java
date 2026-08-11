@@ -18,10 +18,12 @@ import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.commons.config.ResourcesCache;
 import org.eclipse.dirigible.commons.config.ResourcesCache.Cache;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
+import org.eclipse.dirigible.components.base.http.roles.Roles;
 import org.eclipse.dirigible.components.engine.cms.CmisDocument;
 import org.eclipse.dirigible.components.engine.cms.CmisObject;
 import org.eclipse.dirigible.components.engine.cms.CmisSessionFactory;
 import org.eclipse.dirigible.components.engine.cms.ObjectType;
+import org.eclipse.dirigible.components.engine.cms.documents.DocumentAccessEvaluator;
 import org.eclipse.dirigible.components.engine.cms.service.CmsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,9 +42,13 @@ import jakarta.servlet.http.HttpServletRequest;
 
 /**
  * The Class CmsEndpoint.
+ * <p>
+ * Secured path only. The CMS holds tenant BUSINESS content - record attachments, generated document
+ * snapshots and the database export dumps - so it must never be served from the unauthenticated
+ * {@code /public/**} space, where a known or guessable path is readable with no credentials at all.
  */
 @RestController
-@RequestMapping({BaseEndpoint.PREFIX_ENDPOINT_SECURED + "cms", BaseEndpoint.PREFIX_ENDPOINT_PUBLIC + "cms"})
+@RequestMapping(BaseEndpoint.PREFIX_ENDPOINT_SECURED + "cms")
 public class CmsEndpoint extends BaseEndpoint {
 
     /** The Constant logger. */
@@ -51,8 +57,17 @@ public class CmsEndpoint extends BaseEndpoint {
     /** The Constant INDEX_HTML. */
     private static final String INDEX_HTML = "index.html";
 
+    /**
+     * The CMS folder the asynchronous database export writes its dumps into. Mirrors
+     * {@code DataAsyncExportService.EXPORTS_FOLDER_NAME}, which this module cannot depend on.
+     */
+    private static final String EXPORTS_FOLDER_NAME = "__EXPORTS";
+
     /** The cms service. */
     private final CmsService cmsService;
+
+    /** Decides whether the caller may read the requested path. */
+    private final DocumentAccessEvaluator accessEvaluator;
 
     /** The Constant WEB_CACHE. */
     private static final Cache WEB_CACHE = ResourcesCache.getWebCache();
@@ -66,10 +81,11 @@ public class CmsEndpoint extends BaseEndpoint {
      * Instantiates a new cms endpoint.
      *
      * @param cmsService the cms service
+     * @param accessEvaluator the per-path access evaluator
      */
-    @Autowired
-    public CmsEndpoint(CmsService cmsService) {
+    public CmsEndpoint(CmsService cmsService, DocumentAccessEvaluator accessEvaluator) {
         this.cmsService = cmsService;
+        this.accessEvaluator = accessEvaluator;
     }
 
     /**
@@ -83,8 +99,11 @@ public class CmsEndpoint extends BaseEndpoint {
         if (path.trim()
                 .isEmpty()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Listing of web folders is forbidden.");
-        } else if (path.trim()
-                       .endsWith("/")) {
+        }
+        assertExportsAccess(path);
+        assertReadable(path);
+        if (path.trim()
+                .endsWith("/")) {
             return getDocumentByPath(path + INDEX_HTML);
         }
         ResponseEntity resourceResponse = getDocumentByPath(path);
@@ -93,6 +112,42 @@ public class CmsEndpoint extends BaseEndpoint {
                             .add("X-Frame-Options", "Deny");
         }
         return resourceResponse;
+    }
+
+    /**
+     * A database export dump is readable only by the roles entitled to produce one: a full schema dump
+     * is an administrative artefact and must not be reachable just because its file name is known. This
+     * is a blanket rule, independent of the per-path grants applied by {@link #assertReadable}.
+     *
+     * @param path the requested CMS path
+     */
+    private void assertExportsAccess(String path) {
+        String normalized = path.trim();
+        while (normalized.startsWith("/")) {
+            normalized = normalized.substring(1);
+        }
+        if (!normalized.equals(EXPORTS_FOLDER_NAME) && !normalized.startsWith(EXPORTS_FOLDER_NAME + "/")) {
+            return; // the folder itself or anything under it - not merely a name starting with it
+        }
+        if (!request.isUserInRole(Roles.ADMINISTRATOR.getRoleName()) && !request.isUserInRole(Roles.OPERATOR.getRoleName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access to the database exports requires the "
+                    + Roles.ADMINISTRATOR.getRoleName() + " or " + Roles.OPERATOR.getRoleName() + " role.");
+        }
+    }
+
+    /**
+     * The per-path role grants apply here exactly as they do to the Documents API.
+     * <p>
+     * This endpoint reads the same tenant content by path, so without this check a grant restricting a
+     * folder would hide it from the Documents user interface while still serving every file under it to
+     * any authenticated caller who knows - or guesses - the path.
+     *
+     * @param path the requested CMS path
+     */
+    private void assertReadable(String path) {
+        if (!accessEvaluator.isReadable(path, request)) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Access to the requested path is not allowed.");
+        }
     }
 
     /**

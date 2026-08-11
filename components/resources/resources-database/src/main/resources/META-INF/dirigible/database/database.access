@@ -1,0 +1,14 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/database/",
+            "method": "*",
+            "roles": [
+                "ADMINISTRATOR",
+                "OPERATOR",
+                "DEVELOPER"
+            ]
+        }
+    ]
+}

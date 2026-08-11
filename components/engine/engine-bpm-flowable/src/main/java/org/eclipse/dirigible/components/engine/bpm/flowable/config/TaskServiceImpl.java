@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.engine.bpm.flowable.config;
 
 import org.eclipse.dirigible.commons.api.helpers.GsonHelper;
+import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.tenant.Tenant;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
@@ -208,9 +209,12 @@ class TaskServiceImpl implements TaskService {
         TaskQuery taskQuery = flowableTaskService.createTaskQuery()
                                                  .taskTenantId(getTenantId());
         if (PrincipalType.CANDIDATE_GROUPS.equals(type)) {
+            // roles/groups are NEVER impersonated - candidate visibility stays the REAL user's
             return taskQuery.taskCandidateGroupIn(UserFacade.getUserRoles());
         } else if (PrincipalType.ASSIGNEE.equals(type)) {
-            return taskQuery.taskAssignee(UserFacade.getName());
+            // assignee = the effective identity: under act-as (delegated entry) the Inbox serves
+            // the acting identity's own tasks, e.g. a personal-assigned submit task
+            return taskQuery.taskAssignee(ActAsFacade.effectiveUser());
         } else {
             throw new IllegalArgumentException("Unrecognised principal type: " + type);
         }

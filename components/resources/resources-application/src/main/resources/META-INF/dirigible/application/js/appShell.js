@@ -59,13 +59,29 @@ document.addEventListener('alpine:init', () => {
     tenantConfigSaving: false,
     tenantConfigError: null,
 
-    /** A human-friendly label for a predefined key, derived from its DIRIGIBLE_BRANDING_* name. */
+    /** A localized label for a predefined key, falling back to a title-cased form of its name. */
     tenantConfigLabel(key) {
-      return key.replace(/^DIRIGIBLE_BRANDING_/, '')
+      const derived = key.replace(/^DIRIGIBLE_BRANDING_/, '')
                 .replace(/^DIRIGIBLE_/, '')
                 .toLowerCase()
                 .replace(/_/g, ' ')
                 .replace(/\b\w/g, (c) => c.toUpperCase());
+      const suffix = {
+        DIRIGIBLE_BRANDING_NAME: 'name',
+        DIRIGIBLE_BRANDING_SUBTITLE: 'subtitle',
+        DIRIGIBLE_BRANDING_BRAND: 'brand',
+        DIRIGIBLE_BRANDING_BRAND_URL: 'brandUrl',
+        DIRIGIBLE_BRANDING_FAVICON: 'favicon',
+        DIRIGIBLE_BRANDING_THEME: 'theme',
+        DIRIGIBLE_BRANDING_PREFIX: 'prefix',
+        DIRIGIBLE_BRANDING_ANALYTICS: 'analytics',
+        DIRIGIBLE_APPLICATION_LANGUAGES: 'languages',
+        DIRIGIBLE_CMS_ROLES_ENABLED: 'cmsRoles',
+        DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED: 'msOfficeContentTypes',
+      }[key];
+      return (suffix && window.T)
+        ? T('application-core:shell.settings.tenantConfigLabels.' + suffix, derived)
+        : derived;
     },
 
     /** Load the predefined properties and the current tenant's value for each. */
@@ -138,9 +154,31 @@ document.addEventListener('alpine:init', () => {
     numberingLoading: false,
     numberingError: null,
 
-    /** A readable label for a series row: the series, plus the partition in brackets when partitioned. */
+    /**
+     * A readable label for a series row: the series, plus the partition's DISPLAY LABEL when the
+     * declaration names a partition source ("Sales Invoice - ACME Ltd."), falling back to the raw
+     * partition value in brackets when no label resolves.
+     */
     numberingLabel(row) {
-      return row.partition ? row.series + ' [' + row.partition + ']' : row.series;
+      if (!row.partition) return row.series;
+      if (row.partitionLabel) return row.series + ' — ' + row.partitionLabel;
+      return row.series + ' [' + row.partition + ']';
+    },
+
+    /**
+     * The base ("") row of a PARTITIONED series is only the shape template new partitions inherit at
+     * birth - allocation always draws from a partition row - so its counter must not be offered for
+     * editing (editing it looks like seeding the next number and does nothing).
+     */
+    numberingIsShapeTemplate(row) {
+      return !row.partition && row.partitioned;
+    },
+
+    /** Whether the row's edits differ from what was loaded - drives the per-row Save. */
+    numberingDirty(row) {
+      return (row.prefix || '') !== row.orig.prefix
+        || parseInt(row.size, 10) !== row.orig.size
+        || (!this.numberingIsShapeTemplate(row) && parseInt(row.next, 10) !== row.orig.next);
     },
 
     /**
@@ -175,9 +213,16 @@ document.addEventListener('alpine:init', () => {
         this.numbering = data.map((c) => ({
           series: c.series,
           partition: c.partition || '',
+          partitionLabel: c.partitionLabel || '',
           prefix: c.prefix || '',
           size: c.size,
           next: c.next,
+          partitioned: !!c.partitioned,
+          // A declared partition value that has never allocated: the row does not exist yet and is
+          // rendered from the base shape; saving it provisions it (seed a counter before first use).
+          virtual: !!c.virtual,
+          saving: false,
+          saved: false,
           orig: { prefix: c.prefix || '', size: c.size, next: c.next }
         }));
       } catch (e) {
@@ -191,40 +236,49 @@ document.addEventListener('alpine:init', () => {
     },
 
     /**
-     * Persist each row's edits: a changed shape via PUT /shape, a changed next via PUT. Untouched
+     * Persist ONE row's edits: a changed shape via PUT /shape, a changed next via PUT. Untouched
      * values are not written - setNext rewinds the live counter, so writing an unchanged "next"
-     * would silently undo allocations made since the page loaded.
+     * would silently undo allocations made since the page loaded. Per-row on purpose: a real suite
+     * has dozens of series, and saving must sit next to what was edited, not below the whole list.
+     * Only the saved row's baseline is refreshed, so other rows' in-progress edits survive.
      */
-    async saveNumbering() {
+    async saveNumberingRow(row) {
       this.numberingError = null;
+      row.saving = true;
+      row.saved = false;
       try {
-        for (const row of this.numbering) {
-          const size = parseInt(row.size, 10);
-          const shapeChanged = (row.prefix || '') !== row.orig.prefix || size !== row.orig.size;
-          if (shapeChanged && isFinite(size)) {
-            const res = await fetch('/services/core/numbering/shape', {
-              method: 'PUT',
-              credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ series: row.series, partition: row.partition, prefix: row.prefix || '', size: size })
-            });
-            if (!res.ok) throw new Error('PUT shape ' + row.series + ' -> HTTP ' + res.status);
-          }
-          const next = parseInt(row.next, 10);
-          if (isFinite(next) && next >= 1 && next !== row.orig.next) {
-            const res = await fetch('/services/core/numbering', {
-              method: 'PUT',
-              credentials: 'same-origin',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ series: row.series, partition: row.partition, next: next })
-            });
-            if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
-          }
+        const size = parseInt(row.size, 10);
+        const shapeChanged = (row.prefix || '') !== row.orig.prefix || size !== row.orig.size;
+        if (shapeChanged && isFinite(size)) {
+          const res = await fetch('/services/core/numbering/shape', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series: row.series, partition: row.partition, prefix: row.prefix || '', size: size })
+          });
+          if (!res.ok) throw new Error('PUT shape ' + row.series + ' -> HTTP ' + res.status);
+          row.orig.prefix = row.prefix || '';
+          row.orig.size = size;
         }
-        await this.loadNumbering();
+        const next = parseInt(row.next, 10);
+        if (!this.numberingIsShapeTemplate(row) && isFinite(next) && next >= 1 && next !== row.orig.next) {
+          const res = await fetch('/services/core/numbering', {
+            method: 'PUT',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ series: row.series, partition: row.partition, next: next })
+          });
+          if (!res.ok) throw new Error('PUT ' + row.series + ' -> HTTP ' + res.status);
+          row.orig.next = next;
+        }
+        row.saved = true;
+        setTimeout(() => { row.saved = false; }, 2500);
       } catch (e) {
         console.error('document-numbering: failed to save', e);
         this.numberingError = 'save';
+      } finally {
+        row.saving = false;
+        this.refreshIcons();
       }
     },
 
@@ -277,7 +331,41 @@ document.addEventListener('alpine:init', () => {
       return locale.languages().map(code => ({ value: code, text: locale.displayName(code) }));
     },
 
+    // ---- Act as (delegated entry) - the Applications-shell entry point -------------------
+    // An entitled user (ADMINISTRATOR) arms an acting identity here and lands in the My shell
+    // as that person - the manager-does-the-entry mode. Server-side session + entitlement.
+    actAs: { entitled: false, acting: null },
+    actAsDialog: false,
+    actAsInput: '',
+    async loadActAs() {
+      try {
+        const res = await fetch('/services/core/actas', { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+        if (res.ok) {
+          const s = await res.json();
+          this.actAs = { entitled: !!s.entitled, acting: s.actingAs || null };
+        }
+      } catch (e) {
+        console.error('Failed to load the act-as state', e);
+      }
+    },
+    async armActAs() {
+      const username = (this.actAsInput || '').trim();
+      if (!username) return;
+      const res = await fetch('/services/core/actas', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ username }),
+      });
+      if (res.ok) {
+        window.location.href = '/services/web/personal/';
+      } else {
+        console.error('Failed to arm act-as', res.status);
+      }
+    },
+
     async init() {
+      this.loadActAs(); // fire-and-forget: the menu entry appears when the state arrives
       const projectionsLoaded = this.loadProjections();
       try {
         const res = await fetch(PERSPECTIVES_URL, { headers: { 'Accept': 'application/json' } });
@@ -310,8 +398,14 @@ document.addEventListener('alpine:init', () => {
             } else if (g.path && g.kind === 'SETTING') {
               // A standalone setting perspective declared with no navigation group.
               settings.push(g);
-            } else if (g.path && g.kind === 'PRIMARY') {
-              // A standalone (un-grouped) app entity perspective.
+            } else if (g.path && g.kind) {
+              // A standalone app perspective: declared with no navigation group (PRIMARY - the
+              // expected case), or one the aggregator could not place at all. Rescuing any kind, not
+              // just PRIMARY, is what keeps an unplaceable perspective visible: enumerating kinds let
+              // one fall off the end of this chain and vanish with no diagnostic anywhere (#6646).
+              if (g.kind !== 'PRIMARY') {
+                console.warn(`Perspective '${g.id}' (kind ${g.kind}, groupId '${g.groupId || ''}') matched no navigation group; showing it under "Other".`);
+              }
               ungrouped.push(g);
             }
           });

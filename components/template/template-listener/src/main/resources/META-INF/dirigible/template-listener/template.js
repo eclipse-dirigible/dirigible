@@ -4,23 +4,18 @@
  * Do not modify the content as it may be re-generated again.
  */
 export const getTemplate = () => ({
-  name: "Message Listener (Model)",
-  description: "Listener for a message with a simple Javascript handler",
+  name: "Message Listener (Java)",
+  description: "Message Listener with a client Java handler",
   sources: [
     {
-      location: "/template-listener/listener.template",
+      location: "/template-listener/handler.java.template",
       action: "generate",
-      rename: "{{fileName}}.listener",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
     {
-      location: "/template-listener/handler.js.template",
+      location: "/template-listener/trigger.java.template",
       action: "generate",
-      rename: "{{fileName}}-handler.js",
-    },
-    {
-      location: "/template-listener/trigger.js.template",
-      action: "generate",
-      rename: "{{fileName}}-trigger.js",
+      rename: "{{javaPackageName}}/{{javaClassName}}Trigger.java",
     },
   ],
   parameters: [],

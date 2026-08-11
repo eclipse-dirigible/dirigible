@@ -12,6 +12,7 @@ package org.eclipse.dirigible.components.ide.workspace.service;
 import org.eclipse.dirigible.commons.config.Configuration;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.publisher.PublisherHandler;
+import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.repository.api.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,15 +40,24 @@ public class PublisherService {
     private final IRepository repository;
 
     /**
+     * Marks the window in which the registry is half-written, so a synchronization pass that lands in
+     * it defers its cleanup instead of deleting artefacts whose sources are about to reappear.
+     */
+    private final RegistryMutationTracker registryMutationTracker;
+
+    /**
      * Instantiates a new publisher service.
      *
      * @param repository the repository
      * @param publisherHandlers the publisher handlers
+     * @param registryMutationTracker the registry mutation tracker
      */
     @Autowired
-    public PublisherService(IRepository repository, List<PublisherHandler> publisherHandlers) {
+    public PublisherService(IRepository repository, List<PublisherHandler> publisherHandlers,
+            RegistryMutationTracker registryMutationTracker) {
         this.repository = repository;
         this.publisherHandlers = publisherHandlers;
+        this.registryMutationTracker = registryMutationTracker;
     }
 
     /**
@@ -110,6 +120,16 @@ public class PublisherService {
      * @param afterPublishMetadata the after publish metadata
      */
     private void publishResource(String sourceLocation, String targetLocation, PublisherHandler.AfterPublishMetadata afterPublishMetadata) {
+        registryMutationTracker.enter();
+        try {
+            doPublishResource(sourceLocation, targetLocation, afterPublishMetadata);
+        } finally {
+            registryMutationTracker.exit();
+        }
+    }
+
+    private void doPublishResource(String sourceLocation, String targetLocation,
+            PublisherHandler.AfterPublishMetadata afterPublishMetadata) {
         for (PublisherHandler next : publisherHandlers) {
             try {
                 next.beforePublish(sourceLocation);
@@ -196,6 +216,15 @@ public class PublisherService {
      * @param targetLocation the targetLocation
      */
     private void unpublishResource(String targetLocation) {
+        registryMutationTracker.enter();
+        try {
+            doUnpublishResource(targetLocation);
+        } finally {
+            registryMutationTracker.exit();
+        }
+    }
+
+    private void doUnpublishResource(String targetLocation) {
 
         for (PublisherHandler next : publisherHandlers) {
             try {

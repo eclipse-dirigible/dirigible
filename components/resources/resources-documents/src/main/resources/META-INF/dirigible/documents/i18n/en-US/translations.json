@@ -44,6 +44,18 @@
         "openFolder": "Could not open folder. Check console for errors.",
         "uploadTitle": "Failed to upload item",
         "upload": "Could not upload item. Check console for errors.",
-        "copyLink": "Failed to copy link"
-    }
+        "copyLink": "Failed to copy link",
+        "accessLoad": "Could not load the access rules.",
+        "accessAdd": "Could not add the rule.",
+        "accessRemove": "Could not remove the rule."
+    },
+    "manageAccess": "Manage access",
+    "accessOpen": "No rules: open to everyone who can use Documents.",
+    "accessOwn": "This folder",
+    "accessSource": "Applies from",
+    "accessRole": "Role",
+    "accessMethod": "Permission",
+    "accessRead": "Read",
+    "accessWrite": "Write",
+    "accessAdd": "Add"
 }

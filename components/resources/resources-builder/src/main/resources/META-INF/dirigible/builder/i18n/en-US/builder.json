@@ -1,0 +1,46 @@
+{
+  "builder": {
+    "title": "Builder",
+    "publish": "Publish",
+    "notConfigured": "The AI assistant is not configured on this instance. Set DIRIGIBLE_INTENT_AI_API_KEY on the server and reload this page.",
+    "apps": {
+      "title": "Your apps",
+      "new": "New app",
+      "untitled": "New app"
+    },
+    "welcome": {
+      "title": "Describe the application you need.",
+      "subtitle": "Tell me what it should do in plain language. I will design it as we talk, and one button turns it into a running application."
+    },
+    "composer": {
+      "placeholder": "Describe a change..."
+    },
+    "canvas": {
+      "empty": "Your application will appear here as you describe it."
+    },
+    "source": {
+      "view": "View source",
+      "title": "app.intent",
+      "copy": "Copy",
+      "copied": "Copied",
+      "close": "Close",
+      "emptyText": "Nothing yet."
+    },
+    "pipeline": {
+      "title": "Publishing your application"
+    },
+    "success": {
+      "isLive": "is live.",
+      "warnings": "Generated with notes:",
+      "tryIt": "Try it here:",
+      "keepBuilding": "Keep building"
+    },
+    "failure": {
+      "title": "Could not publish",
+      "published": "Published with errors",
+      "issues": "The description does not hold together yet:",
+      "retry": "Try again",
+      "back": "Back to the app"
+    }
+  }
+}

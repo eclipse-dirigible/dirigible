@@ -169,16 +169,31 @@ public class GenerationService {
      * @return the template metadata
      */
     private static GenerationTemplateMetadata getTemplateMetadata(GenerationTemplateParameters parameters) {
-        String templateModule = parameters.getTemplate();
+        return getTemplateMetadata(parameters.getTemplate(), parameters.getParameters());
+    }
+
+    /**
+     * Gets the template metadata, by reading the template module's own descriptor.
+     *
+     * <p>
+     * The descriptors are authored as template modules, so reading one means running its
+     * {@code getTemplate} function. The parameters are passed in because a composite template branches
+     * on them when assembling its source list.
+     *
+     * @param templateModule the template's module path
+     * @param parameters the generation parameters
+     * @return the template metadata
+     */
+    public static GenerationTemplateMetadata getTemplateMetadata(String templateModule, Map<String, Object> parameters) {
         try (DirigibleJavascriptCodeRunner runner = new DirigibleJavascriptCodeRunner()) {
             Module module = runner.run(Path.of(templateModule));
-            Object res = runner.runMethod(module, "getTemplate", parameters.getParameters())
+            Object res = runner.runMethod(module, "getTemplate", parameters)
                                .as(Object.class);
             String serializedMetadata = GsonHelper.toJson(res);
             GenerationTemplateMetadata metadata = GsonHelper.fromJson(serializedMetadata, GenerationTemplateMetadata.class);
             return Objects.requireNonNull(metadata);
         } catch (Exception e) {
-            throw new IllegalArgumentException(format("Invalid template definition file: [{0}]", parameters.getTemplate()));
+            throw new IllegalArgumentException(format("Invalid template definition file: [{0}]", templateModule), e);
         }
     }
 
@@ -303,6 +318,8 @@ public class GenerationService {
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME, fileName);
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME_EXT, fileNameExt);
         parameters.put(GenerationParameters.PARAMETER_FILE_NAME_BASE, fileNameBase);
+        parameters.put(GenerationParameters.PARAMETER_JAVA_CLASS_NAME, JavaNames.toClassName(fileNameBase));
+        parameters.put(GenerationParameters.PARAMETER_JAVA_PACKAGE_NAME, JavaNames.toPackageName(project));
         parameters.put(GenerationParameters.PARAMETER_FILE_PATH, filePath.build());
         parameters.put(GenerationParameters.PARAMETER_PACKAGE_PATH, packagePath.build());
     }

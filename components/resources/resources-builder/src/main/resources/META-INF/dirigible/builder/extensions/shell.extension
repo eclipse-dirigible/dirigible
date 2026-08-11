@@ -1,0 +1,5 @@
+{
+    "module": "builder/configs/shell.js",
+    "extensionPoint": "platform-shells",
+    "description": "Builder Shell"
+}

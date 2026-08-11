@@ -12,7 +12,7 @@
 /**
  * documentsPage — the built-in Documents view: a full Document Storage browser (the Harmonia
  * counterpart of the dashboard's AngularJS documents perspective), over the CMS REST API
- * /services/js/documents/api/documents.js. Outlook-style master-detail: a file/folder list on the
+ * /services/documents. Outlook-style master-detail: a file/folder list on the
  * left and a File Preview pane on the right (CSV → table via PapaParse, other types → an <iframe>
  * over /preview). Features: back/forward history, breadcrumbs, search-in-folder, new folder,
  * rename, single + multi-select delete, download (file + folder zip), copy link, file-type icons,
@@ -44,9 +44,10 @@ document.addEventListener('alpine:init', () => {
 
   Alpine.data('documentsPage', () => ({
     ...basePage(),
-    base: '/services/js/documents/api/documents.js',
+    base: '/services/documents',
+    accessBase: '/services/documents/access',
     folder: { name: 'root', path: '/', children: [] },
-    breadcrumbs: [{ name: 'Home', path: '' }],
+    breadcrumbs: [{ name: window.T ? T('application-core:shell.nav.home', 'Home') : 'Home', path: '' }],
     state: 'loading',      // loading | error | default
     error: null,
 
@@ -66,6 +67,12 @@ document.addEventListener('alpine:init', () => {
     newFolderOpen: false, newFolderName: '', newFolderError: null,
     renameOpen: false, renameName: '', renameTarget: null, renameError: null,
     deleteOpen: false, deleteTargets: [],
+
+    // Manage access: per-path role grants, editable by an administrator. Read-only for everybody
+    // else - the endpoint answers 403, which is what hides the entry rather than a client-side guess.
+    accessOpen: false, accessTarget: null, accessError: null,
+    access: { path: '/', own: [], inherited: [] },
+    accessDraft: { role: '', method: 'READ' },
 
     _hist: { idx: -1, state: [] },
 
@@ -141,7 +148,7 @@ document.addEventListener('alpine:init', () => {
     // ----- breadcrumbs (Home navigates to the no-path root) -----
     parseBreadcrumbs(path) {
       const parts = String(path || '/').split('/').filter(Boolean);
-      const crumbs = [{ name: 'Home', path: '' }];
+      const crumbs = [{ name: window.T ? T('application-core:shell.nav.home', 'Home') : 'Home', path: '' }];
       let acc = '';
       for (const p of parts) { acc += '/' + p; crumbs.push({ name: p, path: acc }); }
       this.breadcrumbs = crumbs;
@@ -262,6 +269,49 @@ document.addEventListener('alpine:init', () => {
         this.deleteOpen = false; this.deleteTargets = [];
         await this.refresh();
       } catch (e) { this.error = App.services.apiErrors.messageFor(e, 'Could not delete.'); this.deleteOpen = false; }
+      finally { this.busy = false; }
+    },
+
+    // ----- manage access -----
+    // Grants are per path and inherited by everything under it; the deepest path that has any grants
+    // decides, and holding ANY granted role suffices. A path with no grants is open, so an empty
+    // dialog means "everybody with access to Documents".
+    async askAccess(item) {
+      this.accessTarget = item || null;
+      this.accessError = null;
+      this.accessDraft = { role: '', method: 'READ' };
+      this.accessOpen = true;
+      await this.loadAccess();
+    },
+    accessPath() { return this.accessTarget ? this.fullPath(this.accessTarget.name) : this.folder.path; },
+    async loadAccess() {
+      this.busy = true;
+      try {
+        const res = await App.services.api.get(this.accessBase + '?path=' + encodeURIComponent(this.accessPath()), { baseUrl: '' });
+        this.access = { path: res.path, own: res.own || [], inherited: res.inherited || [] };
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not load the access rules.'); }
+      finally { this.busy = false; }
+    },
+    async addGrant() {
+      const role = (this.accessDraft.role || '').trim();
+      if (!role) return;
+      this.busy = true; this.accessError = null;
+      try {
+        await App.services.api.request('PUT', this.accessBase,
+          { path: this.accessPath(), method: this.accessDraft.method, role: role }, { baseUrl: '' });
+        this.accessDraft.role = '';
+        await this.loadAccess();
+        await this.refresh();
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not add the rule.'); }
+      finally { this.busy = false; }
+    },
+    async removeGrant(grant) {
+      this.busy = true; this.accessError = null;
+      try {
+        await App.services.api.request('DELETE', this.accessBase, grant, { baseUrl: '' });
+        await this.loadAccess();
+        await this.refresh();
+      } catch (e) { this.accessError = App.services.apiErrors.messageFor(e, 'Could not remove the rule.'); }
       finally { this.busy = false; }
     },
 

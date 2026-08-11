@@ -5,7 +5,7 @@
  */
 export const getTemplate = () => ({
   name: "Data Tables (UI)",
-  description: "Table View With HTTP Data Requests",
+  description: "Harmonia Table Page With HTTP Data Requests",
   image: "/services/web/template-html/template.svg",
   sources: [
     {

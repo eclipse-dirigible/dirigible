@@ -230,12 +230,23 @@ included. For logic beyond an expression, a hand-written `CalculatedField` compo
   slots: { start: startTime }
 ```
 
+Every `view:` on a **top-level entity** adds a page **alongside** that entity's own layout - it never
+replaces it. The view becomes the entity's landing browse page (`/<Entity>`), the layout's own browse
+page moves to `/<Entity>/list`, and both carry a switch to the other; create / edit / preview stay the
+layout's own, so a **document master browsed on a calendar (or booked on a slot picker) still edits on
+its document page** (line items, Print, inline process tasks included). Same on the personal surface:
+`/my/<Entity>` is the calendar, `/my/<Entity>/list` the list.
+
 `view: calendar` on a **composition child** renders an **embedded calendar panel inside its master's
 page** (and the master's edit form) instead of the detail table: the same master-filtered rows become
 events, event-click edits the child, an empty-day click creates one with the master FK and the
 clicked date preset. The child keeps everything a detail has (registry, filtered controller, form
-pages) - the calendar is just how its panel renders. `range` works the same way; `slots` stays
-primary-only.
+pages) - the calendar is just how its panel renders. When that child is the document's **line-items**
+entity, the document's items **pane** is the calendar (see below); `range` works the same way.
+
+`view: slots` works the same way: the picker is how a booking is CREATED (pick a free slot → the
+layout's create page, prefilled with the chosen datetime), and the list / document page is how it is
+worked with afterwards - an author needs both, so the picker is additional too.
 
 ## generate children - collection-driven scheduled generation
 
@@ -337,6 +348,21 @@ generates:
     items: { from: ProjectTimesheetItem, to: SalesInvoiceItem, map: { Description: Description } }
     sourceStatus: 3                   # optional completion hook: the SOURCE's EntityStatus after creation
 ```
+
+`items:` has two mutually-exclusive shapes. As an OBJECT (above) it MIRRORS each source child row
+1:1. As a LIST (below, #6555) it builds COMPUTED synthetic lines whose cells are expressions over the
+SOURCE record - the target's line-items child is resolved automatically:
+
+```yaml
+    items:                            # computed synthetic lines over the SOURCE record
+      - name: "Services for {period}"   # string: {field} interpolation (or a source-field copy / literal)
+        quantity: 1                     # numeric: a Calc arithmetic expression (PascalCase source idents)
+        price: BillableAmount           #   rounded to the target field's scale (a literal is trivial)
+        when: "BillableAmount != 0"     # optional guard: `<SourceField> ==|!= <number>` (Calc, null-safe)
+```
+
+A numeric cell is `Calc.eval(...)` (like posting item amounts); a to-one relation cell copies the raw
+source FK (#6533 parity); a string cell interpolates / copies / literals.
 
 Adds a button on the source view; the clone saves through the target's repository so numbering,
 status init and calculated fields fire. `sourceStatus:` flips the SOURCE to the given EntityStatus

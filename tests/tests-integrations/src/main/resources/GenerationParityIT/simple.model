@@ -1,0 +1,104 @@
+{
+    "model": {
+        "entities": [
+            {
+                "properties": [
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "true",
+                        "dataLength": "0",
+                        "dataName": "BOOK_ID",
+                        "dataNullable": "true",
+                        "dataPrimaryKey": "true",
+                        "dataType": "INTEGER",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "false",
+                        "name": "Id",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "20",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "false",
+                        "dataLength": "40",
+                        "dataName": "BOOK_TITLE",
+                        "dataNullable": "false",
+                        "dataPrecision": "NaN",
+                        "dataPrimaryKey": "false",
+                        "dataScale": "NaN",
+                        "dataType": "VARCHAR",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "true",
+                        "name": "Title",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "40",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    },
+                    {
+                        "calculatedPropertyExpressionCreate": "",
+                        "calculatedPropertyExpressionUpdate": "",
+                        "dataAutoIncrement": "false",
+                        "dataLength": "40",
+                        "dataName": "BOOK_AUTHOR",
+                        "dataNullable": "false",
+                        "dataPrecision": "NaN",
+                        "dataPrimaryKey": "false",
+                        "dataScale": "NaN",
+                        "dataType": "VARCHAR",
+                        "dataUnique": "false",
+                        "isCalculatedProperty": "false",
+                        "isRequiredProperty": "true",
+                        "name": "Author",
+                        "widgetIsMajor": "true",
+                        "widgetLength": "40",
+                        "widgetSize": "",
+                        "widgetType": "TEXTBOX"
+                    }
+                ],
+                "caption": "Manage entity Book",
+                "dataCount": "SELECT COUNT(*) AS COUNT FROM \"${tablePrefix}BOOK\"",
+                "dataName": "BOOK",
+                "dataQuery": "",
+                "disableGeneration": "false",
+                "icon": "/services/web/resources/unicons/file.svg",
+                "layoutType": "MANAGE_MASTER",
+                "menuIndex": "100",
+                "menuKey": "book",
+                "menuLabel": "Book",
+                "name": "Book",
+                "navigationPath": "/Home",
+                "perspectiveIcon": "/services/web/resources/unicons/book-open.svg",
+                "perspectiveName": "Books",
+                "perspectiveOrder": "100",
+                "perspectiveRole": "",
+                "title": "Book",
+                "tooltip": "Book",
+                "type": "PRIMARY"
+            }
+        ],
+        "perspectives": [
+            {
+                "name": "Books",
+                "label": "Books",
+                "icon": "/services/web/resources/unicons/book-open.svg",
+                "order": "100",
+                "role": {}
+            },
+            {
+                "name": "Settings",
+                "label": "Settings",
+                "icon": "/services/web/resources/unicons/setting.svg",
+                "order": "200",
+                "role": {}
+            }
+        ],
+        "navigations": []
+    }
+}

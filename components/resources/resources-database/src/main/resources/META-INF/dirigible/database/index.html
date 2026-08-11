@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  The Database shell - browse the schema, look at the data, run a SQL fix, without opening the IDE.
+  Pure Harmonia over the SHARED shell runtime served from /services/web/application-core/shell; both
+  pages read existing, role-gated endpoints under /services/data/. The deep tooling (import/export,
+  anonymization, data transfer, datasource management, script generation, topology) deliberately
+  stays in the Workbench's Database perspective, which this shell links to.
+-->
+<!-- data-brand-title: services/branding.js sets the tab title to the instance brand name. -->
+<html lang="en" data-brand-title>
+
+  <head>
+    <meta charset="UTF-8" />
+    <!-- Placeholder favicon, replaced at runtime by services/branding.js (DIRIGIBLE_BRANDING_FAVICON). -->
+    <link rel="icon" sizes="any" href="data:;base64,iVBORw0KGgo=" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Database</title>
+
+    <link href="/webjars/codbex__harmonia/dist/harmonia.css" rel="stylesheet" />
+    <link href="/services/web/application-core/shell/css/app.css" rel="stylesheet" />
+    <link href="./css/app.css" rel="stylesheet" />
+
+    <script>
+      (function () {
+        try { if (!localStorage.getItem('codbex.harmonia.colorMode')) localStorage.setItem('codbex.harmonia.colorMode', 'light'); } catch (e) { /* no storage */ }
+      })();
+    </script>
+  </head>
+
+  <body class="vbox size-full" x-data="app">
+
+    <!-- Narrow-viewport drawer host. -->
+    <div x-h-sheet-overlay="isOpen">
+      <div x-h-sheet data-align="left" x-ref="overlay"></div>
+    </div>
+
+    <!-- x-cloak hides the shell until Alpine + Harmonia upgrade the markup (no raw-chrome flash). -->
+    <div x-cloak x-h-split class="size-full" data-orientation="horizontal" data-variant="border">
+
+      <!-- Sidebar -->
+      <div x-h-split-panel :data-hidden="hiddenPanels.left" data-max="280" data-min="220"
+           data-locked="true" data-gutterless="true" x-ref="sidebarPanel">
+        <div x-h-sidebar x-ref="sidebar">
+          <div x-h-sidebar-header>
+            <div class="hbox items-center gap-2 p-1">
+              <img :src="$store.branding.logo" :alt="$store.branding.name" class="size-5" />
+              <div class="vbox gap-0">
+                <span class="font-bold leading-tight" x-text="$store.branding.name"></span>
+                <span x-h-text.muted class="text-xs leading-tight" x-text="T('database:shell.title', 'Database')"></span>
+              </div>
+            </div>
+          </div>
+
+          <div x-h-sidebar-content>
+            <div x-h-sidebar-group>
+              <div x-h-sidebar-group-label x-text="T('database:shell.nav.group', 'Database')"></div>
+              <div x-h-sidebar-group-content>
+                <ul x-h-sidebar-menu>
+                  <li x-h-sidebar-menu-item>
+                    <button id="database-nav-explorer" x-h-sidebar-menu-button :data-active="isActive('/explorer')" @click="navigate('/explorer')">
+                      <i role="img" x-h-lucide data-lucide="database"></i>
+                      <span class="flex-1" x-text="T('database:shell.nav.explorer', 'Explorer')"></span>
+                    </button>
+                  </li>
+                  <li x-h-sidebar-menu-item>
+                    <button id="database-nav-sql" x-h-sidebar-menu-button :data-active="isActive('/sql')" @click="navigate('/sql')">
+                      <i role="img" x-h-lucide data-lucide="square-terminal"></i>
+                      <span class="flex-1" x-text="T('database:shell.nav.sql', 'SQL Console')"></span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <!-- The deep tooling lives in the Workbench; the shell links to it rather than cloning it. -->
+          <div x-h-sidebar-footer>
+            <ul x-h-sidebar-menu>
+              <li x-h-sidebar-menu-item>
+                <a x-h-sidebar-menu-button href="/services/web/shell-ide/" target="_blank" rel="noopener">
+                  <i role="img" x-h-lucide data-lucide="external-link"></i>
+                  <span x-text="T('database:shell.nav.workbench', 'Open in Workbench')"></span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main panel -->
+      <div x-h-split-panel>
+        <div class="vbox size-full">
+          <div x-h-toolbar data-variant="transparent" x-cloak>
+            <button x-show="hiddenPanels.left" x-h-button data-variant="transparent"
+                    aria-label="Navigation" @click="openSideNav()" data-size="icon">
+              <i role="img" x-h-lucide data-lucide="menu"></i>
+            </button>
+            <span x-h-toolbar-title class="shrink-0" x-text="T('database:shell.title', 'Database')"></span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="$store.theme.toggle()"
+                    :aria-label="$store.theme.value === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'" title="Toggle theme">
+              <svg x-h-lucide x-show="$store.theme.value !== 'dark'" role="img" data-lucide="moon"></svg>
+              <svg x-h-lucide x-show="$store.theme.value === 'dark'" role="img" data-lucide="sun"></svg>
+            </button>
+
+            <button id="user-menu-trigger" x-h-button x-h-menu-trigger.dropdown data-variant="transparent" data-size="icon-sm"
+                    :aria-label="$store.currentUser.name || 'Account'">
+              <i role="img" x-h-lucide data-lucide="circle-user"></i>
+            </button>
+            <ul x-h-menu aria-label="User menu" data-align="bottom-end">
+              <div x-h-tile class="mb-1">
+                <div x-h-tile-media><i role="img" x-h-lucide data-lucide="circle-user" class="size-6"></i></div>
+                <div x-h-tile-content>
+                  <div x-h-tile-title x-text="$store.currentUser.name || T('application-core:shell.user.user', 'User')"></div>
+                </div>
+              </div>
+              <div x-h-menu-separator></div>
+              <!-- Switch shells without the detour through Home: the same `platform-shells` list the
+                   launchpad renders, minus this one (the shared `shells` store). -->
+              <div x-h-menu-label x-text="T('application-core:shell.switch.title', 'Switch to')"></div>
+              <li x-h-menu-item @click="$store.shells.openHome()">
+                <i role="img" x-h-lucide data-lucide="house"></i>
+                <span x-text="T('application-core:shell.switch.home', 'Home')"></span>
+              </li>
+              <template x-for="shell in $store.shells.items" :key="shell.id">
+                <li x-h-menu-item @click="$store.shells.open(shell)">
+                  <!-- svg, not <i>: the Lucide plugin REPLACES the element it upgrades, so a bound
+                       :data-lucide on an <i> throws and aborts Alpine's walk over the rest of the menu. -->
+                  <svg x-h-lucide role="img" :data-lucide="$store.shells.iconFor(shell)"></svg>
+                  <span x-text="shell.label"></span>
+                </li>
+              </template>
+              <div x-h-menu-separator></div>
+              <li x-h-menu-item data-variant="negative" @click="$store.currentUser.logout()">
+                <i role="img" x-h-lucide data-lucide="log-out"></i>
+                <span x-text="T('application-core:shell.user.logout', 'Log out')"></span>
+              </li>
+            </ul>
+          </div>
+
+          <!-- Pinecone Router renders the matched view fragment here. -->
+          <div id="app" class="size-full overflow-auto flex-1"></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Routes -->
+    <template x-route="/" x-template.target.app="./views/_explorer.html"></template>
+    <template x-route="/explorer" x-template.target.app="./views/_explorer.html"></template>
+    <template x-route="/sql" x-template.target.app="./views/_sql.html"></template>
+    <template x-route="notfound" x-template.target.app="/services/web/application-core/shell/views/_notfound.html"></template>
+
+    <!-- 1. Plugins -->
+    <script src="/webjars/pinecone-router/dist/router.min.js"></script>
+
+    <!-- 2. Shared Harmonia runtime (served from application-core) + local config/pages (defer keeps order) -->
+    <script src="/services/web/application-core/shell/js/app.js" defer></script>
+    <script src="./js/config.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/i18n.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/api.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/apiError.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/format.js"></script>
+    <!-- Instance branding (the DIRIGIBLE_BRANDING_* env vars): the platform service sets
+         top.PlatformBranding; the adapter applies the favicon/title and exposes the `branding` store. -->
+    <script src="/services/js/platform-branding/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/services/branding.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/theme.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/locale.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/currentUser.js" defer></script>
+    <script src="/services/web/application-core/shell/js/stores/shells.js" defer></script>
+    <script src="./js/services/dbops.js" defer></script>
+    <script src="./js/stores/explorer.js" defer></script>
+    <script src="./js/stores/sql.js" defer></script>
+    <script src="./js/components/pages/explorerPage.js" defer></script>
+    <script src="./js/components/pages/sqlPage.js" defer></script>
+    <script src="./js/appShell.js" defer></script>
+
+    <!-- 3. Alpine LAST (the Harmonia bundle auto-starts Alpine - do NOT call Alpine.start()) -->
+    <script defer src="/webjars/alpinejs/dist/cdn.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia.min.js"></script>
+
+    <!-- 4. Lucide icons (x-h-lucide renders and keeps them in sync, incl. router-swapped views) -->
+    <script src="/webjars/lucide/dist/umd/lucide.min.js"></script>
+    <script src="/webjars/codbex__harmonia/dist/harmonia-lucide.min.js"></script>
+  </body>
+
+</html>

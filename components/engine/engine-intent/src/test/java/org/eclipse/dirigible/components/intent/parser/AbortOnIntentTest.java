@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.parser;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -63,9 +64,33 @@ class AbortOnIntentTest {
         assertIssue(YAML.replace("status: [3, 4], then: markVoid", "then: end"), "abortOn must declare `status`");
     }
 
+    /**
+     * A status may be named symbolically, but only against a nomenclature seeded in this model - here
+     * {@code OrderStatus} carries no seed, so there is nothing to resolve the name against.
+     */
     @Test
-    void aNonIntegerStatusIsRejected() {
-        assertIssue(YAML.replace("status: [3, 4]", "status: [VOID]"), "must be an integer EntityStatus seed id");
+    void aStatusNameWithoutASeededNomenclatureIsRejected() {
+        assertIssue(YAML.replace("status: [3, 4]", "status: [VOID]"), "has no seeded rows in this model");
+    }
+
+    /** With the nomenclature seeded, the same names resolve to their seed ids. */
+    @Test
+    void seededStatusNamesResolve() {
+        String yaml = YAML.replace("status: [3, 4]", "status: [ISSUED, VOIDED]") + """
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 3, name: ISSUED }
+                      - { id: 4, name: VOIDED }
+                """;
+        // Stringified: the YAML -> JSON -> POJO round-trip lands the ids as Long, not Integer.
+        assertEquals("[3, 4]", String.valueOf(IntentParser.parse(yaml)
+                                                          .getProcesses()
+                                                          .get(0)
+                                                          .getAbortOn()
+                                                          .get("status")));
     }
 
     @Test

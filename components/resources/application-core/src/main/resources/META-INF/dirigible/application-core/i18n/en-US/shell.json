@@ -8,18 +8,33 @@
       "settings": "Settings",
       "application": "Application",
       "applications": "Applications",
+      "personal": "Personal",
       "entities": "Entities",
       "other": "Other",
       "create": "Create",
-      "edit": "Edit"
+      "edit": "Edit",
+      "home": "Home"
     },
     "user": {
       "user": "User",
       "logout": "Log out"
     },
+    "actAs": {
+      "start": "Act as...",
+      "enter": "Enter data as...",
+      "stop": "Stop acting as",
+      "title": "Act as another person",
+      "hint": "Their timesheets, requests and inbox tasks open as their own; every entry is recorded in their name, and the audit log keeps yours.",
+      "username": "Person's login e-mail",
+      "startShort": "Start",
+      "bannerActing": "Acting as",
+      "bannerNote": "entries are recorded in this person's name; the log keeps yours",
+      "exit": "Exit"
+    },
     "notifications": {
       "title": "Notifications",
-      "caughtUp": "You're all caught up."
+      "caughtUp": "You're all caught up.",
+      "newTask": "New task: {{name}}"
     },
     "dashboard": {
       "title": "Dashboard",
@@ -37,7 +52,12 @@
       "selectTaskHint": "Select a task from the list to claim it or open its form.",
       "noForm": "This task has no form.",
       "taskForm": "Task form",
-      "claimHint": "This task is available to your group. Claim it to open and complete its form."
+      "claimHint": "This task is available to your group. Claim it to open and complete its form.",
+      "updated": "Updated {{time}}",
+      "mine": "Mine",
+      "available": "Available",
+      "assignedToMe": "Assigned to me",
+      "ref": "Ref {{key}}"
     },
     "documents": {
       "newFolder": "New folder",
@@ -55,11 +75,50 @@
       "newName": "New name",
       "name": "Name",
       "enterFolderName": "Enter folder name...",
-      "findInFolder": "Find in folder"
+      "findInFolder": "Find in folder",
+      "noMatch": "No items match your search.",
+      "emptyFolder": "This folder is empty.",
+      "cannotPreview": "This file cannot be previewed.",
+      "previewHint": "Click on a file to see its preview.",
+      "manageAccess": "Manage access",
+      "accessFor": "Rules for",
+      "accessOpen": "No rules: open to everyone who can use Documents.",
+      "accessOwn": "On this folder",
+      "accessInherited": "Inherited from a parent folder",
+      "accessRole": "Role",
+      "accessRolePlaceholder": "Role name...",
+      "accessMethod": "Permission",
+      "accessRead": "Read",
+      "accessWrite": "Write",
+      "accessAdd": "Add",
+      "close": "Close"
     },
     "reports": {
       "select": "Select a report",
       "selectHint": "Choose a report from the sidebar to view it here."
+    },
+    "report": {
+      "rows": "{{count}} rows",
+      "table": "Table",
+      "chart": "Chart",
+      "filters": "Filters",
+      "refresh": "Refresh",
+      "export": "Export",
+      "print": "Print",
+      "apply": "Apply",
+      "clear": "Clear",
+      "noData": "No data",
+      "noRows": "The {{name}} report returned no rows.",
+      "total": "Total",
+      "prev": "Prev",
+      "next": "Next",
+      "pageOf": "Page {{page}} / {{total}}",
+      "any": "any",
+      "yes": "yes",
+      "no": "no",
+      "min": "min",
+      "max": "max",
+      "contains": "contains..."
     },
     "notfound": {
       "title": "Page not found",
@@ -74,7 +133,45 @@
       "language": "Language",
       "missingTranslations": "Missing translations",
       "missingWarning": "{{app}} does not provide: {{missing}} - falls back to the default language.",
-      "rlDescription": "One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language."
+      "rlDescription": "One preference for the whole stack: the user interface, the data and document printing all follow the selected language. Content a module has not translated yet falls back to the default language.",
+      "formats": "Display formats",
+      "formatsHint": "Patterns for dates, timestamps and numbers across all applications. The number pattern sets the grouping and decimal separators; each field keeps its own number of decimals.",
+      "dateFormat": "Date format",
+      "timestampFormat": "Timestamp format",
+      "numberFormat": "Number format",
+      "apply": "Apply",
+      "resetDefaults": "Reset to defaults",
+      "loading": "Loading...",
+      "save": "Save",
+      "reload": "Reload",
+      "tenantConfig": "Tenant Configuration",
+      "tenantConfigHint": "Per-tenant overrides for the predefined branding properties. Leave a value empty to fall back to the platform default.",
+      "tenantConfigForbidden": "You do not have permission to view or change the tenant configuration.",
+      "tenantConfigFailed": "Something went wrong. Please try again.",
+      "numbering": "Document Numbering",
+      "numberingHint": "Each document series' prefix, total width and next value for this tenant. A number is the prefix plus the sequence zero-padded to the total width; sequences run continuously - to restart numbering (e.g. each January), set the prefix and the next value here.",
+      "numberingForbidden": "You do not have permission to view or change document numbering.",
+      "numberingFailed": "Something went wrong. Please try again.",
+      "numberingEmpty": "No number series declared yet. A series appears here once a published application declares it.",
+      "numberingPrefix": "Prefix",
+      "numberingSize": "Total width",
+      "numberingNext": "Next",
+      "numberingExample": "Next number:",
+      "numberingSaved": "Saved",
+      "numberingShapeTemplate": "Counters live on the per-partition rows below; a new partition appears on its first use, inheriting this shape and its starting counter.",
+      "tenantConfigLabels": {
+        "name": "Name",
+        "subtitle": "Subtitle",
+        "brand": "Brand",
+        "brandUrl": "Brand URL",
+        "favicon": "Favicon",
+        "theme": "Theme",
+        "prefix": "Prefix",
+        "analytics": "Analytics",
+        "languages": "Application Languages",
+        "cmsRoles": "Document access rules enforced",
+        "msOfficeContentTypes": "Legacy Microsoft Office file types"
+      }
     },
     "apps": {
       "loading": "Loading applications...",
@@ -82,6 +179,19 @@
     },
     "projections": {
       "title": "Applications"
+    },
+    "related": {
+      "addNew": "Add new"
+    },
+    "switch": {
+      "title": "Switch to",
+      "home": "Home"
+    },
+    "customActions": {
+      "confirmTitle": "Run action",
+      "confirmBody": "Run {{name}} for the selected record? This creates or changes data.",
+      "confirmCancel": "Cancel",
+      "confirmRun": "Run"
     }
   }
 }

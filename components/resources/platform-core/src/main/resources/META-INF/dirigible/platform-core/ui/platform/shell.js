@@ -99,7 +99,7 @@ if (window !== top) {
           const dialogHub = new DialogHub();
           const exportsHub = new ExportsHub();
           const DB_EXPORT_SERVICE_URL = "/services/data/export-async/";
-          scope.EXPORT_BASE_URL = "/public/cms/__EXPORTS/";
+          scope.EXPORT_BASE_URL = "/services/cms/__EXPORTS/";
           scope.ExportStatus = {
             TRIGGRED: "TRIGGRED",
             FINISHED: "FINISHED",

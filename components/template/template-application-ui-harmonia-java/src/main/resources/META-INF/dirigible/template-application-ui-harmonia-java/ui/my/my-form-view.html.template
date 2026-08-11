@@ -23,6 +23,11 @@
 #if($statusProp != "")
     <span x-h-badge class="shrink-0" :data-variant="statusVariant(statusText())" x-show="mode === 'edit' && statusText()" x-text="statusText()"></span>
 #end
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- Immutability pre-check: the record refuses user edits/deletes in its current status, so the
+         page renders read-only and says so (the controller's 409 stays authoritative). -->
+    <span x-h-badge class="shrink-0" data-variant="warning" x-show="!mutable" :title="T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.')" x-text="T('$projectName:${tprefix}.defaults.readOnly', 'Read-only')"></span>
+#end
     <div x-h-toolbar-spacer></div>
     <button x-h-button data-variant="transparent" @click="goBack()" x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
   </div>
@@ -31,6 +36,11 @@
   <div x-show="error" class="px-4" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="error"></div></div>
 
   <div x-show="state === 'default'" class="p-4 vbox gap-4 overflow-auto">
+#if($immutableStatusProperty || $immutableAlways)
+    <!-- One switch makes every control read-only when the record is immutable (display:contents
+         keeps the grid layout intact - the same trick the manage form's preview mode uses). -->
+    <fieldset :disabled="!mutable" style="display: contents;">
+#end
     <div class="grid grid-cols-12 gap-4" style="max-width: 900px">
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && !$property.sensitiveProperty && $property.name != "ProcessId" && (!$property.auditType || $property.auditType == "NONE") && $property.name != "Name" && $property.name != $skipOwnerFk && $property.name != $skipParentFk && $property.isReadOnlyProperty != "true" && $property.widgetType != "DOCUMENT_STATUS")
@@ -40,7 +50,7 @@
         </label>
 #if($property.widgetType == "DROPDOWN")
         <div x-h-select data-filter="contains">
-          <input x-h-select-input x-model="form.${property.name}" placeholder="Select..." />
+          <input x-h-select-input x-model="form.${property.name}" :placeholder="T('$projectName:${tprefix}.messages.inputSelect', 'Select #if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end...', { name: T('$projectName:${tprefix}.t.${property.dataName}', '#if($property.widgetLabel)${property.widgetLabel}#else${property.name}#end') })" />
           <div x-h-select-content>
             <div x-h-select-search></div>
             <template x-for="opt in (options['${property.name}'] || [])" :key="opt.value">
@@ -71,6 +81,20 @@
           <input type="text" x-h-time-picker-input x-model="form.${property.name}" />
           <div x-h-time-picker-popup></div>
         </div>
+#elseif($property.widgetType == "MONTH")
+        <!-- Harmonia month picker: model is a YYYY-MM string, so form.${property.name} round-trips unchanged. -->
+        <div x-h-month-picker>
+          <input type="text" />
+          <button x-h-month-picker-trigger aria-label="Choose month"></button>
+          <div x-h-month-picker-popup x-model="form.${property.name}"></div>
+        </div>
+#elseif($property.widgetType == "WEEK")
+        <!-- Harmonia week picker: model is a YYYY-Www ISO-week string, so form.${property.name} round-trips unchanged. -->
+        <div x-h-week-picker>
+          <input type="text" />
+          <button x-h-week-picker-trigger aria-label="Choose week"></button>
+          <div x-h-week-picker-popup x-model="form.${property.name}"></div>
+        </div>
 #else
         <input x-h-input type="text" x-model="form.${property.name}"#if($property.widgetPattern) pattern="${property.widgetPattern}"#end />
 #end
@@ -78,6 +102,9 @@
 #end
 #end
     </div>
+#if($immutableStatusProperty || $immutableAlways)
+    </fieldset>
+#end
 
 #set($hasReadOnly = false)
 #foreach($property in $properties)
@@ -160,12 +187,12 @@
       <button x-h-button data-variant="transparent" @click="goBack()"
               x-text="T('$projectName:${tprefix}.defaults.back', 'Back')"></button>
 #else
-      <button x-h-button data-variant="negative" x-show="mode === 'edit'" @click="deleteOpen = true"
+      <button x-h-button data-variant="negative" x-show="mode === 'edit'#if($immutableStatusProperty || $immutableAlways) &amp;&amp; mutable#end" @click="deleteOpen = true"
               x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></button>
       <div class="grow"></div>
       <button x-h-button data-variant="transparent" @click="goBack()" :disabled="saving"
               x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
-      <button x-h-button data-variant="primary" @click="save()" :disabled="saving">
+      <button x-h-button data-variant="primary"#if($immutableStatusProperty || $immutableAlways) x-show="mutable"#end @click="save()" :disabled="saving">
         <span x-show="saving" x-h-spinner></span>
         <span x-text="T('$projectName:${tprefix}.defaults.save', 'Save')"></span>
       </button>

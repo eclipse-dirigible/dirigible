@@ -10,11 +10,13 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -75,6 +77,8 @@ class IntentEngineIT extends IntegrationTest {
                   - { name: active,      type: boolean, defaultValue: "true" }
                   - { name: creditLimit, type: decimal }
                   - { name: orderCount,  type: integer }
+                  # The language this customer's documents are rendered in (drives the snapshot's languageFrom).
+                  - { name: locale,      type: string,  length: 5 }
                 relations:
                   - { name: country, kind: manyToOne, to: Country }
                   - { name: orders,  kind: oneToMany, to: Order }
@@ -101,10 +105,12 @@ class IntentEngineIT extends IntegrationTest {
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
-              # function: Snapshot - the immutable, versioned copy generated at issue. Its mere presence
-              # is what arms the print guardrail: Print must serve the stored copy, never re-render.
+              # function: Snapshot - the immutable, versioned copy generated at issue. Served by the
+              # read-only files panel (per-version Open + Download); Print always renders live.
+              # languageFrom: the customer decides which print-template language the copy is minted in.
               - name: OrderCopy
                 function: Snapshot
+                languageFrom: customer.locale
                 relations:
                   - { name: order, kind: manyToOne, to: Order, composition: true }
 
@@ -276,6 +282,18 @@ class IntentEngineIT extends IntegrationTest {
                                                  .post(AGENT_URL)
                                                  .then()
                                                  .statusCode(412));
+    }
+
+    @Test
+    void agent_status_reports_whether_the_assistant_is_configured() {
+        // The cheap counterpart of the 412 above: a client can ask whether the assistant is usable
+        // BEFORE the user types, without spending an upstream model call to find out. No key is set
+        // in the test environment, so it must answer 200 with configured=false. Network-free.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(AGENT_URL + "/status")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("configured", equalTo(false)));
     }
 
     @Test
@@ -907,6 +925,135 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void parallel_step_emits_a_fork_join_parallel_gateway_pair() {
+        // #6556: a `kind: parallel` step runs its branch steps concurrently and joins before `next`.
+        // Two reviews run at once; both must complete before consolidate. Emitted as a diverging
+        // parallelGateway (the fork) + a synthesized converging one (<fork>Join); the branch steps and
+        // the join are off the linear chain (the fork never falls through to consolidate directly).
+        String yaml = """
+                name: orders3
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: OrderReview
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }
+                      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: REVIEWED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String bpmn = contentOf("OrderReview.bpmn");
+        assertTrue(bpmn.contains("<parallelGateway id=\"reviews\""), "the fork is a diverging parallelGateway");
+        assertTrue(bpmn.contains("<parallelGateway id=\"reviewsJoin\""), "a converging join parallelGateway is synthesized");
+        // The fork fans an unconditioned flow to each branch, each branch flows to the join, and the
+        // join flows once to `next`.
+        assertTrue(bpmn.contains("sourceRef=\"reviews\" targetRef=\"techReview\"")
+                && bpmn.contains("sourceRef=\"reviews\" targetRef=\"commercialReview\""), "the fork flows to both branches");
+        assertTrue(bpmn.contains("sourceRef=\"techReview\" targetRef=\"reviewsJoin\"")
+                && bpmn.contains("sourceRef=\"commercialReview\" targetRef=\"reviewsJoin\""), "both branches flow into the join");
+        assertTrue(bpmn.contains("sourceRef=\"reviewsJoin\" targetRef=\"consolidate\""), "the join flows on to `next`");
+        // The fork must NOT fall through the linear chain into the branches' successor.
+        assertFalse(bpmn.contains("sourceRef=\"reviews\" targetRef=\"consolidate\""),
+                "the fork must fan to branches, not fall through linearly to consolidate");
+        assertTrue(bpmn.contains("<userTask id=\"techReview\"") && bpmn.contains("<userTask id=\"commercialReview\""),
+                "the branch user tasks are emitted");
+        assertTrue(bpmn.contains("BPMNShape_reviewsJoin") && bpmn.contains("BPMNShape_reviews"),
+                "the fork and join gateways get DI shapes");
+    }
+
+    @Test
+    void parallel_branches_chain_onward_and_nest() {
+        // #6568: a branch is a CHAIN - the first branch runs two steps before joining, and the second is
+        // itself a `parallel` whose own join (declaring no `next`) flows into the enclosing one.
+        String yaml = """
+                name: orders4
+                entities:
+                  - name: OrderStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: SalesOrder
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }
+                processes:
+                  - name: OrderReview
+                    trigger: { onCreate: SalesOrder }
+                    steps:
+                      - { name: reviews, kind: parallel, args: { branches: [techReview, commercial], next: consolidate } }
+                      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: techSignoff } }
+                      - { name: techSignoff, kind: serviceTask, args: { setRelationField: Status, value: 2 } }
+                      - { name: commercial, kind: parallel, args: { branches: [pricing, legal] } }
+                      - { name: pricing, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: legal, kind: userTask, args: { assignee: manager, form: ReviewOrder } }
+                      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 3 } }
+                      - { name: done, kind: end }
+                forms:
+                  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }
+                seeds:
+                  - name: order-statuses
+                    entity: OrderStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 2, name: SIGNED }
+                      - { id: 3, name: REVIEWED }
+                """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+
+        String bpmn = contentOf("OrderReview.bpmn");
+        // Branch 1 runs its own chain and joins at the step that declares no routing.
+        assertTrue(bpmn.contains("sourceRef=\"reviews\" targetRef=\"techReview\""), "the fork enters the branch at its first step");
+        assertTrue(bpmn.contains("sourceRef=\"techReview\" targetRef=\"techSignoff\""), "the branch chains on to its own `next`");
+        assertTrue(bpmn.contains("sourceRef=\"techSignoff\" targetRef=\"reviewsJoin\""), "the branch terminal joins");
+        assertFalse(bpmn.contains("sourceRef=\"techSignoff\" targetRef=\"commercial\""),
+                "a branch step must not fall through into the next declared step");
+        // Branch 2 is a nested fork with its own gateway pair, joining into the enclosing join.
+        assertTrue(bpmn.contains("<parallelGateway id=\"commercial\"") && bpmn.contains("<parallelGateway id=\"commercialJoin\""),
+                "the nested fork gets its own gateway pair");
+        assertTrue(bpmn.contains("sourceRef=\"commercial\" targetRef=\"pricing\"")
+                && bpmn.contains("sourceRef=\"commercial\" targetRef=\"legal\""), "the nested fork fans to its own branches");
+        assertTrue(
+                bpmn.contains("sourceRef=\"pricing\" targetRef=\"commercialJoin\"")
+                        && bpmn.contains("sourceRef=\"legal\" targetRef=\"commercialJoin\""),
+                "the nested branches join into the nested join");
+        assertTrue(bpmn.contains("sourceRef=\"commercialJoin\" targetRef=\"reviewsJoin\""),
+                "a nested fork with no `next` joins into the enclosing join");
+        assertTrue(bpmn.contains("sourceRef=\"reviewsJoin\" targetRef=\"consolidate\""), "the outer join flows on to `next`");
+        assertFalse(bpmn.contains("sourceRef=\"end\""), "the end event must have no outgoing sequence flow");
+    }
+
+    @Test
     void field_major_false_is_kept_off_the_list_via_widget_is_major() {
         // `major: false` on a field maps to the model's widgetIsMajor="false" so the entity list table
         // omits that column (the field is still shown in forms + the details pane). Default is true.
@@ -1289,6 +1436,31 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void a_hand_edited_print_template_is_preserved_across_regeneration() {
+        writeIntent(INTENT_YAML);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        // A fresh project gets the scaffold: the minimal, model-derived starting point.
+        String printPath = "doc/Templates/Order/Print/en/standard.print";
+        String scaffold = contentOf(printPath);
+        assertTrue(scaffold.contains("<document") && scaffold.contains("<table source=\"items\">"),
+                "the first Generate must scaffold the standard print template, got: " + scaffold);
+
+        // The developer hand-improves it. A printed invoice is a formatted/audited artifact - the
+        // scaffold is a customization point (like the CMS seeding, which is create-if-absent), so a
+        // regeneration must leave the authored template BYTE-IDENTICAL, never re-emit over it.
+        String authored = "<document id=\"authored\"><page><section><field label=\"N\">{{document.Id}}</field></section></page></document>";
+        writeProjectFile(printPath, authored);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        assertEquals(authored, contentOf(printPath), "an authored print template must survive regeneration byte-identical");
+    }
+
+    @Test
     void generating_the_events_template_preserves_the_full_stack_gen_output() {
         writeIntent(INTENT_YAML);
         restAssuredExecutor.execute(() -> given().when()
@@ -1309,6 +1481,21 @@ class IntentEngineIT extends IntegrationTest {
         assertTrue(resource("gen/orders/data/order/OrderRepository.java").exists(),
                 "generating the glue template must not delete the full-stack gen/orders output");
         assertTrue(resource("gen/events/orders/OrderApprovalTrigger.java").exists(), "the glue template should still produce gen/events");
+
+        // The snapshot delegate resolves its render language per record (OrderCopy declares
+        // languageFrom: customer.locale): it loads the document, follows the Customer FK, reads the
+        // locale, and falls back to the first entry of the tenant-resolved application language set
+        // when the chain is null or blank - the language is never hardcoded into the delegate.
+        String snapshotGenerator = contentOf("gen/events/orders/OrderSnapshotGenerator.java");
+        assertTrue(snapshotGenerator.contains("OrderEntity document = new OrderRepository().findById(id);"),
+                "languageFrom must load the master document, got: " + snapshotGenerator);
+        assertTrue(snapshotGenerator.contains("new CustomerRepository().findById(document.Customer)"),
+                "languageFrom must follow the master's Customer FK to the language source");
+        assertTrue(snapshotGenerator.contains("languageSource.Locale"), "the language must be read off the customer's locale");
+        assertTrue(snapshotGenerator.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
+                "a null/blank locale must fall back to the application language set at mint time");
+        assertTrue(snapshotGenerator.contains("Print.render(\"Order\", language,"),
+                "the render must use the resolved language, not a literal");
     }
 
     @Test
@@ -1330,21 +1517,40 @@ class IntentEngineIT extends IntegrationTest {
                 "the dropdown refresh should POST the /search EQ filter on the defaulted filterBy");
         assertTrue(documentPage.contains("CustomerController/' + encodeURIComponent(value)"),
                 "the trigger's selected record should be loaded from its own controller URL");
-        // The print guardrail (#6359): a document carrying a generated Snapshot must print the STORED
-        // copy, never re-render from live master data. The page has to (a) recognise its read-only
-        // Snapshot child, (b) look the stored copy up before printing, and (c) refuse to fall back to a
-        // live render when it cannot tell - a silent fallback would defeat the whole guardrail.
-        assertTrue(documentPage.contains("snapshotDef") && documentPage.contains("storedSnapshot"),
-                "the document page must resolve its Snapshot child and look up the stored copy before printing");
-        assertTrue(documentPage.contains("openStoredSnapshot"),
-                "the document page must be able to serve the stored copy instead of rendering");
-        assertTrue(documentPage.contains("failed: true") && documentPage.contains("printing was not attempted"),
-                "an undeterminable snapshot state must abort the print rather than silently re-render");
+        // Print always renders LIVE (the #6359 stored-copy redirect was removed): the Print button
+        // runs the dynamic flow unconditionally - fetch the CMS languages, one prints directly,
+        // several pop the picker. The stored issued copy is served by the read-only Snapshot panel
+        // (per-version Open + Download), not by the Print button.
+        assertFalse(documentPage.contains("storedSnapshot") || documentPage.contains("openStoredSnapshot"),
+                "the Print button must not redirect to a stored copy - it always renders live");
+        assertTrue(documentPage.contains("printLanguages") && documentPage.contains("/services/print/Order/languages"),
+                "the Print button should fetch the CMS languages and ask when there are several");
         // The child is registered as a READ-ONLY files def - that flag is what identifies it as a
-        // Snapshot rather than a user-uploaded Attachment.
+        // Snapshot rather than a user-uploaded Attachment, and what gives its rows the per-version
+        // inline Open action next to Download.
         String copyRegister = contentOf("gen/orders/js/components/pages/Order/OrderCopy.detail.js");
         assertTrue(copyRegister.contains("files: { readOnly: true }"),
                 "a function: Snapshot child must register as a read-only files def, got: " + copyRegister);
+
+        // Detail-panel children open in the shared iframe DIALOG, never a main-pane navigation - a
+        // navigation would discard the master form's unsaved edits (observed live: fill a record,
+        // add a child, come back to empty fields). The register therefore carries no returnTo
+        // route, and the generated form page reports a dialog-mode EDIT save to the opener.
+        assertFalse(copyRegister.contains("returnTo"),
+                "detail rows open in a dialog - the register must not carry a main-pane return route");
+        String customerFormPage = contentOf("gen/orders/js/components/pages/Customer/CustomerFormPage.js");
+        assertTrue(customerFormPage.contains("this.emitSaved(this.id)"),
+                "a dialog-mode edit save must report to the opener instead of navigating the iframe to a list");
+        String documentView = contentOf("gen/orders/views/Order/Order-document.html");
+        assertTrue(documentView.contains("openHref(row)"),
+                "the files panel rows must offer the inline Open action for stored snapshot versions");
+
+        // A detail's form never offers its COMPOSITION-parent FK as an input: the detail is created
+        // from its master's panel, which presets the FK via the create query param - offering the
+        // parent as a dropdown invites re-parenting by accident and is redundant in the dialog.
+        String itemForm = contentOf("gen/orders/views/Order/OrderItem-form.html");
+        assertFalse(itemForm.contains("f_Order\""), "the composition-parent FK must not render as a form input, got a f_Order control");
+        assertTrue(itemForm.contains("f_Quantity\""), "the detail's own fields still render as inputs");
 
         // The generic item-dialog machinery is model-independent but must be present for line items.
         assertTrue(documentPage.contains("applyDraftDependsOn") && documentPage.contains("dialogOptionsFor"),
@@ -1407,6 +1613,17 @@ class IntentEngineIT extends IntegrationTest {
         String modelCatalog = contentOf("i18n/en-US/orders.model.json");
         assertTrue(modelCatalog.contains("\"widgetSystemHealth\": \"System Health\""),
                 "the custom widget's label should land in the model catalog");
+        // BPM user-task labels land in the catalog's processes section, keyed by the authored step
+        // name, and config.js carries the baked reverse (runtime task name -> key) map: the views
+        // translate the in-record task buttons as
+        // T('<project>:<model>-model.processes.' + processTaskKeys[task.name], task.name), so an
+        // Approve / Issue / Send button follows the locale instead of always showing the English
+        // BPMN name. Everything is known at generation time - no runtime key derivation.
+        assertTrue(modelCatalog.contains("\"processes\"") && modelCatalog.contains("\"managerReview\": \"Manager Review\""),
+                "the BPM user-task labels should land in the en catalog's processes section, got: " + modelCatalog);
+        String appConfig = contentOf("gen/orders/js/config.js");
+        assertTrue(appConfig.contains("\"Manager Review\":\"managerReview\""),
+                "config.js should carry the baked task-name -> catalog-key map, got: " + appConfig);
 
         // The report-file template also emits the report's label catalog (report + columns + the
         // widget's tile label) under the '<Name>-report' translation prefix.
@@ -1625,6 +1842,79 @@ class IntentEngineIT extends IntegrationTest {
     }
 
     @Test
+    void conditional_rule_column_emits_a_classifier_ternary_and_a_runtime_guard() {
+        // #6534: the account column is chosen by a source classifier - rule(by: Method, cases: {...}) -
+        // so ONE item row replaces the when:-gated row pair. The generated handler reads the rule row's
+        // column selected at runtime and null-guards the whole selection (an undetermined account skips
+        // the posting fail-soft), instead of statically null-checking every case column.
+        String yaml =
+                """
+                        name: condposting
+                        entities:
+                          - name: Account
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: number, type: string }
+                          - name: PaymentMethodType
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string, required: true, length: 100 }
+                          - name: PostingRule
+                            kind: setting
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: documentType, type: string }
+                            relations:
+                              - { name: BankAccount, kind: manyToOne, to: Account }
+                              - { name: CashAccount, kind: manyToOne, to: Account }
+                              - { name: SuspenseAccount, kind: manyToOne, to: Account }
+                          - name: Payment
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: amount, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: Method, kind: manyToOne, to: PaymentMethodType, required: true }
+                          - name: Ledger
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: memo, type: string, length: 400 }
+                            relations:
+                              - { name: Payment, kind: manyToOne, to: Payment }
+                          - name: LedgerLine
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: debit, type: decimal, precision: 18, scale: 2 }
+                            relations:
+                              - { name: Ledger, kind: manyToOne, to: Ledger, composition: true, required: true }
+                              - { name: Account, kind: manyToOne, to: Account, required: true }
+                        postings:
+                          - name: paymentLedger
+                            event: { onCreate: Payment }
+                            creates: Ledger
+                            backReference: Payment
+                            rule: { entity: PostingRule, match: { documentType: "Payment" } }
+                            items:
+                              - { Account: "rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)", debit: "Amount" }
+                        """;
+        writeIntent(yaml);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200));
+        generateFromModel("template-application-events-java/template/template.js", "condposting.glue");
+        String posting = contentOf("gen/events/condposting/PaymentLedgerPosting.java");
+        assertTrue(
+                posting.contains("Calc.eval(\"Method\", source, 6).compareTo(new java.math.BigDecimal(\"1\")) == 0 ? ruleRow.BankAccount"),
+                "the account is a classifier ternary over the rule row's columns");
+        assertTrue(posting.contains("ruleRow.CashAccount") && posting.contains("ruleRow.SuspenseAccount"),
+                "every case column + the default is reachable from the ternary");
+        assertTrue(posting.contains("selected no account"), "the whole selection is null-guarded at runtime (fail-soft skip)");
+        assertFalse(posting.contains("if (ruleRow.BankAccount == null)"),
+                "a conditional case column must NOT be a static usedRuleColumns skip");
+    }
+
+    @Test
     void generates_completion_hook_flips_the_source_via_targeted_update() {
         // A create-from with a sourceStatus completion hook: after the Invoice is created, the Proforma
         // flips to status 3 - via a TARGETED single-column write (updateProperty), never a full-row
@@ -1672,6 +1962,18 @@ class IntentEngineIT extends IntegrationTest {
         // call pattern; an explanatory code comment naming it is expected and must not trip this).
         assertFalse(generate.contains("Repository().updateWithoutEvent(source)"),
                 "the source flip must NOT go through a full-row updateWithoutEvent (stale-snapshot clobber)");
+
+        // The custom-action BUTTON localizes like every other label: the descriptor carries the
+        // model-catalog translation key (the renderer shows T(translation.key, label)), and the
+        // label lands in the generated en catalog's actions section - hardcoded-English Void /
+        // Save-as-Template buttons on an otherwise translated app were the reported defect.
+        String descriptor = contentOf("invoice-from-proforma-generate-action.js");
+        assertTrue(descriptor.contains("\"translation\"") && descriptor.contains(PROJECT + ":proforma-model.actions.invoice-from-proforma"),
+                "the action descriptor must carry the model-catalog translation key, got: " + descriptor);
+        generateFromModel("template-application-ui-harmonia-java/template/template.js", "proforma.model");
+        String actionCatalog = contentOf("i18n/en-US/proforma.model.json");
+        assertTrue(actionCatalog.contains("\"actions\"") && actionCatalog.contains("\"invoice-from-proforma\""),
+                "the action label must land in the en catalog's actions section, got: " + actionCatalog);
     }
 
     @Test
@@ -1876,6 +2178,125 @@ class IntentEngineIT extends IntegrationTest {
                 "the writer must persist the edited columns in one targeted multi-column write");
         assertFalse(writer.contains("updateWithoutEvent"),
                 "the writer must NOT full-row merge (updateWithoutEvent) - that reverts concurrent writes to unedited columns");
+    }
+
+    /**
+     * Lifecycle-aware aggregates (#6645): a status nomenclature classified with {@code stage:} makes an
+     * aggregating report count the LIVE rows only - so a draft or voided document stops inflating every
+     * total - while a report that is about the lifecycle opts out with {@code scope: all}. Statuses are
+     * named symbolically throughout, which is what stops an id shift from silently retargeting a guard.
+     */
+    @Test
+    void lifecycle_aware_reports_scope_aggregates_to_the_live_statuses() {
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 40 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: issuedOn, type: date }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: DRAFT }
+                transitions:
+                  - name: VoidInvoice
+                    forEntity: Invoice
+                    from: [ISSUED]
+                    setStatus: VOIDED
+                reports:
+                  # No scope: an aggregation over a stage-classified lifecycle defaults to live.
+                  - name: RevenueByMonth
+                    source: Invoice
+                    dimensions: ["month(issuedOn)"]
+                    measures: ["sum(total)"]
+                  # This one IS about the lifecycle, so it keeps every row.
+                  - name: InvoicesByStatus
+                    source: Invoice
+                    scope: all
+                    dimensions: [Status]
+                    measures: ["count(*)"]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT, stage: draft }
+                      - { id: 3, name: ISSUED, stage: live }
+                      - { id: 7, name: PAID, stage: live }
+                      - { id: 9, name: VOIDED, stage: void }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 // Everything resolved, so Generate reports no notes.
+                                                 .body("warnings", hasSize(0)));
+
+        String revenue = contentOf("RevenueByMonth.report");
+        assertTrue(revenue.contains("WHERE Invoice.\\\"INVOICE_STATUS\\\" IN (3, 7)"),
+                "the unscoped aggregation should be restricted to the live statuses, got: " + revenue);
+        String byStatus = contentOf("InvoicesByStatus.report");
+        assertFalse(byStatus.contains("INVOICE_STATUS\\\" IN"), "scope: all must keep every row, got: " + byStatus);
+
+        // The seed CSV carries data only - `stage` classifies the row, it is not a column.
+        assertEquals("""
+                INVOICE_STATUS_ID,INVOICE_STATUS_NAME
+                1,DRAFT
+                3,ISSUED
+                7,PAID
+                9,VOIDED
+                """, contentOf("invoice-statuses.csv"));
+        // Symbolic statuses reached the generated model as ids: the FK default and the transition guards.
+        assertTrue(contentOf("billing.edm").contains("dataDefaultValue=\"1\""),
+                "init: DRAFT should have resolved to the seed id on the status FK");
+        String glue = contentOf("billing.glue");
+        assertTrue(glue.contains("\"setStatus\": \"9\""), "setStatus: VOIDED should have resolved to the seed id, got: " + glue);
+        assertTrue(glue.contains("\"3\""), "from: [ISSUED] should have resolved to the seed id, got: " + glue);
+    }
+
+    /**
+     * The cheap half of #6645: with no {@code stage:} classification there is nothing to resolve a
+     * scope against, so Generate reports the lifecycle-blind aggregate as a note instead of silently
+     * emitting a query that counts drafts. This is the only signal the omission has - it must reach the
+     * API.
+     */
+    @Test
+    void generate_warns_when_an_aggregate_over_a_lifecycle_entity_has_no_scope() {
+        writeIntent("""
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string, required: true, length: 40 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: total, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Status, kind: manyToOne, to: InvoiceStatus, function: EntityStatus, init: 1 }
+                reports:
+                  - name: Revenue
+                    source: Invoice
+                    measures: ["sum(total)"]
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT }
+                      - { id: 3, name: ISSUED }
+                """);
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .post(GENERATE_URL)
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("warnings", hasItem(containsString("neither declares `scope:` nor filters"))));
+        assertFalse(contentOf("Revenue.report").contains("WHERE"), "with nothing to resolve, the query stays exactly as authored");
     }
 
     private void writeIntent(String yaml) {

@@ -14,11 +14,15 @@ import org.eclipse.dirigible.sdk.mail.Mail;
 #end
 import org.eclipse.dirigible.sdk.job.JobHandler;
 
-import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Entity;
-import gen.${javaGenFolderName}.data.${javaPerspective}.${entity}Repository;
+import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Entity;
+import gen.${sourceGenFolder}.data.${javaPerspective}.${entity}Repository;
 #foreach($load in $relationLoads)
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Entity;
 import gen.${load.javaGenFolder}.data.${load.javaTargetPerspective}.${load.targetEntity}Repository;
+#end
+#if($attachLanguageFkProperty != "")
+import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Entity;
+import gen.${attachLanguageJavaGenFolder}.data.${attachLanguageJavaTargetPerspective}.${attachLanguageTargetEntity}Repository;
 #end
 
 /**
@@ -129,11 +133,15 @@ public class ${className}Job implements JobHandler {
             // attach: print - render THIS row's own print template to PDF server-side (the generated
             // feeder assembles the { document, items } payload) and attach it, so a periodic notice
             // carries the document itself (a reminder with the invoice, not just about it).
+#if($attachLanguageFkProperty != "")
+            ${attachLanguageTargetEntity}Entity attachLanguageSource = entity.${attachLanguageFkProperty} == null ? null
+                    : new ${attachLanguageTargetEntity}Repository().findById(entity.${attachLanguageFkProperty});
+#end
             Map document = new HashMap();
             document.put("type", "attachment");
             document.put("contentType", "application/pdf");
             document.put("fileName", ${attachFileNameExpression});
-            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", "${attachLanguage}",
+            document.put("data", org.eclipse.dirigible.sdk.print.Print.render("${attachEntity}", ${attachLanguageExpression},
                     new ${attachEntity}PrintFeeder().feed(entity.${attachKeyProperty})));
             parts.add(document);
 #end

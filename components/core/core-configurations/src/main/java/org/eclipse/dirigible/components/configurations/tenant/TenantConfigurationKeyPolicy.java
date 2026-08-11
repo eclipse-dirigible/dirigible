@@ -44,7 +44,18 @@ class TenantConfigurationKeyPolicy {
             // e.g. "en,bg,fr"). Per-tenant: each tenant decides which languages its users see; the
             // modules themselves carry whatever translations they ship, falling back to the default
             // (first) language for anything missing.
-            "DIRIGIBLE_APPLICATION_LANGUAGES");
+            "DIRIGIBLE_APPLICATION_LANGUAGES", //
+            // Serve and store Office documents with the legacy Microsoft mime types. Per-tenant
+            // because it depends on the client software a tenant's users actually open files with;
+            // the resolver reads it per call, so a change applies without a restart.
+            "DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", //
+            // Whether the per-path CMS access grants are enforced at all. Per-tenant because whether
+            // a tenant restricts folders by role is its own decision; the resolver reads it per
+            // request, so switching it applies immediately.
+            "DIRIGIBLE_CMS_ROLES_ENABLED", //
+            // The application's externally-reachable base URL (e.g. the {appUrl} notify token) -
+            // per-tenant because a tenant may be served from its own subdomain/host.
+            "DIRIGIBLE_APP_BASE_URL");
 
     /**
      * The full list of configuration keys a tenant may override, in display order.

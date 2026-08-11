@@ -103,16 +103,22 @@ public class EntityIntent {
      */
     private List<String> order = new ArrayList<>();
     /**
-     * Optional UI view type for this entity. {@code calendar} renders its records as events on a
-     * Harmonia calendar (see {@link #calendar}); absent → the default list / manage / document layout
-     * inferred from structure.
+     * Optional UI view type for this entity. {@code calendar} / {@code range} render its records as
+     * events on a Harmonia calendar (see {@link #calendar}) - an ADDITIONAL page: the entity keeps the
+     * list / manage / document layout inferred from structure (and everything it brings - the document
+     * editor, Print, inline process tasks), the calendar becomes its landing browse page and that
+     * layout's own list moves to {@code /<Entity>/list}. On a composition child the calendar is instead
+     * how the master renders that child's panel. {@code slots} does replace the layout (it is an
+     * authoring surface, not a second way to browse). Absent → no calendar page.
      */
     private String view;
     /**
      * Optional rendering of a document master's line-items pane. Default (unset) renders the items as
      * an editable table; {@code documentItemsLayout: chat} renders them as a conversation thread
      * (bubbles + a composer) - the document header/status/process stay intact. Only meaningful on a
-     * document master.
+     * document master. The third rendering, a calendar, is not declared here but on the items child
+     * itself ({@code view: calendar}), which is where its date/title configuration lives; the two are
+     * mutually exclusive.
      */
     private String documentItemsLayout;
     /** Calendar-view configuration; used when {@code view: calendar} or {@code view: range}. */
@@ -174,6 +180,22 @@ public class EntityIntent {
      * two gated on an EntityStatus seed id so drafting stays unconstrained. See {@link CheckIntent}.
      */
     private List<CheckIntent> checks;
+
+    /**
+     * On a {@code function: Snapshot} child only: the fixed print-template language its generated
+     * copies are rendered in (a {@code languages:} code, e.g. {@code bg}). Mutually exclusive with
+     * {@link #languageFrom}; absent both, the mint falls back to the first entry of the tenant-resolved
+     * application language set at run time.
+     */
+    private String language;
+    /**
+     * On a {@code function: Snapshot} child only: a {@code relation.field} path on the snapshot's
+     * DOCUMENT MASTER that determines the render language per record (e.g.
+     * {@code languageFrom: customer.language} - the customer decides the invoice's language). The
+     * relation is a to-one of the master; the field a string field of its target. Mutually exclusive
+     * with {@link #language}; a blank resolved value falls back like an absent knob.
+     */
+    private String languageFrom;
 
 
     public String getName() {
@@ -480,5 +502,21 @@ public class EntityIntent {
 
     public void setLabel(String label) {
         this.label = label;
+    }
+
+    public String getLanguage() {
+        return language;
+    }
+
+    public void setLanguage(String language) {
+        this.language = language;
+    }
+
+    public String getLanguageFrom() {
+        return languageFrom;
+    }
+
+    public void setLanguageFrom(String languageFrom) {
+        this.languageFrom = languageFrom;
     }
 }

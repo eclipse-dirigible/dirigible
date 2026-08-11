@@ -42,10 +42,12 @@ import org.springframework.stereotype.Component;
  * <li>the management surface writes {@code PREFIX} / {@code SIZE} / the counter reset;</li>
  * <li>allocation writes only {@code COUNTER}, via {@code COUNTER = COUNTER + 1} - with one
  * deliberate exception: the first allocation for a NEW PARTITION of a declared series materializes
- * that partition's row, copying the shape from the series' base ({@code ""}-partition) row.
- * Partition values are data (company ids), so no artefact can pre-provision them; the base row is
- * the tenant's configured default they inherit. The copy happens once, at row birth - it never
- * overwrites anything.</li>
+ * that partition's row, copying the shape AND the counter from the series' base
+ * ({@code ""}-partition) row. Partition values are data (company ids), so no artefact can
+ * pre-provision them; the base row is the tenant's configured template they inherit - including the
+ * starting point, so seeding the base row's next value BEFORE the first document works (a
+ * zero-started partition silently ignored the seed, observed live). The copy happens once, at row
+ * birth - it never overwrites anything.</li>
  * </ul>
  *
  * <p>
@@ -215,14 +217,18 @@ class DocumentNumberStore {
             if (exists(connection, series, partition)) {
                 return;
             }
-            insertRow(connection, series, partition, prefix, size);
+            insertRow(connection, series, partition, prefix, size, 0L);
         }
     }
 
     /**
-     * Materializes a NEW partition row of a declared series, inheriting the shape of the series' base
-     * ({@code ""}-partition) row - the tenant's configured default. Partition values are data, so this
-     * is the only place a partition row can be born.
+     * Materializes a NEW partition row of a declared series, inheriting the shape AND the counter of
+     * the series' base ({@code ""}-partition) row - the tenant's configured template. The counter is
+     * inherited because the base row is the only thing an operator CAN seed before a partition's first
+     * allocation (on a fresh tenant nothing marks the series partitioned yet, so the settings page
+     * offers the base row's next value): starting the partition at zero instead silently discarded the
+     * seed and the first document rendered ...0001. Partition values are data, so this is the only
+     * place a partition row can be born.
      *
      * @param connection the connection (autocommit)
      * @param series the series identity
@@ -236,11 +242,12 @@ class DocumentNumberStore {
                     + "] is not declared for this tenant - declare it in a .numbers artefact");
         }
         Allocation base = read(connection, series, "");
-        insertRow(connection, series, partition, base.prefix(), base.size());
+        insertRow(connection, series, partition, base.prefix(), base.size(), base.value());
     }
 
-    /** Inserts one series row with a zero counter, tolerating a concurrent identical insert. */
-    private void insertRow(Connection connection, String series, String partition, String prefix, int size) throws SQLException {
+    /** Inserts one series row with the given counter, tolerating a concurrent identical insert. */
+    private void insertRow(Connection connection, String series, String partition, String prefix, int size, long counter)
+            throws SQLException {
         String sql = SqlFactory.getNative(connection)
                                .insert()
                                .into(TABLE_NAME)
@@ -253,13 +260,87 @@ class DocumentNumberStore {
         try (PreparedStatement statement = connection.prepareStatement(sql)) {
             statement.setString(1, series);
             statement.setString(2, partition);
-            statement.setLong(3, 0L);
+            statement.setLong(3, counter);
             statement.setString(4, prefix == null ? "" : prefix);
             statement.setInt(5, size);
             statement.executeUpdate();
             LOGGER.info("Provisioned document-number series [{}] partition [{}] as prefix [{}] size [{}]", series, partition, prefix, size);
         } catch (SQLException duplicate) {
             LOGGER.debug("Series [{}] partition [{}] was provisioned concurrently", series, partition, duplicate);
+        }
+    }
+
+    /**
+     * One partition value with its display label, read from a declared partition source.
+     *
+     * @param value the partition value (the key column, as a string - partition keys are strings)
+     * @param label the display label
+     */
+    record PartitionValue(String value, String label) {
+    }
+
+    /**
+     * Every row of a declared partition source: the partition values a series CAN be partitioned by,
+     * with their display labels - what lets the management surface label the rows it has and list the
+     * values that have not allocated yet. The identifiers were validated to plain SQL identifiers at
+     * artefact parse and are quoted verbatim here; the table lives in the tenant-routed default
+     * datasource like everything else the numbering engine touches.
+     *
+     * @param table the partition-source table
+     * @param key the column holding the partition value
+     * @param label the column holding the display label
+     * @return the values in label order (possibly empty; empty also when the table does not exist yet -
+     *         the owning module may not be deployed to this tenant)
+     * @throws SQLException if the read fails
+     */
+    List<PartitionValue> readPartitionSource(String table, String key, String label) throws SQLException {
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            if (!SqlFactory.getNative(connection)
+                           .existsTable(connection, table)) {
+                return List.of();
+            }
+            String sql = SqlFactory.getNative(connection)
+                                   .select()
+                                   .column(key)
+                                   .column(label)
+                                   .from(table)
+                                   .order(label)
+                                   .build();
+            List<PartitionValue> values = new ArrayList<>();
+            try (PreparedStatement statement = connection.prepareStatement(sql); ResultSet resultSet = statement.executeQuery()) {
+                while (resultSet.next()) {
+                    String value = resultSet.getString(1);
+                    if (value != null && !value.isBlank()) {
+                        values.add(new PartitionValue(value, resultSet.getString(2)));
+                    }
+                }
+            }
+            return values;
+        }
+    }
+
+    /**
+     * Materializes the partition's row NOW when it does not exist yet (inheriting the base row's shape,
+     * zero counter) - the management surface's write path for a VIRTUAL row: an operator seeds a
+     * partition's counter BEFORE its first allocation, so the row must be born on save, exactly as the
+     * first allocation would have born it.
+     *
+     * @param series the series identity
+     * @param partition the partition value
+     * @throws SQLException if the write fails
+     * @throws IllegalStateException if the series has no base row - it was never declared
+     */
+    void ensurePartition(String series, String partition) throws SQLException {
+        if (partition.isEmpty()) {
+            return;
+        }
+        try (Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                       .getConnection()) {
+            ensureTableExists(connection);
+            if (!exists(connection, series, partition)) {
+                materializePartition(connection, series, partition);
+            }
         }
     }
 

@@ -5,12 +5,12 @@
  */
 export const getTemplate = () => ({
   name: "HTTP Client (API)",
-  description: "Service With HTTP Client Support",
+  description: "Client Java Service With HTTP Client Support",
   sources: [
     {
-      location: "/template-http-client/service.mjs.template",
+      location: "/template-http-client/service.java.template",
       action: "generate",
-      rename: "{{fileName}}.mjs",
+      rename: "{{javaPackageName}}/{{javaClassName}}.java",
     },
   ],
   parameters: [],

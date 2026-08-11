@@ -281,13 +281,19 @@ export function generateFiles(model, parameters, templateSources) {
     // from its registration); other composition children render as ordinary detail panels.
     const uiDocumentModels = model.entities.filter(e => e.layoutType === "MANAGE_DOCUMENT" && e.type === "PRIMARY");
 
-    // UI Calendar: a PRIMARY entity rendered as a Harmonia x-h-calendar (set by EdmIntentGenerator as
-    // layoutType MANAGE_CALENDAR from `view: calendar`) - its records become events on a month/week/day
-    // calendar; create/edit reuse the shared manage form on date-click / event-click.
-    const uiCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.type === "PRIMARY");
+    // UI Calendar: a PRIMARY entity that ALSO renders on a Harmonia x-h-calendar (calendarView, set by
+    // EdmIntentGenerator from `view: calendar|range`) - its records become events on a month/week/day
+    // calendar. The calendar is an ADDITIONAL page: the entity keeps its own layout (MANAGE /
+    // MANAGE_MASTER / MANAGE_DOCUMENT) and every page that layout generates, so date-click / event-click
+    // land on the natural editor (a document master edits on its document page). The calendar takes over
+    // the landing route and the layout's list moves to /<Entity>/list (see the shell template).
+    const uiCalendarModels = model.entities.filter(e => e.calendarView === "true" && e.type === "PRIMARY");
 
-    // UI Slots: a PRIMARY entity rendered as an x-h-slot-picker (view: slots) for appointment booking.
-    const uiSlotsModels = model.entities.filter(e => e.layoutType === "MANAGE_SLOTS" && e.type === "PRIMARY");
+    // UI Slots: a PRIMARY entity that ALSO renders as an x-h-slot-picker (slotsView, from `view: slots`)
+    // for appointment booking. Like the calendar it is an ADDITIONAL page: the entity keeps its own
+    // layout, the picker takes over the landing route, and that layout's browse page moves to
+    // /<Entity>/list - a picker creates a booking, the list/document works with it afterwards.
+    const uiSlotsModels = model.entities.filter(e => e.slotsView === "true" && e.type === "PRIMARY");
 
     // Personal (my) surface: entities owned by the logged-in user - a direct personal FK
     // (intent `personal: true`) or the scope inherited from the direct composition parent
@@ -296,11 +302,12 @@ export function generateFiles(model, parameters, templateSources) {
     // Roots only (a DIRECT personal owner): these get list pages + shell perspectives; children
     // reach their forms through the parent's panels, never through navigation.
     const personalRootModels = model.entities.filter(e => e.personalProperty);
-    // A personal CALENDAR/RANGE root (view: calendar|range) lands on a personal calendar page
-    // instead of the list - exactly like the power surface, where the calendar replaces the table.
-    const personalCalendarModels = model.entities.filter(e => e.layoutType === "MANAGE_CALENDAR" && e.personalProperty);
-    // The personal LIST pair renders for every root EXCEPT a calendar root (replaced above).
-    const personalListModels = model.entities.filter(e => e.personalProperty && e.layoutType !== "MANAGE_CALENDAR");
+    // A personal CALENDAR/RANGE root (view: calendar|range) additionally gets a personal calendar page,
+    // which takes over the /my/<Entity> landing route - exactly like the power surface.
+    const personalCalendarModels = model.entities.filter(e => e.calendarView === "true" && e.personalProperty);
+    // The personal LIST pair renders for every root, calendar roots included: the calendar is an
+    // additional page, so the list stays reachable at /my/<Entity>/list.
+    const personalListModels = model.entities.filter(e => e.personalProperty);
     // A personal document root (MANAGE_DOCUMENT + a direct personal owner) gets the personal DOCUMENT
     // layout (header form + inline items table + status pill + totals). It still gets a MyController
     // (personalModels, above) and a list + perspective (personalRootModels) - only its FORM is the
@@ -783,7 +790,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: model.notifications[n].attachKeyProperty,
                                 attach: model.notifications[n].attach,
                                 attachEntity: model.notifications[n].attachEntity,
-                                attachLanguage: model.notifications[n].attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: model.notifications[n].attachLanguageExpression,
+                                attachLanguageFkProperty: model.notifications[n].attachLanguageFkProperty,
+                                attachLanguageTargetEntity: model.notifications[n].attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(model.notifications[n].attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: model.notifications[n].attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(model.notifications[n].attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: model.notifications[n].attachFileNameExpression
                             };
                             const cleanNotificationParameters = cleanData(notificationParameters);
@@ -813,6 +830,11 @@ export function generateFiles(model, parameters, templateSources) {
                                 entity: sc.entity,
                                 perspective: sc.perspective,
                                 javaPerspective: sanitizeJavaIdentifier(sc.perspective),
+                                // The source entity's gen folder: the sanitized OWNER model when the
+                                // source is cross-model (the job imports the owner's gen classes - the
+                                // leafOnly precedent), else this project's own folder. Always supplied,
+                                // so a local-source schedule stays byte-identical.
+                                sourceGenFolder: sc.sourceCrossModel ? sanitizeJavaIdentifier(sc.sourceModel) : parameters.javaGenFolderName,
                                 criteriaExpression: sc.criteriaExpression,
                                 action: sc.action || "notify",
                                 relationLoads: (sc.relationLoads || []).map(load => ({
@@ -828,7 +850,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: sc.attachKeyProperty,
                                 attach: sc.attach,
                                 attachEntity: sc.attachEntity,
-                                attachLanguage: sc.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: sc.attachLanguageExpression,
+                                attachLanguageFkProperty: sc.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: sc.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(sc.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: sc.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(sc.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: sc.attachFileNameExpression,
                                 genToEntity: sc.genToEntity,
                                 genToPk: sc.genToPk,
@@ -840,19 +872,22 @@ export function generateFiles(model, parameters, templateSources) {
                                 // Collection-driven children: fully-qualified classes resolved here
                                 // (the template engine knows the path layout; the glue carried only
                                 // logical names). The child target lives in the generation target's
-                                // model; the forEach collection is always LOCAL.
+                                // model; the forEach collection is LOCAL by default, or in the owner
+                                // model when the child's forEach carried a model: alias.
                                 genChildren: (sc.genChildren || []).map(function resolveChild(c) {
                                     const childGenFolder = c.toCrossModel ? sanitizeJavaIdentifier(c.toModel) : parameters.javaGenFolderName;
                                     const childPkg = 'gen.' + childGenFolder + '.data.' + sanitizeJavaIdentifier(c.toPerspective) + '.';
+                                    const forEachGenFolder = c.forEachCrossModel ? sanitizeJavaIdentifier(c.forEachModel) : parameters.javaGenFolderName;
+                                    const forEachPkg = 'gen.' + forEachGenFolder + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.';
                                     return {
                                         ...c,
                                         toEntityClass: childPkg + c.toEntity + 'Entity',
                                         toRepositoryClass: childPkg + c.toEntity + 'Repository',
                                         forEachEntityClass: c.forEachEntity
-                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Entity'
+                                            ? forEachPkg + c.forEachEntity + 'Entity'
                                             : undefined,
                                         forEachRepositoryClass: c.forEachEntity
-                                            ? 'gen.' + parameters.javaGenFolderName + '.data.' + sanitizeJavaIdentifier(c.forEachPerspective) + '.' + c.forEachEntity + 'Repository'
+                                            ? forEachPkg + c.forEachEntity + 'Repository'
                                             : undefined,
                                         children: (c.children || []).map(resolveChild)
                                     };
@@ -1065,12 +1100,22 @@ export function generateFiles(model, parameters, templateSources) {
                                 className: g.className,
                                 fromEntity: g.fromEntity,
                                 fromJavaPerspective: sanitizeJavaIdentifier(g.fromPerspective),
+                                // The SOURCE's gen folder / owning project: this project unless the
+                                // source belongs to another model (intent `fromUses:`). That is what lets
+                                // a create-from be authored on the module owning the TARGET and keeps the
+                                // two modules' generated Java acyclic - only one side references the other.
+                                fromGenFolder: g.crossModelSource ? sanitizeJavaIdentifier(g.fromModel) : parameters.javaGenFolderName,
+                                fromProjectName: g.crossModelSource ? g.fromProject : parameters.projectName,
                                 toEntity: g.toEntity,
                                 toGenFolder: g.crossModel ? sanitizeJavaIdentifier(g.toModel) : parameters.javaGenFolderName,
                                 toJavaPerspective: sanitizeJavaIdentifier(g.toPerspective),
                                 toPk: g.toPk,
                                 fieldAssignments: g.fieldAssignments,
                                 hasItems: g.hasItems,
+                                // Computed line-items form (issue #6555): synthetic lines whose cells are
+                                // pre-rendered expressions over the source master; passed through untouched.
+                                hasItemLines: g.hasItemLines,
+                                itemLines: g.itemLines,
                                 fromItemEntity: g.fromItemEntity,
                                 toItemEntity: g.toItemEntity,
                                 // The source item's own package (a non-composition primary source item
@@ -1138,7 +1183,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 notifyBodyExpression: t.notifyBodyExpression,
                                 attach: t.attach,
                                 attachEntity: t.attachEntity,
-                                attachLanguage: t.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: t.attachLanguageExpression,
+                                attachLanguageFkProperty: t.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: t.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(t.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: t.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(t.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: t.attachFileNameExpression
                             };
                             const cleanTransitionParameters = cleanData(transitionParameters);
@@ -1187,7 +1242,17 @@ export function generateFiles(model, parameters, templateSources) {
                                 attachKeyProperty: s.attachKeyProperty,
                                 attach: s.attach,
                                 attachEntity: s.attachEntity,
-                                attachLanguage: s.attachLanguage,
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the attachLanguageSource local, or
+                                // the run-time application-language fallback); the attachLanguage*
+                                // coordinates drive the languageFrom load's import/package.
+                                attachLanguageExpression: s.attachLanguageExpression,
+                                attachLanguageFkProperty: s.attachLanguageFkProperty,
+                                attachLanguageTargetEntity: s.attachLanguageTargetEntity,
+                                attachLanguageJavaTargetPerspective: sanitizeJavaIdentifier(s.attachLanguageTargetPerspective || ""),
+                                attachLanguageJavaGenFolder: s.attachLanguageCrossModel
+                                    ? sanitizeJavaIdentifier(s.attachLanguageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 attachFileNameExpression: s.attachFileNameExpression
                             };
                             const cleanSendParameters = cleanData(sendParameters);
@@ -1347,6 +1412,10 @@ export function generateFiles(model, parameters, templateSources) {
                                 ruleMatchProperty: po.ruleMatchProperty,
                                 ruleMatchValueJava: po.ruleMatchValueJava,
                                 usedRuleColumns: po.usedRuleColumns,
+                                // Conditional rule(by:...) selectors (#6534): whole-expression null
+                                // guards, checked after the rule row resolves (the selected column is a
+                                // runtime choice, so it cannot be a static usedRuleColumn).
+                                conditionalRuleGuards: po.conditionalRuleGuards,
                                 headerAssignments: po.headerAssignments,
                                 itemRows: po.itemRows
                             };
@@ -1385,6 +1454,24 @@ export function generateFiles(model, parameters, templateSources) {
                                 // committed gen/ survives the owner retiring a field. hasCrossModel emits
                                 // that one helper only where it is needed.
                                 hasCrossModel: feeder.hasCrossModel === true,
+                                // Line-item to-one lookups: the same shape as the header nodes, resolved
+                                // per row (label + fields), so an items-table column can render the
+                                // relation ({{Unit}} / {{Unit.Name}}).
+                                itemNodes: (feeder.itemNodes || []).map(function (n) {
+                                    return {
+                                        entityVar: n.entityVar,
+                                        mapVar: n.mapVar,
+                                        fkProperty: n.fkProperty,
+                                        keyInParent: n.keyInParent,
+                                        entity: n.entity,
+                                        crossModel: n.crossModel === true,
+                                        model: n.model,
+                                        genFolder: n.crossModel ? sanitizeJavaIdentifier(n.model) : parameters.javaGenFolderName,
+                                        javaPerspective: sanitizeJavaIdentifier(n.perspective),
+                                        labelField: n.labelField,
+                                        scalars: n.scalars
+                                    };
+                                }),
                                 nodes: (feeder.nodes || []).map(function (n) {
                                     return {
                                         entityVar: n.entityVar,
@@ -1426,7 +1513,18 @@ export function generateFiles(model, parameters, templateSources) {
                                 ...parameters,
                                 master: snapshot.master,
                                 masterPk: snapshot.masterPk,
-                                language: snapshot.language,
+                                masterJavaPerspective: sanitizeJavaIdentifier(snapshot.masterPerspective || ""),
+                                // The render language is a pre-rendered Java expression (a quoted
+                                // literal, a languageFrom read off the languageSource local, or the
+                                // run-time application-language fallback); the languageTarget*
+                                // coordinates drive the languageFrom load's import/package.
+                                languageExpression: snapshot.languageExpression,
+                                languageFkProperty: snapshot.languageFkProperty,
+                                languageTargetEntity: snapshot.languageTargetEntity,
+                                languageTargetJavaPerspective: sanitizeJavaIdentifier(snapshot.languageTargetPerspective || ""),
+                                languageTargetJavaGenFolder: snapshot.languageTargetModel
+                                    ? sanitizeJavaIdentifier(snapshot.languageTargetModel)
+                                    : parameters.javaGenFolderName,
                                 snapshotEntity: snapshot.snapshotEntity,
                                 snapshotJavaPerspective: sanitizeJavaIdentifier(snapshot.snapshotPerspective),
                                 snapshotMasterFk: snapshot.snapshotMasterFk
@@ -1560,6 +1658,19 @@ export function generateFiles(model, parameters, templateSources) {
                         translations.t[model.widgets[i].tId] = model.widgets[i].label || model.widgets[i].name;
                     }
                 }
+            }
+            // Per-record custom action labels (transitions + generates, the .model root
+            // `customActionLabels` map): their descriptors reference <tprefix>.actions.<name>, so a
+            // Void / Save-as-Template button localizes like every other label.
+            if (model.customActionLabels) {
+                translations.actions = { ...model.customActionLabels };
+            }
+            // BPM user-task labels (the .model root `processTaskLabels` map, authored step name ->
+            // humanized task name): the views render each in-record task button through
+            // <tprefix>.processes.<step name> (resolved from the baked config.js reverse map), so
+            // an Approve/Issue/Send button localizes instead of always showing the English BPMN name.
+            if (model.processTaskLabels) {
+                translations.processes = { ...model.processTaskLabels };
             }
             generatedFiles.push({
                 content: JSON.stringify({ [parameters['tprefix']]: translations }, null, 2),

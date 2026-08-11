@@ -1,0 +1,5 @@
+{
+    "module": "personal/configs/personal-group.js",
+    "extensionPoint": "application-personal-perspectives",
+    "description": "Personal Shell - the 'personal' navigation group"
+}

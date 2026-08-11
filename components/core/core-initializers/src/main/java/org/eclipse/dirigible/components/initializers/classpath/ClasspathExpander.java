@@ -106,6 +106,12 @@ public class ClasspathExpander {
     private void handleJarURLConnection(String root, URLConnection urlConnection) throws IOException {
         String jarRoot = "META-INF/" + root;
         JarURLConnection jarUrlConnection = (JarURLConnection) urlConnection;
+        // A cached JarURLConnection hands out the JVM-wide shared JarFile - the very instance the
+        // application class loader reads resources from. Closing it breaks every read of that JAR
+        // that is in flight elsewhere: the JDT.LS installer, which streams a ~50 MB tar.gz out of
+        // its own JAR on a background thread while this expansion runs, died with "ZipFile closed".
+        // Opting out of the cache yields a handle this method exclusively owns and may close.
+        jarUrlConnection.setUseCaches(false);
         try (JarFile jar = jarUrlConnection.getJarFile()) {
             Enumeration<JarEntry> entries = jar.entries();
             JarEntry maybeSkip = jar.getJarEntry("META-INF/dirigible/.skip");

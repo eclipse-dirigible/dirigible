@@ -1,0 +1,39 @@
+package {{javaPackageName}};
+
+import org.eclipse.dirigible.sdk.component.Component;
+import org.eclipse.dirigible.sdk.db.Database;
+import org.eclipse.dirigible.sdk.http.Controller;
+import org.eclipse.dirigible.sdk.http.Get;
+
+/**
+ * A client Java service querying a database. It answers at
+ * {@code /services/java/{{projectName}}/{{javaPackageName}}/{{javaClassName}}} with the result set
+ * of the statement below, already serialized to JSON by
+ * {@link Database#query(String, String, String)}.
+ *
+ * <p>
+ * The query runs against {@code SystemDB} - the platform's own database, which holds the metadata
+ * read here. Point it at your own data source by passing its name instead, or drop the argument to
+ * use the default one.
+ *
+ * <p>
+ * The bean name is qualified with the package so two projects can scaffold a service of the same
+ * name without colliding in the shared client container.
+ */
+@Controller
+@Component("{{javaPackageName}}_{{javaClassName}}")
+public class {{javaClassName}} {
+
+    private static final String SQL = "select * from DIRIGIBLE_EXTENSIONS where EXTENSION_EXTENSIONPOINT_NAME = ?";
+
+    /** Indexed statement parameters, as a JSON array of values. */
+    private static final String PARAMETERS = "[\"platform-templates\"]";
+
+    private static final String DATA_SOURCE = "SystemDB";
+
+    @Get
+    public String listExtensions() throws Throwable {
+        return Database.query(SQL, PARAMETERS, DATA_SOURCE);
+    }
+
+}

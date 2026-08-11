@@ -33,6 +33,10 @@ class TenantConfigurationKeyPolicyTest {
         assertTrue(policy.isInjectable("DIRIGIBLE_BRANDING_BRAND_URL"));
         // The platform language set is tenant-overridable (default "en"; e.g. "en,bg,fr").
         assertTrue(policy.isInjectable("DIRIGIBLE_APPLICATION_LANGUAGES"));
+        assertTrue(policy.isInjectable("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED"));
+        assertTrue(policy.isInjectable("DIRIGIBLE_CMS_ROLES_ENABLED"));
+        // The app's external base URL (the {appUrl} notify token) is per-tenant overridable.
+        assertTrue(policy.isInjectable("DIRIGIBLE_APP_BASE_URL"));
     }
 
     @Test

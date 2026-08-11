@@ -166,9 +166,32 @@ document.addEventListener('alpine:init', () => {
         window.T ? window.T('$projectName:${tprefix}.t.${dataName}_plural', '${menuLabel}') : '${menuLabel}');
     },
 
+#if($calendarView)
+    // Switch to the additional calendar page (intent `view: calendar|range`), which owns /${name}.
+    goCalendar() { window.PineconeRouter.navigate('/${name}'); },
+#end
+#if($slotsView)
+    // Switch to the additional slot-picker page (intent `view: slots`), which owns /${name}.
+    goSlots() { window.PineconeRouter.navigate('/${name}'); },
+#end
     newMaster()  { window.PineconeRouter.navigate('/${name}/create'); },
     editMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/edit'); },
     previewMaster(row) { window.PineconeRouter.navigate('/${name}/' + encodeURIComponent(row.${primaryKeysString}) + '/preview'); },
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability mirror for the row affordances (intent `immutable`/`immutableWhen:`): computed
+    // from the row's status FK against the generation-time immutable status ids - no per-row API
+    // call. The controller's 409 (and its GET /{id}/mutable pre-check, which the form page asks)
+    // stay authoritative; this only keeps Edit/Delete honest in the table and the details pane.
+    isRowImmutable(row) {
+#if($immutableAlways)
+      return row != null;
+#else
+      const v = row == null ? null : row.${immutableStatusProperty};
+      return v != null && '${immutableStatusValues}'.split(',').includes(String(v));
+#end
+    },
+#end
 
     askDelete(row) { this.deleteTarget = row; this.deleteOpen = true; },
     async confirmDelete() {

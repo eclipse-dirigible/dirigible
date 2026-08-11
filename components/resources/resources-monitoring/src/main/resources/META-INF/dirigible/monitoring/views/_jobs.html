@@ -1,0 +1,160 @@
+<!--
+  Copyright (c) 2010-2026 Eclipse Dirigible contributors
+  SPDX-License-Identifier: EPL-2.0
+
+  Jobs - the scheduled jobs with their last outcome, and the execution log of the selected one.
+  Enable, disable and trigger are allowed here; e-mail assignment and log clearing stay in the
+  Workbench.
+-->
+<div id="monitoring-jobs-page" class="vbox size-full" x-data="jobsPage">
+
+  <div x-h-toolbar data-variant="transparent">
+    <span x-h-toolbar-title class="shrink-0" x-text="T('monitoring:jobs.title', 'Jobs')"></span>
+    <span x-show="state.actionResult" x-cloak x-h-badge
+          :data-variant="state.actionResult ? state.actionResult.variant : 'outline'"
+          x-text="state.actionResult ? state.actionResult.text : ''"></span>
+    <div x-h-toolbar-spacer></div>
+    <button x-h-button data-variant="outline" data-size="sm" @click="state.load()" :data-loading="state.loading">
+      <i role="img" x-h-lucide data-lucide="refresh-cw"></i>
+      <span x-text="T('monitoring:overview.refresh', 'Refresh')"></span>
+    </button>
+  </div>
+
+  <div x-h-split class="flex-1 min-h-0" data-orientation="horizontal" data-variant="border">
+
+    <!-- Jobs -->
+    <div x-h-split-panel data-size="55%">
+      <div class="vbox size-full overflow-auto">
+        <div x-show="state.loading" x-cloak class="vbox gap-2 p-3">
+          <template x-for="i in 5" :key="i"><div x-h-skeleton class="h-6 w-full"></div></template>
+        </div>
+        <div x-show="!state.loading && state.error" x-cloak x-h-text.muted class="p-3 text-sm"
+             x-text="T('monitoring:jobs.loadFailed', 'The jobs could not be read.')"></div>
+        <div x-show="!state.loading && !state.error && state.items.length === 0" x-cloak x-h-text.muted
+             class="p-3 text-sm" x-text="T('monitoring:jobs.empty', 'No jobs are deployed.')"></div>
+
+        <table x-h-table x-show="!state.loading && state.items.length" x-cloak>
+          <thead x-h-table-header>
+            <tr>
+              <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colName', 'Job')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colSchedule', 'Schedule')"></th>
+              <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colStatus', 'Last run')"></th>
+              <th x-h-table-head scope="col"></th>
+            </tr>
+          </thead>
+          <tbody x-h-table-body>
+            <template x-for="job in state.items" :key="job.name">
+              <tr x-h-table-row data-hoverable="true" class="cursor-pointer"
+                  :data-state="state.selectedName === job.name ? 'selected' : ''" @click="state.select(job)">
+                <td x-h-table-cell>
+                  <div class="vbox gap-0">
+                    <span x-text="job.name"></span>
+                    <span x-show="!job.enabled" x-h-text.muted class="text-xs"
+                          x-text="T('monitoring:jobs.disabled', 'Disabled')"></span>
+                  </div>
+                </td>
+                <td x-h-table-cell><code class="text-xs" x-text="job.expression"></code></td>
+                <td x-h-table-cell>
+                  <div class="vbox gap-0">
+                    <span x-h-badge :data-variant="statusVariant(job.status)" class="self-start" x-text="job.status"></span>
+                    <span x-h-text.muted class="text-xs" x-text="timeText(job.executedAt)"></span>
+                  </div>
+                </td>
+                <td x-h-table-cell class="text-end" @click.stop>
+                  <div class="hbox items-center justify-end gap-1">
+                    <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.openTrigger(job)"
+                            :aria-label="T('monitoring:jobs.trigger', 'Run now')" :title="T('monitoring:jobs.trigger', 'Run now')">
+                      <i role="img" x-h-lucide data-lucide="play"></i>
+                    </button>
+                    <button x-h-button data-variant="transparent" data-size="icon-sm"
+                            @click="state.setEnabled(job, !job.enabled)"
+                            :aria-label="job.enabled ? 'Disable' : 'Enable'"
+                            :title="job.enabled ? T('monitoring:jobs.disable', 'Disable') : T('monitoring:jobs.enable', 'Enable')">
+                      <svg x-h-lucide x-show="job.enabled" role="img" data-lucide="pause"></svg>
+                      <svg x-h-lucide x-show="!job.enabled" role="img" data-lucide="power"></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Execution log of the selected job. -->
+    <div x-h-split-panel data-size="45%" :data-hidden="!state.selectedName">
+      <template x-if="state.selected">
+        <div class="vbox size-full min-h-0">
+          <div x-h-toolbar data-size="sm">
+            <span x-h-toolbar-title class="shrink-0" x-text="state.selected.name"></span>
+            <div x-h-toolbar-spacer></div>
+            <button x-h-button data-variant="transparent" data-size="icon-sm" @click="state.selectedName = ''"
+                    aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+          </div>
+          <div class="flex-1 min-h-0 overflow-auto p-3">
+            <div x-show="state.logsLoading" x-cloak class="vbox gap-2">
+              <template x-for="i in 4" :key="i"><div x-h-skeleton class="h-5 w-full"></div></template>
+            </div>
+            <div x-show="!state.logsLoading && !logEntries.length" x-cloak x-h-text.muted class="text-sm"
+                 x-text="T('monitoring:jobs.noLogs', 'This job has not run yet.')"></div>
+            <table x-h-table x-show="!state.logsLoading && logEntries.length" x-cloak>
+              <thead x-h-table-header>
+                <tr>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colTriggered', 'Triggered')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colStatus', 'Status')"></th>
+                  <!-- The tenant column stays visible: the job-log service does not scope its reads,
+                       so an operator must be able to see whose execution an entry belongs to. -->
+                  <th x-h-table-head scope="col" x-text="T('monitoring:jobs.colTenant', 'Tenant')"></th>
+                  <th x-h-table-head scope="col" x-text="T('monitoring:overview.colMessage', 'Message')"></th>
+                </tr>
+              </thead>
+              <tbody x-h-table-body>
+                <template x-for="entry in logEntries" :key="entry.id">
+                  <tr x-h-table-row>
+                    <td x-h-table-cell x-text="timeText(entry.triggeredAt)"></td>
+                    <td x-h-table-cell>
+                      <span x-h-badge :data-variant="statusVariant(entry.status)" x-text="entry.status"></span>
+                    </td>
+                    <td x-h-table-cell x-text="entry.tenantId || ''"></td>
+                    <td x-h-table-cell :title="entry.message" x-text="shorten(entry.message)"></td>
+                  </tr>
+                </template>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </template>
+    </div>
+
+  </div>
+
+  <!-- Trigger dialog: the job's declared parameters, edited before the run. -->
+  <div x-h-dialog-overlay :data-open="state.triggerOpen">
+    <div x-h-dialog style="max-width: 520px;">
+      <div x-h-dialog-header>
+        <h2 x-h-dialog-title x-text="T('monitoring:jobs.triggerTitle', 'Run {{job}} now', { job: state.triggerJobName })"></h2>
+        <button x-h-dialog-close @click="state.closeTrigger()" aria-label="Close">
+          <i role="img" x-h-lucide data-lucide="x"></i>
+        </button>
+      </div>
+      <div x-h-dialog-content class="vbox gap-3">
+        <p x-show="!state.triggerParameters.length" x-h-text.muted class="text-sm"
+           x-text="T('monitoring:jobs.noParameters', 'This job declares no parameters.')"></p>
+        <template x-for="parameter in state.triggerParameters" :key="parameter.name">
+          <div x-h-field>
+            <label x-h-label :for="'job-parameter-' + parameter.name" x-text="parameter.name"></label>
+            <input x-h-input type="text" :id="'job-parameter-' + parameter.name" x-model="parameter.value" />
+            <span x-show="parameter.description" x-h-text.muted class="text-xs" x-text="parameter.description"></span>
+          </div>
+        </template>
+      </div>
+      <div x-h-dialog-footer>
+        <button x-h-button data-variant="transparent" @click="state.closeTrigger()"
+                x-text="T('application-core:shell.defaults.cancel', 'Cancel')"></button>
+        <button x-h-button data-variant="primary" :data-loading="state.triggering" @click="state.trigger()"
+                x-text="T('monitoring:jobs.trigger', 'Run now')"></button>
+      </div>
+    </div>
+  </div>
+</div>

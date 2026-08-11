@@ -1,0 +1,14 @@
+{
+    "constraints": [
+        {
+            "scope": "HTTP",
+            "path": "/monitoring/",
+            "method": "*",
+            "roles": [
+                "ADMINISTRATOR",
+                "OPERATOR",
+                "DEVELOPER"
+            ]
+        }
+    ]
+}

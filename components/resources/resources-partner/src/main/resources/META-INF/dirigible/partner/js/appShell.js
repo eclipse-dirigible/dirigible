@@ -59,13 +59,27 @@ document.addEventListener('alpine:init', () => {
     tenantConfigSaving: false,
     tenantConfigError: null,
 
-    /** A human-friendly label for a predefined key, derived from its DIRIGIBLE_BRANDING_* name. */
+    /** A localized label for a predefined key, falling back to a title-cased form of its name. */
     tenantConfigLabel(key) {
-      return key.replace(/^DIRIGIBLE_BRANDING_/, '')
+      const derived = key.replace(/^DIRIGIBLE_BRANDING_/, '')
                 .replace(/^DIRIGIBLE_/, '')
                 .toLowerCase()
                 .replace(/_/g, ' ')
                 .replace(/\b\w/g, (c) => c.toUpperCase());
+      const suffix = {
+        DIRIGIBLE_BRANDING_NAME: 'name',
+        DIRIGIBLE_BRANDING_SUBTITLE: 'subtitle',
+        DIRIGIBLE_BRANDING_BRAND: 'brand',
+        DIRIGIBLE_BRANDING_BRAND_URL: 'brandUrl',
+        DIRIGIBLE_BRANDING_FAVICON: 'favicon',
+        DIRIGIBLE_BRANDING_THEME: 'theme',
+        DIRIGIBLE_BRANDING_PREFIX: 'prefix',
+        DIRIGIBLE_BRANDING_ANALYTICS: 'analytics',
+        DIRIGIBLE_APPLICATION_LANGUAGES: 'languages',
+      }[key];
+      return (suffix && window.T)
+        ? T('application-core:shell.settings.tenantConfigLabels.' + suffix, derived)
+        : derived;
     },
 
     /** Load the predefined properties and the current tenant's value for each. */
@@ -209,8 +223,14 @@ document.addEventListener('alpine:init', () => {
             } else if (g.path && g.kind === 'SETTING') {
               // A standalone setting perspective declared with no navigation group.
               settings.push(g);
-            } else if (g.path && g.kind === 'PRIMARY') {
-              // A standalone (un-grouped) app entity perspective.
+            } else if (g.path && g.kind) {
+              // A standalone app perspective: declared with no navigation group (PRIMARY - the
+              // expected case), or one the aggregator could not place at all. Rescuing any kind, not
+              // just PRIMARY, is what keeps an unplaceable perspective visible: enumerating kinds let
+              // one fall off the end of this chain and vanish with no diagnostic anywhere (#6646).
+              if (g.kind !== 'PRIMARY') {
+                console.warn(`Perspective '${g.id}' (kind ${g.kind}, groupId '${g.groupId || ''}') matched no navigation group; showing it under "Other".`);
+              }
               ungrouped.push(g);
             }
           });

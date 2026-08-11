@@ -10,15 +10,19 @@
 package org.eclipse.dirigible.integration.tests.api;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.TimeUnit;
 
+import io.restassured.http.ContentType;
+
 import org.awaitility.Awaitility;
 import org.eclipse.dirigible.components.base.artefact.ArtefactLifecycle;
 import org.eclipse.dirigible.components.base.tenant.TenantContext;
+import org.eclipse.dirigible.components.data.sources.manager.DataSourcesManager;
 import org.eclipse.dirigible.components.engine.numbering.DocumentNumberService;
 import org.eclipse.dirigible.components.engine.numbering.NumberSeriesDeclaration;
 import org.eclipse.dirigible.components.engine.numbering.NumberSeriesDeclarationService;
@@ -53,8 +57,13 @@ class NumberingSdkIT extends IntegrationTest {
     private static final String CONTROLLER_PATH = IRepositoryStructure.PATH_REGISTRY_PUBLIC + CONTROLLER_LOCATION;
     private static final String ENDPOINT = "/services/java/" + PROJECT + "/api/NumberingTestController";
 
+    private static final String PARTITIONED_SERIES = "NumberingPartIT";
+    private static final String PARTITION_TABLE = "NUMBERING_IT_COMPANY";
+
     /** Declared shape: prefix {@code T-} in a total width of 6 → {@code T-0001}. */
-    private static final String NUMBERS_CONTENT = "{\"series\": [{\"name\": \"" + SERIES + "\", \"prefix\": \"T-\", \"size\": 6}]}";
+    private static final String NUMBERS_CONTENT = "{\"series\": [{\"name\": \"" + SERIES + "\", \"prefix\": \"T-\", \"size\": 6},"
+            + " {\"name\": \"" + PARTITIONED_SERIES + "\", \"prefix\": \"P-\", \"size\": 6," + " \"partitions\": {\"table\": \""
+            + PARTITION_TABLE + "\", \"key\": \"COMPANY_ID\", \"label\": \"COMPANY_NAME\"}}]}";
     /** The same series declared DIFFERENTLY by another module - must fail that artefact. */
     private static final String RIVAL_NUMBERS_CONTENT = "{\"series\": [{\"name\": \"" + SERIES + "\", \"prefix\": \"X-\", \"size\": 8}]}";
 
@@ -72,6 +81,9 @@ class NumberingSdkIT extends IntegrationTest {
 
     @Autowired
     private NumberSeriesDeclarationService declarationService;
+
+    @Autowired
+    private DataSourcesManager dataSourcesManager;
 
     @Autowired
     private DocumentNumberService documentNumberService;
@@ -161,6 +173,122 @@ class NumberingSdkIT extends IntegrationTest {
     }
 
     @Test
+    void theSettingsSurfaceSeedsPartitionCountersAndTheBaseRowIsOnlyTheShapeTemplate() {
+        publishDeclarationAndController();
+
+        restAssuredExecutor.execute(() -> {
+            // Materialize a partition: its first allocation copies the base shape and starts its own
+            // counter (partition values are data - no artefact can pre-provision them).
+            allocate("/next/SEED");
+
+            // The management surface flags the series PARTITIONED - the base ("") row is only the
+            // shape template new partitions inherit, so the settings page offers no counter on it.
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + SERIES + "' && it.partition == '' }.partitioned", equalTo(true))
+                   .body("find { it.series == '" + SERIES + "' && it.partition == 'SEED' }.partitioned", equalTo(true));
+
+            // Editing the BASE row's next must not affect partition allocations (the observed trap:
+            // an operator edits the base Next expecting to seed the next invoice number)...
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"\", \"next\": 500}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+
+            // ...while a PARTITION row's next IS the seed: it round-trips and the next issued number
+            // renders exactly it.
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"SEED\", \"next\": 42}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + SERIES + "' && it.partition == 'SEED' }.next", equalTo(42));
+
+            assertEquals("T-0042", allocate("/next/SEED"), "the partition row's Next is what the next document renders");
+        }, ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void aDeclaredPartitionSourceLabelsRowsAndSeedsCountersBeforeFirstUse() throws Exception {
+        // The partition source: the table whose rows ARE the partition values (per: Company).
+        try (java.sql.Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                                .getConnection();
+                java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate(
+                    "CREATE TABLE \"" + PARTITION_TABLE + "\" (\"COMPANY_ID\" INTEGER PRIMARY KEY, \"COMPANY_NAME\" VARCHAR(100))");
+            statement.executeUpdate("INSERT INTO \"" + PARTITION_TABLE + "\" VALUES (7, 'ACME Ltd.'), (9, 'Globex')");
+        }
+        publishDeclarationAndController();
+
+        restAssuredExecutor.execute(() -> {
+            // Every declared partition value appears BEFORE its first allocation - a VIRTUAL row
+            // rendered from the base shape, labeled by the entity's display name.
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '7' }.partitionLabel", equalTo("ACME Ltd."))
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '7' }.virtual", equalTo(true))
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '9' }.partitionLabel", equalTo("Globex"))
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '' }.partitioned", equalTo(true));
+
+            // Seeding the virtual row provisions it: the operator sets the company's starting number
+            // BEFORE its first document...
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + PARTITIONED_SERIES + "\", \"partition\": \"7\", \"next\": 42}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+            given().when()
+                   .get("/services/core/numbering")
+                   .then()
+                   .statusCode(200)
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '7' }.virtual", equalTo(false))
+                   .body("find { it.series == '" + PARTITIONED_SERIES + "' && it.partition == '7' }.next", equalTo(42));
+
+            // ...and the FIRST issued document renders exactly it.
+            assertEquals("P-0042", given().when()
+                                          .get(ENDPOINT + "/nextPartitioned/7")
+                                          .then()
+                                          .statusCode(200)
+                                          .extract()
+                                          .asString(),
+                    "the seeded Next is what the first document renders");
+        }, ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
+    void aFreshPartitionInheritsTheBaseRowsSeededCounter() {
+        publishDeclarationAndController();
+
+        restAssuredExecutor.execute(() -> {
+            // On a fresh tenant nothing marks the series partitioned yet, so the base row is the only
+            // thing an operator CAN seed before the first document. Seed it...
+            given().contentType(ContentType.JSON)
+                   .body("{\"series\": \"" + SERIES + "\", \"partition\": \"\", \"next\": 300}")
+                   .when()
+                   .put("/services/core/numbering")
+                   .then()
+                   .statusCode(204);
+            // ...and the FIRST allocation of a brand-new partition must render exactly the seed - the
+            // partition materializes inheriting the base row's shape AND counter (a zero-started
+            // partition silently discarded the seed: the first document rendered ...0001).
+            assertEquals("T-0300", allocate("/next/FRESHSEED"), "a fresh partition's first number is the base row's seeded next value");
+            assertEquals("T-0301", allocate("/next/FRESHSEED"), "and it continues from there");
+        }, ASSERTION_TIMEOUT_SECONDS);
+    }
+
+    @Test
     void aNewTenantGetsTheDeclaredSeriesWithItsOwnSequence() throws Exception {
         publishDeclarationAndController();
 
@@ -191,7 +319,12 @@ class NumberingSdkIT extends IntegrationTest {
     }
 
     @AfterEach
-    void cleanup() {
+    void cleanup() throws Exception {
+        try (java.sql.Connection connection = dataSourcesManager.getDefaultDataSource()
+                                                                .getConnection();
+                java.sql.Statement statement = connection.createStatement()) {
+            statement.executeUpdate("DROP TABLE IF EXISTS \"" + PARTITION_TABLE + "\"");
+        }
         boolean cleaned = false;
         for (String path : new String[] {CONTROLLER_PATH, NUMBERS_PATH, RIVAL_NUMBERS_PATH}) {
             if (repository.hasResource(path)) {
@@ -244,6 +377,11 @@ class NumberingSdkIT extends IntegrationTest {
                     @Get("/next/{partition}")
                     public String nextFor(@PathParam("partition") String partition) {
                         return DocumentNumbers.next("NumberingIT", partition);
+                    }
+
+                    @Get("/nextPartitioned/{partition}")
+                    public String nextPartitioned(@PathParam("partition") String partition) {
+                        return DocumentNumbers.next("NumberingPartIT", partition);
                     }
 
                     @Get("/undeclared")

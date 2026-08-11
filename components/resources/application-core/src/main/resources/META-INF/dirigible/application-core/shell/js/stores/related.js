@@ -29,7 +29,7 @@ document.addEventListener('alpine:init', () => {
     create(createUrl, title, onCreated) {
       if (!createUrl) return;
       this.src = createUrl;
-      this.title = title || 'Add new';
+      this.title = title || (window.T ? T('application-core:shell.related.addNew', 'Add new') : 'Add new');
       this._onCreated = typeof onCreated === 'function' ? onCreated : null;
       this.open = true;
     },
@@ -51,15 +51,17 @@ document.addEventListener('alpine:init', () => {
   });
 });
 
-// The embedded create page posts a message to its parent: 'harmonia.entity.created' (with id) on
-// save, or 'harmonia.dialog.cancel' when the user cancels. Route both to the related store.
+// The embedded form posts a message to its parent: 'harmonia.entity.created' (with id) when a
+// create saves, 'harmonia.entity.updated' when a detail-panel dialog's edit saves, or
+// 'harmonia.dialog.cancel' when the user cancels. Created and updated take the same path - close
+// the dialog and hand the id to the opener's callback (select the new record / reload the panel).
 window.addEventListener('message', (event) => {
   const data = event && event.data;
   if (!data) return;
   try {
     const store = window.Alpine && Alpine.store('related');
     if (!store || !store.open) return;
-    if (data.type === 'harmonia.entity.created') store.handleCreated(data.id);
+    if (data.type === 'harmonia.entity.created' || data.type === 'harmonia.entity.updated') store.handleCreated(data.id);
     else if (data.type === 'harmonia.dialog.cancel') store.close();
   } catch (e) { /* Alpine not ready / no store */ }
 });

@@ -78,7 +78,7 @@ public final class ProcessTimerSupport {
                 }
                 loads.add(new TimerLoad(process.getName(), step.getName(),
                         "Load" + IntentNaming.pascalCase(process.getName()) + IntentNaming.pascalCase(step.getName()) + "Expire",
-                        triggerEntity, IntentEntities.resolvePerspective(triggerEntity, compositionParents),
+                        triggerEntity, IntentEntities.resolvePerspective(triggerEntity, compositionParents, model),
                         IntentEntities.keyFieldName(owner), idAccessor(IntentEntities.primaryKeyOf(owner)), expireVariable(step.getName()),
                         dueExpression(IntentNaming.pascalCase(field.getName()), field.getType())));
             }

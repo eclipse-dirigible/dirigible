@@ -1,5 +1,0 @@
-{
-    "module": "template-application-data-v2/template/template.js",
-    "extensionPoint": "platform-templates",
-    "description": "Application Template - Data - v2"
-}

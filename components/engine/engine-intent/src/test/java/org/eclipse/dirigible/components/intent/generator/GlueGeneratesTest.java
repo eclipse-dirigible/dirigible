@@ -179,6 +179,65 @@ class GlueGeneratesTest {
         assertTrue(fields.contains(Map.of("targetProp", "Note", "expr", "source.Note")));
     }
 
+    /**
+     * A cross-model SOURCE ({@code fromUses:}) is what lets a create-from be authored on the module
+     * owning the TARGET, so only that module references the other and the pair stays independently
+     * compilable (and jar-packageable). The glue must therefore point the SOURCE half at the owner's
+     * gen folder / project while the generated controller itself stays in this project.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void resolvesCrossModelSourceGenFolderAndOwningProject() {
+        IntentModel model = IntentParser.parse("""
+                name: delivery-notes
+                uses:
+                  - { model: inventory }
+                entities:
+                  - name: DeliveryNote
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                    relations:
+                      - { name: GoodsIssue, kind: manyToOne, to: GoodsIssue, model: inventory }
+                generates:
+                  - name: delivery-note-from-goods-issue
+                    from: GoodsIssue
+                    fromUses: inventory
+                    to: DeliveryNote
+                    forEntity: GoodsIssue
+                    map:
+                      GoodsIssue: id
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals(true, g.get("crossModelSource"));
+        assertEquals("inventory", g.get("fromModel"));
+        // The project owning the source's views and its "-transitioned" topic (alias, no project:).
+        assertEquals("inventory", g.get("fromProject"));
+        assertEquals("GoodsIssue", g.get("fromEntity"));
+        // With no repository the owner perspective falls back to the entity name (convention).
+        assertEquals("GoodsIssue", g.get("fromPerspective"));
+        // The TARGET is local here - the exact mirror of the usual cross-model-target case.
+        assertEquals(false, g.get("crossModel"));
+        assertEquals("DeliveryNote", g.get("toEntity"));
+        assertEquals("", g.get("toModel"));
+
+        List<Map<String, Object>> fields = (List<Map<String, Object>>) g.get("fieldAssignments");
+        assertTrue(fields.contains(Map.of("targetProp", "GoodsIssue", "expr", "source.Id")));
+    }
+
+    /** A purely local generate keeps the cross-model-source markers empty (backward compatibility). */
+    @Test
+    void localSourceLeavesTheCrossModelSourceMarkersEmpty() {
+        IntentModel model = IntentParser.parse(YAML);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertFalse(((Boolean) g.get("crossModelSource")).booleanValue());
+        assertEquals("", g.get("fromModel"));
+        assertEquals("", g.get("fromProject"));
+    }
+
     @Test
     void integerDecimalAndBooleanLiteralsRenderTyped() {
         String yaml = """
@@ -274,5 +333,205 @@ class GlueGeneratesTest {
         assertTrue(itemFields.contains(Map.of("targetProp", "Price", "expr", "srcItem.Amount")));
         // The decimal `quantity` default renders as BigDecimal (a bare `1` would not compile).
         assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+    }
+
+    /**
+     * An item default naming a TO-ONE RELATION of the item target (a required classifier the map has no
+     * source for - a line's TaxRate) is a foreign-key ID: it must stay a bare integer literal. The
+     * decimal-column BigDecimal wrap would not compile against the generated Integer FK field - the
+     * exact miss that made invoice-from-timesheet emit header-only invoices (every line insert violated
+     * the NOT NULL tax-rate column, uncoverable by the map).
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void relationItemDefaultStaysAnIntegerForeignKey() {
+        IntentModel model = IntentParser.parse("""
+                name: work
+                entities:
+                  - name: Sheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: Line
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Sheet, kind: manyToOne, to: Sheet, required: true }
+                  - name: TaxRate
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Invoice
+                    function: Document
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: price, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: TaxRate, kind: manyToOne, to: TaxRate, required: true }
+                generates:
+                  - name: invoice-from-sheet
+                    from: Sheet
+                    to: Invoice
+                    forEntity: Sheet
+                    items:
+                      from: Line
+                      to: InvoiceItem
+                      map:
+                        name: number
+                        price: amount
+                      defaults:
+                        quantity: 1
+                        TaxRate: 1
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        assertEquals(true, g.get("hasItems"));
+
+        List<Map<String, Object>> itemFields = (List<Map<String, Object>>) g.get("itemFieldAssignments");
+        // The decimal default keeps the BigDecimal wrap...
+        assertTrue(itemFields.contains(Map.of("targetProp", "Quantity", "expr", "new java.math.BigDecimal(\"1\")")));
+        // ...but the relation default is the FK id, assigned as the bare integer.
+        assertTrue(itemFields.contains(Map.of("targetProp", "TaxRate", "expr", "1")));
+    }
+
+    /**
+     * The computed line-items form (issue #6555): a list-valued {@code items:} builds a fixed set of
+     * synthetic target lines whose cells are expressions over the SOURCE master - a numeric cell runs
+     * through {@code Calc} rounded to the target field's scale (a bare literal is a trivial
+     * expression), a {@code {field}} string cell interpolates the source, a to-one relation copies the
+     * source FK, and a {@code when} cell becomes a null-safe {@code Calc} row guard. The target items
+     * child is resolved automatically (never named). No source item repository is iterated - the mirror
+     * keys stay empty.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void computedItemLinesRenderExpressionsOverTheSource() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                      - { name: period, type: month }
+                      - { name: billableAmount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                      - { name: Product, kind: manyToOne, to: Product }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string, documentTitle: true }
+                      - { name: date, type: date }
+                    relations:
+                      - { name: Customer, kind: manyToOne, to: Customer }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: quantity, type: decimal, precision: 18, scale: 3 }
+                      - { name: price, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                      - { name: Product, kind: manyToOne, to: Product }
+                  - name: Customer
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: Product
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                generates:
+                  - name: invoice-from-timesheet
+                    from: Timesheet
+                    to: Invoice
+                    forEntity: Timesheet
+                    map:
+                      Customer: Customer
+                    defaults:
+                      Date: now
+                    items:
+                      - name: "Services for {period}"
+                        quantity: 1
+                        price: BillableAmount
+                        Product: Product
+                        when: "BillableAmount != 0"
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+
+        assertEquals(false, g.get("hasItems"));
+        assertEquals(true, g.get("hasItemLines"));
+        // The target items child + its master FK are resolved automatically - the intent never names them.
+        assertEquals("InvoiceItem", g.get("toItemEntity"));
+        assertEquals("Invoice", g.get("toFkProperty"));
+        // The mirror-form keys stay empty (no source item repository is iterated).
+        assertEquals("", g.get("fromItemEntity"));
+        assertTrue(((List<?>) g.get("itemFieldAssignments")).isEmpty());
+
+        List<Map<String, Object>> lines = (List<Map<String, Object>>) g.get("itemLines");
+        assertEquals(1, lines.size());
+        Map<String, Object> row = lines.get(0);
+        // The `when` cell becomes a null-safe Calc row guard (the postings guard convention).
+        assertEquals("Calc.eval(\"BillableAmount\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0", row.get("guard"));
+
+        List<Map<String, Object>> assigns = (List<Map<String, Object>>) row.get("assigns");
+        // String cell: {period} interpolates the source master (a month field is a plain String).
+        assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Services for \" + String.valueOf(source.Period)")));
+        // Numeric cells run through Calc rounded to the TARGET field's scale (quantity 3, price 2).
+        assertTrue(assigns.contains(Map.of("targetProp", "Quantity", "expr", "Calc.eval(\"1\", source, 3)")));
+        assertTrue(assigns.contains(Map.of("targetProp", "Price", "expr", "Calc.eval(\"BillableAmount\", source, 2)")));
+        // A to-one relation cell copies the raw source foreign key (issue #6533 parity), not a Calc value.
+        assertTrue(assigns.contains(Map.of("targetProp", "Product", "expr", "source.Product")));
+    }
+
+    /**
+     * A string cell that is neither a {@code {}} template nor a source property is a plain literal (a
+     * caption is not mistaken for a field), and a {@code double} target narrows the {@code Calc}
+     * result.
+     */
+    @SuppressWarnings("unchecked")
+    @Test
+    void computedItemLineStringLiteralAndDoubleNarrowing() {
+        IntentModel model = IntentParser.parse("""
+                name: sales
+                entities:
+                  - name: Timesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: hours, type: decimal, precision: 18, scale: 2 }
+                  - name: Invoice
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                  - name: InvoiceItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                      - { name: factor, type: double }
+                    relations:
+                      - { name: Invoice, kind: manyToOne, to: Invoice, composition: true, required: true }
+                generates:
+                  - name: invoice-from-timesheet
+                    from: Timesheet
+                    to: Invoice
+                    items:
+                      - name: "Consulting services"
+                        factor: "Hours * 2"
+                """);
+        Map<String, Object> g = GlueIntentGenerator.buildGeneratesForTest(model)
+                                                   .get(0);
+        List<Map<String, Object>> assigns = (List<Map<String, Object>>) ((List<Map<String, Object>>) g.get("itemLines")).get(0)
+                                                                                                                        .get("assigns");
+        assertTrue(assigns.contains(Map.of("targetProp", "Name", "expr", "\"Consulting services\"")));
+        assertTrue(assigns.contains(Map.of("targetProp", "Factor", "expr", "Calc.eval(\"Hours * 2\", source, 2).doubleValue()")));
     }
 }

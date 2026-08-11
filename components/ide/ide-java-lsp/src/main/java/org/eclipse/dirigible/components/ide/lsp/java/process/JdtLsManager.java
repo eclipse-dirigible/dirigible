@@ -90,6 +90,12 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
      */
     private volatile boolean available = false;
 
+    /**
+     * Memoised default {@code .classpath} XML, shared by every project. See
+     * {@link #defaultClasspathXml()}.
+     */
+    private volatile String defaultClasspathXml;
+
     public JdtLsManager(ClassPathIndex classPathIndex, Optional<JavaCompiledOutputDirectory> compiledOutputDirectory) {
         this.classPathIndex = classPathIndex;
         this.compiledOutputDir = compiledOutputDirectory.map(JavaCompiledOutputDirectory::get)
@@ -124,7 +130,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                           logger.warn("[java-lsp] Classpath pre-warm failed (will materialise lazily on first use)", warmEx);
                       }
                   } catch (Exception e) {
-                      logger.warn("[java-lsp] JDT.LS is not available: {}. Java language support will be disabled.", e.getMessage());
+                      logger.warn("[java-lsp] JDT.LS is not available. Java language support will be disabled.", e);
                   }
               });
     }
@@ -307,7 +313,7 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
         logger.debug("[java-lsp] Wrote .project for {}", sanitize(project));
 
         Path dotClasspath = projectRoot.resolve(".classpath");
-        Files.writeString(dotClasspath, buildClasspathXml(), StandardCharsets.UTF_8);
+        Files.writeString(dotClasspath, defaultClasspathXml(), StandardCharsets.UTF_8);
         logger.debug("[java-lsp] Wrote .classpath for {}", sanitize(project));
     }
 
@@ -322,21 +328,51 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
                 + "        </buildCommand>\n" + "    </buildSpec>\n" + "</projectDescription>\n";
     }
 
-    private String buildClasspathXml() {
-        StringBuilder libs = new StringBuilder();
-        for (Path entry : classPathIndex.classPathEntries()) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"")
-                .append(entry.toString())
-                .append("\"/>\n");
+    /**
+     * The single default classpath shared by every Java project in the workspace. It is byte-identical
+     * for every project (nothing in it is project-specific), so it is rendered once and reused. It is
+     * composed of exactly the three things client Java needs to resolve:
+     * <ul>
+     * <li><b>Java standard library</b> - the {@code JRE_CONTAINER};</li>
+     * <li><b>the Dirigible SDK + platform jars</b> - one {@code lib} entry per {@link ClassPathIndex}
+     * entry. This is the full platform jar set: it contains {@code org.eclipse.dirigible.sdk.*} as well
+     * as the Spring / Flowable / etc. jars that generated controllers and BPMN handlers depend on (an
+     * SDK-only subset does not compile real projects);</li>
+     * <li><b>the registry / published projects</b> - one {@code lib} entry for the flat compiled-output
+     * directory ({@code <repoRoot>/dirigible/java-compiled/bin}). Every client {@code .java} on the
+     * platform (registry-published and sibling workspace projects) compiles into that one tree, so this
+     * single entry resolves cross-project and published types.</li>
+     * </ul>
+     * Plus the project's own sources via {@code src path=""}. Memoised because
+     * {@link ClassPathIndex#classPathEntries()} is itself cached for the application lifetime and
+     * {@code compiledOutputDir} is a fixed path, so the rendered XML never changes within a run.
+     */
+    private String defaultClasspathXml() {
+        String cached = defaultClasspathXml;
+        if (cached != null) {
+            return cached;
         }
-        if (compiledOutputDir != null) {
-            libs.append("    <classpathentry kind=\"lib\" path=\"")
-                .append(compiledOutputDir.toString())
-                .append("\"/>\n");
+        synchronized (this) {
+            if (defaultClasspathXml != null) {
+                return defaultClasspathXml;
+            }
+            StringBuilder libs = new StringBuilder();
+            for (Path entry : classPathIndex.classPathEntries()) {
+                libs.append("    <classpathentry kind=\"lib\" path=\"")
+                    .append(entry.toString())
+                    .append("\"/>\n");
+            }
+            if (compiledOutputDir != null) {
+                libs.append("    <classpathentry kind=\"lib\" path=\"")
+                    .append(compiledOutputDir.toString())
+                    .append("\"/>\n");
+            }
+            defaultClasspathXml =
+                    "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<classpath>\n" + "    <classpathentry kind=\"src\" path=\"\"/>\n"
+                            + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n" + libs
+                            + "    <classpathentry kind=\"output\" path=\"bin\"/>\n" + "</classpath>\n";
+            return defaultClasspathXml;
         }
-        return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + "<classpath>\n" + "    <classpathentry kind=\"src\" path=\"\"/>\n"
-                + "    <classpathentry kind=\"con\" path=\"org.eclipse.jdt.launching.JRE_CONTAINER\"/>\n" + libs
-                + "    <classpathentry kind=\"output\" path=\"bin\"/>\n" + "</classpath>\n";
     }
 
     private List<String> buildCommand(String launcherJar, String configDir, String dataDir) {
@@ -573,7 +609,10 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
     }
 
     /**
-     * Extracts the JDT.LS tar.gz that was bundled into the JAR at build time.
+     * Extracts the JDT.LS tar.gz that was bundled into the JAR at build time. A half-written
+     * installation is removed before the failure propagates: {@link #isInstalled()} only looks for the
+     * Equinox launcher JAR, so leaving one behind would make every subsequent startup believe JDT.LS is
+     * present and silently keep Java language support broken.
      *
      * @return {@code true} if the bundled resource was found and extracted successfully
      */
@@ -586,17 +625,36 @@ public class JdtLsManager implements DisposableBean, ApplicationRunner, Applicat
             }
             logger.info("[java-lsp] Extracting bundled JDT.LS to {} ...", jdtlsHome);
             Files.createDirectories(jdtlsHome);
-            Process tar = new ProcessBuilder("tar", "xzf", "-", "-C", jdtlsHome.toString()).redirectError(ProcessBuilder.Redirect.INHERIT)
-                                                                                           .start();
-            bundled.transferTo(tar.getOutputStream());
-            tar.getOutputStream()
-               .close();
-            int rc = tar.waitFor();
-            if (rc != 0) {
-                throw new Exception("[java-lsp] tar extraction of bundled JDT.LS failed with exit code " + rc);
+            try {
+                Process tar =
+                        new ProcessBuilder("tar", "xzf", "-", "-C", jdtlsHome.toString()).redirectError(ProcessBuilder.Redirect.INHERIT)
+                                                                                         .start();
+                bundled.transferTo(tar.getOutputStream());
+                tar.getOutputStream()
+                   .close();
+                int rc = tar.waitFor();
+                if (rc != 0) {
+                    throw new Exception("[java-lsp] tar extraction of bundled JDT.LS failed with exit code " + rc);
+                }
+            } catch (Exception e) {
+                discardPartialInstallation();
+                throw e;
             }
             logger.info("[java-lsp] JDT.LS installed from bundled resource at {}", jdtlsHome);
             return true;
+        }
+    }
+
+    /**
+     * Removes an installation directory left behind by a failed extraction so the next startup extracts
+     * again from scratch.
+     */
+    private void discardPartialInstallation() {
+        try {
+            deleteDirectory(jdtlsHome);
+        } catch (IOException e) {
+            logger.warn("[java-lsp] Could not remove the partially extracted JDT.LS at {} - delete it manually, "
+                    + "otherwise Java language support stays disabled", jdtlsHome, e);
         }
     }
 

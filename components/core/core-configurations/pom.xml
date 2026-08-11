@@ -27,6 +27,12 @@
 			<artifactId>dirigible-components-data-sources</artifactId>
     	</dependency>
 
+    	<!-- Security API - the act-as (delegated entry) session facade behind /services/core/actas -->
+    	<dependency>
+	    	<groupId>org.eclipse.dirigible</groupId>
+			<artifactId>dirigible-components-api-security</artifactId>
+    	</dependency>
+
     </dependencies>
 
 	<properties>

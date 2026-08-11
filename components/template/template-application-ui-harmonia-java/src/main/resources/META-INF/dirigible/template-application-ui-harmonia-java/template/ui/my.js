@@ -7,7 +7,7 @@
 /*
  * The personal (my) surface pages - generated only for entities with a personal owner relation
  * (or the scope inherited from their composition parent). Roots get a list page and a shell
- * perspective (contributed to `application-personal-perspectives`, aggregated by the My Shell);
+ * perspective (contributed to `application-personal-perspectives`, aggregated by the Personal Shell);
  * every personal entity gets a form page, reached from the list or from a parent's child panel
  * (an embedded calendar for detailCalendar children, a table otherwise). The pages talk to the
  * scoped <Entity>MyController only - sensitive fields never reach them.

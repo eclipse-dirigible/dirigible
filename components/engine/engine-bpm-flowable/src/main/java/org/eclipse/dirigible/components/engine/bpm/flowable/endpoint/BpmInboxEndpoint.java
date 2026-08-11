@@ -9,6 +9,7 @@
  */
 package org.eclipse.dirigible.components.engine.bpm.flowable.endpoint;
 
+import org.eclipse.dirigible.components.api.security.ActAsFacade;
 import org.eclipse.dirigible.components.api.security.UserFacade;
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.engine.bpm.flowable.dto.ProcessInstanceData;
@@ -105,6 +106,10 @@ public class BpmInboxEndpoint extends BaseEndpoint {
 
     @GetMapping(value = "/tasks/{taskId}/variables")
     public ResponseEntity<?> getTaskVariables(@PathVariable("taskId") String taskId) {
+        // A task's variables carry its business payload (the record id and the locators a task form
+        // resolves), so reading them is gated exactly like acting on the task - the inbox is scoped
+        // to the tasks the caller is assigned to or a candidate for, never addressable by bare id.
+        verifyCurrentUserHasPermissionForTask(taskId);
         try {
             Map<String, Object> variables = bpmService.getTaskVariables(taskId);
             TaskVariablesDTO taskVariables = new TaskVariablesDTO(variables);
@@ -123,7 +128,9 @@ public class BpmInboxEndpoint extends BaseEndpoint {
 
         if (CLAIM.getActionName()
                  .equals(actionData.getAction())) {
-            bpmService.claimTask(taskId, UserFacade.getName());
+            // under act-as (delegated entry) a claim assigns the task to the ACTING identity, so
+            // the flow's record of who owns the step matches whose work it is
+            bpmService.claimTask(taskId, ActAsFacade.effectiveUser());
         } else if (UNCLAIM.getActionName()
                           .equals(actionData.getAction())) {
             bpmService.unclaimTask(taskId);

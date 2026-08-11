@@ -14,10 +14,10 @@ export const getTemplate = () => ({
       rename: "{{fileName}}.bpmn",
     },
     {
-      location: "/template-bpm/api/ProcessService.ts.template",
+      location: "/template-bpm/api/ProcessService.java.template",
       action: "generate",
       engine: "velocity",
-      rename: "api/ProcessService.ts",
+      rename: "{{javaPackageName}}/ProcessService.java",
     },
     {
       location: "/template-bpm/trigger-new-process.form.template",
@@ -32,9 +32,10 @@ export const getTemplate = () => ({
       rename: "trigger-new-process.gen",
     },
     {
-      location: "/template-bpm/tasks/my-service-task.ts",
+      location: "/template-bpm/tasks/MyServiceTask.java.template",
       action: "generate",
-      rename: "tasks/my-service-task.ts",
+      engine: "velocity",
+      rename: "{{javaPackageName}}/MyServiceTask.java",
     },
     {
       location: "/template-bpm/project.json",

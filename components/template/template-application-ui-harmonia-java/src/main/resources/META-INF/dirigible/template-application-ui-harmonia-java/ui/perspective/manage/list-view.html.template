@@ -15,6 +15,22 @@
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+#if($calendarView)
+    <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
+         this browse page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
+      <i role="img" x-h-lucide data-lucide="calendar"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
+    </button>
+#end
+#if($slotsView)
+    <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
+         this browse page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
+      <i role="img" x-h-lucide data-lucide="clock"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
+    </button>
+#end
     <button x-h-button data-variant="primary" @click="newEntity()">
       <i role="img" x-h-lucide data-lucide="plus"></i>
       <span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span>
@@ -73,57 +89,59 @@
         <!-- Hierarchy (intent `hierarchy:`): the records render as a Harmonia tree off
              ${hierarchyProperty} when no search/filter is active; searching falls back to the flat
              table so matches outside collapsed branches stay findable. Markup recursion is a fixed
-             6 levels deep (Alpine has no recursive template) - deeper nodes are not rendered. -->
+             6 levels deep - deeper nodes are not rendered. (Harmonia's x-h-template can render a
+             tree of any depth from data; folding these six copies into one is a worthwhile
+             follow-up, but it is a behaviour change and not part of the 2.9 API migration.) -->
         <div x-show="treeVisible" x-h-table-container.scroll class="flex-1" data-border="true">
           <ul x-h-tree class="p-2">
               <template x-for="n1 in childrenOf(null)" :key="n1.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n1) ? 'information' : null" @click="selectRow(n1)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n1) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n1)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n1)" @tree-item-click.self="selectRow(n1)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n1) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n1)"></span>
+                  </div>
                   <template x-if="hasChildren(n1)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <template x-for="n2 in childrenOf(n1)" :key="n2.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n2) ? 'information' : null" @click="selectRow(n2)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n2) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n2)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n2)" @tree-item-click.self="selectRow(n2)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n2) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n2)"></span>
+                  </div>
                   <template x-if="hasChildren(n2)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <template x-for="n3 in childrenOf(n2)" :key="n3.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n3) ? 'information' : null" @click="selectRow(n3)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n3) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n3)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n3)" @tree-item-click.self="selectRow(n3)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n3) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n3)"></span>
+                  </div>
                   <template x-if="hasChildren(n3)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <template x-for="n4 in childrenOf(n3)" :key="n4.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n4) ? 'information' : null" @click="selectRow(n4)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n4) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n4)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n4)" @tree-item-click.self="selectRow(n4)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n4) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n4)"></span>
+                  </div>
                   <template x-if="hasChildren(n4)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <template x-for="n5 in childrenOf(n4)" :key="n5.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n5) ? 'information' : null" @click="selectRow(n5)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n5) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n5)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n5)" @tree-item-click.self="selectRow(n5)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n5) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n5)"></span>
+                  </div>
                   <template x-if="hasChildren(n5)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <template x-for="n6 in childrenOf(n5)" :key="n6.${primaryKeysString}">
-                <li x-h-tree-item.expanded="true">
-                  <button x-h-tree-button :data-indicator="isSelected(n6) ? 'information' : null" @click="selectRow(n6)">
-                    <i role="img" x-h-lucide :data-lucide="hasChildren(n6) ? 'folder' : 'file-text'"></i>
-                    <span x-text="nodeLabel(n6)"></span>
-                  </button>
+                <li x-h-tree-item="true" :aria-selected="isSelected(n6)" @tree-item-click.self="selectRow(n6)">
+                  <div x-h-tree-row>
+                    <svg x-h-lucide role="presentation" :data-lucide="hasChildren(n6) ? 'folder' : 'file-text'"></svg>
+                    <span x-h-tree-label x-text="nodeLabel(n6)"></span>
+                  </div>
                   <template x-if="hasChildren(n6)">
-                    <ul x-h-tree.sub data-border="true">
+                    <ul x-h-tree.sub data-line="true">
                       <!-- depth limit: 6 levels (see the page comment) -->
                     </ul>
                   </template>
@@ -227,9 +245,17 @@
                     </button>
                     <ul x-h-menu data-align="bottom-end">
                       <li x-h-menu-item @click="previewEntity(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+#if($immutableStatusProperty || $immutableAlways)
+                      <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
+                           Preview stays - the record remains readable. -->
+                      <li x-h-menu-item x-show="!isRowImmutable(row)" @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                      <li x-h-menu-separator x-show="!isRowImmutable(row)"></li>
+                      <li x-h-menu-item x-show="!isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#else
                       <li x-h-menu-item @click="editEntity(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
                       <li x-h-menu-separator></li>
                       <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#end
                     </ul>
                   </td>
                 </tr>
@@ -240,7 +266,7 @@
 
         <div#if($hierarchyProperty) x-show="!treeVisible"#end class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-          <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
+          <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: currentPage, total: totalPages })"></span>
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
       </div>
@@ -262,8 +288,14 @@
           <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
           <button x-h-button data-variant="outline" data-size="sm" @click="previewEntity(selected)"><i role="img" x-h-lucide data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
+#if($immutableStatusProperty || $immutableAlways)
+          <!-- Edit/Delete are disabled for an immutable record (the controller would 409). -->
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="isRowImmutable(selected)" :title="isRowImmutable(selected) ? T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.') : null" @click="editEntity(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" :disabled="isRowImmutable(selected)" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#else
           <button x-h-button data-variant="outline" data-size="sm" @click="editEntity(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#end
         </div>
 
 #if($hasProcess)
@@ -271,7 +303,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
             </button>
           </template>
         </div>

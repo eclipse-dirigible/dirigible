@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.base.http.access;
 
 import org.eclipse.dirigible.components.base.http.roles.Roles;
+import org.eclipse.dirigible.components.base.http.uri.HostedEngineUris;
 import org.eclipse.dirigible.components.base.spring.BeanProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,9 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 /**
  * The Class HttpSecurityURIConfigurator.
@@ -68,8 +71,29 @@ public class HttpSecurityURIConfigurator {
             "/websockets/**", //
             "/api-docs/swagger-config", //
             "/api-docs/**", //
-            "/odata/**", //
             "/swagger-ui/**"};
+
+    /**
+     * Monitoring surface. The controllers behind these paths all declare
+     * {@code @RolesAllowed({ADMINISTRATOR, DEVELOPER, OPERATOR})}, but they live under
+     * {@code /services/ide/**} and {@code /services/bpm/**}, which the URL layer gates on DEVELOPER
+     * alone - so an OPERATOR was rejected before method security ever ran. These patterns re-align the
+     * URL layer with the declared method policy; they are matched before {@link #DEVELOPER_PATTERNS},
+     * so the rest of those prefixes (workspaces, git, publisher, the BPMN modeler, ...) stays
+     * DEVELOPER-only.
+     */
+    private static final String[] MONITORING_PATTERNS = { //
+            "/services/bpm/bpm-processes", //
+            "/services/bpm/bpm-processes/**", //
+            "/services/ide/monitoring", //
+            "/services/ide/monitoring/**", //
+            "/services/ide/logs", //
+            "/services/ide/logs/**", //
+            "/services/ide/loggers", //
+            "/services/ide/loggers/**", //
+            "/services/ide/messaging-monitoring", //
+            "/services/ide/messaging-monitoring/**", //
+            "/websockets/ide/console"};
 
     /** The Constant DEVELOPER_PATTERNS. */
     private static final String[] DEVELOPER_PATTERNS = { //
@@ -89,6 +113,61 @@ public class HttpSecurityURIConfigurator {
             "/services/native-apps", //
             "/services/native-apps/**"};
 
+    /**
+     * Data management surface. Every controller under {@code /services/data/} declares roles drawn from
+     * {ADMINISTRATOR, DEVELOPER, OPERATOR} - the metadata, definition and execution endpoints allow all
+     * three, while export / import / anonymize / datasource CRUD are the stricter ADMINISTRATOR +
+     * OPERATOR. Without a gate of its own the whole prefix falls through to
+     * {@link #AUTHENTICATED_PATTERNS}, leaving method security as the only thing standing between an
+     * ordinary authenticated user and the database.
+     * <p>
+     * The gate therefore uses the WIDEST legitimate set: it must not reject anyone the endpoints allow,
+     * and the finer per-endpoint {@code @RolesAllowed} checks stay in place to enforce the stricter
+     * half. For the REST endpoints this is defense in depth, not the authorization itself.
+     * <p>
+     * For the data transfer WEBSOCKET it is the only authorization there is.
+     * {@code DataTransferWebsocketHandler} declares no roles at all, and being registered outside
+     * {@code /websockets/ide/} it matched nothing but the {@code /websockets/**} catch-all - so any
+     * authenticated user, including one with no platform role, could drive a transfer between
+     * datasources. The role set is the trio rather than the stricter ADMINISTRATOR + OPERATOR that
+     * guards export / import, because the feature's only UI is the Transfer view of the IDE's Database
+     * perspective and it populates itself from {@code /services/data/definition/}, which the trio may
+     * read; narrowing it here would take the tool away from the developers it was built for. Whether a
+     * DEVELOPER should be able to copy data between datasources at all is a policy question, and a
+     * separate one from closing this hole.
+     */
+    private static final String[] DATA_MANAGEMENT_PATTERNS = { //
+            "/services/data", //
+            "/services/data/**", //
+            "/websockets/data/transfer"};
+
+    /** The roles allowed on the monitoring, native-app management and data management surfaces. */
+    private static final String[] OPERATIONS_ROLES = { //
+            Roles.ADMINISTRATOR.getRoleName(), //
+            Roles.DEVELOPER.getRoleName(), //
+            Roles.OPERATOR.getRoleName()};
+
+    /**
+     * The role gates in the order they are applied - the first gate whose pattern matches a request
+     * decides the roles required for it. Both {@link #configure(HttpSecurity)} and the test that guards
+     * the matrix read this single declaration.
+     */
+    static final List<RoleGate> ROLE_GATES = List.of( //
+            new RoleGate(MONITORING_PATTERNS, OPERATIONS_ROLES), //
+            new RoleGate(DEVELOPER_PATTERNS, new String[] {Roles.DEVELOPER.getRoleName()}), //
+            new RoleGate(OPERATOR_PATTERNS, new String[] {Roles.OPERATOR.getRoleName()}), //
+            new RoleGate(NATIVE_APPS_MANAGEMENT_PATTERNS, OPERATIONS_ROLES), //
+            new RoleGate(DATA_MANAGEMENT_PATTERNS, OPERATIONS_ROLES));
+
+    /**
+     * A role gate - the URI patterns it covers and the roles any of which grants access to them.
+     *
+     * @param patterns the Ant patterns
+     * @param roles the role names, any of which is sufficient
+     */
+    record RoleGate(String[] patterns, String[] roles) {
+    }
+
     private final BeanProvider beanProvider;
 
     HttpSecurityURIConfigurator(BeanProvider beanProvider) {
@@ -104,40 +183,50 @@ public class HttpSecurityURIConfigurator {
     public void configure(HttpSecurity http) throws Exception {
         applyCustomConfigurations(http);
 
-        http.authorizeHttpRequests((authz) -> //
+        http.authorizeHttpRequests((authz) -> {
 
-        authz.requestMatchers(PUBLIC_PATTERNS)
-             .permitAll()
+            authz.requestMatchers(PUBLIC_PATTERNS)
+                 .permitAll();
 
-             // NOTE!: the order is important - role checks should be before just
-             // authenticated paths
+            // NOTE!: the order is important - role checks should be before just
+            // authenticated paths
 
-             // Fine grained configurations
-             .requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")
-             .authenticated()
+            // Fine grained configurations
+            authz.requestMatchers(HttpMethod.GET, "/services/bpm/bpm-processes/tasks")
+                 .authenticated();
 
-             .requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
-             .authenticated()
+            authz.requestMatchers(HttpMethod.POST, "/services/bpm/bpm-processes/tasks/*")
+                 .authenticated();
 
-             // "DEVELOPER" role required
-             .requestMatchers(DEVELOPER_PATTERNS)
-             .hasRole(Roles.DEVELOPER.getRoleName())
+            // Role gates, in declaration order
+            for (RoleGate gate : ROLE_GATES) {
+                authz.requestMatchers(gate.patterns())
+                     .hasAnyRole(gate.roles());
+            }
 
-             // "OPERATOR" role required
-             .requestMatchers(OPERATOR_PATTERNS)
-             .hasRole(Roles.OPERATOR.getRoleName())
+            // Authenticated
+            authz.requestMatchers(authenticatedPatterns())
+                 .authenticated();
 
-             // Native-apps management: any of DEVELOPER, ADMINISTRATOR, OPERATOR
-             .requestMatchers(NATIVE_APPS_MANAGEMENT_PATTERNS)
-             .hasAnyRole(Roles.DEVELOPER.getRoleName(), Roles.ADMINISTRATOR.getRoleName(), Roles.OPERATOR.getRoleName())
+            // Deny all other requests
+            authz.anyRequest()
+                 .denyAll();
+        });
+    }
 
-             // Authenticated
-             .requestMatchers(AUTHENTICATED_PATTERNS)
-             .authenticated()
-
-             // Deny all other requests
-             .anyRequest()
-             .denyAll());
+    /**
+     * Builds the authenticated patterns, merging the static ones with any Ant patterns contributed by
+     * hosted engines (e.g. the externalized OData engine) via {@link HostedEngineUris}. When no such
+     * engine is on the classpath the result is just the static patterns.
+     *
+     * @return the authenticated request matcher patterns
+     */
+    private String[] authenticatedPatterns() {
+        List<String> patterns = new ArrayList<>(List.of(AUTHENTICATED_PATTERNS));
+        for (HostedEngineUris hostedEngineUris : BeanProvider.getBeans(HostedEngineUris.class)) {
+            patterns.addAll(hostedEngineUris.securedAntPatterns());
+        }
+        return patterns.toArray(String[]::new);
     }
 
     private void applyCustomConfigurations(HttpSecurity http) throws Exception {

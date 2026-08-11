@@ -20,6 +20,7 @@ import org.eclipse.dirigible.components.base.artefact.topology.TopologyFactory;
 import org.eclipse.dirigible.components.base.artefact.topology.TopologyWrapper;
 import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatus;
 import org.eclipse.dirigible.components.base.healthcheck.status.HealthCheckStatus.Jobs.JobStatus;
+import org.eclipse.dirigible.components.base.registry.RegistryMutationTracker;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizationWatcher;
 import org.eclipse.dirigible.components.base.synchronizer.Synchronizer;
 import org.eclipse.dirigible.components.base.synchronizer.SynchronizerCallback;
@@ -78,6 +79,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
     /** The synchronization watcher. */
     private final SynchronizationWatcher synchronizationWatcher;
 
+    /** Tells whether a client is publishing to (or unpublishing from) the registry. */
+    private final RegistryMutationTracker registryMutationTracker;
+
     /** The initialized. */
     private final AtomicBoolean initialized;
 
@@ -94,16 +98,18 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
      * @param synchronizers the synchronizers
      * @param definitionService the definition service
      * @param synchronizationWatcher the synchronization watcher
+     * @param registryMutationTracker the registry mutation tracker
      */
     @Autowired
     public SynchronizationProcessor(IRepository repository, List<Synchronizer<?, ?>> synchronizers, DefinitionService definitionService,
-            SynchronizationWatcher synchronizationWatcher) {
+            SynchronizationWatcher synchronizationWatcher, RegistryMutationTracker registryMutationTracker) {
         this.repository = repository;
         this.synchronizers = Collections.synchronizedList(synchronizers);
         logger.info("Registered [{}] synchronizers: [{}]", synchronizers.size(), synchronizers);
 
         this.definitionService = definitionService;
         this.synchronizationWatcher = synchronizationWatcher;
+        this.registryMutationTracker = registryMutationTracker;
         this.synchronizers.forEach(s -> s.setCallback(this));
 
         this.initialized = new AtomicBoolean(false);
@@ -200,6 +206,9 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                                                                          .passStarted();
         processing.set(true);
         synchronizationWatcher.reset();
+        // Sampled before the walk, compared at cleanup: a publish that came and went while this pass
+        // ran is as dangerous as one still in flight.
+        long mutationsBeforePass = registryMutationTracker.completedMutations();
 
         try {
 
@@ -389,7 +398,21 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
 
             logger.trace("Cleaning up removed artefacts...");
 
-            // cleanup
+            // An artefact whose source is gone is removed - UNLESS a publish was in flight while this
+            // pass ran. A publish replaces a collection by DELETING it and copying it back
+            // milliseconds later, and a pass that looks into that hole deletes artefacts whose
+            // sources are about to reappear. That is not cosmetic: a reconciler that rebuilds from
+            // the WHOLE artefact set - the client-Java batch compile - then compiles a half-empty
+            // codebase, the batch fails as a whole, and the instance is left with no controllers
+            // registered until something else changes.
+            //
+            // The question asked is "was a client writing to the registry", NOT "did the registry
+            // change": the file-system watcher reports a genuine deletion exactly like a publish, so
+            // keying on it would defer every deletion by a pass. A publish always ends by marking the
+            // registry modified, which schedules the next pass - and forceProcessSynchronizers()
+            // waits for it - so the deferred cleanup happens promptly.
+            boolean registryChangedDuringPass =
+                    registryMutationTracker.isMutating() || registryMutationTracker.completedMutations() != mutationsBeforePass;
             for (Synchronizer synchronizer : synchronizers) {
                 List<? extends Artefact> registered = synchronizer.getService()
                                                                   .getAll();
@@ -397,7 +420,13 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
                     if (synchronizer.isAccepted(artefact.getType())) {
                         if (!repository.getResource(IRepositoryStructure.PATH_REGISTRY_PUBLIC + artefact.getLocation())
                                        .exists()) {
-                            synchronizer.cleanup(artefact);
+                            if (registryChangedDuringPass) {
+                                logger.info(
+                                        "Source of artefact [{}] is missing, but the registry changed during this pass - deferring its cleanup to the next one",
+                                        artefact.getLocation());
+                            } else {
+                                synchronizer.cleanup(artefact);
+                            }
                         }
                     }
                 }

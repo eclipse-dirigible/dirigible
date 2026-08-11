@@ -1,27 +1,14 @@
-import { BookRepository } from "../gen/edm/dao/Books/BookRepository";
-import { logging } from "@aerokit/sdk/log";
+import { Update } from "@aerokit/sdk/db";
 
-const logger = logging.getLogger("test-job-handler.ts");
+// The BOOK table comes from the generated schema; the rows are written with plain SQL rather than a
+// generated DAO because what this test asserts is the Quartz transaction boundary, not the
+// persistence layer above it.
+// The identifiers are quoted because the generated schema creates them in upper case and
+// PostgreSQL folds an unquoted name to lower case.
+const INSERT_BOOK = 'INSERT INTO "BOOK" ("BOOK_TITLE", "BOOK_AUTHOR") VALUES (?, ?)';
 
-
-const repo = new BookRepository();
-const entity = {
-    Title: "test-title-01",
-    Author: "test-author-01"
-}
-repo.create(entity);
-
-const entity2 = {
-    Title: "test-title-02",
-    Author: "test-author-02"
-}
-repo.create(entity2);
-
-const entity3 = {
-    Title: "test-title-03",
-    Author: "test-author-03"
-}
-repo.create(entity3);
+Update.execute(INSERT_BOOK, ["test-title-01", "test-author-01"]);
+Update.execute(INSERT_BOOK, ["test-title-02", "test-author-02"]);
+Update.execute(INSERT_BOOK, ["test-title-03", "test-author-03"]);
 
 console.log("test-job-handler.ts: test entities are saved");
-

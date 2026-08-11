@@ -794,6 +794,107 @@ class IntentParserTest {
                              .size());
     }
 
+    /**
+     * A payment posting whose account column is chosen by a source classifier - #6534. The single
+     * {@code items} row is supplied per test.
+     */
+    private static String conditionalRulePosting(String itemRow) {
+        return """
+                name: ledger
+                entities:
+                  - name: Account
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: number, type: string }
+                  - name: PaymentMethodType
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: PostingRule
+                    kind: setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: documentType, type: string }
+                    relations:
+                      - { name: BankAccount, kind: manyToOne, to: Account }
+                      - { name: CashAccount, kind: manyToOne, to: Account }
+                      - { name: SuspenseAccount, kind: manyToOne, to: Account }
+                  - name: Payment
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: amount, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: Method, kind: manyToOne, to: PaymentMethodType, required: true }
+                  - name: JournalEntry
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                    relations:
+                      - { name: Payment, kind: manyToOne, to: Payment }
+                  - name: JournalEntryItem
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: debit, type: decimal, precision: 18, scale: 2 }
+                    relations:
+                      - { name: JournalEntry, kind: manyToOne, to: JournalEntry, composition: true, required: true }
+                      - { name: Account, kind: manyToOne, to: Account, required: true }
+                postings:
+                  - name: paymentPosting
+                    event: { onCreate: Payment }
+                    creates: JournalEntry
+                    backReference: Payment
+                    rule: { entity: PostingRule, match: { documentType: "Payment" } }
+                    items:
+                      - %s
+                """.formatted(itemRow);
+    }
+
+    @Test
+    void conditionalRuleColumnParses() {
+        IntentParser.parse(conditionalRulePosting(
+                "{ Account: \"rule(by: Method, cases: { 1: BankAccount, 2: CashAccount }, default: SuspenseAccount)\", debit: \"Amount\" }"));
+    }
+
+    @Test
+    void conditionalRuleUnknownCaseColumnIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Method, cases: { 1: Nonsuch })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("case column [Nonsuch] is not a field or to-one relation of [PostingRule]")),
+                "expected an unknown case-column issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleWithAWhenGuardIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(conditionalRulePosting(
+                "{ Account: \"rule(by: Method, cases: { 1: BankAccount })\", debit: \"Amount\", when: \"Amount == 0\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("combines a conditional rule(by: ...) with a when: guard")),
+                "expected a conditional+when issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleNonNumericCaseKeyIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Method, cases: { bank: BankAccount })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("case key [bank] must be a number")),
+                "expected a non-numeric case-key issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void conditionalRuleUnknownClassifierIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(
+                conditionalRulePosting("{ Account: \"rule(by: Nonsuch, cases: { 1: BankAccount })\", debit: \"Amount\" }")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("rule(by: Nonsuch) is not a field or to-one relation of the source [Payment]")),
+                "expected an unknown-classifier issue, got: " + ex.getIssues());
+    }
+
     /** The event declares exactly one trigger - onTransition XOR onCreate. */
     @Test
     void postingEventDeclaresExactlyOneTrigger() {
@@ -1376,6 +1477,127 @@ class IntentParserTest {
                 "expected a bad-map-source issue, got: " + ex.getIssues());
     }
 
+    /**
+     * A consumer model that owns the created rows and reaches a source entity ({@code Project}) in a
+     * declared {@code uses:} model. The generate block is appended per test.
+     */
+    private static final String CROSS_SCHEDULE_HEAD = """
+            name: timesheets
+            uses:
+              - { model: projects }
+            entities:
+              - name: ProjectTimesheet
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                  - { name: period, type: date }
+              - name: EmployeeTimesheet
+                fields:
+                  - { name: id, type: integer, primaryKey: true, generated: true }
+                relations:
+                  - { name: ProjectTimesheet, kind: manyToOne, to: ProjectTimesheet }
+            schedules:
+              - name: monthly-project-timesheets
+                cron: "0 0 2 1 * ?"
+                entity: Project
+                model: projects
+                where:
+                  - { field: Status, op: eq, value: 2 }
+            """;
+
+    @Test
+    void crossModelScheduleSourceParsesWhenModelIsDeclared() {
+        // The source Project is not a local entity, but its model is a declared uses: alias - so the
+        // local entity check is skipped and its where/map fields validate at generation time, not here.
+        String yaml = CROSS_SCHEDULE_HEAD + """
+                    generate:
+                      to: ProjectTimesheet
+                      map:
+                        Period: now
+                      children:
+                        - to: EmployeeTimesheet
+                          parent: ProjectTimesheet
+                          forEach:
+                            entity: EmployeeProjectAssignment
+                            model: projects
+                            match: { Project: id }
+                          map: { Employee: Employee }
+                """;
+        IntentParser.parse(yaml);
+    }
+
+    @Test
+    void crossModelScheduleSourceToUndeclaredModelIsRejected() {
+        String yaml = """
+                name: timesheets
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: period, type: date }
+                schedules:
+                  - name: monthly-project-timesheets
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    model: projects
+                    generate:
+                      to: ProjectTimesheet
+                      map: { Period: now }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("source model [projects] is not a declared uses: alias")),
+                "expected an undeclared-source-model issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void crossModelScheduleSourceWithNotifyIsRejected() {
+        String yaml = """
+                name: timesheets
+                uses:
+                  - { model: projects }
+                entities:
+                  - name: ProjectTimesheet
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                schedules:
+                  - name: nudge
+                    cron: "0 0 2 1 * ?"
+                    entity: Project
+                    model: projects
+                    notify:
+                      to: contactEmail
+                      subject: "x"
+                      body: "y"
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("notify needs the source's relation metadata")),
+                "expected a cross-model-notify-unsupported issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void crossModelForEachToUndeclaredModelIsRejected() {
+        String yaml = CROSS_SCHEDULE_HEAD + """
+                    generate:
+                      to: ProjectTimesheet
+                      map: { Period: now }
+                      children:
+                        - to: EmployeeTimesheet
+                          parent: ProjectTimesheet
+                          forEach:
+                            entity: EmployeeProjectAssignment
+                            model: staffing
+                            match: { Project: id }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("forEach model [staffing] is not a declared uses: alias")),
+                "expected an undeclared-forEach-model issue, got: " + ex.getIssues());
+    }
+
     /** A complete personalized model built line by line - no text-block margin surprises. */
     private static String personalYaml(String employeeExtra, String requestFields, String requestRelations) {
         return "name: hr\n" //
@@ -1673,6 +1895,26 @@ class IntentParserTest {
                 "expected an audit issue, got: " + issues);
     }
 
+    @Test
+    void chatDocumentRejectsAnItemsChildThatIsAlsoACalendar() {
+        // Both render the line items (#6482), so declaring both leaves it undecidable which pane wins.
+        String yaml = CHAT_HEAD + """
+                    audit: true
+                    view: calendar
+                    calendar: { start: sentOn }
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: body, type: text, messageBody: true }
+                      - { name: sentOn, type: date }
+                    relations:
+                      - { name: Case, kind: manyToOne, to: Case, composition: true, required: true }
+                """;
+        List<String> issues = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml)).getIssues();
+        assertTrue(issues.stream()
+                         .anyMatch(i -> i.contains("both render the line items")),
+                "expected a chat-vs-calendar issue, got: " + issues);
+    }
+
     /**
      * A guard's non-blocking outcomes each need their own companion key, and a companion belonging to
      * another outcome is an authoring mistake worth failing on: the write would look guarded and do
@@ -1854,5 +2096,153 @@ class IntentParserTest {
                      .stream()
                      .anyMatch(i -> i.contains("declares both `format` and `pattern`")),
                 "expected a both-declared issue, got: " + ex.getIssues());
+    }
+
+    /**
+     * A process with a parallel step (#6556), assembled by concatenation so each per-test {@code steps}
+     * fragment keeps exact six-space indentation - a multi-line value interpolated into a text block is
+     * not re-indented and breaks the YAML.
+     */
+    private static String parallelProcess(String steps) {
+        return "name: pp\n" //
+                + "entities:\n" //
+                + "  - name: OrderStatus\n" //
+                + "    function: Setting\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "      - { name: name, type: string }\n" //
+                + "  - name: SalesOrder\n" //
+                + "    fields:\n" //
+                + "      - { name: id, type: integer, primaryKey: true, generated: true }\n" //
+                + "    relations:\n" //
+                + "      - { name: Status, kind: manyToOne, to: OrderStatus, function: EntityStatus, init: 1 }\n" //
+                + "processes:\n" //
+                + "  - name: Review\n" //
+                + "    trigger: { onCreate: SalesOrder }\n" //
+                + "    steps:\n" //
+                + steps //
+                + "forms:\n" //
+                + "  - { name: ReviewOrder, forEntity: SalesOrder, fields: [Status], actions: [approve] }\n";
+    }
+
+    private static final String P_FORK =
+            "      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: consolidate } }\n";
+    private static final String P_TECH = "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n";
+    private static final String P_COMMERCIAL =
+            "      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n";
+    private static final String P_CONSOLIDATE =
+            "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n";
+
+    @Test
+    void parallelStepParses() {
+        IntentParser.parse(parallelProcess(P_FORK + P_TECH + P_COMMERCIAL + P_CONSOLIDATE + "      - { name: done, kind: end }\n"));
+    }
+
+    @Test
+    void parallelWithFewerThanTwoBranchesIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(
+                        parallelProcess("      - { name: reviews, kind: parallel, args: { branches: [techReview], next: consolidate } }\n"
+                                + P_TECH + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("needs a `branches` list of at least two")),
+                "expected a too-few-branches issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelUnknownBranchIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        "      - { name: reviews, kind: parallel, args: { branches: [techReview, nope], next: consolidate } }\n" + P_TECH
+                                + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("branch [nope] is not a declared step")),
+                "expected an unknown-branch issue, got: " + ex.getIssues());
+    }
+
+    /** A branch that is a two-step chain, and a branch that is itself a nested fork (#6568). */
+    @Test
+    void parallelBranchChainsAndNestedForksParse() {
+        IntentParser.parse(parallelProcess(
+                P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: techSignoff } }\n"
+                        + "      - { name: techSignoff, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n"
+                        + "      - { name: commercialReview, kind: parallel, args: { branches: [pricing, legal] } }\n"
+                        + "      - { name: pricing, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n"
+                        + "      - { name: legal, kind: userTask, args: { assignee: manager, form: ReviewOrder } }\n" + P_CONSOLIDATE));
+    }
+
+    @Test
+    void parallelBranchRoutingToTheForksOwnNextIsRejected() {
+        // `consolidate` is what the JOIN flows into - a branch converges on `join`, never on it directly
+        // (otherwise the branch and the join both feed it and the flow loops back into the branch).
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(
+                P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: consolidate } }\n"
+                        + P_COMMERCIAL + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("next [consolidate] is also reachable from inside one of its branches")),
+                "expected a converge-on-join issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelBranchRoutingToEndIsRejected() {
+        // A token that ends inside a branch never reaches the join, and the instance hangs on it.
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        P_FORK + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: end } }\n"
+                                + P_COMMERCIAL + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("routes to `end` from inside a parallel branch")),
+                "expected an end-inside-a-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void theJoinLiteralOutsideAParallelBranchIsRejected() {
+        IntentValidationException ex =
+                assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(P_FORK + P_TECH + P_COMMERCIAL
+                        + "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: join } }\n")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("routes to `join`, which is only valid inside a parallel branch")),
+                "expected a join-outside-a-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void aStepReachableFromTwoParallelBranchesIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(P_FORK
+                        + "      - { name: techReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: sign } }\n"
+                        + "      - { name: commercialReview, kind: userTask, args: { assignee: manager, form: ReviewOrder, next: sign } }\n"
+                        + "      - { name: sign, kind: serviceTask, args: { setRelationField: Status, value: 2 } }\n" + P_CONSOLIDATE)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("step [sign] is reachable from more than one parallel branch")),
+                "expected a shared-step issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void routingIntoAParallelBranchFromTheMainFlowIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(parallelProcess(P_FORK
+                + P_TECH + P_COMMERCIAL
+                + "      - { name: consolidate, kind: serviceTask, args: { setRelationField: Status, value: 2, next: techReview } }\n")));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("which is inside a parallel branch - a branch is entered through its fork only")),
+                "expected a routes-into-a-branch issue, got: " + ex.getIssues());
+    }
+
+    @Test
+    void parallelUnknownNextIsRejected() {
+        IntentValidationException ex = assertThrows(IntentValidationException.class,
+                () -> IntentParser.parse(parallelProcess(
+                        "      - { name: reviews, kind: parallel, args: { branches: [techReview, commercialReview], next: nowhere } }\n"
+                                + P_TECH + P_COMMERCIAL)));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("next [nowhere] is not a declared step or `end`")),
+                "expected an unknown-next issue, got: " + ex.getIssues());
     }
 }

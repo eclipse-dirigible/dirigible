@@ -25,7 +25,42 @@ component shapes. Read this before changing anything under `engine-java`, `data-
   consumers. So when a consumer runs, every bean is already built and injected.
 - Platform classpath for `javac` comes from `ClassPathIndex` — it extracts `BOOT-INF/lib/*.jar` once
   to disk; **never** introspect nested fat-jar entries in-process (closes pooled `NestedJarFile`
-  handles → cascading `NoClassDefFoundError`).
+  handles → cascading `NoClassDefFoundError`). It also appends the drop-in module jars (next section).
+
+## AOT compiled modules + the `/modules` drop-in directory
+
+A module can ship **already compiled** instead of as registry sources — no runtime `javac` at all
+(PR [#6400](https://github.com/eclipse-dirigible/dirigible/pull/6400)). Such a module jar carries:
+
+- its compiled classes (`gen.*` / `custom.*` packages),
+- a marker at `META-INF/dirigible/<project>/.compiled` — a UTF-8 list of the module's top-level class
+  binary names, one per line (`#` comments allowed),
+- the module's declarative registry payload under the same `META-INF/dirigible/<project>/` folder.
+
+On `ApplicationReadyEvent`, `CompiledModuleClassProvider` scans `classpath*:META-INF/dirigible/*/.compiled`,
+`Class.forName`s every listed class through the **application** classloader and installs them via
+`JavaLoader.installCompiledModules(...)` — the same install path a registry rebuild uses, so the standard
+consumers register the controllers / entities / handlers (`Registered [N] class(es) from AOT compiled
+module(s) on the classpath`). The installed generation is the **union** of the registry-compiled and the
+classpath-compiled sub-generations: a later registry rebuild does not unload compiled modules. In
+parallel, the existing `ClasspathExpander` lays the payload into `registry/public/<project>/`, so one jar
+delivers both halves of the module.
+
+**Getting such a jar onto the classpath of the shipped image (issue [#6592](https://github.com/eclipse-dirigible/dirigible/issues/6592)):**
+`build/application/Dockerfile` launches through Spring Boot's **`PropertiesLauncher`** with
+`-Dloader.path=/modules` (instead of `JarLauncher` via `-jar`), and creates an empty `/modules`. A
+downstream image `COPY`s module jars there, or they are volume-mounted at run time — **the platform jar
+is consumed verbatim**; never explode the fat jar to add jars to `BOOT-INF/lib`.
+
+- **Empty or missing `/modules` is a no-op** — `PropertiesLauncher` reads `Start-Class` from the jar's
+  manifest, so boot is identical to `java -jar` (verified: same startup lines, same startup time).
+- `loader.path` entries are **prepended** to `BOOT-INF/classes` + `BOOT-INF/lib`, so in principle a
+  drop-in jar could shadow a platform class. In practice it cannot happen by accident: module packages
+  are `gen.*` / `custom.*`, which the platform does not use.
+- **`LOADER_PATH`** (env var, comma-separated) is the override for non-default locations — Spring Boot
+  honors it natively, so there is no `DIRIGIBLE_*` property for this.
+- `ClassPathIndex` appends the same `loader.path` / `LOADER_PATH` jars to the **compile** classpath, so
+  registry sources can still be compiled against a drop-in module's classes.
 
 ## The bean container (`ComponentContainer`, `engine-java`)
 
@@ -59,7 +94,15 @@ instantiate client classes.
 - `EntityClassConsumer` (data-store-java) — `@Entity` → `JavaEntityManager` (Hibernate dynamic-map).
 - `ControllerClassConsumer` — `@Controller` → `ControllerRouter` + OpenAPI via
   `JavaControllerOpenApiPublisher`. (A `@Controller` must not also implement `JavaHandler`.)
-- `ScheduledClassConsumer` — jobs (see two styles below) → cron via a dedicated `ThreadPoolTaskScheduler`.
+- `ScheduledClassConsumer` — jobs (see two styles below) → a real `Job` row per tenant on the platform's
+  **shared Quartz scheduler** (#6375), under the synthetic `RUNTIME_LOCATION_PREFIX` location so the job
+  synchronizer does not reap it as a registry orphan. So a client-Java job is listed, enable/disable-able,
+  trigger-now-able and job-logged in the Jobs perspective like any `.job`, and fires **once cluster-wide**
+  — not once per JVM, as the private `ThreadPoolTaskScheduler` this replaced did. At fire time the jobs
+  engine dispatches back through the `JavaJobExecutor` SPI (engine `java`); both that path and the manual
+  trigger go through `JobHandlerRunner`, which is the ONLY place the engine→runner dispatch lives —
+  trigger-now was written out separately once and stayed JavaScript-only, so triggering a client-Java job
+  ran its class name as a JS path and 500'd (#6305).
 - `ListenerClassConsumer` — listeners → ActiveMQ; re-establishes the message's tenant context.
 - `WebsocketClassConsumer` + `JavaWebsocketRegistry` — websockets; `WebsocketProcessor`
   (`engine-websockets`) calls `JavaWebsocketRegistry.dispatch(...)` reflectively (keeps that module free

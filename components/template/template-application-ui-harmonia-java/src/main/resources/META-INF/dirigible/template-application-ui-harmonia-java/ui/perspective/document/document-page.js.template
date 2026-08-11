@@ -174,6 +174,12 @@ document.addEventListener('alpine:init', () => {
     chatSending: false,
     chatInternal: false,
 #end
+#if($documentItemsLayout == "calendar")
+    // Reactive config for the items x-h-calendar (the items child declares view: calendar); rebuilt
+    // after every items load so the calendar re-renders. The view comes from the child's own
+    // declaration, which rides its detail registration.
+    itemsCalCfg: { view: 'month', events: [] },
+#end
     itemOptions: {},         // edit-column name -> [{ value, text }] for relationship cells
     // Depends-On-filtered options for the OPEN item dialog only. Kept apart from itemOptions,
     // which the items table uses to resolve labels for ALL rows and must stay the full set.
@@ -197,6 +203,14 @@ document.addEventListener('alpine:init', () => {
     printError: null,
 
     apiPath: '/${javaPerspectiveName}/${name}Controller',
+#if($immutableStatusProperty || $immutableAlways)
+
+    // Immutability pre-check (intent `immutable`/`immutableWhen:`), asked from the controller's
+    // GET /{id}/mutable so the Edit affordances stay honest - an /edit URL typed directly opens
+    // read-only. The controller's PUT/DELETE 409 stays authoritative; the pre-check fails OPEN
+    // (an outage must not lock the UI - the server still refuses the write).
+    mutable: true,
+#end
 
     // Entity name used to match developer-contributed custom actions ($store.customActions) targeted
     // at this document. Set here (not inline in the view) so Velocity substitutes it - a $store.*(...)
@@ -212,58 +226,16 @@ document.addEventListener('alpine:init', () => {
     // like the line items, only once the document (header) exists (nothing to allocate against on Create).
     get secondaryDetails() { return this.itemsEnabled ? App.detailsFor('${name}').filter(d => d.entity !== '${documentItemsEntity}') : []; },
 
-    // The read-only Snapshot child (intent `function: Snapshot`), when this document declares one.
-    // A files def is a Snapshot exactly when it is read-only - an editable one is a user Attachment.
-    get snapshotDef() { return App.detailsFor('${name}').find(d => d.files && d.files.readOnly) || null; },
-
-    // The stored copy that Print must serve, if any. Returns the highest-Version row, `null` when the
-    // document provably has none (a draft - nothing has been issued yet), or `{ failed: true }` when it
-    // could not be determined. The failure case matters: falling back to a live render there would
-    // silently defeat the guardrail, so the caller reports it instead.
-    async storedSnapshot() {
-      const def = this.snapshotDef;
-      if (!def || this.id == null) return null;
-      try {
-        const rows = await App.services.api.get(
-          def.apiPath + '?' + encodeURIComponent(def.masterEntityId) + '=' + encodeURIComponent(this.id));
-        if (!Array.isArray(rows) || !rows.length) return null;
-        return rows.reduce((best, row) => (Number(row.Version || 0) > Number(best.Version || 0) ? row : best));
-      } catch (e) {
-        console.error('[${name}DocumentPage] could not determine whether a stored copy exists', e);
-        return { failed: true };
-      }
-    },
-
-    // A stored copy is downloaded straight from its own controller (a plain browser GET, like the Files
-    // panel's download link) - the bytes are the record, so nothing is re-rendered.
-    openStoredSnapshot(row) {
-      const def = this.snapshotDef;
-      const base = (App.config && App.config.restBase) || '';
-      window.open(base + def.apiPath + '/' + encodeURIComponent(row[def.primaryKey]) + '/download', '_blank');
-    },
-
     // ===== Print: the .print template lives in the CMS (Templates/${name}/Print/<lang>/), where it
     // can be customized via the Documents perspective. One language prints directly; several ask.
     //
-    // GUARDRAIL: a document that already carries a generated Snapshot prints THAT copy and nothing else.
-    // The print feeder dereferences LIVE master data, so re-rendering an issued document after its
-    // partner was renamed would hand back a PDF showing today's name while claiming to be that issued
-    // document - editing master data would rewrite history on paper. The stored copy IS the record; the
-    // language it was rendered in is part of it, so the language dialog is skipped as well.
+    // Print always renders LIVE (fetch languages; one prints directly, several ask). The immutable
+    // issued copy stays first-class on its own surface: the read-only Snapshot panel on this page
+    // serves every stored version (Open + Download), so a live re-render after master-data changes
+    // is acceptable - the copy that IS the record is one click away.
     async openPrint() {
       this.printError = null;
       this.printBusy = true;
-      const stored = await this.storedSnapshot();
-      if (stored && stored.failed) {
-        this.printBusy = false;
-        this.printError = 'Could not verify whether an issued copy exists - printing was not attempted.';
-        return;
-      }
-      if (stored) {
-        this.printBusy = false;
-        this.openStoredSnapshot(stored);
-        return;
-      }
       let languages = [];
       try {
         languages = (await App.services.api.get('/services/print/${name}/languages', { baseUrl: '' })) || [];
@@ -308,8 +280,21 @@ document.addEventListener('alpine:init', () => {
         }
         const blob = await response.blob();
         const url = URL.createObjectURL(blob);
-        window.open(url, '_blank');
-        setTimeout(() => URL.revokeObjectURL(url), 60000);
+        // The object URL must outlive the tab that renders it: a timed revoke kills the PDF
+        // viewer's reload/print the moment it fires (observed live - the blob tab worked once,
+        // then "the file was removed"). The URL is released when THIS page unloads, which is the
+        // blob's natural owner lifetime; a print-sized PDF held until then costs nothing.
+        const opened = window.open(url, '_blank');
+        if (!opened) {
+          // Popup blocked - the open runs after async work, outside the click's gesture stack.
+          // Fall back to a download, which the browser always allows.
+          const link = document.createElement('a');
+          link.href = url;
+          link.download = '${name}-' + this.id + '.pdf';
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+        }
       } catch (e) {
         console.error('Print failed', e);
         this.printError = 'Print failed';
@@ -356,6 +341,17 @@ document.addEventListener('alpine:init', () => {
         this.state = 'loading';
         try {
           await this.loadHeader();
+#if($immutableStatusProperty || $immutableAlways)
+          try {
+            const m = await App.services.api.get(this.apiPath + '/' + encodeURIComponent(this.id) + '/mutable');
+            this.mutable = !m || m.mutable !== false;
+          } catch (e) {
+            console.error('[${name}DocumentPage] mutable pre-check failed', e);
+          }
+          // An immutable document opened on the /edit route renders as preview - header, items and
+          // panels all read-only, exactly as if Preview had been chosen (or the URL said /preview).
+          if (!this.mutable && this.isEdit) this.mode = 'preview';
+#end
           this.state = 'ready';
           await this.loadItems();
         } catch (e) {
@@ -453,7 +449,7 @@ document.addEventListener('alpine:init', () => {
     // "Add new <related>" from a header FK combobox: open the target's own create page in the shared
     // related-create iframe dialog; on save, reload that field's options and select the new record.
     addRelated(field, controllerUrl, entity) {
-      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), 'New ' + entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(controllerUrl, entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: entity }), async (id) => {
         await this.loadOptions();
         if (id != null) this.form[field] = String(id);
       });
@@ -561,10 +557,7 @@ document.addEventListener('alpine:init', () => {
       }
 #foreach($property in $properties)
 #if($property.isDateType && $property.aggregate != "true")
-      if (payload.${property.name} != null) {
-        const _d${property.name} = new Date(payload.${property.name});
-        if (!isNaN(_d${property.name}.getTime())) payload.${property.name} = _d${property.name}.toISOString();
-      }
+      payload.${property.name} = window.HarmoniaFormat.toPayload(payload.${property.name}, '${property.widgetType}');
 #end
 #end
       return payload;
@@ -622,6 +615,16 @@ document.addEventListener('alpine:init', () => {
     // ----- Items (read-only table + add/edit dialog, server-side) --------------------------------
     get editColumns() { return (this.itemsDef && this.itemsDef.editColumns) || []; },
 
+    // The columns the read-only items TABLE shows: the display columns (major fields - `major:
+    // false` hides a field/relation from the table), carried with their full edit metadata so
+    // lookup labels, dates and number patterns still render. The add/edit DIALOG keeps the full
+    // editColumns (a hidden trigger like Product must stay editable there).
+    get tableColumns() {
+      if (!this.itemsDef) return [];
+      const visible = new Set((this.itemsDef.columns || []).map(c => c.name));
+      return this.editColumns.filter(c => visible.has(c.name));
+    },
+
     async loadItems() {
       if (!this.itemsDef || this.id == null) { this.items = []; this.itemsState = 'empty'; return; }
       this.itemsState = 'loading';
@@ -632,12 +635,79 @@ document.addEventListener('alpine:init', () => {
         const rows = await App.services.api.getAll(this.itemsDef.apiPath + q);
         this.items = rows || [];
         this.itemsState = this.items.length === 0 ? 'empty' : 'default';
+#if($documentItemsLayout == "calendar")
+        this.refreshItemsCalendar();
+#end
       } catch (e) {
         this.itemsError = App.services.apiErrors.messageFor(e, 'Could not load items.');
         this.itemsState = 'error';
       }
       this.refreshIcons();
     },
+#if($documentItemsLayout == "calendar")
+
+    // ----- Items calendar (the items child declares view: calendar) -------------------------------
+    // A day-grained line (a booked day, an allocated hour) is entered on a calendar instead of the row
+    // grid. The rows and the dialog are the SAME ones the table pane uses - only the presentation
+    // differs - and the event mapping is the shared one (services/calendarEvents.js). The calendar's
+    // own configuration (start / end / title / colour / initial view / range) rides the items child's
+    // detail registration, so this page never enumerates it at generation time.
+    itemsCalendar() {
+      return (this.itemsDef && this.itemsDef.calendar) || null;
+    },
+
+    refreshItemsCalendar() {
+      const cal = this.itemsCalendar();
+      this.itemsCalCfg = { view: (cal && cal.view) || 'month', events: this.buildItemEvents() };
+    },
+
+    buildItemEvents() {
+      const cal = this.itemsCalendar();
+      if (!cal) return [];
+      return window.HarmoniaCalendar.events(this.items, cal, {
+        primaryKey: this.itemsDef.primaryKey,
+        label: '${documentItemsLabel}',
+        title: cal.title ? (row => this.itemEventTitle(cal, row)) : null,
+      });
+    },
+
+    // The event pill's title: the titling column resolved exactly as the items table renders it (an FK
+    // shows its referenced label, a date its formatted value), blank when the row carries no value so
+    // the shared mapping falls back to "<label> #<id>".
+    itemEventTitle(cal, row) {
+      const value = row[cal.title];
+      if (value === null || value === undefined || value === '') return '';
+      const column = this.editColumns.find(c => c.name === cal.title);
+      return column ? this.cellDisplay(column, row) : String(value);
+    },
+
+    // Event click -> edit that line in the same dialog the table's Edit opens; empty-day click -> a new
+    // line with the clicked day (and, in week/day views, the clicked time) preset on the date field.
+    onItemsEventClick(e) {
+      const id = window.HarmoniaCalendar.clickedEventId(e);
+      if (id === null) return;
+      const pk = this.itemsDef.primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(id));
+      if (row) this.openRowDialog(row);
+    },
+
+    onItemsDateClick(e) {
+      const cal = this.itemsCalendar();
+      if (!cal) return;
+      const value = window.HarmoniaCalendar.clickedDateValue(e);
+      this.openRowDialog(null, value ? { [cal.start]: value } : null);
+    },
+
+    // Delete from the line dialog: the calendar pane has no per-row menu, so this is the only route to
+    // the (shared) delete confirmation.
+    askDeleteDraft() {
+      const pk = this.itemsDef.primaryKey;
+      const row = (this.items || []).find(r => String(r[pk]) === String(this.draft[pk]));
+      if (!row) return;
+      this.rowDialogOpen = false;
+      this.askDeleteRow(row);
+    },
+#end
 #if($documentItemsLayout == "chat")
 
     // Append a chat message as a new items child (documentItemsLayout: chat). The message body maps to
@@ -828,7 +898,7 @@ document.addEventListener('alpine:init', () => {
     // "Add new <related>" from an item-dialog FK combobox.
     addRelatedItem(col) {
       if (!col.lookup) return;
-      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), 'New ' + col.lookup.entity, async (id) => {
+      Alpine.store('related').create(App.utils.relatedCreateUrl(col.lookup.url, col.lookup.entity), T('$projectName:${tprefix}.defaults.newTitle', 'New {{name}}', { name: col.lookup.entity }), async (id) => {
         delete this.itemOptions[col.name];
         // Drop a Depends-On-filtered set so the just-created record is selectable even off-filter.
         delete this.draftOptions[col.name];
@@ -906,7 +976,10 @@ document.addEventListener('alpine:init', () => {
     },
 
     // ----- Add / edit line dialog ----------------------------------------------------------------
-    openRowDialog(row) {
+    // `preset` seeds a CREATE draft with values the caller already knows (the day clicked on the items
+    // calendar), applied before the calculated columns are evaluated so a value derived from it is
+    // right on first render.
+    openRowDialog(row, preset) {
       if (!this.itemsEnabled || this.isPreview) return;
       this.draftError = null;
       this.draftMode = row ? 'edit' : 'create';
@@ -926,6 +999,10 @@ document.addEventListener('alpine:init', () => {
         draft[col.name] = v == null ? (col.widget === 'CHECKBOX' ? false : (col.widget === 'NUMBER' ? null : '')) : v;
       }
       if (row && row[pk] != null) draft[pk] = row[pk];
+      if (preset) {
+        Object.keys(preset)
+              .forEach(key => { draft[key] = preset[key]; });
+      }
       this.draft = draft;
       this.recalcDraft();
       // Filter dependent dropdowns for already-populated triggers (edit) WITHOUT touching values.
@@ -963,13 +1040,14 @@ document.addEventListener('alpine:init', () => {
       for (const col of this.editColumns) {
         let v = this.draft[col.name];
         if (v === '') v = null;
-        if (col.date && v != null) { const d = new Date(v); if (!isNaN(d.getTime())) v = d.toISOString(); }
+        if (col.date && v != null) v = window.HarmoniaFormat.toPayload(v, col.widget || 'DATETIME-LOCAL');
         payload[col.name] = v;
       }
       return payload;
     },
 
     async saveDraft() {
+      if (this.draftMode === 'fill') { await this.fillMonthDraft(); return; }
       this.draftSaving = true;
       this.draftError = null;
       try {
@@ -988,6 +1066,74 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.draftSaving = false;
       }
+    },
+
+    // ----- Fill Month (one dialog fill -> a line per working day) ---------------------------------
+    // Offered only when the line item carries an editable plain DATE column (the fill target).
+    fillDateColumn() {
+      return this.editColumns.find(c => c.widget === 'DATE' && !c.readonly) || null;
+    },
+    fillDateName() { const c = this.fillDateColumn(); return c ? c.name : ''; },
+
+    // The same line dialog, in 'fill' mode: the fill-target date column picks the MONTH (seeded with
+    // the current one) and Save creates a line per working day instead of one line.
+    openFillDialog() {
+      const col = this.fillDateColumn();
+      if (!col) return;
+      this.openRowDialog(null);
+      if (!this.rowDialogOpen) return;   // openRowDialog refused (preview / items disabled)
+      this.draftMode = 'fill';
+      const now = new Date();
+      this.draft[col.name] = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    },
+
+    // One POST per working day (Mon-Fri) of the picked month with the dialog's values; days that
+    // already carry a line are skipped, so a partially filled month can be topped up safely.
+    async fillMonthDraft() {
+      this.draftSaving = true;
+      this.draftError = null;
+      try {
+        const col = this.fillDateColumn();
+        const month = String((col && this.draft[col.name]) || '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Pick a month to fill.');
+        const taken = new Set((this.items || []).map(r => this.itemDayOf(r[col.name])).filter(Boolean));
+        const pk = this.itemsDef.primaryKey;
+        for (const day of this.monthWorkingDays(month)) {
+          if (taken.has(day)) continue;
+          const body = this.draftPayload();
+          delete body[pk];
+          body[col.name] = new Date(day + 'T00:00:00Z').toISOString();
+          await App.services.api.post(this.itemsDef.apiPath, body);
+        }
+        this.rowDialogOpen = false; this.draft = {};
+      } catch (e) {
+        this.draftError = App.services.apiErrors.messageFor(e, 'Could not fill the month.');
+      } finally {
+        this.draftSaving = false;
+        await this.loadItems();   // reflect what was created even on a mid-loop failure
+        await this.loadHeader();
+      }
+    },
+
+    monthWorkingDays(month) {
+      const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+      const days = [];
+      for (let day = 1, last = new Date(y, m, 0).getDate(); day <= last; day++) {
+        const dow = new Date(y, m - 1, day).getDay();
+        if (dow !== 0 && dow !== 6) days.push(month + '-' + String(day).padStart(2, '0'));
+      }
+      return days;
+    },
+
+    // A stored date arrives as an ISO string, epoch number or java.time array - its YYYY-MM-DD part.
+    itemDayOf(v) {
+      if (v == null || v === '') return '';
+      if (Array.isArray(v)) return v[0] + '-' + String(v[1]).padStart(2, '0') + '-' + String(v[2]).padStart(2, '0');
+      if (typeof v === 'number') {
+        const d = new Date(v < 1e12 ? v * 1000 : v);
+        return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+      }
+      return String(v).slice(0, 10);
     },
 
     askDeleteRow(row) { if (this.isPreview) return; this.deleteTarget = row; this.deleteOpen = true; },

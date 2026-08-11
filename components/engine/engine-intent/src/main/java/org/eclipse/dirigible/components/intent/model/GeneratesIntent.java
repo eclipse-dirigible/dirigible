@@ -10,6 +10,7 @@
 package org.eclipse.dirigible.components.intent.model;
 
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,7 +35,19 @@ import java.util.Map;
  * Mapping is split into two disjoint maps so the source-copy vs constant intent is unambiguous:
  * {@link #map} copies a source property onto a target property; {@link #defaults} sets a target
  * property to {@code now} (the current date) or a literal (string / integer / decimal / boolean).
- * {@link #items} optionally mirrors the composition child rows the same way.
+ *
+ * <p>
+ * The composition line-items of the target are filled by exactly one of two mutually-exclusive
+ * shapes:
+ * <ul>
+ * <li>{@link #items} (an OBJECT) - the <b>mirror</b> form: for each source item row a target item
+ * row is created and its cells copied ({@code map}) / defaulted ({@code defaults}); and</li>
+ * <li>{@link #itemLines} (a LIST) - the <b>computed</b> form (issue #6555): a fixed set of
+ * synthetic target lines whose cells are EXPRESSIONS over the SOURCE record - numeric arithmetic
+ * evaluated through {@code Calc} (as calculated fields / posting item amounts are), {@code {field}}
+ * string interpolation, a source foreign-key copy, or a {@code now}/literal. This expresses the
+ * "one line for the period's rolled-up total" invoice a create-from could not build before.</li>
+ * </ul>
  */
 public class GeneratesIntent {
 
@@ -43,8 +56,25 @@ public class GeneratesIntent {
      */
     private String name;
 
-    /** The source entity in THIS model, loaded by the selected record's id. */
+    /**
+     * The source entity, loaded by the selected record's id. Lives in THIS model unless
+     * {@link #fromUses} names the model that owns it.
+     */
     private String from;
+
+    /**
+     * Optional model alias (from the model's {@code uses:} list) the {@link #from} entity lives in.
+     * Blank means the source is a local entity of this model (the default, fully backward compatible).
+     *
+     * <p>
+     * A cross-model source lets the create-from be authored on the module that owns the TARGET, which
+     * is what breaks a mutual compile dependency between two modules: without it, "A generates into B"
+     * must be authored in A - so A's generated controller references B's entities while B already
+     * references A's, and neither module can be compiled (or packaged as a jar) before the other. The
+     * mirror of the cross-model {@code entity}/{@code model} source a {@code schedules} block accepts
+     * (issue #6532).
+     */
+    private String fromUses;
 
     /** The target entity to create. May live in another model (see {@link #uses}). */
     private String to;
@@ -87,9 +117,21 @@ public class GeneratesIntent {
     private Map<String, String> defaults = new LinkedHashMap<>();
 
     /**
-     * Optional composition child mapping (the source document's items -> the target document's items).
+     * Optional composition child mapping (the source document's items -> the target document's items) -
+     * the MIRROR form. Mutually exclusive with {@link #itemLines}.
      */
     private GeneratesItemsIntent items;
+
+    /**
+     * Optional computed line-items (issue #6555) - the COMPUTED form. Each element is one synthetic
+     * target line: a cell key names a field or to-one relation of the target document's line-items
+     * child, and its value is an expression over the SOURCE record (a numeric {@code Calc} arithmetic
+     * expression, a {@code {field}}-interpolated string, a source foreign-key copy, or a
+     * {@code now}/literal); an optional {@code when} cell guards the whole line. Mutually exclusive
+     * with {@link #items}. The parser moves a list-valued {@code items:} here so the two shapes stay
+     * typed.
+     */
+    private List<Map<String, String>> itemLines;
 
     /**
      * Scheduled generation only: child blocks generated under the created target - one child per
@@ -112,6 +154,19 @@ public class GeneratesIntent {
 
     public void setFrom(String from) {
         this.from = from;
+    }
+
+    public String getFromUses() {
+        return fromUses;
+    }
+
+    public void setFromUses(String fromUses) {
+        this.fromUses = fromUses;
+    }
+
+    /** Whether the {@link #from} entity is owned by another model (see {@link #getFromUses()}). */
+    public boolean isCrossModelSource() {
+        return fromUses != null && !fromUses.isBlank();
     }
 
     public String getTo() {
@@ -200,6 +255,14 @@ public class GeneratesIntent {
 
     public void setItems(GeneratesItemsIntent items) {
         this.items = items;
+    }
+
+    public List<Map<String, String>> getItemLines() {
+        return itemLines;
+    }
+
+    public void setItemLines(List<Map<String, String>> itemLines) {
+        this.itemLines = itemLines;
     }
 
     public java.util.List<GenerateChildIntent> getChildren() {

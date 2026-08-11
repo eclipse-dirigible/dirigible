@@ -17,7 +17,6 @@ import org.eclipse.dirigible.repository.api.IRepositoryStructure;
 import org.eclipse.dirigible.repository.api.IResource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.stereotype.Component;
 
 import java.io.File;
 import java.io.IOException;
@@ -29,8 +28,11 @@ import java.nio.file.StandardCopyOption;
 
 /**
  * The Class DirigibleSourceProvider.
+ *
+ * <p>
+ * Deliberately not a Spring bean: every consumer constructs it directly, so the stereotype it used
+ * to carry only suggested an injection point that never existed.
  */
-@Component
 @CalledFromJS
 public class DirigibleSourceProvider implements JavascriptSourceProvider {
 

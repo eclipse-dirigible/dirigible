@@ -529,9 +529,27 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
             return null;
         }
         recalculate(entity);
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && !$property.calculatedActionOnUpdate && $property.calculatedPropertyExpressionUpdate)
+#if($foreach.first)
+        // The header's expression-calculated fields follow the totals they derive from (e.g.
+        // balance = total - paid): an items change moves the totals, so the derived expressions are
+        // refreshed here and persisted in the same targeted write - otherwise they stay stale (or
+        // null, printing an empty amount) until the next explicit header save. Calculated ACTIONS
+        // are deliberately NOT run here: a server call-out may mint or mutate state and belongs to
+        // the explicit save/update paths only.
+#end
+#calcAssign($property $property.calculatedPropertyExpressionUpdate)
+#end
+#end
         java.util.Map<String, Object> totals = new java.util.LinkedHashMap<>();
 #foreach($f in $documentMaster.fields)
         totals.put("${f.field}", entity.${f.field});
+#end
+#foreach ($property in $properties)
+#if($property.isCalculatedProperty && !$property.calculatedActionOnUpdate && $property.calculatedPropertyExpressionUpdate)
+        totals.put("${property.name}", entity.${property.name});
+#end
 #end
         super.updateProperties(id, totals);
         return entity;
@@ -574,6 +592,17 @@ public class ${name}Repository extends JavaRepository<${name}Entity> {
         if (pattern != null && value instanceof TemporalAccessor temporal) {
             return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
                                     .format(temporal);
+        }
+        // A month field stores the picker's YYYY-MM string - parse it back to a temporal so a
+        // |format token renders "2026 July" instead of the raw string. Fail-soft: a value that is
+        // not a real month, or a pattern demanding fields a month lacks (dd), keeps the raw string.
+        if (pattern != null && value instanceof String string && string.matches("\\d{4}-\\d{2}")) {
+            try {
+                return DateTimeFormatter.ofPattern(pattern, Locale.ENGLISH)
+                                        .format(java.time.YearMonth.parse(string));
+            } catch (RuntimeException e) {
+                return string;
+            }
         }
         return String.valueOf(value);
     }

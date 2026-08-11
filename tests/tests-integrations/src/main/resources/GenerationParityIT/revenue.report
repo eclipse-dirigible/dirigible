@@ -1,0 +1,69 @@
+{
+    "name": "Revenue",
+    "alias": "REVENUE",
+    "table": "SALESORDER",
+    "query": "SELECT O.ID, O.NAME, O.TOTAL, O.ORDERDATE\n  FROM SALESORDER O\n WHERE O.NAME LIKE :customerName\n   AND O.TOTAL > :minTotal",
+    "columns": [
+        {
+            "name": "ID",
+            "alias": "Identifier",
+            "table": "SALESORDER",
+            "type": "INTEGER",
+            "aggregate": "NONE",
+            "select": true
+        },
+        {
+            "name": "NAME",
+            "alias": "Customer",
+            "table": "SALESORDER",
+            "type": "VARCHAR",
+            "aggregate": "NONE",
+            "select": true
+        },
+        {
+            "name": "TOTAL",
+            "alias": "Total Amount",
+            "table": "SALESORDER",
+            "type": "DECIMAL",
+            "aggregate": "SUM",
+            "select": true
+        },
+        {
+            "name": "ORDERDATE",
+            "alias": "Order Date",
+            "table": "SALESORDER",
+            "type": "DATE",
+            "aggregate": "NONE",
+            "select": true
+        }
+    ],
+    "parameters": [
+        {
+            "name": "customerName",
+            "type": "VARCHAR",
+            "initial": "%"
+        },
+        {
+            "name": "minTotal",
+            "type": "DECIMAL",
+            "initial": "0"
+        }
+    ],
+    "conditions": [
+        {
+            "left": "SALESORDER.NAME",
+            "operation": "LIKE",
+            "right": ":customerName"
+        },
+        {
+            "left": "SALESORDER.TOTAL",
+            "operation": ">",
+            "right": ":minTotal"
+        }
+    ],
+    "security": {
+        "generateDefaultRoles": "true",
+        "roleRead": "revenue-read",
+        "roleWrite": "revenue-write"
+    }
+}

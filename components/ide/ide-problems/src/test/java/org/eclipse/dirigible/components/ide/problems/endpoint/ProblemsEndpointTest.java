@@ -35,7 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * The Class ProblemsEndpointTest.
  */
-@WithMockUser
+@WithMockUser(roles = {"ADMINISTRATOR"})
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 @AutoConfigureMockMvc

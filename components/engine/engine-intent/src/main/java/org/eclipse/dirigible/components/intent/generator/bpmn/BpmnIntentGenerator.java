@@ -31,6 +31,7 @@ import org.eclipse.dirigible.components.intent.generator.ProcessFieldLoadSupport
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessResolverSupport.Resolver;
 import org.eclipse.dirigible.components.intent.generator.ProcessAbortSupport;
+import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport;
 import org.eclipse.dirigible.components.intent.generator.ProcessTimerSupport.TimerLoad;
 import org.eclipse.dirigible.components.intent.generator.ProcessWaitSupport;
@@ -297,8 +298,13 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // own-field decision, an expire-date-loader service task before a user task with an `expire:`
         // timer, and writer/setter service tasks after a user task with editable fields or a
         // setRelationField.
-        List<StepIntent> steps = augmentWithResolvers(process.getSteps(), eventsPackage, resolvers, fieldLoads, timerLoads,
+        // The parallel branch REGIONS are computed from the AUTHORED steps, before augmentation: a user
+        // task's `next` is transferred onto its trailing writer/setter delegate, which would break the
+        // walk that follows the authored routing.
+        ProcessParallelSupport.Regions regions = ProcessParallelSupport.regions(process.getSteps());
+        AugmentedSteps augmented = augmentWithResolvers(process.getSteps(), eventsPackage, resolvers, fieldLoads, timerLoads,
                 ownFieldPascalCase, writerByTask, setterByTask);
+        List<StepIntent> steps = augmented.steps();
         // abortOn: a -transitioned into a listed status cancels the in-flight instance via an
         // interrupting message event subprocess (below). Its optional `then` cleanup is an abort-only
         // serviceTask - pull it out of the main flow (it is emitted inside the event subprocess), and
@@ -315,14 +321,37 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
             }
             steps.removeIf(step -> abortThenName.equals(step.getName()));
         }
+        // parallel (fork/join): a `kind: parallel` step fans to its branch chains and joins before
+        // `next`. Synthesize the converging join gateway as a step (so it is emitted + laid out), and
+        // treat every step inside a branch region + the join as OFF the linear chain (like decision
+        // branches) - the fork/branch/join flows are wired explicitly in buildSequenceFlows.
+        List<ProcessParallelSupport.Fork> forks = ProcessParallelSupport.forks(steps);
+        for (ProcessParallelSupport.Fork fork : forks) {
+            StepIntent join = new StepIntent();
+            join.setName(fork.joinId());
+            join.setKind("parallelJoin");
+            steps.add(join);
+        }
+        TargetResolver targets = new TargetResolver(steps, regions, augmented.nodesByStep());
         List<String> effectiveSteps = buildEffectiveStepIds(steps);
-        List<SequenceFlow> flows = buildSequenceFlows(steps, effectiveSteps);
+        Set<String> parallelOffLinear = new HashSet<>(ProcessParallelSupport.joinIds(forks));
+        for (String regionStep : regions.steps()) {
+            parallelOffLinear.addAll(targets.nodesOf(regionStep));
+        }
+        // Dedupe AFTER the filter: pulling the off-linear nodes out can leave the end event adjacent to
+        // itself (an author-declared `end` step, then the join steps, then the implicit end), and a
+        // sequence flow out of the end event is invalid BPMN.
+        List<String> linearSteps = dedupeConsecutive(effectiveSteps.stream()
+                                                                   .filter(id -> !parallelOffLinear.contains(id))
+                                                                   .collect(java.util.stream.Collectors.toList()));
+        List<SequenceFlow> flows = buildSequenceFlows(steps, linearSteps, forks, targets);
         // Boundary timers on user tasks (timeout: non-cancelling reminder; expire: cancelling,
         // date-field-driven). Their outgoing flow to `then` joins the sequence flows; the branch steps
         // are declared steps the author routes around with `next`, like decision branches.
         List<BoundaryTimer> boundaryTimers = collectBoundaryTimers(steps);
         for (BoundaryTimer timer : boundaryTimers) {
-            flows.add(new SequenceFlow("flow_" + timer.id() + "_then", timer.id(), effectiveTarget(timer.thenTarget(), steps), null));
+            flows.add(new SequenceFlow("flow_" + timer.id() + "_then", timer.id(),
+                    targets.resolve(timer.thenTarget(), regions.joinOf(timer.attachedTo())), null));
         }
         String processId = process.getName();
         StringBuilder sb = new StringBuilder(4096);
@@ -385,7 +414,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         writeSequenceFlows(sb, flows);
         sb.append("  </process>\n");
-        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers, hasAbort, abortThenStep);
+        appendBpmnDiagram(sb, processId, effectiveSteps, flows, steps, boundaryTimers, hasAbort, abortThenStep, targets);
         sb.append("</definitions>\n");
         return sb.toString();
     }
@@ -515,11 +544,17 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * sets persists, so a decision downstream of the inserting step still resolves correctly even
      * though its own condition is what is rewritten. Original steps otherwise pass through untouched.
      */
-    private static List<StepIntent> augmentWithResolvers(List<StepIntent> steps, String eventsPackage, List<Resolver> resolvers,
+    private static AugmentedSteps augmentWithResolvers(List<StepIntent> steps, String eventsPackage, List<Resolver> resolvers,
             List<FieldLoad> fieldLoads, List<TimerLoad> timerLoads, Map<String, String> ownFieldPascalCase,
             Map<String, String> writerByTask, Map<String, String> setterByTask) {
         List<StepIntent> result = new ArrayList<>(steps.size());
+        Map<String, List<String>> nodesByStep = new LinkedHashMap<>();
         for (StepIntent step : steps) {
+            // The nodes this authored step expands to, in flow order: the delegates inserted before it,
+            // the step itself, then the delegates inserted after it. Off the linear chain (inside a
+            // parallel branch) they no longer connect by adjacency, so the group is what the generator
+            // wires up - and what an incoming/outgoing flow must enter/leave the step at.
+            int from = result.size();
             for (Resolver resolver : resolvers) {
                 if (step.getName() != null && step.getName()
                                                   .equals(resolver.beforeStep())) {
@@ -565,13 +600,66 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                     }
                     result.add(delegateStep);
                 }
-                continue;
+            } else {
+                // Rewrite a decision against ALL process resolvers (the variables are process-global), not
+                // just those anchored at this step - the path may have been resolved by an earlier step.
+                result.add("decision".equals(step.getKind()) ? rewriteDecision(step, resolvers, ownFieldPascalCase) : step);
             }
-            // Rewrite a decision against ALL process resolvers (the variables are process-global), not
-            // just those anchored at this step - the path may have been resolved by an earlier step.
-            result.add("decision".equals(step.getKind()) ? rewriteDecision(step, resolvers, ownFieldPascalCase) : step);
+            if (step.getName() != null) {
+                List<String> group = new ArrayList<>(result.size() - from);
+                for (StepIntent node : result.subList(from, result.size())) {
+                    group.add(node.getName());
+                }
+                nodesByStep.put(step.getName(), group);
+            }
         }
-        return result;
+        return new AugmentedSteps(result, nodesByStep);
+    }
+
+    /**
+     * The augmented step list plus, per authored step, the node ids it expands to in flow order (the
+     * delegates inserted before it, the step, the delegates inserted after it).
+     */
+    private record AugmentedSteps(List<StepIntent> steps, Map<String, List<String>> nodesByStep) {
+    }
+
+    /**
+     * Resolves an authored routing target to the BPMN element id a flow must point at, and an authored
+     * step to the node its flows enter ({@link #entry}) and leave ({@link #exit}) at.
+     *
+     * <p>
+     * Outside a parallel branch this is the identity (plus the {@code end} translation) - the linear
+     * chain already connects a step's inserted delegates by adjacency. Inside a branch region nothing
+     * is adjacent, so a flow into a step must land on its first node and a flow out of it must start
+     * from its last, and the literal {@link ProcessParallelSupport#JOIN_TARGET} (or no target at all -
+     * a branch terminal) resolves to the enclosing join gateway.
+     */
+    private record TargetResolver(List<StepIntent> steps, ProcessParallelSupport.Regions regions, Map<String, List<String>> nodesByStep) {
+
+        String resolve(String target, String enclosingJoin) {
+            if (target == null || target.isBlank() || ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(target)) {
+                return enclosingJoin != null ? enclosingJoin : END_ID;
+            }
+            String effective = effectiveTarget(target, steps);
+            return END_ID.equals(effective) ? END_ID : entry(effective);
+        }
+
+        /**
+         * The nodes an authored step expands to, in flow order (the step itself when it expands to none).
+         */
+        List<String> nodesOf(String step) {
+            List<String> nodes = nodesByStep.get(step);
+            return nodes == null || nodes.isEmpty() ? List.of(step) : nodes;
+        }
+
+        String entry(String step) {
+            return regions.contains(step) ? nodesOf(step).get(0) : step;
+        }
+
+        String exit(String step) {
+            List<String> nodes = nodesOf(step);
+            return regions.contains(step) ? nodes.get(nodes.size() - 1) : step;
+        }
     }
 
     /** A copy of a user-task step with its {@code next} routing removed (transferred to the writer). */
@@ -692,6 +780,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 break;
             case "wait":
                 appendWaitCatchEvent(sb, step, processName);
+                break;
+            case "parallel":
+            case "parallelJoin":
+                appendParallelGateway(sb, step);
                 break;
             case "end":
                 break;
@@ -909,6 +1001,20 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         sb.append("    </intermediateCatchEvent>\n");
     }
 
+    /**
+     * A {@code parallelGateway} - the diverging fork (a {@code parallel} step) or the synthesized
+     * converging join ({@code parallelJoin}). Unlike an exclusive gateway it carries no {@code default}
+     * flow: every outgoing branch fires, and every incoming branch must arrive before the join
+     * proceeds.
+     */
+    private static void appendParallelGateway(StringBuilder sb, StepIntent step) {
+        sb.append("    <parallelGateway id=\"")
+          .append(escapeXmlAttribute(step.getName()))
+          .append("\" name=\"")
+          .append(escapeXmlAttribute(IntentNaming.humanize(step.getName())))
+          .append("\"></parallelGateway>\n");
+    }
+
     private static void appendExclusiveGateway(StringBuilder sb, StepIntent step) {
         sb.append("    <exclusiveGateway id=\"")
           .append(escapeXmlAttribute(step.getName()))
@@ -933,11 +1039,16 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * (e.g. {@code activate} and {@code reject} both flowing to {@code done}) without the first
      * silently falling through into the second.
      */
-    private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds) {
+    private static List<SequenceFlow> buildSequenceFlows(List<StepIntent> steps, List<String> effectiveIds,
+            List<ProcessParallelSupport.Fork> forks, TargetResolver targets) {
         List<SequenceFlow> flows = new ArrayList<>();
         for (int i = 0; i < effectiveIds.size() - 1; i++) {
             String source = effectiveIds.get(i);
             String target = effectiveIds.get(i + 1);
+            // A parallel fork does not fall through linearly - it fans to its branches (wired below).
+            if ("parallel".equalsIgnoreCase(kindOf(source, steps))) {
+                continue;
+            }
             String flowId;
             StepIntent decision = decisionOf(source, steps);
             if (decision != null) {
@@ -966,9 +1077,61 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
                 LOGGER.warn("Decision [{}] is missing `if` or `then` - skipping conditioned outgoing flow", step.getName());
                 continue;
             }
-            flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), effectiveTarget(thenTarget, steps), condition));
+            flows.add(new SequenceFlow("flow_" + step.getName() + "_then", step.getName(), targets.resolve(thenTarget, targets.regions()
+                                                                                                                              .joinOf(step.getName())),
+                    condition));
+        }
+        // parallel fork/join: the fork fans an unconditioned flow to each branch chain, and the join
+        // flows once to `next` (a nested fork with no `next` joins into its own enclosing join). All
+        // flows are unconditioned - every branch runs, and the join waits for all of them.
+        for (ProcessParallelSupport.Fork fork : forks) {
+            for (String branch : fork.branches()) {
+                flows.add(new SequenceFlow("flow_" + fork.forkId() + "_" + branch, fork.forkId(), targets.entry(branch), null));
+            }
+            String joinTarget = targets.resolve(fork.next(), targets.regions()
+                                                                    .joinOf(fork.forkId()));
+            flows.add(new SequenceFlow("flow_" + fork.joinId() + "_" + joinTarget, fork.joinId(), joinTarget, null));
+        }
+        flows.addAll(branchChainFlows(steps, targets));
+        return flows;
+    }
+
+    /**
+     * The flows inside the parallel branch regions. A branch is a chain and its steps are off the
+     * linear chain, so each step's routing is wired explicitly here: the delegates inserted around a
+     * step chain into it, and the outgoing flow leaves the last of them for the step's {@code next} (a
+     * decision: its {@code else}; the conditioned {@code then} flow is emitted with every other
+     * decision above) - or for the enclosing join when the step declares no routing at all, which is
+     * what makes it a branch terminal. There is deliberately no positional fall-through inside a
+     * branch: a step either routes explicitly or joins.
+     */
+    private static List<SequenceFlow> branchChainFlows(List<StepIntent> steps, TargetResolver targets) {
+        List<SequenceFlow> flows = new ArrayList<>();
+        for (Map.Entry<String, String> region : targets.regions()
+                                                       .joinByStep()
+                                                       .entrySet()) {
+            String join = region.getValue();
+            List<String> nodes = targets.nodesOf(region.getKey());
+            for (int i = 0; i < nodes.size() - 1; i++) {
+                flows.add(new SequenceFlow("flow_" + nodes.get(i) + "_" + nodes.get(i + 1), nodes.get(i), nodes.get(i + 1), null));
+            }
+            String exit = nodes.get(nodes.size() - 1);
+            StepIntent step = stepByName(exit, steps);
+            if (step == null || ProcessParallelSupport.isParallel(step)) {
+                continue; // a nested fork's outgoing flow belongs to its join, wired with the forks above
+            }
+            StepIntent decision = decisionOf(exit, steps);
+            String target = targets.resolve(stringArg(step, decision != null ? "else" : "next"), join);
+            String flowId = decision != null ? "flow_" + exit + "_default" : "flow_" + exit + "_" + target;
+            flows.add(new SequenceFlow(flowId, exit, target, null));
         }
         return flows;
+    }
+
+    /** The kind of the step with the given id, or {@code null} when the id is not a declared step. */
+    private static String kindOf(String stepId, List<StepIntent> steps) {
+        StepIntent step = stepByName(stepId, steps);
+        return step == null ? null : step.getKind();
     }
 
     private static void writeSequenceFlows(StringBuilder sb, List<SequenceFlow> flows) {
@@ -1043,7 +1206,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
      * graph, so re-generation stays byte-stable; the modeler re-routes on first manual edit.
      */
     private static void appendBpmnDiagram(StringBuilder sb, String processId, List<String> effectiveIds, List<SequenceFlow> flows,
-            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers, boolean hasAbort, StepIntent abortCleanup) {
+            List<StepIntent> steps, List<BoundaryTimer> boundaryTimers, boolean hasAbort, StepIntent abortCleanup, TargetResolver targets) {
         // A boundary event has no column of its own - it rides its host task's border. For the layered
         // layout its outgoing branch still needs a rank, so each boundary flow contributes a pseudo-flow
         // from the HOST task to the branch target (the real boundary flow is invisible to the layout:
@@ -1051,7 +1214,10 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         // shape added after the layout.
         List<SequenceFlow> layoutFlows = new ArrayList<>(flows);
         for (BoundaryTimer timer : boundaryTimers) {
-            layoutFlows.add(new SequenceFlow("layout_" + timer.id(), timer.attachedTo(), effectiveTarget(timer.thenTarget(), steps), null));
+            layoutFlows.add(new SequenceFlow(
+                    "layout_" + timer.id(), timer.attachedTo(), targets.resolve(timer.thenTarget(), targets.regions()
+                                                                                                           .joinOf(timer.attachedTo())),
+                    null));
         }
         Map<String, int[]> bounds = layout(effectiveIds, layoutFlows, steps);
         // Boundary shapes overlap the host task's bottom edge (the modeler convention), fanning left
@@ -1327,7 +1493,7 @@ public class BpmnIntentGenerator implements IntentTargetGenerator {
         }
         StepIntent step = stepByName(id, steps);
         String kind = step == null ? "userTask" : step.getKind();
-        if ("decision".equalsIgnoreCase(kind)) {
+        if ("decision".equalsIgnoreCase(kind) || "parallel".equalsIgnoreCase(kind) || "parallelJoin".equalsIgnoreCase(kind)) {
             return new int[] {40, 40};
         }
         if ("wait".equalsIgnoreCase(kind)) {

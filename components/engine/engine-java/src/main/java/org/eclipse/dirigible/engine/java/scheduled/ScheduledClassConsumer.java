@@ -53,7 +53,11 @@ import org.springframework.stereotype.Component;
  * <p>
  * The {@code Job} row is registered under the {@link JavaJobExecutor#RUNTIME_LOCATION_PREFIX}
  * synthetic location so the job synchronizer does not reap it as a registry orphan. Hot-reload
- * re-registers the schedule; a genuinely unloaded class unschedules and removes its rows.
+ * re-registers the schedule <b>onto the existing row</b>, which is what preserves the operator's
+ * enable/disable choice: that flag belongs to the Jobs perspective, not to the code, so a
+ * registration carries it over instead of switching the job back on - a class load happens at every
+ * server start and on every client-Java rebuild. A genuinely unloaded class, or a job that a
+ * reloaded class no longer declares, unschedules and removes its rows.
  */
 @Component
 @Order(400)
@@ -105,7 +109,10 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
             return;
         }
 
-        unregister(info.fqn());
+        // Register what the class declares NOW, then drop only the names it no longer declares -
+        // rather than unregistering everything first. A re-registration must find (and update) the
+        // existing Job row, because that row carries operator state - above all the enabled flag,
+        // which a delete-then-recreate would silently reset to true (#6626).
         List<String> names = new ArrayList<>();
 
         if (jobHandler) {
@@ -126,9 +133,11 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
 
         if (names.isEmpty()) {
+            unregister(info.fqn());
             LOGGER.warn("Scheduled job [{}] produced no schedule.", info.fqn());
             return;
         }
+        retainOnly(info.fqn(), names);
         registered.put(info.fqn(), names);
     }
 
@@ -162,8 +171,15 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 // findByName THROWS when absent (it does not return null) - treat that as "new", and
                 // otherwise mutate the existing managed row so save() updates it rather than duplicating.
                 Job job;
+                boolean enabled = true;
                 try {
                     job = jobService.findByName(name);
+                    // The enabled flag belongs to the OPERATOR, not to the code: it is what the Jobs
+                    // perspective's enable/disable writes. Carry it over, so a disabled job stays
+                    // disabled across restarts and hot reloads instead of quietly firing again - and so
+                    // no spurious "job enabled" notification mail goes out (#6626). A brand-new job
+                    // starts enabled, like every other artefact-defined one.
+                    enabled = job.isEnabled();
                 } catch (Exception notFound) {
                     job = new Job();
                 }
@@ -174,7 +190,7 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
                 job.setEngine(JavaJobExecutor.ENGINE_JAVA);
                 job.setExpression(expression);
                 job.setSingleton(false);
-                job.setEnabled(true);
+                job.setEnabled(enabled);
                 job.setDescription("Client-Java scheduled job [" + handler + "]");
                 job.setType(Job.ARTEFACT_TYPE);
                 job.setLocation(JavaJobExecutor.RUNTIME_LOCATION_PREFIX + handler);
@@ -191,12 +207,32 @@ public class ScheduledClassConsumer implements JavaClassConsumer, DisposableBean
         }
     }
 
+    /**
+     * Drop the jobs a class registered before but no longer declares - a {@code @Scheduled} method that
+     * was renamed or removed. The ones it still declares were just re-registered onto their existing
+     * rows, so they keep their operator state.
+     */
+    private void retainOnly(String fqn, List<String> current) {
+        List<String> previous = registered.get(fqn);
+        if (previous == null) {
+            return;
+        }
+        List<String> stale = new ArrayList<>(previous);
+        stale.removeAll(current);
+        remove(stale);
+    }
+
     /** Unschedule + remove the Job rows a class previously registered (per tenant). */
     private void unregister(String fqn) {
         List<String> names = registered.remove(fqn);
         if (names == null) {
             return;
         }
+        remove(names);
+    }
+
+    /** Unschedule + delete the given job rows, per tenant. */
+    private void remove(List<String> names) {
         for (String name : names) {
             try {
                 tenantContext.executeForEachTenant(() -> {

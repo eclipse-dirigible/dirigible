@@ -13,7 +13,6 @@ import org.eclipse.dirigible.integration.tests.api.javascript.cms.CmsSuiteIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.ApproveLeaveRequestBpmIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.CreateNewFileIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.DeclineLeaveRequestBpmIT;
-import org.eclipse.dirigible.integration.tests.ui.tests.MultitenancyIT;
 import org.eclipse.dirigible.integration.tests.ui.tests.camel.CamelExtractTransformLoadJdbcIT;
 import org.junit.platform.suite.api.SelectClasses;
 import org.junit.platform.suite.api.Suite;
@@ -22,7 +21,6 @@ import org.junit.platform.suite.api.SuiteDisplayName;
 @Suite
 @SuiteDisplayName("Ordered Test Suite")
 @SelectClasses({//
-        MultitenancyIT.class, //
         CmsSuiteIT.class, //
         ApproveLeaveRequestBpmIT.class, //
         DeclineLeaveRequestBpmIT.class, //

@@ -97,6 +97,10 @@ document.addEventListener('alpine:init', () => {
       const val = slot.date + 'T' + slot.start;
       window.PineconeRouter.navigate('/${name}/create?${slotStartProperty}=' + encodeURIComponent(val));
     },
-    newEntity() { window.PineconeRouter.navigate('/${name}/create'); }
+    newEntity() { window.PineconeRouter.navigate('/${name}/create'); },
+
+    // Switch to the entity's own browse page (list / master / document list). The picker took over
+    // /${name}, so that layout browses at /${name}/list.
+    goList() { window.PineconeRouter.navigate('/${name}/list'); }
   }));
 }, { once: true });

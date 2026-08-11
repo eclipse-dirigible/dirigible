@@ -9,9 +9,12 @@
  */
 package org.eclipse.dirigible.components.base.endpoint;
 
+import org.eclipse.dirigible.components.base.http.uri.HostedEngineUris;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 /**
  * The Class HttpContextFilterFilterConfig.
@@ -20,17 +23,24 @@ import org.springframework.context.annotation.Configuration;
 public class HttpContextFilterConfig {
 
     /**
-     * Security filter registration bean.
+     * Security filter registration bean. The base patterns are extended with any URL patterns
+     * contributed by hosted engines (e.g. the externalized OData engine) via {@link HostedEngineUris}.
      *
      * @param httpContextFilter the security filter
+     * @param hostedEngineUris the hosted engine URI contributions
      * @return the filter registration bean
      */
     @Bean
-    public FilterRegistrationBean<HttpContextFilter> httpContextFilterRegistrationBean(HttpContextFilter httpContextFilter) {
+    public FilterRegistrationBean<HttpContextFilter> httpContextFilterRegistrationBean(HttpContextFilter httpContextFilter,
+            List<HostedEngineUris> hostedEngineUris) {
         FilterRegistrationBean<HttpContextFilter> filterRegistrationBean = new FilterRegistrationBean<>(httpContextFilter);
 
         filterRegistrationBean.setFilter(httpContextFilter);
-        filterRegistrationBean.addUrlPatterns("/services/*", "/public/*", "/odata/v2/*");
+        filterRegistrationBean.addUrlPatterns("/services/*", "/public/*");
+        for (HostedEngineUris engineUris : hostedEngineUris) {
+            engineUris.filterUrlPatterns()
+                      .forEach(filterRegistrationBean::addUrlPatterns);
+        }
 
         return filterRegistrationBean;
     }

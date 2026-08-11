@@ -12,6 +12,7 @@ package org.eclipse.dirigible.integration.tests.api;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -146,6 +147,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
+                  # postings source-FK copy (#6533): this counterparty FK is copied onto the posted
+                  # line, so an auto-posted Entry line carries the subledger dimension.
+                  - { name: Party,  kind: manyToOne, to: Party }
 
               # postings onCreate source (#6421): a booked payment has NO status lifecycle -
               # its INSERT is the posting event.
@@ -154,6 +158,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: date,   type: date, required: true }
                   - { name: amount, type: decimal }
+
+              # postings source-FK-copy counterparty (#6533): a plain nomenclature copied by FK id.
+              - name: Party
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, required: true, length: 100 }
 
               # first-class numbering, stampOn: create - the generated DAO allocates the real number
               # at insert from the tenant series that the module's AUTHORED .numbers artefact
@@ -187,6 +197,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 relations:
                   - { name: Entry, kind: manyToOne, to: Entry, composition: true, required: true }
                   - { name: Unit,  kind: manyToOne, to: Unit }
+                  # copied from Doc.Party by docPosting, and carried UNCHANGED onto the storno line (#6533).
+                  - { name: Party, kind: manyToOne, to: Party }
 
               # A master-detail (MANAGE_MASTER) entity carrying an EntityStatus: the master
               # layout must resolve the status FK to a label lookup and render it as a badge in
@@ -214,15 +226,24 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,    type: integer, primaryKey: true, generated: true }
                   - { name: name,  type: string, required: true, length: 200 }
                   - { name: email, type: string, required: true, unique: true, length: 320 }
+                  # The language this person's documents are rendered in (drives the notify languageFrom).
+                  - { name: locale, type: string, length: 5 }
                   # #6336: an input-format regex must survive Generate and be enforced server-side.
                   # Deliberately NOT on `email` - that is the identity and holds the USERNAME (`admin`).
                   - { name: contactEmail, type: string, length: 320, pattern: '^[^@]+@[^@]+\\.[a-z]{2,}$' }
 
+              # period is a month field: YYYY-MM string storage, month-picker widget on EVERY
+              # writable surface (power + my), a |format label token rendering "2026 July", and
+              # the schedule's `Period: now` below emitting the string shape (not LocalDate).
+              # audit: the act-as assertions below prove a delegated write carries the ACTING
+              # owner while CreatedBy keeps the REAL user.
               - name: Claim
-                label: "{note} ({Person.name})"
+                audit: true
+                label: "{note} ({Person.name}) {period|yyyy MMMM}"
                 fields:
                   - { name: id,   type: integer, primaryKey: true, generated: true }
                   - { name: note, type: string, length: 200 }
+                  - { name: period, type: month }
                   - { name: rate, type: decimal, sensitive: true }
                   - { name: totalCost, type: decimal }
                 relations:
@@ -295,9 +316,18 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 function: DocumentItem
                 fields:
                   - { name: id,     type: integer, primaryKey: true, generated: true }
+                  - { name: note,   type: string }
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Voucher, kind: manyToOne, to: Voucher, composition: true, required: true }
+
+              # Source of the computed create-from below (#6555): a Voucher is generated from a Slip
+              # with ONE synthetic line whose cells are expressions over the Slip (not a 1:1 mirror).
+              - name: Slip
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: label, type: string }
+                  - { name: total, type: decimal, precision: 18, scale: 2 }
 
               # documentItemsLayout: chat - the document master's line-items child renders as a
               # conversation thread (x-h-chat bubbles + a composer) instead of the editable table;
@@ -336,8 +366,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: Ticket, kind: manyToOne, to: Ticket, composition: true, required: true }
                   - { name: Person, kind: manyToOne, to: Person }
 
-              # view: range + a personal owner - the PERSONAL surface must render the range
-              # calendar (never the plain form+list), scoped to the MyController (U3 parity).
+              # view: range + a personal owner - the PERSONAL surface must render the range calendar
+              # (scoped to the MyController, U3 parity). Since #6547 the calendar is an ADDITIONAL page
+              # on BOTH shells: the entity keeps its own layout + form and browses at <Entity>/list,
+              # while the calendar owns the landing route.
               - name: Leave
                 view: range
                 calendar: { start: fromDate, end: toDate, title: Person }
@@ -347,6 +379,49 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: toDate, type: date, required: true }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person, personal: true }
+
+              # view: slots on a DOCUMENT master (#6547) - the picker is an additional page: the document
+              # layout survives it (slot-click creates a document), and the document list stays reachable
+              # at /<Entity>/list.
+              - name: Visit
+                function: Document
+                view: slots
+                slots: { start: startsAt, open: "09:00", close: "17:00", step: 15 }
+                fields:
+                  - { name: id,       type: integer, primaryKey: true, generated: true }
+                  - { name: startsAt, type: timestamp, required: true }
+              - name: VisitItem
+                function: DocumentItem
+                fields:
+                  - { name: id,   type: integer, primaryKey: true, generated: true }
+                  - { name: name, type: string, length: 100 }
+                relations:
+                  - { name: Visit, kind: manyToOne, to: Visit, composition: true, required: true }
+
+              # view: calendar on the document's LINE-ITEMS child (#6482) - the document's items PANE
+              # renders as the calendar (a day-grained line belongs on one), instead of the calendar
+              # markup being emitted and then filtered out of the secondary panels. The document layout
+              # itself (header, totals, Print) is untouched. The personal owner makes it a personal root
+              # too, so the PERSONAL document surface is covered by the same fixture.
+              - name: Roster
+                function: Document
+                fields:
+                  - { name: id,        type: integer, primaryKey: true, generated: true }
+                  - { name: reference, type: string, length: 40 }
+                  - { name: hours,     type: decimal, precision: 18, scale: 2, aggregate: true }
+                relations:
+                  - { name: Owner, kind: manyToOne, to: Person, personal: true }
+              - name: RosterItem
+                function: DocumentItem
+                view: calendar
+                calendar: { start: day, title: Person, initialView: month }
+                fields:
+                  - { name: id,    type: integer, primaryKey: true, generated: true }
+                  - { name: day,   type: date, required: true }
+                  - { name: hours, type: decimal, precision: 18, scale: 2 }
+                relations:
+                  - { name: Roster, kind: manyToOne, to: Roster, composition: true, required: true }
+                  - { name: Person, kind: manyToOne, to: Person }
 
               # partner: the EXTERNAL-partner mirror of personal - PartnerTicket is owned by a Person
               # (reusing identity: email; the admin seed maps the IT user), with a sensitive field.
@@ -402,6 +477,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: id,     type: integer, primaryKey: true, generated: true }
                   - { name: note,   type: string,  length: 200 }
                   - { name: amount, type: decimal, aggregate: true }
+                  # expression-calculated from the aggregate: the document-totals recompute must
+                  # refresh it on every line change, or it stays stale/null until a header save
+                  # (the unpaid-invoice Balance printed empty).
+                  - { name: balanceDue, type: decimal, calculatedOnCreate: "Amount", calculatedOnUpdate: "Amount" }
                 relations:
                   - { name: Person, kind: manyToOne, to: Person }
                   - { name: Status, kind: manyToOne, to: EntryStatus, function: EntityStatus, init: 1 }
@@ -412,6 +491,9 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { name: amount, type: decimal }
                 relations:
                   - { name: Bill, kind: manyToOne, to: Bill, composition: true, required: true }
+                  # an item-level to-one: the print feeder must feed it per row so an items-table
+                  # column can render {{Unit}} (the label, translated) or {{Unit.Name}}
+                  - { name: Unit, kind: manyToOne, to: Unit }
 
               # keyed cross-entity aggregate: a signed ledger summed per (Person, Unit) into a
               # materialised total row keyed by the same two FKs. Ledger.amount is SENSITIVE and
@@ -503,7 +585,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 generate:
                   to: Claim
                   map: { Person: id }
-                  defaults: { note: monthly }
+                  defaults: { note: monthly, Period: now }
                   children:
                     - to: ClaimLine
                       parent: Claim
@@ -609,6 +691,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   subject: "Bill {note}"
                   body: "Please find the bill attached."
                   attach: print
+                  # languageFrom: the counterparty decides the language the attached print renders in.
+                  languageFrom: Person.locale
 
             # postings + reverses (red storno): a POSTED Doc posts one balanced Entry (debit +
             # credit); a VOIDED Doc posts the reversal - the SAME lines negated on the SAME sides,
@@ -620,7 +704,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 backReference: Doc
                 map: { date: date }
                 items:
-                  - { debit: "Amount" }
+                  # Party: source-FK copy (#6533) - the debit line carries Doc.Party as its dimension.
+                  - { debit: "Amount", Party: Party }
                   - { credit: "Amount" }
               - name: docStorno
                 event: { onTransition: Doc, when: "Status == 3" }
@@ -636,6 +721,22 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                   - { debit: "Amount" }
                   - { credit: "Amount" }
 
+            # Computed create-from item lines (#6555): the list form of generates.items builds a fixed
+            # synthetic line from EXPRESSIONS over the source Slip - a Calc amount, a {} interpolated
+            # string, and a when guard - instead of mirroring a source child 1:1. The target items child
+            # (VoucherLine) is resolved automatically. Enforcement lives in the generated Generate.java.
+            generates:
+              - name: voucher-from-slip
+                from: Slip
+                to: Voucher
+                defaults:
+                  refNumber: "AUTO"
+                  date: now
+                items:
+                  - note: "Slip {label}"
+                    amount: "Total * 2"
+                    when: "Total != 0"
+
             seeds:
               - name: people
                 entity: Person
@@ -647,6 +748,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 rows:
                   - { id: 1, note: mine,    rate: 50, Person: 1 }
                   - { id: 2, note: foreign, rate: 70, Person: 2 }
+              - name: parties
+                entity: Party
+                rows:
+                  - { id: 1, name: Acme }
               - name: entry-statuses
                 entity: EntryStatus
                 rows:
@@ -748,6 +853,21 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String snapshotController = contentOf("gen/emission/api/snapshot/SnapshotController.java");
         assertTrue(snapshotController.contains("requireMutable") && snapshotController.contains("append-only"),
                 "immutable: true must emit the unconditional append-only gate in the REST controller");
+        // The immutability UI pre-check (GET /{id}/mutable): the controller exposes it and the
+        // generated pages gate their Edit affordances on it - the form/document pages ask the
+        // endpoint (so a directly typed /edit URL opens read-only), while the browse tables use
+        // the baked status check per row (no per-row API call). The PUT/DELETE 409 stays the
+        // authoritative guard.
+        assertTrue(entryController.contains("/{id}/mutable") && entryController.contains("isMutable("),
+                "immutableWhen must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
+        assertTrue(snapshotController.contains("/{id}/mutable"),
+                "immutable: true must emit the GET /{id}/mutable pre-check endpoint in the REST controller");
+        String entryFormPage = contentOf("gen/emission/js/components/pages/Entry/EntryFormPage.js");
+        assertTrue(entryFormPage.contains("/mutable"),
+                "the edit form page must ask the mutable pre-check so a direct /edit URL opens read-only");
+        String entryMasterPage = contentOf("gen/emission/js/components/pages/Entry/EntryMasterPage.js");
+        assertTrue(entryMasterPage.contains("isRowImmutable"),
+                "the browse page must gate row Edit/Delete on the baked per-row immutability check");
         assertTrue(entryController.contains("must reference a leaf"),
                 "leafOnly must emit the server-side children check in the REST controller");
 
@@ -807,6 +927,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertFalse(billRepository.replaceAll("\\s+", " ")
                                   .contains("recalculate(entity); return super.update(entity);"),
                 "the document-totals recompute must not fall back to the full-row write");
+        // recalculate() also refreshes the header's EXPRESSION-calculated fields (balanceDue derives
+        // from the aggregate amount) and persists them in the same targeted write - actions are
+        // deliberately not run there.
+        String billHeaderRepository = contentOf("gen/emission/data/bill/BillRepository.java");
+        assertTrue(billHeaderRepository.contains("totals.put(\"BalanceDue\", entity.BalanceDue)"),
+                "the totals recompute must persist the refreshed calculated field: " + billHeaderRepository);
         String billLineRepository = contentOf("gen/emission/data/bill/BillLineRepository.java");
         assertTrue(billLineRepository.contains("new BillRepository().recalculate("),
                 "a line change must trigger the master's document-totals recompute");
@@ -900,6 +1026,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimMy.contains("eq(\"Email\", username)"), "personal must emit the identity match against the logged-in username");
         assertTrue(claimMy.contains("entity.Rate = null"), "sensitive must emit the response scrub in the personal controller");
         assertTrue(claimMy.contains("entity.Person = me"), "personal must force the owner FK server-side on create");
+        // act-as (delegated entry): the identity resolution reads the EFFECTIVE user, so an armed
+        // acting identity redirects the personal surface while audit stamping stays on getName().
+        assertTrue(claimMy.contains("User.getEffectiveName()"),
+                "the personal identity resolution must read the effective (act-as aware) user");
         // Auto-sensitive derivation (U5 class): totalCost is NOT authored sensitive, but it sums the
         // sensitive ClaimLine.cost into the personal-rooted Claim - the parser must propagate the
         // flag so the total is scrubbed from the personal wire exactly like the leaf value.
@@ -1031,7 +1161,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(spaIndex.contains("/my/Claim"), "the SPA must route the personal pages");
         String myPerspective = contentOf("gen/emission/perspectives/my/Claim/perspective.extension");
         assertTrue(myPerspective.contains("application-personal-perspectives"),
-                "the personal perspective must register on the My Shell's extension point");
+                "the personal perspective must register on the Personal Shell's extension point");
+        // The Personal Shell has a single navigation group, declared as the DEFAULT of its extension
+        // point, so the shell owns the placement. A baked-in groupId would be a platform constant this
+        // artifact must agree with forever - and the platform-side rename that invalidated it made every
+        // personal page vanish silently (#6646).
+        assertFalse(contentOf("gen/emission/perspectives/my/Claim/perspective.js").contains("groupId"),
+                "a personal perspective must not bake in the shell's navigation group id");
 
         // partner: the EXTERNAL-partner surface - an ADDITIONAL scoped controller (identity match +
         // forced owner FK + sensitive strip) and a perspective on the DISJOINT Partner-shell point.
@@ -1045,6 +1181,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the partner perspective must register on the Partner shell's DISJOINT extension point");
         assertTrue(!partnerPerspective.contains("application-personal-perspectives"),
                 "the partner perspective must NOT register on the personal point (disjoint by construction)");
+        assertFalse(contentOf("gen/emission/perspectives/partner/PartnerTicket/perspective.js").contains("groupId"),
+                "a partner perspective must not bake in the shell's navigation group id (#6646)");
         String partnerList = contentOf("gen/emission/js/components/pages/partner/PartnerTicketPartnerListPage.js");
         assertTrue(partnerList.contains("PartnerTicketPartnerController"),
                 "the partner list page must talk to the scoped partner controller");
@@ -1059,6 +1197,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(job.contains("savedTarget"), "the scheduled generation must save the parent and keep its id for the children");
         assertTrue(job.contains("getDayOfWeek"), "a days child must iterate the working days of the month");
         assertTrue(job.contains("ClaimLineRepository"), "the child rows must be saved through the child's repository");
+        // type-aware now: a month field is a String on the generated entity, so the default must
+        // render the YYYY-MM string - the untyped LocalDate.now() would not even compile.
+        assertTrue(job.contains(".Period = java.time.YearMonth.now().toString()"),
+                "a month field's `now` default must render the YYYY-MM string, not LocalDate");
+
+        // month widget: the YYYY-MM field renders the Harmonia month picker on BOTH writable
+        // surfaces - the power form and the personal form (my-shell parity).
+        assertTrue(contentOf("gen/emission/views/Claim/Claim-form.html").contains("x-h-month-picker"),
+                "a month field must render the Harmonia month picker on the power form");
+        assertTrue(contentOf("gen/emission/views/my/Claim-form.html").contains("x-h-month-picker"),
+                "a month field must render the Harmonia month picker on the personal form too");
 
         // documentItemsLayout: chat - the .model marker is resolved (body property from the child's
         // messageBody field), and the Harmonia document view + page render the items pane as an
@@ -1106,8 +1255,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                 "the personal document's child calendar must resolve a relation title via the label lookup");
         assertTrue(myTicketDoc.contains("onChildEventClick"), "the personal document must render the child calendar panel markup");
 
-        // view: range/calendar + personal - the personal surface renders the calendar (never the
-        // plain form+list), reads through the scoped controller, and /my/<Entity> lands on it.
+        // view: range/calendar + personal - the personal surface renders the calendar, reads through
+        // the scoped controller, and /my/<Entity> lands on it.
         String myLeaveCalendar = contentOf("gen/emission/js/components/pages/my/LeaveMyCalendarPage.js");
         assertTrue(myLeaveCalendar.contains("LeaveMyController"), "the personal calendar must read through the scoped controller");
         String myLeaveView = contentOf("gen/emission/views/my/Leave-calendar.html");
@@ -1121,6 +1270,63 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String leaveCalendar = contentOf("gen/emission/js/components/pages/Leave/LeaveCalendarPage.js");
         assertTrue(leaveCalendar.contains("titleLookup"), "the power calendar must resolve a relation title through a label lookup");
         assertTrue(myLeaveCalendar.contains("titleLookup"), "the personal calendar must resolve a relation title through a label lookup");
+
+        // #6547: the calendar is an ADDITIONAL page - the entity's own layout survives it. The range
+        // root above keeps its MANAGE list + form pages (the class where declaring a calendar silently
+        // deleted the entity's editing surface), the calendar owns the landing route, and the layout's
+        // browse page moves to /<Entity>/list with a switch between the two on both pages.
+        assertTrue(shellIndex.contains("x-route=\"/Leave\" x-template.target.app=\"./views/Leave/Leave-calendar.html\""),
+                "a calendar entity must land on its calendar");
+        assertTrue(shellIndex.contains("x-route=\"/Leave/list\" x-template.target.app=\"./views/Leave/Leave-manage-list.html\""),
+                "the entity's own browse page must stay reachable at /<Entity>/list");
+        assertTrue(shellIndex.contains("x-route=\"/Leave/create\" x-template.target.app=\"./views/Leave/Leave-form.html\""),
+                "the entity's own create/edit form must still be routed");
+        assertTrue(shellIndex.contains("x-route=\"/my/Leave/list\" x-template.target.app=\"./views/my/Leave-list.html\""),
+                "the personal list must stay reachable at /my/<Entity>/list");
+        assertTrue(contentOf("gen/emission/views/Leave/Leave-manage-list.html").contains("goCalendar()"),
+                "the entity's browse page must offer the switch to its calendar");
+        assertTrue(contentOf("gen/emission/views/Leave/Leave-calendar.html").contains("goList()"),
+                "the calendar must offer the switch back to the entity's own browse page");
+        assertTrue(contentOf("gen/emission/views/my/Leave-list.html").contains("goCalendar()"),
+                "the personal list must offer the switch to the personal calendar");
+
+        // The slot picker follows the same additive rule: a DOCUMENT master declaring view: slots keeps
+        // its document layout (slot-click creates a document, not a bare form), the document list stays
+        // at /<Entity>/list, and the two browse pages switch to each other.
+        assertTrue(shellIndex.contains("x-route=\"/Visit\" x-template.target.app=\"./views/Visit/Visit-slots.html\""),
+                "a slots entity must land on its picker");
+        assertTrue(shellIndex.contains("x-route=\"/Visit/list\" x-template.target.app=\"./views/Visit/Visit-manage-list.html\""),
+                "the document list of a slots entity must stay reachable at /<Entity>/list");
+        assertTrue(shellIndex.contains("x-route=\"/Visit/create\" x-template.target.app=\"./views/Visit/Visit-document.html\""),
+                "slot-click must create through the DOCUMENT editor, not a plain form");
+        assertTrue(contentOf("gen/emission/views/Visit/Visit-slots.html").contains("goList()"),
+                "the picker must offer the switch to the entity's own browse page");
+        assertTrue(contentOf("gen/emission/views/Visit/Visit-manage-list.html").contains("goSlots()"),
+                "the document list must offer the switch back to the picker");
+
+        // #6482: a document whose LINE-ITEMS child declares view: calendar renders the items PANE as
+        // the calendar - on the power, personal and partner document surfaces alike. This is the
+        // authored-but-unconsumed class: the markup used to be emitted and then filtered out by name.
+        String rosterDoc = contentOf("gen/emission/views/Roster/Roster-document.html");
+        assertTrue(rosterDoc.contains("x-h-calendar=\"itemsCalCfg\""), "the document's items pane must render as a calendar");
+        assertTrue(rosterDoc.contains("onItemsEventClick") && rosterDoc.contains("onItemsDateClick"),
+                "the items calendar must be wired to the line dialog (edit on event, add on empty day)");
+        assertTrue(!rosterDoc.contains("x-for=\"col in tableColumns\""), "the items TABLE must be replaced, not rendered alongside");
+        assertTrue(rosterDoc.contains("askDeleteDraft()"), "the line dialog must offer Delete - the calendar pane has no per-row menu");
+        String rosterPage = contentOf("gen/emission/js/components/pages/Roster/RosterDocumentPage.js");
+        assertTrue(rosterPage.contains("window.HarmoniaCalendar.events"), "the items events must come from the shared calendar mapping");
+        assertTrue(rosterPage.contains("this.itemsDef.calendar"),
+                "the items calendar must be configured from the child's detail registration, not baked at generation time");
+        assertTrue(contentOf("gen/emission/js/components/pages/Roster/RosterItem.detail.js").contains("calendar: {"),
+                "the items child's registration must carry the calendar config the document page reads");
+        // The PERSONAL document surface renders the same items calendar through its scoped controller
+        // (the partner document is the mechanical mirror of this one).
+        String myRosterDoc = contentOf("gen/emission/views/my/Roster-document.html");
+        assertTrue(myRosterDoc.contains("x-h-calendar=\"itemsCalCfg\""),
+                "the personal document's items pane must render as a calendar too");
+        String myRosterPage = contentOf("gen/emission/js/components/pages/my/RosterMyDocumentPage.js");
+        assertTrue(myRosterPage.contains("window.HarmoniaCalendar.events") && myRosterPage.contains("RosterItemMyController"),
+                "the personal items calendar must read through the scoped items controller");
 
         // The app-test manifest carries the personal UI-parity metadata the runner's my flow
         // drives (wave 2): the /my route, the layout family the personal page belongs to, and
@@ -1157,8 +1363,29 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(sendBill.contains("Mail.send("), "a transition's notify must emit the actual send call");
         assertTrue(sendBill.contains("\"type\", \"attachment\"") && sendBill.contains("application/pdf"),
                 "attach: print must emit a PDF attachment part");
-        assertTrue(sendBill.contains("Print.render(\"Bill\", \"en\"") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
+        assertTrue(sendBill.contains("Print.render(\"Bill\",") && sendBill.contains("new BillPrintFeeder().feed(entity.Id)"),
                 "the attachment must be the generated feeder's payload rendered by the server-side print engine");
+        // The render language is never hardcoded: languageFrom: Person.locale loads the counterparty
+        // and reads it off the record, falling back to the first entry of the tenant-resolved
+        // application language set when the chain is null or blank.
+        assertFalse(sendBill.contains("Print.render(\"Bill\", \"en\""),
+                "the attachment language must come from the languageFrom knob, not a hardcoded literal");
+        assertTrue(sendBill.contains("new gen.emission.data.person.PersonRepository().findById(entity.Person)"),
+                "languageFrom must load the language source off the record's FK");
+        assertTrue(sendBill.contains("attachLanguageSource.Locale"), "the language must be read off the person's locale");
+        assertTrue(sendBill.contains("org.eclipse.dirigible.sdk.print.Print.defaultLanguage()"),
+                "a null/blank locale must fall back to the application language set at send time");
+
+        // The feeder resolves the LINE-ITEM to-one relations per row - an items-table column renders
+        // {{Unit}} (the target's label, through the repository so the translation overlay applies) or
+        // descends into {{Unit.Name}} - with one load per DISTINCT key, not one per row.
+        String billFeeder = contentOf("gen/events/emission/BillPrintFeeder.java");
+        assertTrue(billFeeder.contains("itemUnitCache"), "item relation lookups are cached per distinct key: " + billFeeder);
+        assertTrue(billFeeder.contains("new gen.emission.data.settings.UnitRepository().findById(item.Unit)"),
+                "the item's Unit is loaded through its generated repository");
+        assertTrue(billFeeder.contains("itemUnitMap.put(\"__label\", itemUnit.Name)"),
+                "the item relation map carries the __label the binder renders for a bare {{Unit}}");
+        assertTrue(billFeeder.contains("im.put(\"Unit\", itemUnitMap)"), "the map is hung under the relation's own key on the row");
         assertTrue(sendBill.contains("catch (Exception"), "a transition's mail must be fail-soft - the status flip has already committed");
 
         // (2) On a PROCESS STEP - a JavaDelegate whose work IS the message: it re-loads the trigger
@@ -1195,6 +1422,13 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         String basePosting = contentOf("gen/events/emission/DocPostingPosting.java");
         assertTrue(basePosting.contains("candidate.Storno == null"), "the reversed posting's idempotency guard must exclude reversal rows");
         assertTrue(basePosting.contains("-Doc-transitioned"), "a status-triggered posting must bind the -transitioned topic");
+        // source-FK copy (#6533): a to-one relation item cell copies the source FK verbatim onto the
+        // line - no Calc, no negation, and it must carry through UNCHANGED onto the reversal line.
+        assertTrue(basePosting.contains("item.Party = source.Party;"),
+                "a to-one relation item cell must copy the source FK onto the posted line");
+        assertTrue(!basePosting.contains("Calc.eval(\"Party\""), "the FK copy must not go through Calc");
+        assertTrue(stornoPosting.contains("item.Party = source.Party;"),
+                "the reversal must carry the copied source FK dimension UNCHANGED (not negated)");
 
         // postings onCreate (#6421): a source with no status lifecycle posts on its INSERT - the
         // handler binds the source's bare create topic (creates publish unsuffixed) and carries no
@@ -1223,6 +1457,10 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(claimRepository.contains("computeName"), "label must emit the display-name computation into the repository");
         assertTrue(claimRepository.contains("related.Name"),
                 "a one-hop label token must load the related record and read its display property");
+        // A month field is a YYYY-MM String (not a TemporalAccessor), so a |format label token
+        // must parse it back to a temporal - otherwise the label degrades to the raw "2026-07".
+        assertTrue(claimRepository.contains("YearMonth.parse"),
+                "a |format token on a month field must parse the YYYY-MM string back to a temporal");
         // A workflow setter/writer targeted write keeps the stored display Name current: the label
         // repository OVERRIDES updateProperties to recompute it on that path too.
         assertTrue(claimRepository.contains("public int updateProperties(") && claimRepository.contains("computeName(entity)"),
@@ -1263,10 +1501,27 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         assertTrue(adminPage.contains("loadLookups"), "the admin page must resolve relation ids to labels");
         assertTrue(adminPage.contains("\"readonly\":true"), "identity/calculated/audit columns must be marked read-only");
         String adminPerspective = contentOf("gen/emission/perspectives/admin/perspective.js");
-        assertTrue(adminPerspective.contains("kind: 'ADMIN'") && adminPerspective.contains("groupId: 'admin'"),
-                "the admin perspective must declare the ADMIN kind and group");
+        assertTrue(adminPerspective.contains("kind: 'ADMIN'"), "the admin perspective must declare the ADMIN kind");
+        assertFalse(adminPerspective.contains("groupId"), "an admin perspective must not bake in the shell's navigation group id (#6646)");
         assertTrue(contentOf("gen/emission/perspectives/admin/perspective.extension").contains("application-admin-perspectives"),
                 "the admin perspective must register on the admin extension point (never the application/my/partner ones)");
+
+        // generates computed item lines (#6555): the create-from controller builds ONE synthetic
+        // VoucherLine whose cells are expressions over the loaded `source` Slip - a Calc amount rounded
+        // to the target field's scale, a {} interpolated string, and a null-safe Calc `when` guard -
+        // then re-points it at the saved Voucher through the target repository. The Calc import proves
+        // the numeric-expression path is wired.
+        String generate = contentOf("gen/events/emission/VoucherFromSlipGenerate.java");
+        assertTrue(generate.contains("import org.eclipse.dirigible.sdk.utils.Calc;"),
+                "a computed item line must import Calc for its numeric expressions");
+        assertTrue(generate.contains("Calc.eval(\"Total * 2\", source, 2)"),
+                "a numeric item-line cell must emit a Calc expression over the source, rounded to the target scale");
+        assertTrue(generate.contains("\"Slip \" + String.valueOf(source.Label)"),
+                "a {field} string item-line cell must emit source interpolation");
+        assertTrue(generate.contains("Calc.eval(\"Total\", source, 6).compareTo(new java.math.BigDecimal(\"0\")) != 0"),
+                "an item-line when cell must emit a null-safe Calc row guard");
+        assertTrue(generate.contains("VoucherLineEntity item") && generate.contains("item.Voucher = saved.Id;"),
+                "the computed line must write into the auto-resolved target items child and re-point it at the saved master");
     }
 
     /** Layer 2 (the outermost): the published app enforces the features over REST. */
@@ -1341,6 +1596,54 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .post(API + "/voucher/VoucherController")
                                                  .then()
                                                  .statusCode(400));
+
+        // generates computed item lines (#6555) at the outermost layer: create a Slip, fire the
+        // create-from, and assert the Voucher was born with ONE computed line - amount = Total * 2
+        // (Calc arithmetic over the source), note = "Slip <label>" ({} interpolation). This is the
+        // capability that did not exist before: a create-from that builds a COMPUTED line, not a
+        // 1:1 clone of a source child.
+        AtomicInteger slipId = new AtomicInteger();
+        restAssuredExecutor.execute(() -> slipId.set(given().contentType("application/json")
+                                                            .body("{\"Label\":\"March\",\"Total\":21}")
+                                                            .when()
+                                                            .post(API + "/slip/SlipController")
+                                                            .then()
+                                                            .statusCode(200)
+                                                            .extract()
+                                                            .path("Id")));
+        AtomicInteger generatedVoucherId = new AtomicInteger();
+        // The generated create-from controller returns Json.stringify(saved) as a String, which the SDK
+        // serves as text/plain - so parse the body as JSON explicitly rather than RestAssured's
+        // content-type-driven .path() (which only maps a JSON/XML response).
+        restAssuredExecutor.execute(() -> {
+            String voucher = given().contentType("application/json")
+                                    .body("{\"id\":" + slipId.get() + "}")
+                                    .when()
+                                    .post("/services/java/" + PROJECT + "/gen/events/emission/VoucherFromSlipGenerate/run")
+                                    .then()
+                                    .statusCode(200)
+                                    .extract()
+                                    .asString();
+            generatedVoucherId.set(io.restassured.path.json.JsonPath.from(voucher)
+                                                                    .getInt("Id"));
+        });
+        restAssuredExecutor.execute(() -> {
+            int voucherId = generatedVoucherId.get();
+            String matching = "findAll { it.Voucher == " + voucherId + " }";
+            io.restassured.path.json.JsonPath lines = given().when()
+                                                             .get(API + "/voucher/VoucherLineController")
+                                                             .then()
+                                                             .statusCode(200)
+                                                             .extract()
+                                                             .jsonPath();
+            assertEquals(1, lines.getList(matching)
+                                 .size(),
+                    "the computed create-from must produce exactly one synthetic line");
+            // amount = Total(21) * 2, computed by Calc over the source (not a copied literal).
+            assertEquals(42.0f, lines.getFloat(matching + ".Amount[0]"), 0.001f);
+            // note = "Slip " + the source's label, via {} interpolation.
+            assertEquals("Slip March", lines.getString(matching + ".Note[0]"));
+        });
 
         // #6336 pattern: a malformed e-mail must be rejected by the generated controller, and a
         // well-formed one accepted - the regex authored in the intent is what actually runs.
@@ -1433,6 +1736,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/entry/EntryController/" + entryId)
                                                  .then()
                                                  .statusCode(409));
+        // ...and the UI pre-check endpoint reports it, so the generated pages disable Edit up front.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + entryId + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
 
         // immutable: true (append-only): a snapshot can be created, then never edited or deleted.
         AtomicInteger snapshot = new AtomicInteger();
@@ -1454,6 +1763,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .delete(API + "/snapshot/SnapshotController/" + snapshot.get())
                                                  .then()
                                                  .statusCode(409));
+        // An append-only record reports immutable from the moment it exists.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/snapshot/SnapshotController/" + snapshot.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(false)));
 
         // transitions: a fresh DRAFT entry cancels (200, status CANCELLED)...
         String transitionRun = "/services/java/" + PROJECT + "/gen/events/emission/CancelEntryTransition/run";
@@ -1466,6 +1781,12 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                  .statusCode(200)
                                                                  .extract()
                                                                  .path("Id")));
+        // While DRAFT the pre-check reports the record editable (the Edit affordances stay live).
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryController/" + cancellable.get() + "/mutable")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("mutable", equalTo(true)));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + cancellable.get() + "}")
                                                  .when()
@@ -1517,6 +1838,25 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                           .statusCode(200)
                                                           .extract()
                                                           .path("Id")));
+        // A line change must refresh the header's expression-calculated field in the same recompute:
+        // balanceDue (= amount) follows the aggregate the moment the line lands - it must never stay
+        // null/stale until an explicit header save (the unpaid-invoice Balance printed empty).
+        restAssuredExecutor.execute(() -> given().contentType("application/json")
+                                                 .body("{\"Amount\":250,\"Bill\":" + bill.get() + "}")
+                                                 .when()
+                                                 .post(API + "/bill/BillLineController")
+                                                 .then()
+                                                 .statusCode(200));
+        restAssuredExecutor.execute(() -> {
+            Object balanceDue = given().when()
+                                       .get(API + "/bill/BillController/" + bill.get())
+                                       .then()
+                                       .statusCode(200)
+                                       .extract()
+                                       .path("BalanceDue");
+            assertTrue(balanceDue instanceof Number && Math.abs(((Number) balanceDue).doubleValue() - 250.0) < 0.001,
+                    "the calculated header field must follow the totals recompute, got: " + balanceDue);
+        });
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"id\":" + bill.get() + "}")
                                                  .when()
@@ -1528,7 +1868,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
         // postings: posting a Doc creates the balanced Entry (async handler - poll)...
         AtomicInteger doc = new AtomicInteger();
         restAssuredExecutor.execute(() -> doc.set(given().contentType("application/json")
-                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250}")
+                                                         .body("{\"Date\":\"2026-01-17\",\"Amount\":250,\"Party\":1}")
                                                          .when()
                                                          .post(API + "/doc/DocController")
                                                          .then()
@@ -1551,6 +1891,16 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                                    .extract()
                                                                    .path("find { it.Doc == " + doc.get() + " && it.Storno == null }.Id")),
                 30);
+        // source-FK copy (#6533): the debit line copied Doc.Party as its dimension; the credit line
+        // (no Party cell) carries none.
+        restAssuredExecutor.execute(() -> given().when()
+                                                 .get(API + "/entry/EntryLineController")
+                                                 .then()
+                                                 .statusCode(200)
+                                                 .body("findAll { it.Entry == " + originalEntry.get() + " && it.Party == 1 }.size()",
+                                                         equalTo(1))
+                                                 .body("findAll { it.Entry == " + originalEntry.get() + " && it.Party == null }.size()",
+                                                         equalTo(1)));
         // ...and reverses: voiding the Doc creates the red storno - the SAME lines negated on the
         // SAME sides, linked to the original through the storno self-relation.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
@@ -1577,7 +1927,11 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
                                                          + " && it.Debit != null && it.Debit < 0 }.size()", equalTo(1))
                                                  .body("findAll { it.Entry == " + reversalEntry.get()
-                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1)));
+                                                         + " && it.Credit != null && it.Credit < 0 }.size()", equalTo(1))
+                                                 // storno carry-through (#6533): the reversal's debit line
+                                                 // carries the SAME Party dimension, unnegated.
+                                                 .body("findAll { it.Entry == " + reversalEntry.get() + " && it.Party == 1 }.size()",
+                                                         equalTo(1)));
 
         // postings onCreate (#6421): a booked Payment has no status lifecycle - its INSERT posts
         // the balanced Entry (async handler - poll), back-referenced through Entry.Payment.
@@ -1633,15 +1987,17 @@ class IntentEmissionCoverageIT extends IntegrationTest {
 
         // Writes force the owner and ignore the sensitive field, whatever the client sends.
         restAssuredExecutor.execute(() -> given().contentType("application/json")
-                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999}")
+                                                 .body("{\"Note\":\"spoofed\",\"Person\":2,\"Rate\":999,\"Period\":\"2026-07\"}")
                                                  .when()
                                                  .post(API + "/claim/ClaimMyController")
                                                  .then()
                                                  .statusCode(200)
                                                  .body("Person", equalTo(1))
                                                  .body("Rate", nullValue())
-                                                 // label: the stored display name computed on write - "{note} ({Person.name})".
-                                                 .body("Name", equalTo("spoofed (Admin)")));
+                                                 // label: the stored display name computed on write -
+                                                 // "{note} ({Person.name}) {period|yyyy MMMM}"; the month
+                                                 // value formats through the pattern, never the raw 2026-07.
+                                                 .body("Name", equalTo("spoofed (Admin) 2026 July")));
         restAssuredExecutor.execute(() -> given().contentType("application/json")
                                                  .body("{\"Note\":\"edited\",\"Person\":2,\"Rate\":999}")
                                                  .when()
@@ -1690,17 +2046,109 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .statusCode(200)
                                                  .body("$", hasSize(1)));
 
-        // My Shell (phase C): the shell page is served and aggregates the published personal
+        // ---- Act as (delegated entry): an entitled user arms an acting identity for the SESSION
+        // and the personal surfaces serve THAT person's world - the manager-does-the-entry mode.
+        // The override lives in the server-side session, so the sequence pins one session.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.filter.session.SessionFilter session = new io.restassured.filter.session.SessionFilter();
+            given().filter(session)
+                   .when()
+                   .get("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("entitled", equalTo(true))
+                   .body("actingAs", nullValue());
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"username\":\"other@example.com\"}")
+                   .when()
+                   .put("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("actingAs", equalTo("other@example.com"));
+            // The my list now serves the ACTING person's rows - and the sensitive strip still holds.
+            given().filter(session)
+                   .when()
+                   .get(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.Person != 2 }.size()", equalTo(0))
+                   .body("findAll { it.Note == 'foreign' }.size()", equalTo(1))
+                   .body("[0].Rate", nullValue());
+            // A write goes under the ACTING identity, while the audit column keeps the REAL user -
+            // the record shows whose it is AND who really entered it.
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"Note\":\"delegated\",\"Rate\":123}")
+                   .when()
+                   .post(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("Person", equalTo(2))
+                   .body("Rate", nullValue())
+                   .body("CreatedBy", equalTo("admin"));
+            // personalReadOnly still refuses writes - acting as the owner does not grant authoring.
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"Days\":5}")
+                   .when()
+                   .post(API + "/balance/BalanceMyController")
+                   .then()
+                   .statusCode(403);
+            // Disarm restores self - the my list is the real user's again.
+            given().filter(session)
+                   .when()
+                   .delete("/services/core/actas")
+                   .then()
+                   .statusCode(200)
+                   .body("actingAs", nullValue());
+            given().filter(session)
+                   .when()
+                   .get(API + "/claim/ClaimMyController")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.Person != 1 }.size()", equalTo(0));
+        });
+        // While armed, the Inbox's assignee query serves the ACTING person's personal-assigned
+        // tasks - the delegated claim's confirm task, which the real user could never see before.
+        // Retried (the task spawns off the create event); every step here is idempotent.
+        restAssuredExecutor.execute(() -> {
+            io.restassured.filter.session.SessionFilter session = new io.restassured.filter.session.SessionFilter();
+            given().filter(session)
+                   .contentType("application/json")
+                   .body("{\"username\":\"other@example.com\"}")
+                   .when()
+                   .put("/services/core/actas")
+                   .then()
+                   .statusCode(200);
+            given().filter(session)
+                   .when()
+                   .get("/services/inbox/tasks?type=assigned")
+                   .then()
+                   .statusCode(200)
+                   .body("findAll { it.assignee == 'other@example.com' }.size()", greaterThanOrEqualTo(1));
+            given().filter(session)
+                   .when()
+                   .delete("/services/core/actas")
+                   .then()
+                   .statusCode(200);
+        }, 30);
+
+        // Personal Shell (phase C): the shell page is served and aggregates the published personal
         // perspective through the application-personal-perspectives extension point.
         restAssuredExecutor.execute(() -> given().when()
-                                                 .get("/services/web/my/index.html")
+                                                 .get("/services/web/personal/index.html")
                                                  .then()
                                                  .statusCode(200));
+        // Assert the perspective is INSIDE the shell's navigation group, not merely present somewhere in
+        // the response: the aggregator places perspectives by group, and one it cannot place used to be
+        // dropped, leaving the group rendered empty with no diagnostic anywhere (#6646).
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-personal-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString("emission-test-my-Claim")),
+                                                 .body("perspectives.find { it.id == 'personal' }.items.id",
+                                                         hasItem("emission-test-my-Claim")),
                 30);
 
         // partner: the partner controller scopes to the logged-in partner (admin -> Person 1); a
@@ -1728,7 +2176,7 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-admin-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString(PROJECT + "-admin")),
+                                                 .body("perspectives.find { it.id == 'admin' }.items.id", hasItem(PROJECT + "-admin")),
                 30);
         restAssuredExecutor.execute(() -> given().when()
                                                  .get("/services/web/" + PROJECT + "/gen/emission/admin/index.html")
@@ -1753,7 +2201,8 @@ class IntentEmissionCoverageIT extends IntegrationTest {
                                                  .get("/services/js/platform-core/extension-services/perspectives.js?extensionPoints=application-partner-perspectives")
                                                  .then()
                                                  .statusCode(200)
-                                                 .body(org.hamcrest.Matchers.containsString("emission-test-partner-PartnerTicket")),
+                                                 .body("perspectives.find { it.id == 'partner' }.items.id",
+                                                         hasItem("emission-test-partner-PartnerTicket")),
                 30);
 
         // personalReadOnly: the scoped read serves 200 (the owner sees their own rows), but a write

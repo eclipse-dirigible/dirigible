@@ -17,6 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+import org.eclipse.dirigible.components.intent.generator.ProcessParallelSupport;
 import org.eclipse.dirigible.components.intent.model.ActionIntent;
 import org.eclipse.dirigible.components.intent.model.AggregateIntent;
 import org.eclipse.dirigible.components.intent.model.CustomWidgetIntent;
@@ -35,8 +36,10 @@ import org.eclipse.dirigible.components.intent.model.IntegrationIntent;
 import org.eclipse.dirigible.components.intent.model.GenerateChildIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
+import org.eclipse.dirigible.components.intent.model.LifecycleStages;
 import org.eclipse.dirigible.components.intent.model.NotificationIntent;
 import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.PostingRuleSelector;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.SlotsIntent;
 import org.eclipse.dirigible.components.intent.model.ReportIntent;
@@ -98,7 +101,7 @@ public final class IntentParser {
     private static final Set<String> FIELD_FUNCTIONS = Set.of("documenttitle");
     /** Implemented relation {@code function} values (lower-cased). */
     private static final Set<String> RELATION_FUNCTIONS = Set.of("entitystatus");
-    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "end");
+    private static final Set<String> STEP_KINDS = Set.of("userTask", "serviceTask", "decision", "script", "wait", "parallel", "end");
     /** Entity lifecycle events a declarative-glue item (notification, reaction) can bind to. */
     private static final Set<String> EVENT_KINDS = Set.of("onCreate", "onUpdate", "onDelete");
     /** Notification delivery channels supported today. */
@@ -140,6 +143,10 @@ public final class IntentParser {
             return new IntentModel();
         }
         rejectRemovedNumberKeys(tree);
+        moveGeneratesItemLines(tree);
+        // Statuses may be referenced by their seeded NAME; resolve them to ids on the raw tree so the
+        // typed mapping, every validator and every generator keep seeing the integers they always saw.
+        StatusSymbolResolver.resolve(tree);
         String json = GSON.toJson(tree);
         IntentModel model;
         try {
@@ -239,6 +246,7 @@ public final class IntentParser {
                             + " (or give it a single composition child)");
                 }
             }
+            validateSnapshotLanguage(entity, model, compositionParent, issues);
             for (FieldIntent field : entity.getFields()) {
                 String ff = field.getFunction();
                 if (ff != null && !ff.isBlank() && !FIELD_FUNCTIONS.contains(ff.trim()
@@ -399,6 +407,12 @@ public final class IntentParser {
                     issues.add("entity [" + name + "] items child [" + child.getName() + "] messageInternal field [" + field.getName()
                             + "] must be boolean");
                 }
+            }
+            // Both claim the SAME pane: the chat thread and the items calendar (the child's own
+            // `view: calendar`) are two renderings of the line items, so only one may be declared.
+            if (child.isCalendar()) {
+                issues.add("entity [" + name + "] declares documentItemsLayout: chat while its items child [" + child.getName()
+                        + "] declares view: calendar - both render the line items; drop one of the two");
             }
         }
     }
@@ -666,8 +680,23 @@ public final class IntentParser {
                                                       .isBlank()) {
                 issues.add("schedule [" + name + "] has no cron expression");
             }
+            // A cross-model source (model: <uses alias>) lives in another model; its existence and its
+            // where/map/match field references are validated at GENERATION time against the owner's
+            // .model (the same design-time split relations / dependsOn / leafOnly already use), so the
+            // local entity/field checks are skipped and source stays null.
+            boolean crossModelSource = schedule.getModel() != null && !schedule.getModel()
+                                                                               .isBlank();
             EntityIntent source = null;
-            if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
+            if (crossModelSource) {
+                if (!usesAliases.contains(schedule.getModel())) {
+                    issues.add("schedule [" + name + "] source model [" + schedule.getModel()
+                            + "] is not a declared uses: alias (declare it under the model's uses:)");
+                }
+                if (schedule.getEntity() == null || schedule.getEntity()
+                                                            .isBlank()) {
+                    issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
+                }
+            } else if (schedule.getEntity() == null || !entityNames.contains(schedule.getEntity())) {
                 issues.add("schedule [" + name + "] queries unknown entity [" + schedule.getEntity() + "]");
             } else {
                 source = byName.get(schedule.getEntity());
@@ -690,7 +719,16 @@ public final class IntentParser {
             } else if (!hasNotify && !hasGenerate) {
                 issues.add("schedule [" + name + "] has no action (add a notify or a generate)");
             } else if (hasNotify) {
-                validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
+                // v1 scope: the notify machinery resolves recipients/placeholders/relation loads against a
+                // LOCAL EntityIntent; a cross-model source has only TargetInfo metadata, so notify is not
+                // yet supported there. Keep the schedule in the source's model, or drop model:.
+                if (crossModelSource) {
+                    issues.add("schedule [" + name + "] uses a cross-model source with notify - a cross-model schedule source"
+                            + " supports the generate action; notify needs the source's relation metadata - keep the schedule in the"
+                            + " source's model or drop model:");
+                } else {
+                    validateNotifyBlock(schedule.getNotify(), "schedule [" + name + "] notify", schedule.getEntity(), model, issues);
+                }
             } else {
                 validateScheduleGenerate(schedule, source, entityNames, usesAliases, issues);
             }
@@ -726,12 +764,13 @@ public final class IntentParser {
                     + "] (add a uses: alias if the target lives in another model)");
         }
         validateMapSource(source, g.getMap(), "schedule [" + name + "]", "generate map", issues);
-        if (g.getItems() != null) {
+        if (g.getItems() != null || (g.getItemLines() != null && !g.getItemLines()
+                                                                   .isEmpty())) {
             issues.add("schedule [" + name + "] generate declares items - item cloning is not supported for a scheduled generation;"
                     + " use an on-demand generates action for document-to-document cloning");
         }
         if (g.getChildren() != null) {
-            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, issues);
+            validateGenerateChildren(name, g.getChildren(), 1, source, entityNames, usesAliases, issues);
         }
     }
 
@@ -744,7 +783,7 @@ public final class IntentParser {
      * (resolved in the target's model at generation). Depth is capped at two levels.
      */
     private static void validateGenerateChildren(String name, List<GenerateChildIntent> children, int depth, EntityIntent source,
-            Set<String> entityNames, List<String> issues) {
+            Set<String> entityNames, Set<String> usesAliases, List<String> issues) {
         if (depth > 2) {
             issues.add("schedule [" + name + "] generate children nest deeper than two levels - flatten the shape");
             return;
@@ -782,7 +821,18 @@ public final class IntentParser {
                 }
             } else {
                 String collection = String.valueOf(forEachEntity);
-                if (!entityNames.contains(collection)) {
+                // The forEach collection may itself live in another model (forEach.model: <uses alias>);
+                // its existence and match-key field are then validated at generation time.
+                Object forEachModel = child.getForEach()
+                                           .get("model");
+                boolean forEachCrossModel = forEachModel != null && !String.valueOf(forEachModel)
+                                                                           .isBlank();
+                if (forEachCrossModel) {
+                    if (!usesAliases.contains(String.valueOf(forEachModel))) {
+                        issues.add(subject + " forEach model [" + forEachModel
+                                + "] is not a declared uses: alias (declare it under the model's uses:)");
+                    }
+                } else if (!entityNames.contains(collection)) {
                     issues.add(subject + " forEach entity [" + collection + "] is not a local entity of this model");
                 }
                 Object match = child.getForEach()
@@ -792,7 +842,7 @@ public final class IntentParser {
                 }
             }
             if (child.getChildren() != null) {
-                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, issues);
+                validateGenerateChildren(name, child.getChildren(), depth + 1, source, entityNames, usesAliases, issues);
             }
         }
     }
@@ -1337,7 +1387,14 @@ public final class IntentParser {
             aboutEntity = rows;
         }
         String attach = notify.getAttach();
+        boolean hasLanguage = notify.getLanguage() != null && !notify.getLanguage()
+                                                                     .isBlank();
+        boolean hasLanguageFrom = notify.getLanguageFrom() != null && !notify.getLanguageFrom()
+                                                                             .isBlank();
         if (attach == null || attach.isBlank()) {
+            if (hasLanguage || hasLanguageFrom) {
+                issues.add(subject + " declares language/languageFrom without attach: print - they select the attached render's language");
+            }
             return;
         }
         if (!NOTIFY_ATTACHMENTS.contains(attach.trim()
@@ -1346,6 +1403,101 @@ public final class IntentParser {
         } else if (aboutEntity != null && !isPrintableDocument(model, aboutEntity)) {
             issues.add(subject + " attach: print needs [" + aboutEntity
                     + "] to be a document (header + line-items child) - only a document has a print template to render");
+        }
+        if (hasLanguage && hasLanguageFrom) {
+            issues.add(subject + " declares both language and languageFrom - they are mutually exclusive");
+        } else if (hasLanguageFrom && aboutEntity != null) {
+            validateLanguageFromPath(notify.getLanguageFrom(), aboutEntity, subject + " languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * The render-language knob of a {@code function: Snapshot} child: a literal {@code language:} code
+     * or a {@code languageFrom: relation.field} path resolved on the snapshot's composition MASTER (the
+     * document whose copy is minted) - mutually exclusive, meaningless anywhere else. Absent both, the
+     * mint falls back to the first entry of the tenant-resolved application language set at run time.
+     */
+    private static void validateSnapshotLanguage(EntityIntent entity, IntentModel model, Map<String, String> compositionParent,
+            List<String> issues) {
+        boolean hasLanguage = entity.getLanguage() != null && !entity.getLanguage()
+                                                                     .isBlank();
+        boolean hasLanguageFrom = entity.getLanguageFrom() != null && !entity.getLanguageFrom()
+                                                                             .isBlank();
+        if (!hasLanguage && !hasLanguageFrom) {
+            return;
+        }
+        String name = entity.getName();
+        if (!entity.isSnapshot()) {
+            issues.add("entity [" + name + "] declares language/languageFrom, which apply to function: Snapshot children only");
+            return;
+        }
+        if (hasLanguage && hasLanguageFrom) {
+            issues.add("entity [" + name + "] declares both language and languageFrom - they are mutually exclusive");
+            return;
+        }
+        if (hasLanguageFrom) {
+            String master = compositionParent.get(name);
+            if (master == null) {
+                issues.add("entity [" + name + "] languageFrom needs a composition master (the document) to resolve against");
+                return;
+            }
+            validateLanguageFromPath(entity.getLanguageFrom(), master, "entity [" + name + "] languageFrom", model, issues);
+        }
+    }
+
+    /**
+     * A {@code languageFrom} path is a one-hop {@code relation.field}: the relation a to-one of the
+     * entity the render is about, the field a string-typed field (a language code) of its target. A
+     * cross-model target's field is validated at generation against the owner's model, like every other
+     * cross-model reference.
+     */
+    private static void validateLanguageFromPath(String path, String aboutEntity, String subject, IntentModel model, List<String> issues) {
+        String trimmed = path.trim();
+        int dot = trimmed.indexOf('.');
+        if (dot <= 0 || dot == trimmed.length() - 1 || trimmed.indexOf('.', dot + 1) >= 0) {
+            issues.add(subject + " [" + path + "] must be a one-hop relation.field path on [" + aboutEntity + "]");
+            return;
+        }
+        String relationName = trimmed.substring(0, dot)
+                                     .trim();
+        String fieldName = trimmed.substring(dot + 1)
+                                  .trim();
+        EntityIntent about = entityByName(model, aboutEntity);
+        if (about == null) {
+            return; // the dangling entity is reported by the structural checks
+        }
+        RelationIntent relation = null;
+        for (RelationIntent candidate : about.getRelations()) {
+            boolean toOne = "manyToOne".equals(candidate.getKind()) || "oneToOne".equals(candidate.getKind());
+            if (toOne && relationName.equals(candidate.getName())) {
+                relation = candidate;
+            }
+        }
+        if (relation == null) {
+            issues.add(subject + " [" + path + "]: [" + relationName + "] is not a to-one relation of [" + aboutEntity + "]");
+            return;
+        }
+        if (relation.getModel() != null && !relation.getModel()
+                                                    .isBlank()) {
+            return; // cross-model target: field checked at generation against the owner's model
+        }
+        EntityIntent target = entityByName(model, relation.getTo() == null ? "" : relation.getTo());
+        if (target == null) {
+            return; // the dangling relation target is reported by the relations check
+        }
+        FieldIntent field = null;
+        for (FieldIntent candidate : target.getFields()) {
+            if (fieldName.equals(candidate.getName())) {
+                field = candidate;
+            }
+        }
+        if (field == null) {
+            issues.add(subject + " [" + path + "]: [" + fieldName + "] is not a field of [" + relation.getTo() + "]");
+            return;
+        }
+        String type = field.getType() == null ? "string" : field.getType();
+        if (!"string".equals(type) && !"text".equals(type) && !"uuid".equals(type)) {
+            issues.add(subject + " [" + path + "]: [" + fieldName + "] must be a string field holding a language code, not [" + type + "]");
         }
     }
 
@@ -2054,6 +2206,31 @@ public final class IntentParser {
         return false;
     }
 
+    /**
+     * Whether a posting {@code rule(<column>)} reference names a field or a relation of the rule entity
+     * (authored lower-camel matched case-insensitively against the PascalCase property).
+     */
+    private static boolean isRuleColumn(EntityIntent ruleEntity, String column) {
+        if (column == null || column.isBlank()) {
+            return false;
+        }
+        if (ruleEntity.getFields() != null) {
+            for (FieldIntent field : ruleEntity.getFields()) {
+                if (column.equalsIgnoreCase(field.getName())) {
+                    return true;
+                }
+            }
+        }
+        if (ruleEntity.getRelations() != null) {
+            for (RelationIntent relation : ruleEntity.getRelations()) {
+                if (column.equalsIgnoreCase(relation.getName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     /** The entity's composition child (the first entity declaring a composition to-one back to it). */
     private static EntityIntent compositionChildOf(EntityIntent entity, java.util.Map<String, EntityIntent> byName) {
         for (EntityIntent candidate : byName.values()) {
@@ -2139,6 +2316,47 @@ public final class IntentParser {
      * @param tree the SnakeYAML-loaded raw tree
      * @throws IntentValidationException naming every removed key found, with the migration target
      */
+    /**
+     * A {@code generates[].items} may be EITHER an object (the mirror form ->
+     * {@link GeneratesItemsIntent}) or a LIST of computed line rows (issue #6555 ->
+     * {@code GeneratesIntent.itemLines}). Gson maps a field by its static type, so a list-valued
+     * {@code items:} would fail the typed mapping against the object-typed {@code items} field. Rehome
+     * a list-valued {@code items:} to the {@code itemLines} key on the raw tree, BEFORE the typed
+     * mapping, so the two shapes stay in distinct typed fields. A mapping-valued {@code items:} is left
+     * untouched.
+     *
+     * @param tree the SnakeYAML-loaded raw tree
+     */
+    private static void moveGeneratesItemLines(Object tree) {
+        if (!(tree instanceof Map<?, ?> root)) {
+            return;
+        }
+        if (root.get("generates") instanceof List<?> generates) {
+            for (Object generateNode : generates) {
+                rehomeItemLines(generateNode);
+            }
+        }
+        // A schedule's generate rejects items entirely (validated below); rehome a list-valued items:
+        // here too, so the invalid combination surfaces as that clear message rather than a Gson crash.
+        if (root.get("schedules") instanceof List<?> schedules) {
+            for (Object scheduleNode : schedules) {
+                if (scheduleNode instanceof Map<?, ?> schedule) {
+                    rehomeItemLines(schedule.get("generate"));
+                }
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private static void rehomeItemLines(Object generateNode) {
+        if (!(generateNode instanceof Map<?, ?> generate) || !(generate.get("items") instanceof List<?> itemLines)) {
+            return;
+        }
+        Map<Object, Object> mutable = (Map<Object, Object>) generate;
+        mutable.put("itemLines", itemLines);
+        mutable.remove("items");
+    }
+
     private static void rejectRemovedNumberKeys(Object tree) {
         if (!(tree instanceof Map<?, ?> root)) {
             return;
@@ -2575,6 +2793,7 @@ public final class IntentParser {
             validateWaitSteps(process, triggerEntity, byName, issues);
             validateUserTaskTimers(process, triggerEntity, byName, issues);
             validateAbortOn(process, triggerEntity, byName, issues);
+            validateParallelSteps(process, issues);
             validateTaskFormActions(process, model, issues);
         }
     }
@@ -2588,6 +2807,142 @@ public final class IntentParser {
      * needs no decision: it flows on linearly (typically to a status {@code setField} and the next user
      * task). Enforced so the author sees, at parse time, what the chosen actions actually do.
      */
+    /**
+     * A {@code kind: parallel} step forks over {@code args.branches} (at least two declared steps, run
+     * concurrently) and joins before {@code args.next}. Each branch is a <b>chain</b>: it continues
+     * through its steps' own routing ({@code next}, a decision's {@code then}/{@code else}, a boundary
+     * timer's {@code then}) and may itself be a nested {@code parallel}. Everything reachable that way
+     * is the branch <b>region</b> ({@link ProcessParallelSupport#regions}), and the rules make the
+     * region a closed sub-flow:
+     *
+     * <ul>
+     * <li>a step with no routing at all is a branch terminal and joins implicitly; the literal
+     * {@code join} converges on the join explicitly, and means nothing outside a branch;
+     * <li>{@code end} is not reachable from inside a branch - a token that ends there never arrives at
+     * the join, and the instance hangs on it forever;
+     * <li>no step belongs to two branches - a step entered by two concurrent tokens would run twice and
+     * still leave the join waiting;
+     * <li>nothing outside a branch may route into one, which is also how "a branch routed to the fork's
+     * own {@code next} instead of converging on {@code join}" surfaces;
+     * <li>a top-level fork needs a {@code next} (a declared step or {@code end}) on the main flow; a
+     * nested fork may omit it, and then joins into its own enclosing join.
+     * </ul>
+     */
+    private static void validateParallelSteps(ProcessIntent process, List<String> issues) {
+        Map<String, StepIntent> byName = new HashMap<>();
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() != null) {
+                byName.put(step.getName(), step);
+            }
+        }
+        ProcessParallelSupport.Regions regions = ProcessParallelSupport.regions(process.getSteps());
+        String prefix = "process [" + process.getName() + "] ";
+        for (StepIntent step : process.getSteps()) {
+            if (!ProcessParallelSupport.isParallel(step)) {
+                continue;
+            }
+            String subject = prefix + "parallel [" + step.getName() + "]";
+            Map<String, Object> args = step.getArgs() == null ? Map.of() : step.getArgs();
+            List<?> branches = args.get("branches") instanceof List<?> list ? list : List.of();
+            if (branches.size() < 2) {
+                issues.add(subject + " needs a `branches` list of at least two step names");
+            }
+            boolean nested = regions.contains(step.getName());
+            String nextStep = trimmedOrNull(args.get("next"));
+            if (nextStep == null && !nested) {
+                issues.add(subject + " needs a `next` step to join into");
+            } else if (nextStep != null && !nested && !"end".equalsIgnoreCase(nextStep) && !byName.containsKey(nextStep)) {
+                issues.add(subject + " next [" + nextStep + "] is not a declared step or `end`");
+            }
+            Set<String> declared = new HashSet<>();
+            for (Object branchRaw : branches) {
+                String branch = String.valueOf(branchRaw);
+                if (!declared.add(branch)) {
+                    issues.add(subject + " lists branch [" + branch + "] twice");
+                }
+                if (branch.equals(step.getName())) {
+                    issues.add(subject + " lists itself as a branch");
+                } else if (!byName.containsKey(branch)) {
+                    issues.add(subject + " branch [" + branch + "] is not a declared step");
+                }
+            }
+        }
+        for (String shared : regions.shared()) {
+            issues.add(prefix + "step [" + shared + "] is reachable from more than one parallel branch - a step run by two"
+                    + " concurrent tokens runs twice and still leaves the join waiting");
+        }
+        validateParallelRouting(process, byName, regions, issues);
+    }
+
+    /**
+     * Validate every step's routing against the parallel branch regions: {@code join} is meaningful
+     * only inside a branch, a branch may never reach the process end event, and nothing outside a
+     * branch may point into one (see {@link #validateParallelSteps} for why).
+     */
+    private static void validateParallelRouting(ProcessIntent process, Map<String, StepIntent> byName,
+            ProcessParallelSupport.Regions regions, List<String> issues) {
+        String prefix = "process [" + process.getName() + "] ";
+        for (StepIntent step : process.getSteps()) {
+            if (step.getName() == null) {
+                continue;
+            }
+            String join = regions.joinOf(step.getName());
+            String subject = prefix + "step [" + step.getName() + "]";
+            if (ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(step.getName())) {
+                issues.add(subject + " uses the reserved name `join` - that is the routing literal for a parallel branch's join gateway");
+            }
+            if (join != null && "end".equalsIgnoreCase(step.getKind())) {
+                issues.add(subject + " is an `end` step inside a parallel branch - a branch must reach its join, so route to"
+                        + " `join` and end after the fork instead");
+            }
+            for (String target : ProcessParallelSupport.routingTargets(step)) {
+                if (ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(target)) {
+                    if (join == null) {
+                        issues.add(subject + " routes to `join`, which is only valid inside a parallel branch");
+                    }
+                } else if (join == null && regions.contains(target)) {
+                    // A branch absorbs whatever its steps route to, so a step still on the main flow
+                    // pointing into a branch means the two claims collide. The fork's own `next` is the
+                    // common case (a branch routed to it instead of converging on `join`) - and reporting
+                    // it from the fork names both halves of the mistake.
+                    issues.add(ProcessParallelSupport.isParallel(step)
+                            ? prefix + "parallel [" + step.getName() + "] next [" + target + "] is also reachable from inside one of its"
+                                    + " branches - a branch converges on `join`, it must not route to the fork's own `next`"
+                            : subject + " routes to [" + target + "], which is inside a parallel branch - a branch is entered through its"
+                                    + " fork only");
+                } else if (join != null && isEndStep(target, byName)) {
+                    issues.add(subject + " routes to `end` from inside a parallel branch - the join would wait for a token that"
+                            + " never arrives; route to `join` instead");
+                }
+            }
+        }
+    }
+
+    /** Whether a routing target is the process end event: the literal {@code end} or an `end` step. */
+    private static boolean isEndStep(String target, Map<String, StepIntent> byName) {
+        StepIntent step = byName.get(target);
+        return "end".equalsIgnoreCase(target) || (step != null && "end".equalsIgnoreCase(step.getKind()));
+    }
+
+    /**
+     * A routing target that names no step: the literal {@code end} (the process end event) or
+     * {@code join} (the enclosing parallel branch's join gateway). Where {@code join} is actually
+     * allowed is checked by {@link #validateParallelRouting} - it is only meaningful inside a branch.
+     */
+    private static boolean isRoutingLiteral(String target) {
+        return "end".equalsIgnoreCase(target) || ProcessParallelSupport.JOIN_TARGET.equalsIgnoreCase(target);
+    }
+
+    /** A trimmed non-empty string form of a raw arg value, or {@code null}. */
+    private static String trimmedOrNull(Object value) {
+        if (value == null) {
+            return null;
+        }
+        String text = value.toString()
+                           .trim();
+        return text.isEmpty() ? null : text;
+    }
+
     /** The entity a process trigger starts on (onCreate/onUpdate/onDelete target), or null. */
     private static String triggerEntityName(ProcessIntent process) {
         if (process.getTrigger() == null) {
@@ -2801,7 +3156,7 @@ public final class IntentParser {
                 }
             }
             String next = stepArg(step, "next");
-            if (next != null && !next.isBlank() && !"end".equalsIgnoreCase(next) && !stepNames.contains(next)) {
+            if (next != null && !next.isBlank() && !isRoutingLiteral(next) && !stepNames.contains(next)) {
                 issues.add(
                         "process [" + process.getName() + "] step [" + step.getName() + "] `next` references unknown step [" + next + "]");
             }
@@ -2916,7 +3271,7 @@ public final class IntentParser {
                 if (then == null || then.toString()
                                         .isBlank()) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer + " must declare `then`");
-                } else if (!"end".equalsIgnoreCase(then.toString()) && !stepNames.contains(then.toString())) {
+                } else if (!isRoutingLiteral(then.toString()) && !stepNames.contains(then.toString())) {
                     issues.add("process [" + process.getName() + "] step [" + step.getName() + "] " + timer
                             + " `then` references unknown step [" + then + "]");
                 }
@@ -3114,7 +3469,7 @@ public final class IntentParser {
 
     private static void checkDecisionTarget(ProcessIntent process, StepIntent step, String arg, String target, Set<String> stepNames,
             List<String> issues) {
-        if (!"end".equalsIgnoreCase(target) && !stepNames.contains(target)) {
+        if (!isRoutingLiteral(target) && !stepNames.contains(target)) {
             issues.add("process [" + process.getName() + "] decision [" + step.getName() + "] `" + arg + "` references unknown step ["
                     + target + "]");
         }
@@ -3348,6 +3703,15 @@ public final class IntentParser {
                 issues.add(subject + " requires at least one items row");
                 continue;
             }
+            // The event source entity - resolvable here only for a LOCAL source; a cross-model source
+            // (event.model alias) is resolved at generation time via CrossModelSupport, so its relations
+            // cannot be deep-checked at parse time. The FK-copy item cell (issue #6533) is therefore
+            // shape-validated always, and target-entity-matched only when the source is local.
+            Object eventAlias = posting.getEvent() == null ? null
+                    : posting.getEvent()
+                             .get("model");
+            EntityIntent postingSource =
+                    eventAlias == null ? byName.get(String.valueOf(onTransition != null ? onTransition : onCreate)) : null;
             for (java.util.Map<String, String> row : posting.getItems()) {
                 for (java.util.Map.Entry<String, String> cell : row.entrySet()) {
                     String key = cell.getKey();
@@ -3361,35 +3725,77 @@ public final class IntentParser {
                     if (!hasPropertyIgnoreCase(itemsEntity, key)) {
                         issues.add(subject + " item [" + key + "] is not a field or to-one relation of [" + itemsEntity.getName() + "]");
                     }
+                    // Conditional rule column (#6534): the rule-row column is chosen by a source
+                    // classifier - `rule(by: <field>, cases: { <id>: <column>, ... }, default: <column>? )`.
+                    // The by/cases selector already branches the account, so it replaces the when:-gated
+                    // row pair; a when: on the same row is redundant and rejected.
+                    java.util.Optional<PostingRuleSelector> selector = PostingRuleSelector.parse(value);
+                    if (selector.isPresent()) {
+                        PostingRuleSelector sel = selector.get();
+                        if (ruleEntity == null) {
+                            issues.add(subject + " item [" + key + "] references rule(by: ...) but the posting declares no rule");
+                        }
+                        if (row.containsKey("when")) {
+                            issues.add(subject + " item [" + key + "] combines a conditional rule(by: ...) with a when: guard"
+                                    + " - the by/cases selector already branches the account; drop the when:");
+                        }
+                        if (sel.cases()
+                               .isEmpty()) {
+                            issues.add(subject + " item [" + key + "] rule(by: ...) declares no cases");
+                        }
+                        // `by` reads the source at runtime (Calc, as a number); deep-check it only for a
+                        // LOCAL source - a cross-model source is resolved at generation time.
+                        if (postingSource != null && !hasPropertyIgnoreCase(postingSource, sel.by())) {
+                            issues.add(subject + " rule(by: " + sel.by() + ") is not a field or to-one relation of the source ["
+                                    + postingSource.getName() + "]");
+                        }
+                        for (java.util.Map.Entry<String, String> caseEntry : sel.cases()
+                                                                                .entrySet()) {
+                            if (!caseEntry.getKey()
+                                          .matches("-?\\d+(\\.\\d+)?")) {
+                                issues.add(subject + " rule(by: ...) case key [" + caseEntry.getKey()
+                                        + "] must be a number (the classifier's seed id)");
+                            }
+                            if (ruleEntity != null && !isRuleColumn(ruleEntity, caseEntry.getValue())) {
+                                issues.add(subject + " rule(by: ...) case column [" + caseEntry.getValue()
+                                        + "] is not a field or to-one relation of [" + ruleEntity.getName() + "]");
+                            }
+                        }
+                        if (sel.defaultColumn() != null && ruleEntity != null && !isRuleColumn(ruleEntity, sel.defaultColumn())) {
+                            issues.add(subject + " rule(by: ...) default column [" + sel.defaultColumn()
+                                    + "] is not a field or to-one relation of [" + ruleEntity.getName() + "]");
+                        }
+                        continue;
+                    }
                     java.util.regex.Matcher ruleRef = java.util.regex.Pattern.compile("\\s*rule\\((\\w+)\\)\\s*")
                                                                              .matcher(value);
                     if (ruleRef.matches()) {
                         if (ruleEntity == null) {
                             issues.add(subject + " item [" + key + "] references rule(...) but the posting declares no rule");
-                        } else {
-                            String column = ruleRef.group(1);
-                            // Authored lower-camel matches a PascalCase relation (rule(receivableAccount)
-                            // -> ReceivableAccount) - compare case-insensitively.
-                            boolean known = false;
-                            if (ruleEntity.getFields() != null) {
-                                for (FieldIntent f : ruleEntity.getFields()) {
-                                    if (column.equalsIgnoreCase(f.getName())) {
-                                        known = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!known && ruleEntity.getRelations() != null) {
-                                for (RelationIntent r : ruleEntity.getRelations()) {
-                                    if (column.equalsIgnoreCase(r.getName())) {
-                                        known = true;
-                                        break;
-                                    }
-                                }
-                            }
-                            if (!known) {
-                                issues.add(subject + " rule(" + column + ") is not a field or to-one relation of [" + ruleEntity.getName()
-                                        + "]");
+                        } else if (!isRuleColumn(ruleEntity, ruleRef.group(1))) {
+                            issues.add(subject + " rule(" + ruleRef.group(1) + ") is not a field or to-one relation of ["
+                                    + ruleEntity.getName() + "]");
+                        }
+                    } else if (toOneRelationByName(itemsEntity, key) != null) {
+                        // Source-FK copy (issue #6533): a to-one relation item cell copies a source
+                        // to-one FK onto the line (the counterparty dimension). Its value must be a bare
+                        // source relation name, not a Calc expression - you cannot arithmetic-evaluate a
+                        // FK. When the source is local, the copied relation must exist on it and be
+                        // to-one to the SAME entity as the item relation.
+                        String rhs = value.trim();
+                        if (!rhs.matches("\\w+")) {
+                            issues.add(subject + " item [" + key + "] is a to-one relation - its value must copy a source"
+                                    + " to-one relation (a bare source relation name), not an expression [" + value + "]");
+                        } else if (postingSource != null) {
+                            RelationIntent itemRelation = toOneRelationByName(itemsEntity, key);
+                            RelationIntent sourceRelation = toOneRelationByName(postingSource, rhs);
+                            if (sourceRelation == null) {
+                                issues.add(subject + " item [" + key + "] copies [" + rhs + "] which is not a to-one relation of the"
+                                        + " source entity [" + postingSource.getName() + "]");
+                            } else if (!java.util.Objects.equals(itemRelation.getTo(), sourceRelation.getTo())
+                                    || !java.util.Objects.equals(itemRelation.getModel(), sourceRelation.getModel())) {
+                                issues.add(subject + " item [" + key + "] and its copied source [" + rhs + "] must be to-one to the same"
+                                        + " entity (item -> [" + itemRelation.getTo() + "], source -> [" + sourceRelation.getTo() + "])");
                             }
                         }
                     }
@@ -3416,7 +3822,16 @@ public final class IntentParser {
             if (!names.add(name)) {
                 issues.add("duplicate generates action [" + name + "]");
             }
-            if (g.getSourceStatus() != null) {
+            // A cross-model SOURCE (fromUses:) is resolved from the OWNER's .model at generation time,
+            // exactly as a cross-model target is - nothing about it is checkable against this model's
+            // entities, so every local check below is skipped for it (the glue generator fails loudly
+            // if the owner model cannot be resolved).
+            boolean crossModelSource = g.isCrossModelSource();
+            if (crossModelSource && !usesAliases.contains(g.getFromUses())) {
+                issues.add("generates [" + name + "] fromUses unknown model alias [" + g.getFromUses()
+                        + "] (declare it under the model's uses:)");
+            }
+            if (g.getSourceStatus() != null && !crossModelSource) {
                 // The completion hook flips the SOURCE's status after the target is created - it
                 // needs the EntityStatus relation to write to.
                 EntityIntent from = g.getFrom() == null ? null : byName.get(g.getFrom());
@@ -3437,8 +3852,11 @@ public final class IntentParser {
             if (g.getFrom() == null || g.getFrom()
                                         .isBlank()) {
                 issues.add("generates [" + name + "] has no from entity");
+            } else if (crossModelSource) {
+                source = null; // owned elsewhere - resolved against the owner's .model, not this one
             } else if (!entityNames.contains(g.getFrom())) {
-                issues.add("generates [" + name + "] from references unknown entity [" + g.getFrom() + "]");
+                issues.add("generates [" + name + "] from references unknown entity [" + g.getFrom()
+                        + "] (add a fromUses: alias if the source lives in another model)");
             } else {
                 source = byName.get(g.getFrom());
             }
@@ -3462,6 +3880,15 @@ public final class IntentParser {
             String forEntity = g.getForEntity();
             if (forEntity == null || forEntity.isBlank()) {
                 issues.add("generates [" + name + "] has no forEntity");
+            } else if (crossModelSource) {
+                // The button is contributed onto the SOURCE's view, which the owner model generates and
+                // which lives in the owner's project. Hosting it on some other view would need a record
+                // of that view to carry the source id - there is none.
+                if (!forEntity.equals(g.getFrom())) {
+                    issues.add("generates [" + name + "] has a cross-model source (fromUses [" + g.getFromUses()
+                            + "]), so forEntity must be the source entity [" + g.getFrom() + "] - the button is contributed onto "
+                            + "the owner model's view; it cannot be hosted on a local view [" + forEntity + "]");
+                }
             } else if (!entityNames.contains(forEntity)) {
                 issues.add("generates [" + name + "] forEntity references unknown entity [" + forEntity + "]");
             }
@@ -3476,6 +3903,9 @@ public final class IntentParser {
                 if (items.getFrom() == null || items.getFrom()
                                                     .isBlank()) {
                     issues.add("generates [" + name + "] items has no from entity");
+                } else if (crossModelSource) {
+                    // The source's items belong to the source - i.e. to the owner model, resolved there.
+                    itemSource = null;
                 } else if (!entityNames.contains(items.getFrom())) {
                     issues.add("generates [" + name + "] items from references unknown entity [" + items.getFrom() + "]");
                 } else {
@@ -3486,6 +3916,106 @@ public final class IntentParser {
                     issues.add("generates [" + name + "] items has no to entity");
                 }
                 validateMapSource(itemSource, items.getMap(), "generates [" + name + "]", "items map", issues);
+            }
+            validateGeneratesItemLines(g, name, source, byName, crossModel, issues);
+        }
+    }
+
+    /**
+     * Validate the computed line-items form ({@code itemLines}, issue #6555): a fixed set of synthetic
+     * target lines whose cells are expressions over the SOURCE record. The two item forms are mutually
+     * exclusive. For a SAME-model target the cell keys must be fields / to-one relations of the target
+     * document's composition line-items child (resolved automatically, never named), a to-one relation
+     * cell copies a bare source relation, a {@code {field}} placeholder / bare-identifier string cell
+     * references a real source property, and a {@code when} guard has the {@code <field> ==|!= <n>}
+     * shape. A CROSS-model target's items child lives in the owner model (not loaded here), so only the
+     * always-checkable shapes are validated - the cell keys are checked at generation, the same
+     * deferral the mirror form's cross-model {@code map} uses.
+     */
+    private static void validateGeneratesItemLines(GeneratesIntent g, String name, EntityIntent source, Map<String, EntityIntent> byName,
+            boolean crossModel, List<String> issues) {
+        List<Map<String, String>> itemLines = g.getItemLines();
+        if (itemLines == null || itemLines.isEmpty()) {
+            return;
+        }
+        String subject = "generates [" + name + "]";
+        if (g.getItems() != null) {
+            issues.add(subject + " declares both an items mapping (object) and computed item lines (list) - use exactly one");
+        }
+        EntityIntent itemsChild = null;
+        if (!crossModel && g.getTo() != null && byName.get(g.getTo()) != null) {
+            itemsChild = compositionChildOf(byName.get(g.getTo()), byName);
+            if (itemsChild == null) {
+                issues.add(
+                        subject + " declares computed item lines but the target [" + g.getTo() + "] has no composition line-items child");
+            }
+        }
+        Set<String> sourceProperties = new HashSet<>();
+        if (source != null) {
+            if (source.getFields() != null) {
+                for (FieldIntent field : source.getFields()) {
+                    if (field.getName() != null) {
+                        sourceProperties.add(field.getName()
+                                                  .toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+            if (source.getRelations() != null) {
+                for (RelationIntent relation : source.getRelations()) {
+                    if (relation.getName() != null) {
+                        sourceProperties.add(relation.getName()
+                                                     .toLowerCase(Locale.ROOT));
+                    }
+                }
+            }
+        }
+        for (Map<String, String> row : itemLines) {
+            boolean hasCell = false;
+            for (Map.Entry<String, String> cell : row.entrySet()) {
+                String key = cell.getKey();
+                String value = cell.getValue() == null ? ""
+                        : cell.getValue()
+                              .trim();
+                if ("when".equalsIgnoreCase(key)) {
+                    if (!value.matches("\\s*\\w+\\s*[!=]=\\s*\\d+(\\.\\d+)?\\s*")) {
+                        issues.add(subject + " item line when [" + value + "] must be `<SourceField> ==|!= <number>`");
+                    }
+                    continue;
+                }
+                hasCell = true;
+                if (itemsChild != null && !hasPropertyIgnoreCase(itemsChild, key)) {
+                    issues.add(subject + " item line cell [" + key + "] is not a field or to-one relation of the target items child ["
+                            + itemsChild.getName() + "]");
+                    continue;
+                }
+                if (itemsChild != null && toOneRelationByName(itemsChild, key) != null) {
+                    // A to-one relation cell copies a bare source foreign key (issue #6533 parity) - it
+                    // cannot be arithmetic-evaluated. Its value must name a to-one relation of the source.
+                    if (!value.matches("\\w+")) {
+                        issues.add(subject + " item line cell [" + key + "] is a to-one relation - its value must copy a source to-one"
+                                + " relation (a bare source relation name), not an expression [" + value + "]");
+                    } else if (source != null && toOneRelationByName(source, value) == null) {
+                        issues.add(subject + " item line cell [" + key + "] copies [" + value + "] which is not a to-one relation of the"
+                                + " source entity [" + source.getName() + "]");
+                    }
+                } else if (source != null) {
+                    // A string {field} placeholder / bare-identifier copy must reference a real source
+                    // property; a numeric Calc expression's identifiers are validated at runtime (a null
+                    // field reads as 0, the calculated-field contract), so only the string refs are checked.
+                    java.util.regex.Matcher placeholders = java.util.regex.Pattern.compile("\\{(\\w+)\\}")
+                                                                                  .matcher(value);
+                    while (placeholders.find()) {
+                        if (!sourceProperties.contains(placeholders.group(1)
+                                                                   .toLowerCase(Locale.ROOT))) {
+                            issues.add(subject + " item line cell [" + key + "] interpolates {" + placeholders.group(1)
+                                    + "} which is not a property of the source entity ["
+                                    + (source.getName() == null ? g.getFrom() : source.getName()) + "]");
+                        }
+                    }
+                }
+            }
+            if (!hasCell) {
+                issues.add(subject + " has a computed item line with no cells");
             }
         }
     }
@@ -3718,6 +4248,61 @@ public final class IntentParser {
             }
             validateAgeingDimensions(model, report, issues);
             validateBalanceReport(model, report, issues);
+            validateReportScope(model, report, issues);
+        }
+    }
+
+    /**
+     * A report's {@code scope} restricts the query to the lifecycle rows that a stage classifies, so
+     * "economically live only" stops being a hand-written predicate over positional seed ids. It is
+     * therefore only meaningful over a source carrying a {@code function: EntityStatus}, and a stage
+     * scope needs that nomenclature's seed rows to be classified <em>in this model</em> - a cross-model
+     * status entity is seeded elsewhere and nothing here can resolve its ids, which must fail loudly
+     * rather than emit a query missing its predicate.
+     */
+    private static void validateReportScope(IntentModel model, ReportIntent report, List<String> issues) {
+        String scope = report.getNormalizedScope();
+        if (scope == null) {
+            return;
+        }
+        String subject = "report [" + report.getName() + "] scope [" + report.getScope()
+                                                                             .trim()
+                + "]";
+        if (!LifecycleStages.SCOPE_ALL.equals(scope) && !LifecycleStages.STAGES.contains(scope)) {
+            issues.add(subject + " is unknown - expected `" + LifecycleStages.SCOPE_ALL + "` or one of "
+                    + new java.util.TreeSet<>(LifecycleStages.STAGES));
+            return;
+        }
+        EntityIntent source = null;
+        for (EntityIntent entity : model.getEntities()) {
+            if (entity.getName() != null && entity.getName()
+                                                  .equals(report.getSource())) {
+                source = entity;
+            }
+        }
+        if (source == null) {
+            return; // a missing / unknown source is reported separately
+        }
+        RelationIntent status = LifecycleStages.statusRelation(source);
+        if (status == null) {
+            issues.add(subject + " requires the source [" + source.getName() + "] to declare a `function: EntityStatus` relation"
+                    + " - a scope restricts the query by the lifecycle status");
+            return;
+        }
+        if (LifecycleStages.SCOPE_ALL.equals(scope)) {
+            return;
+        }
+        if (status.isCrossModel()) {
+            issues.add(subject + " cannot resolve: the status nomenclature [" + status.getTo() + "] belongs to model [" + status.getModel()
+                    + "], so its stages are not declared here - use an explicit `filter` instead");
+            return;
+        }
+        Map<String, List<Integer>> stages = LifecycleStages.stagesOf(model, status.getTo());
+        if (stages.isEmpty()) {
+            issues.add(subject + " requires the seed rows of [" + status.getTo() + "] to declare `stage:` - without the"
+                    + " classification there is nothing to resolve the scope against");
+        } else if (!stages.containsKey(scope)) {
+            issues.add(subject + " matches no seed row - none of [" + status.getTo() + "] declares `stage: " + scope + "`");
         }
     }
 
@@ -4023,6 +4608,7 @@ public final class IntentParser {
                 byName.put(entity.getName(), entity);
             }
         }
+        Set<String> nomenclatures = statusNomenclatures(model);
         Set<String> seedNames = new HashSet<>();
         for (SeedIntent seed : model.getSeeds()) {
             if (seed.getName() == null || seed.getName()
@@ -4061,8 +4647,74 @@ public final class IntentParser {
             }
             if (seed.isLanguageSeed()) {
                 validateLanguageSeed(seed, byName.get(seed.getEntity()), issues);
+            } else {
+                validateSeedStages(seed, byName.get(seed.getEntity()), nomenclatures, issues);
             }
         }
+    }
+
+    /**
+     * The names of the entities this model uses as a status nomenclature - the same-model targets of a
+     * {@code function: EntityStatus} relation. A cross-model status entity is excluded: its seeds live
+     * in the owning model, so nothing here can classify them.
+     */
+    private static Set<String> statusNomenclatures(IntentModel model) {
+        Set<String> nomenclatures = new HashSet<>();
+        for (EntityIntent entity : model.getEntities()) {
+            RelationIntent status = LifecycleStages.statusRelation(entity);
+            if (status != null && status.getTo() != null && !status.isCrossModel()) {
+                nomenclatures.add(status.getTo());
+            }
+        }
+        return nomenclatures;
+    }
+
+    /**
+     * A seed row's optional {@code stage:} marker classifies what that status MEANS to the lifecycle
+     * ({@code draft} / {@code live} / {@code cancelled} / {@code void}) so consumers - chiefly a
+     * report's {@code scope} - stop expressing "economically live" as a hand-written predicate over
+     * positional seed ids. It is metadata, never a column, so it must carry the row's {@code id} (what
+     * it classifies) and stay inside the vocabulary. A status nomenclature that declares its OWN
+     * {@code stage} property collides with the marker and is rejected: the row key cannot be both data
+     * and classification.
+     */
+    private static void validateSeedStages(SeedIntent seed, EntityIntent entity, Set<String> statusNomenclatures, List<String> issues) {
+        String subject = "seed [" + seed.getName() + "]";
+        boolean anyStage = false;
+        String idField = entity == null ? "id" : seedIdField(entity);
+        for (Map<String, Object> row : seed.getRows()) {
+            if (!row.containsKey(LifecycleStages.STAGE_KEY)) {
+                continue;
+            }
+            anyStage = true;
+            Object raw = row.get(LifecycleStages.STAGE_KEY);
+            String stage = raw == null ? ""
+                    : String.valueOf(raw)
+                            .trim()
+                            .toLowerCase(Locale.ROOT);
+            if (!LifecycleStages.STAGES.contains(stage)) {
+                issues.add(
+                        subject + " row declares stage [" + raw + "] - expected one of " + new java.util.TreeSet<>(LifecycleStages.STAGES));
+            }
+            if (row.get(idField) == null) {
+                issues.add(subject + " row declares a stage but no [" + idField + "] - the stage classifies a status seed id");
+            }
+        }
+        if (anyStage && entity != null && LifecycleStages.declaresStageProperty(entity) && statusNomenclatures.contains(entity.getName())) {
+            issues.add(subject + " uses the lifecycle stage marker but entity [" + entity.getName()
+                    + "] declares its own `stage` property - rename that property, the seed key cannot be both data and"
+                    + " lifecycle classification");
+        }
+    }
+
+    /** The field name a seed row keys the entity's primary key by ({@code id} by convention). */
+    private static String seedIdField(EntityIntent entity) {
+        for (FieldIntent field : entity.getFields()) {
+            if (field.isPrimaryKey() && field.getName() != null) {
+                return field.getName();
+            }
+        }
+        return "id";
     }
 
     /**

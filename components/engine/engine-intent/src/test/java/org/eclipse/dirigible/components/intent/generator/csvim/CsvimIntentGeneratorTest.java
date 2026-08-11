@@ -62,6 +62,37 @@ class CsvimIntentGeneratorTest {
                 """, csv, "a row's relation-name key should become the FK column");
     }
 
+    /**
+     * A status row's {@code stage:} marker classifies the lifecycle (dirigible #6645); it is metadata,
+     * not data, so it must never reach the imported table as a column.
+     */
+    @Test
+    void theLifecycleStageMarkerIsNotACsvColumn() {
+        IntentModel model = IntentParser.parse("""
+                name: billing
+                entities:
+                  - name: InvoiceStatus
+                    function: Setting
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                seeds:
+                  - name: invoice-statuses
+                    entity: InvoiceStatus
+                    rows:
+                      - { id: 1, name: DRAFT, stage: draft }
+                      - { id: 3, name: ISSUED, stage: live }
+                """);
+        assertEquals("""
+                INVOICE_STATUS_ID,INVOICE_STATUS_NAME
+                1,DRAFT
+                3,ISSUED
+                """, CsvimIntentGenerator.renderCsvForTest(model.getEntities()
+                                                                .get(0),
+                model.getSeeds()
+                     .get(0)));
+    }
+
     private static final String MULTILINGUAL_YAML = """
             name: uoms
             languages: [en, bg]

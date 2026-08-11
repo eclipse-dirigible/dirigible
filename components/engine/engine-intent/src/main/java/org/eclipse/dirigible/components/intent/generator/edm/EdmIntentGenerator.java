@@ -23,8 +23,11 @@ import java.util.Queue;
 import java.util.Set;
 
 import org.eclipse.dirigible.components.base.helpers.JsonHelper;
+import org.eclipse.dirigible.components.intent.generator.IntentEntities;
 import org.eclipse.dirigible.components.intent.generator.IntentGenerationContext;
 import org.eclipse.dirigible.components.intent.generator.IntentNaming;
+import org.eclipse.dirigible.components.intent.model.GeneratesIntent;
+import org.eclipse.dirigible.components.intent.model.TransitionIntent;
 import org.eclipse.dirigible.components.intent.generator.IntentSettings;
 import org.eclipse.dirigible.components.intent.generator.IntentTargetGenerator;
 import org.eclipse.dirigible.components.intent.generator.TriggerSupport;
@@ -36,6 +39,8 @@ import org.eclipse.dirigible.components.intent.model.EntityIntent;
 import org.eclipse.dirigible.components.intent.model.LabelExpression;
 import org.eclipse.dirigible.components.intent.model.FieldIntent;
 import org.eclipse.dirigible.components.intent.model.NumberIntent;
+import org.eclipse.dirigible.components.intent.model.ProcessIntent;
+import org.eclipse.dirigible.components.intent.model.StepIntent;
 import org.eclipse.dirigible.components.intent.model.IntentModel;
 import org.eclipse.dirigible.components.intent.model.RelationIntent;
 import org.eclipse.dirigible.components.intent.model.RollupIntent;
@@ -202,7 +207,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             // A setting lives under the global Settings perspective (provided by the shell); it does not
             // own a generated perspective.
             String perspective = perspectiveFor(name, compositionParents, settingEntities);
-            String rolePerspective = resolvePerspective(name, compositionParents);
+            String rolePerspective = IntentEntities.compositionPerspective(name, compositionParents);
             Map<String, Object> entityMap = entityDefaults(name, entity.getDescription(), entity.getIcon(), dependent, setting, perspective,
                     tablePrefix, perspectiveOrder, projectName, rolePerspective);
             if (extension) {
@@ -231,11 +236,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             if (rollupGuards.containsKey(name)) {
                 entityMap.put("rollupGuard", rollupGuards.get(name));
             }
-            // A calendar entity renders its records as events on a Harmonia x-h-calendar instead of a
-            // list/manage table. It keeps its own perspective/nav; the calendar page reuses the generated
-            // REST controller (fetch) and the generated create/edit form (opened in a dialog on
-            // date-click / event-click). The property names are PascalCased to match the .model property
-            // (and the Jackson-serialized controller row) the calendar page reads.
+            // A calendar entity renders its records as events on a Harmonia x-h-calendar. The calendar is
+            // an ADDITIONAL page, not a replacement: the entity keeps its own layout (MANAGE /
+            // MANAGE_MASTER / MANAGE_DOCUMENT resolved below) with every page that layout brings, and the
+            // calendar becomes its landing browse route while that layout's list moves to
+            // /<Entity>/list (see the Harmonia shell template). So a document master browsed on a
+            // calendar still edits on the document page - Print, line items and inline process tasks
+            // included. The property names are PascalCased to match the .model property (and the
+            // Jackson-serialized controller row) the calendar page reads.
             if (entity.isCalendar()) {
                 CalendarIntent cal = entity.getCalendar();
                 if (dependent) {
@@ -246,7 +254,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                     // detail-register.js; no standalone calendar page is generated.
                     entityMap.put("detailCalendar", "true");
                 } else {
-                    entityMap.put("layoutType", "MANAGE_CALENDAR");
+                    // Drives the additional calendar page + its routes; the layout stays the natural one.
+                    entityMap.put("calendarView", "true");
                 }
                 if (cal != null) {
                     if (notBlank(cal.getStart())) {
@@ -278,10 +287,14 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A slots entity renders as a Harmonia x-h-slot-picker for appointment/booking: free time
             // slots are bookable and open the create form prefilled with the chosen datetime. Reuses the
-            // generated controller (existing records mark their slots taken) and the shared form.
-            else if (entity.isSlots()) {
+            // generated controller (existing records mark their slots taken) and the shared form. Like the
+            // calendar above it is an ADDITIONAL page - the entity keeps its own layout and every page
+            // that brings, the picker takes over the landing route, and the layout's browse page moves to
+            // /<Entity>/list. A picker is how you CREATE a booking; the document/list is how you work
+            // with one afterwards, and an author needs both.
+            if (entity.isSlots()) {
                 SlotsIntent slotsCfg = entity.getSlots();
-                entityMap.put("layoutType", "MANAGE_SLOTS");
+                entityMap.put("slotsView", "true");
                 if (slotsCfg != null) {
                     if (notBlank(slotsCfg.getStart())) {
                         entityMap.put("slotStartProperty", IntentNaming.pascalCase(slotsCfg.getStart()));
@@ -312,8 +325,9 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A document master keeps its own perspective/nav but swaps the master-detail layout for the
             // document layout; it names its line-items entity so the document page renders that child as
-            // the inline table (and any other composition children as ordinary detail panels).
-            else if (documentItems.containsKey(name)) {
+            // the inline table (and any other composition children as ordinary detail panels). Resolved
+            // independently of the calendar / slots views above, which are additional pages now.
+            if (documentItems.containsKey(name)) {
                 String itemsEntity = documentItems.get(name);
                 entityMap.put("layoutType", "MANAGE_DOCUMENT");
                 entityMap.put("documentItemsEntity", itemsEntity);
@@ -344,6 +358,16 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
                         }
                     }
                 }
+                // Calendar items: the line-items child itself declares `view: calendar`, so the items
+                // pane renders as an embedded x-h-calendar instead of the row grid - a day-grained line
+                // (a booked day, an allocated hour) is entered on a calendar. The child is the document's
+                // items entity, so it is deliberately NOT a secondary detail panel; without this the
+                // child's calendar declaration was emitted and then filtered out, rendering nothing.
+                // The calendar's own configuration rides the child's detail registration
+                // (detail-register.js `calendar: {...}`), which the document page reads at runtime.
+                else if (isCalendarItemsChild(byName.get(itemsEntity))) {
+                    entityMap.put("documentItemsLayout", "calendar");
+                }
             }
             // A plain PRIMARY entity with NO composition children of its own is standalone, not a
             // master-detail. Give it the fuller MANAGE list layout (search / sort / per-column filter,
@@ -354,9 +378,10 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             // A document master (owns a *Item / DocumentItem composition child) gets a generated .print
             // template + feeder, so its edit surface can offer a Print button. Flag it independently of
-            // the layout: the MANAGE_DOCUMENT layout renders Print in the document view already, but a
-            // document master whose UI is overridden to a calendar/slots view reuses the plain manage
-            // form for edit - the flag is what lets that shared form show Print too.
+            // the layout - the MANAGE_DOCUMENT layout renders Print in the document view, and the flag is
+            // what lets the shared manage form show Print too for a master whose edit surface is that
+            // form. (Neither the calendar nor the slots view overrides the layout any more, so a document
+            // browsed on either still edits on its document page.)
             if (documentItems.containsKey(name)) {
                 entityMap.put("hasPrint", "true");
             }
@@ -630,6 +655,25 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         if (!customWidgets.isEmpty()) {
             body.put("widgets", customWidgets);
         }
+        // Custom per-record action labels (transitions + generates): the descriptors reference
+        // <project>:<model>-model.actions.<name> translation keys, and the template engine's
+        // translate action folds this map into the generated en catalog - so a Void/Save-as-Template
+        // button localizes like every other label instead of staying hardcoded English.
+        Map<String, String> customActionLabels = buildCustomActionLabels(model);
+        if (!customActionLabels.isEmpty()) {
+            body.put("customActionLabels", customActionLabels);
+        }
+        // BPM user-task labels (the processes' userTask steps), keyed by the authored step name -
+        // the same convention as customActionLabels. The translate action folds this map into the
+        // generated en catalog's processes section, and the Harmonia template bakes the reverse
+        // (runtime task name -> step-name key) map into config.js, so an Approve/Issue/Send button
+        // localizes instead of always showing the English BPMN task name. Everything is known at
+        // generation time (the task names are part of the process definition) - no runtime key
+        // derivation anywhere.
+        Map<String, String> processTaskLabels = buildProcessTaskLabels(model);
+        if (!processTaskLabels.isEmpty()) {
+            body.put("processTaskLabels", processTaskLabels);
+        }
         body.put("entities", entityList);
         body.put("perspectives", perspectiveList);
         body.put("navigations", new ArrayList<>());
@@ -640,15 +684,52 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return document;
     }
 
-    /** Names of entities declared as settings / nomenclature ({@code kind: setting}). */
-    private static Set<String> settingEntities(List<EntityIntent> entities) {
-        Set<String> settings = new LinkedHashSet<>();
-        for (EntityIntent entity : entities) {
-            if (entity.getName() != null && entity.isSetting()) {
-                settings.add(entity.getName());
+    /**
+     * The display labels of the per-record custom actions ({@code transitions:} + {@code generates:}),
+     * keyed by action name - one derivation shared with the descriptor generators
+     * ({@link IntentNaming#customActionLabel}), so the catalog entry always matches the button's
+     * fallback label.
+     */
+    private static Map<String, String> buildCustomActionLabels(IntentModel model) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (TransitionIntent transition : model.getTransitions()) {
+            if (transition.getName() != null && !transition.getName()
+                                                           .isBlank()) {
+                labels.put(transition.getName(), IntentNaming.customActionLabel(transition.getName(), transition.getLabel()));
             }
         }
-        return settings;
+        for (GeneratesIntent generates : model.getGenerates()) {
+            if (generates.getName() != null && !generates.getName()
+                                                         .isBlank()) {
+                labels.put(generates.getName(), IntentNaming.customActionLabel(generates.getName(), generates.getLabel()));
+            }
+        }
+        return labels;
+    }
+
+    /**
+     * The display labels of the processes' BPM user tasks, keyed by the authored step name (the
+     * {@code customActionLabels} convention). The value is the humanized task name - the exact
+     * {@code name} {@code BpmnIntentGenerator} emits into the BPMN and Flowable serves at runtime, so
+     * the reverse map baked into the generated app resolves an inbox task's {@code name} to its catalog
+     * key by exact match.
+     */
+    private static Map<String, String> buildProcessTaskLabels(IntentModel model) {
+        Map<String, String> labels = new LinkedHashMap<>();
+        for (ProcessIntent process : model.getProcesses()) {
+            for (StepIntent step : process.getSteps()) {
+                if ("userTask".equals(step.getKind()) && step.getName() != null && !step.getName()
+                                                                                        .isBlank()) {
+                    labels.put(step.getName(), IntentNaming.humanize(step.getName()));
+                }
+            }
+        }
+        return labels;
+    }
+
+    /** Names of entities declared as settings / nomenclature ({@code kind: setting}). */
+    private static Set<String> settingEntities(List<EntityIntent> entities) {
+        return IntentEntities.settingEntities(entities);
     }
 
     /**
@@ -679,7 +760,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
             }
             Map<String, Object> guard = new LinkedHashMap<>();
             guard.put("parentEntity", parent.getName());
-            guard.put("parentPerspective", resolvePerspective(parent.getName(), compositionParents));
+            guard.put("parentPerspective", IntentEntities.resolvePerspective(parent.getName(), compositionParents, model));
             guard.put("fkProperty", IntentNaming.pascalCase(rollup.getVia()));
             guard.put("capacityField", IntentNaming.pascalCase(rollup.getCapacity()));
             guard.put("ofField", IntentNaming.pascalCase(rollup.getOf()));
@@ -690,10 +771,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     }
 
     private static String perspectiveFor(String entityName, Map<String, String> compositionParents, Set<String> settingEntities) {
-        if (settingEntities.contains(entityName)) {
-            return SETTINGS_PERSPECTIVE;
-        }
-        return resolvePerspective(entityName, compositionParents);
+        return IntentEntities.resolvePerspective(entityName, compositionParents, settingEntities);
     }
 
     private static Map<String, EntityIntent> indexEntities(List<EntityIntent> entities) {
@@ -761,7 +839,8 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
     /**
      * Map each entity to its composition parent: the target of its first {@code composition: true}
      * {@code manyToOne} / {@code oneToOne} relation. Entities present as keys are DEPENDENT; their
-     * perspective is the parent's, resolved transitively by {@link #resolvePerspective}.
+     * perspective is the parent's, resolved transitively by
+     * {@code IntentEntities.compositionPerspective}.
      */
     private static Map<String, String> computeCompositionParents(List<EntityIntent> entities) {
         Map<String, String> parents = new LinkedHashMap<>();
@@ -780,23 +859,6 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         return parents;
     }
 
-    /**
-     * Follow the composition-parent chain to the first PRIMARY entity; that entity's name is the
-     * perspective every entity in the chain lives under. A cycle (mutually required relations) falls
-     * back to the starting entity itself.
-     */
-    private static String resolvePerspective(String entityName, Map<String, String> compositionParents) {
-        String current = entityName;
-        Set<String> visited = new LinkedHashSet<>();
-        while (compositionParents.containsKey(current)) {
-            if (!visited.add(current)) {
-                LOGGER.warn("Composition cycle detected at entity [{}] - keeping its own perspective", entityName);
-                return entityName;
-            }
-            current = compositionParents.get(current);
-        }
-        return current;
-    }
 
     private static final String UNICONS_BASE = "/services/web/resources/unicons/";
 
@@ -819,6 +881,15 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
 
     private static boolean notBlank(String value) {
         return value != null && !value.isBlank();
+    }
+
+    /**
+     * Whether a document's line-items child asks for the calendar items pane - it declares
+     * {@code view: calendar} (or {@code range} / {@code function: Calendar}). The parser guarantees
+     * such a child also names its {@code calendar.start} date field.
+     */
+    private static boolean isCalendarItemsChild(EntityIntent itemsChild) {
+        return itemsChild != null && itemsChild.isCalendar();
     }
 
     /**

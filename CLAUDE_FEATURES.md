@@ -99,9 +99,9 @@ Each modeler in §2.4 has an in-IDE editor under `components/ui/editor-*` and a 
 
 Project templates available via the IDE's *Generate* action. Source: `components/template/template-*` (also reachable through `GenerationEndpoint`).
 
-- **Application templates.** `template-application-angular`, `…-angular-java`, `…-angular-v2`, `template-application-dao` (+ `-java`, `-v2`), `template-application-data` (+ `-v2`), `template-application-feed` (+ `-v2`), `template-application-odata`, `template-application-rest` (+ `-java`, `-v2`), `template-application-schema`, `template-application-ui-angular` (+ `-java`, `-v2`).
-- **Sample applications.** `template-bookstore`, `template-hello-world`.
-- **Single-artefact templates.** `template-bpm`, `template-camel`, `template-camel-cron-route`, `template-camel-http-route`, `template-database-access`, `template-database-table`, `template-database-view`, `template-editor`, `template-extension-perspective`, `template-extension-view`, `template-form`, `template-form-builder-angularjs`, `template-html`, `template-http-client`, `template-job`, `template-listener`, `template-mapping-javascript`, `template-perspective`, `template-react`, `template-typescript`, `template-view`, `template-websocket`.
+- **Application templates.** `template-application-schema`, `template-application-dao-java`, `template-application-rest-java`, `template-application-ui-harmonia-java`, `template-application-events-java` — the single Harmonia + client-Java stack. The AngularJS and TypeScript stacks (`template-application-angular*`, `-ui-angular*`, `-dao`, `-data`, `-feed`, `-rest` and their `-v2` twins) have been removed; `template-application-odata` moved out with the OData engine.
+- **Sample applications.** `template-hello-world`.
+- **Single-artefact templates.** `template-bpm`, `template-camel`, `template-camel-cron-route`, `template-camel-http-route`, `template-database-access`, `template-database-table`, `template-database-view`, `template-editor`, `template-form`, `template-form-builder-harmonia`, `template-html`, `template-http-client`, `template-job`, `template-listener`, `template-mapping-java`, `template-mapping-javascript`, `template-perspective`, `template-typescript`, `template-view`, `template-websocket`. The service starters (`template-hello-world`, `template-typescript` — registered as "Java (API)", `template-database-access`, `template-http-client`) scaffold client Java; `template-html` scaffolds a standalone Harmonia page. `template-react` was removed — the platform ships one UI stack.
 
 ---
 
@@ -553,7 +553,7 @@ First-class designers, each writing one of the modeler artefacts from §2.4:
 | Integrations Modeler (Karavan) | `*.camel` | Apache Camel route (`resources-karavan-libs`). |
 
 #### Underlying libraries
-Monaco (editor), mxGraph (Schema/EDM diagrams), bpmn-visualization-js (BPMN viewer), Flowable BPMN (modeler), Karavan (Camel route designer), AngularJS + GoldenLayout (legacy layout), AG Grid (tables), Chart.js (charts), jsTree (trees), Xterm.js (terminal).
+Monaco (editor), mxGraph (Schema/EDM diagrams), bpmn-visualization-js (BPMN viewer), Flowable BPMN (modeler), Karavan (Camel route designer), AngularJS + GoldenLayout (legacy layout), AG Grid (tables), jsTree (trees), Xterm.js (terminal).
 
 ### 7.3 Views (`components/ui/view-*`)
 Side / bottom panels: `view-artefacts`, `view-configurations`, `view-console`, `view-databases`, `view-data-structures`, `view-debugger` (JS), `view-java-debug`, `view-extensions`, `view-git`, `view-import`, `view-jobs`, `view-listeners`, `view-loggers`, `view-logs`, `view-preview`, `view-problems`, `view-projects`, `view-properties`, `view-registry`, `view-repository`, `view-search`, `view-security`, `view-sql`, `view-swagger`, `view-terminal`, `view-transfer`, `view-translation`, `view-websockets`, `view-welcome`.
@@ -662,7 +662,7 @@ For doc generation: the full list of `@RestController`-annotated classes is in `
 
 ### 10.2 Frontend toolchain
 - Node 22.x with global `typescript` and `esbuild`. WebJar modules under `components/ide/` and `components/ui/` are transpiled / bundled at Maven build time.
-- Monaco editor, mxGraph, BlimpKit theme, BPMN visualization, AG Grid, Chart.js, Xterm.js, jsTree.
+- Monaco editor, mxGraph, BlimpKit theme, BPMN visualization, AG Grid, Xterm.js, jsTree.
 
 ### 10.3 CLI (`cli/`)
 Standalone helper that starts the Dirigible jar against a given user project path; produces `cli/target/dirigible-cli-*-executable.jar`. See `cli/README.md`.

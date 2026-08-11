@@ -15,6 +15,21 @@
         <svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg>
       </div>
     </div>
+#if($calendarView)
+    <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
+         this list lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()">
+      <i role="img" x-h-lucide data-lucide="calendar"></i><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span>
+    </button>
+#end
+#if($slotsView)
+    <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
+         this browse page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()">
+      <i role="img" x-h-lucide data-lucide="clock"></i>
+      <span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span>
+    </button>
+#end
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredItems.length === 0" @click="exportCsv()">
       <i role="img" x-h-lucide data-lucide="download"></i><span x-text="T('$projectName:${tprefix}.defaults.export', 'Export')"></span>
@@ -114,7 +129,7 @@
 
         <div class="hbox items-center gap-2 p-2" x-show="totalPages > 1">
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage <= 1" @click="goPage(currentPage - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-          <span x-h-text.muted x-text="'Page ' + currentPage + ' / ' + totalPages"></span>
+          <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: currentPage, total: totalPages })"></span>
           <button x-h-button data-variant="outline" data-size="sm" :disabled="currentPage >= totalPages" @click="goPage(currentPage + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
         </div>
       </div>
@@ -141,7 +156,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap px-4 pt-4 pb-2">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
             </button>
           </template>
         </div>

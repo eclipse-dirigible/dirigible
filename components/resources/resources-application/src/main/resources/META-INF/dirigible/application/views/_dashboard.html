@@ -14,9 +14,8 @@
       <p x-h-text.muted x-text="T('application-core:shell.dashboard.overview', 'Overview of your published applications.')"></p>
     </div>
 
-    <div x-show="!loading && groups.length === 0 && $store.reports.items.length === 0" x-cloak x-h-text.muted>
-      No applications published yet.
-    </div>
+    <div x-show="!loading && groups.length === 0 && $store.reports.items.length === 0" x-cloak x-h-text.muted
+         x-text="T('application-core:shell.apps.empty', 'No applications published yet.')"></div>
 
     <!-- Key Indicators: report-attached KPI widgets (reports[].widget) aggregated from every published
          app. A count/value widget is a compact number tile; a list widget is a top-N mini table.

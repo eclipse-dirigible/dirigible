@@ -70,6 +70,12 @@ public enum DirigibleConfig {
 
     HOME_URL("DIRIGIBLE_HOME_URL", "services/web/home/"), //
 
+    /**
+     * The application's externally-reachable base URL, used to build absolute links (e.g. in
+     * notification emails).
+     */
+    APP_BASE_URL("DIRIGIBLE_APP_BASE_URL", ""), //
+
     APPLICATION_LANGUAGES("DIRIGIBLE_APPLICATION_LANGUAGES", "en"), //
 
     MAIL_USERNAME("DIRIGIBLE_MAIL_USERNAME", null), //
@@ -92,6 +98,9 @@ public enum DirigibleConfig {
 
     /** The cms internal root folder. */
     CMS_INTERNAL_ROOT_FOLDER("DIRIGIBLE_CMS_INTERNAL_ROOT_FOLDER", "target/dirigible/cms"),
+
+    /** Serve and store Office documents with the legacy Microsoft mime types. */
+    DOCUMENTS_CONTENT_TYPE_MS_ENABLED("DIRIGIBLE_DOCUMENTS_EXT_CONTENT_TYPE_MS_ENABLED", "false"),
 
     /** The default data source name. */
     DEFAULT_DATA_SOURCE_NAME("DIRIGIBLE_DATABASE_DATASOURCE_NAME_DEFAULT", "DefaultDB"),

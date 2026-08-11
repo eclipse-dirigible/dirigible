@@ -66,7 +66,7 @@ public final class ProcessAbortSupport {
             if (statusProperty == null) {
                 continue; // parser-reported: abortOn needs an EntityStatus relation to match on
             }
-            aborts.add(new Abort(process.getName(), entity, IntentEntities.resolvePerspective(entity, compositionParents),
+            aborts.add(new Abort(process.getName(), entity, IntentEntities.resolvePerspective(entity, compositionParents, model),
                     messageName(process.getName()), statusProperty, statuses));
         }
         return aborts;

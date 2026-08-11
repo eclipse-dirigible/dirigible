@@ -13,6 +13,16 @@
       <input x-h-input.group type="text" :placeholder="T('$projectName:${tprefix}.messages.inputSearch', 'Search ${name}...', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })" x-model="searchTerm" @input="page = 1; refreshIcons()" />
       <div x-h-input-group-addon data-align="inline-start"><svg x-h-icon data-icon="search" class="size-4" role="img" aria-label="search"></svg></div>
     </div>
+#if($calendarView)
+    <!-- The entity also renders on a calendar (intent `view: calendar|range`), which owns /${name};
+         this master page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goCalendar()"><i role="img" x-h-lucide data-lucide="calendar"></i><span x-text="T('$projectName:${tprefix}.defaults.calendar', 'Calendar')"></span></button>
+#end
+#if($slotsView)
+    <!-- The entity also renders as a slot picker (intent `view: slots`), which owns /${name};
+         this master page lives at /${name}/list. -->
+    <button x-h-button data-variant="outline" data-size="sm" @click="goSlots()"><i role="img" x-h-lucide data-lucide="clock"></i><span x-text="T('$projectName:${tprefix}.defaults.slots', 'Slots')"></span></button>
+#end
     <button x-h-button data-variant="primary" @click="newMaster()"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.new', 'New')"></span></button>
     <!-- Export the filtered rows as CSV / print them (Save as PDF via the browser dialog). -->
     <button x-h-button data-variant="outline" data-size="sm" :disabled="filteredMasters.length === 0" @click="exportCsv()">
@@ -76,9 +86,17 @@
                   <button x-h-menu-trigger.dropdown x-h-table-cell-button aria-label="Row actions"><i role="img" x-h-lucide data-lucide="ellipsis"></i></button>
                   <ul x-h-menu data-align="bottom-end">
                     <li x-h-menu-item @click="previewMaster(row)" x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></li>
+#if($immutableStatusProperty || $immutableAlways)
+                    <!-- Edit/Delete are hidden for an immutable record (the controller would 409);
+                         Preview stays - the record remains readable. -->
+                    <li x-h-menu-item x-show="!isRowImmutable(row)" @click="editMaster(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
+                    <li x-h-menu-separator x-show="!isRowImmutable(row)"></li>
+                    <li x-h-menu-item x-show="!isRowImmutable(row)" data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#else
                     <li x-h-menu-item @click="editMaster(row)" x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></li>
                     <li x-h-menu-separator></li>
                     <li x-h-menu-item data-variant="negative" @click="askDelete(row)" x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></li>
+#end
                   </ul>
                 </td>
               </tr>
@@ -88,7 +106,7 @@
       </div>
       <div class="hbox items-center gap-2 p-2" x-show="(state === 'default' || state === 'empty') && pageCount > 1">
         <button x-h-button data-variant="outline" data-size="sm" :disabled="page <= 1" @click="goPage(page - 1)"><i role="img" x-h-lucide data-lucide="chevron-left"></i><span x-text="T('$projectName:${tprefix}.defaults.previous', 'Prev')"></span></button>
-        <span x-h-text.muted x-text="'Page ' + page + ' / ' + pageCount"></span>
+        <span x-h-text.muted x-text="T('$projectName:${tprefix}.defaults.pageOf', 'Page {{page}} / {{total}}', { page: page, total: pageCount })"></span>
         <button x-h-button data-variant="outline" data-size="sm" :disabled="page >= pageCount" @click="goPage(page + 1)"><span x-text="T('$projectName:${tprefix}.defaults.next', 'Next')"></span><i role="img" x-h-lucide data-lucide="chevron-right"></i></button>
       </div>
     </div>
@@ -108,8 +126,14 @@
           <span x-h-toolbar-title class="shrink-0" x-text="T('$projectName:${tprefix}.t.${dataName}', '${entityLabel}') + ' #' + selectedId"></span>
           <div x-h-toolbar-spacer></div>
           <button x-h-button data-variant="outline" data-size="sm" @click="previewMaster(selected)"><i role="img" x-h-lucide data-lucide="eye"></i><span x-text="T('$projectName:${tprefix}.defaults.preview', 'Preview')"></span></button>
+#if($immutableStatusProperty || $immutableAlways)
+          <!-- Edit/Delete are disabled for an immutable record (the controller would 409). -->
+          <button x-h-button data-variant="outline" data-size="sm" :disabled="isRowImmutable(selected)" :title="isRowImmutable(selected) ? T('$projectName:${tprefix}.messages.immutable', 'This record is read-only in its current status - corrections go through the workflow.') : null" @click="editMaster(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
+          <button x-h-button data-variant="transparent" data-size="sm" :disabled="isRowImmutable(selected)" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#else
           <button x-h-button data-variant="outline" data-size="sm" @click="editMaster(selected)"><i role="img" x-h-lucide data-lucide="pencil"></i><span x-text="T('$projectName:${tprefix}.defaults.edit', 'Edit')"></span></button>
           <button x-h-button data-variant="transparent" data-size="sm" @click="askDelete(selected)" aria-label="Delete"><i role="img" x-h-lucide data-lucide="trash-2"></i></button>
+#end
         </div>
 
 #if($hasProcess)
@@ -117,7 +141,7 @@
         <div x-show="$store.processTasks.getTasks(selected).length" class="hbox gap-2 flex-wrap">
           <template x-for="task in $store.processTasks.getTasks(selected)" :key="task.id">
             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
             </button>
           </template>
         </div>
@@ -208,6 +232,9 @@
                             <span class="text-sm truncate" x-text="row.FileName"></span>
                             <span class="text-xs text-muted-foreground" x-text="fileSizeText(row)"></span>
                           </div>
+                          <template x-if="filesReadOnly">
+                            <a x-h-button data-variant="transparent" data-size="sm" :href="openHref(row)" target="_blank" rel="noopener" aria-label="Print"><i role="img" x-h-lucide data-lucide="printer"></i></a>
+                          </template>
                           <a x-h-button data-variant="transparent" data-size="sm" :href="downloadHref(row)" target="_blank" rel="noopener" aria-label="Download"><i role="img" x-h-lucide data-lucide="download"></i></a>
                         </div>
                       </template>
@@ -230,7 +257,12 @@
                     <template x-for="row in rows" :key="row[def.primaryKey]">
                       <tr x-h-table-row data-hoverable="true">
                         <template x-for="col in def.columns" :key="col.name">
-                          <td x-h-table-cell :class="col.number ? 'text-right' : ''" x-text="cellValue(col, row)"></td>
+                          <td x-h-table-cell :class="col.number ? 'text-right' : ''">
+                            <template x-if="col.number"><span x-text="cellValue(col, row)"></span></template>
+                            <template x-if="!col.number">
+                              <div style="white-space: normal; overflow-wrap: break-word; max-width: 28rem;" x-text="cellValue(col, row)"></div>
+                            </template>
+                          </td>
                         </template>
                         <!-- Read-only browse pane: children are added/edited/deleted from the record's
                              Edit form (where these same panels are editable), NOT here. Only the
@@ -239,7 +271,7 @@
                         <td x-h-table-cell data-row-actions>
                           <template x-for="task in $store.processTasks.getTasks(row)" :key="task.id">
                             <button x-h-button data-variant="primary" data-size="sm" @click="$store.processTasks.openTask(task)">
-                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="task.name"></span>
+                              <i role="img" x-h-lucide data-lucide="inbox"></i><span x-text="T('$projectName:${tprefix}.processes.' + (App.config.processTaskKeys || {})[task.name], task.name)"></span>
                             </button>
                           </template>
                           <button x-h-button data-variant="transparent" data-size="sm" aria-label="Preview" @click="previewRow(row)"><i role="img" x-h-lucide data-lucide="eye"></i></button>
@@ -261,10 +293,10 @@
   <div x-h-dialog-overlay :data-open="deleteOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title>Delete ${name}</h2>
+        <h2 x-h-dialog-title x-text="T('$projectName:${tprefix}.defaults.deleteTitle', 'Delete ${name}?', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></h2>
         <button x-h-dialog-close @click="deleteOpen = false" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
-      <div x-h-dialog-content><p>Are you sure you want to delete this ${name}? This cannot be undone.</p></div>
+      <div x-h-dialog-content><p x-text="T('$projectName:${tprefix}.messages.deleteConfirm', 'Are you sure you want to delete this ${name}? This cannot be undone.', { name: T('$projectName:${tprefix}.t.${dataName}', '${name}') })"></p></div>
       <div x-h-dialog-footer>
         <button x-h-button data-variant="outline" @click="deleteOpen = false" :disabled="deleteBusy" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="negative" @click="confirmDelete()" :disabled="deleteBusy"><span x-show="deleteBusy" x-h-spinner></span><span x-text="T('$projectName:${tprefix}.defaults.delete', 'Delete')"></span></button>
