@@ -15,6 +15,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.eclipse.dirigible.commons.config.Configuration;
+import org.eclipse.dirigible.components.base.tenant.DefaultTenant;
+import org.eclipse.dirigible.components.base.tenant.Tenant;
+import org.eclipse.dirigible.components.base.tenant.TenantContext;
 import org.javers.core.Javers;
 import org.javers.core.JaversBuilder;
 import org.javers.core.diff.Diff;
@@ -35,15 +38,25 @@ public class TaskStateService {
     static final String DIRIGIBLE_TRACING_TASK_ENABLED = "DIRIGIBLE_TRACING_TASK_ENABLED";
 
     /** The repository. */
-    private TaskStateRepository repository;
+    private final TaskStateRepository repository;
+
+    /** The tenant context. */
+    private final TenantContext tenantContext;
+
+    /** The default tenant. */
+    private final Tenant defaultTenant;
 
     /**
      * Instantiates a new task state service.
      *
      * @param repository the repository
+     * @param tenantContext the tenant context
+     * @param defaultTenant the default tenant
      */
-    public TaskStateService(TaskStateRepository repository) {
+    public TaskStateService(TaskStateRepository repository, TenantContext tenantContext, @DefaultTenant Tenant defaultTenant) {
         this.repository = repository;
+        this.tenantContext = tenantContext;
+        this.defaultTenant = defaultTenant;
     }
 
     /**
@@ -56,12 +69,49 @@ public class TaskStateService {
     }
 
     /**
+     * Gets the current tenant id, falling back to the default tenant when the tenant context is not yet
+     * initialized.
+     *
+     * @return the current tenant id
+     */
+    private String getCurrentTenantId() {
+        return tenantContext.isNotInitialized() ? defaultTenant.getId()
+                : tenantContext.getCurrentTenant()
+                               .getId();
+    }
+
+    /**
+     * Creates a task state stamped with the current tenant. Used both to build new records on write and
+     * as a tenant-scoped query-by-example probe for reads and deletes.
+     *
+     * @return the tenant-stamped task state
+     */
+    private TaskState createTaskState() {
+        TaskState taskState = new TaskState();
+        taskState.setTenant(getCurrentTenantId());
+        return taskState;
+    }
+
+    /**
+     * Ensures the given task state belongs to the current tenant, otherwise fails as if it did not
+     * exist so that a tenant can neither read nor delete another tenant's task state.
+     *
+     * @param taskState the task state
+     * @param id the requested id, used for the failure message
+     */
+    private void ensureCurrentTenant(TaskState taskState, Long id) {
+        if (!getCurrentTenantId().equals(taskState.getTenant())) {
+            throw new IllegalArgumentException(this.getClass() + ": missing task state with [" + id + "]");
+        }
+    }
+
+    /**
      * Gets the all.
      *
      * @return the all
      */
     public List<TaskState> getAll() {
-        return getRepository().findAll();
+        return getRepository().findAll(Example.of(createTaskState()));
     }
 
     /**
@@ -71,7 +121,7 @@ public class TaskStateService {
      * @return the pages
      */
     public Page<TaskState> getPages(Pageable pageable) {
-        return getRepository().findAll(pageable);
+        return getRepository().findAll(Example.of(createTaskState()), pageable);
     }
 
     /**
@@ -90,6 +140,7 @@ public class TaskStateService {
      * @param taskState the taskState
      */
     public void delete(TaskState taskState) {
+        ensureCurrentTenant(taskState, taskState.getId());
         getRepository().delete(taskState);
     }
 
@@ -97,7 +148,7 @@ public class TaskStateService {
      * Delete all.
      */
     public void deleteAll() {
-        getRepository().deleteAll();
+        getRepository().deleteAll(getRepository().findAll(Example.of(createTaskState())));
     }
 
     /**
@@ -110,6 +161,8 @@ public class TaskStateService {
         TaskState taskState = getRepository().findById(id)
                                              .orElseThrow(() -> new IllegalArgumentException(
                                                      this.getClass() + ": missing task state with [" + id + "]"));
+
+        ensureCurrentTenant(taskState, id);
 
         if (!TaskStatus.STARTED.equals(taskState.getStatus())) {
             Javers javers = JaversBuilder.javers()
@@ -129,7 +182,7 @@ public class TaskStateService {
      * @return the taskState
      */
     public List<TaskState> findByExecution(String execution) {
-        TaskState example = new TaskState();
+        TaskState example = createTaskState();
         example.setExecution(execution);
         return getRepository().findAll(Example.of(example));
     }
@@ -147,7 +200,7 @@ public class TaskStateService {
         if (!isTracingEnabled()) {
             return null;
         }
-        TaskState taskState = new TaskState();
+        TaskState taskState = createTaskState();
         taskState.setType(taskType);
         taskState.setExecution(execution != null ? execution : "NONE");
         taskState.setStep(step != null ? step : "NONE");
