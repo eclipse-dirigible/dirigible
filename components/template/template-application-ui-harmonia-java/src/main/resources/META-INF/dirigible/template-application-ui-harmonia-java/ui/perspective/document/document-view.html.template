@@ -237,6 +237,9 @@
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
         <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button type="button" x-h-button data-variant="outline" data-size="sm" x-show="!isPreview && fillDateColumn()" @click="openFillDialog()"><i role="img" x-h-lucide data-lucide="calendar-plus"></i><span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
       <div x-h-calendar="itemsCalCfg" style="height: 420px" @event-click="onItemsEventClick" @date-click="onItemsDateClick"></div>
@@ -248,6 +251,9 @@
         <span x-h-toolbar-title class="shrink-0" x-text="itemsDef ? T(itemsDef.tkey, '${documentItemsLabel}') : '${documentItemsLabel}'"></span>
         <div x-h-toolbar-spacer></div>
         <button type="button" x-h-button data-variant="primary" data-size="sm" x-show="!isPreview" @click="openRowDialog(null)"><i role="img" x-h-lucide data-lucide="plus"></i><span x-text="T('$projectName:${tprefix}.defaults.add', 'Add')"></span></button>
+        <!-- Fill Month: one dialog fill -> a line per working day. Offered only when the line item
+             carries an editable plain DATE column (the fill target). -->
+        <button type="button" x-h-button data-variant="outline" data-size="sm" x-show="!isPreview && fillDateColumn()" @click="openFillDialog()"><i role="img" x-h-lucide data-lucide="calendar-plus"></i><span x-text="T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month')"></span></button>
       </div>
       <div x-show="itemsError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="itemsError"></div></div>
 
@@ -544,11 +550,12 @@
   <div x-h-dialog-overlay :data-open="rowDialogOpen">
     <div x-h-dialog>
       <div x-h-dialog-header>
-        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : T('$projectName:${tprefix}.defaults.add', 'Add line')"></h2>
+        <h2 x-h-dialog-title x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.edit', 'Edit line') : (draftMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') : T('$projectName:${tprefix}.defaults.add', 'Add line'))"></h2>
         <button x-h-dialog-close @click="closeRowDialog()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
       </div>
       <div x-h-dialog-content>
         <div x-show="draftError" x-h-alert data-variant="negative" role="alert"><div x-h-alert-description x-text="draftError"></div></div>
+        <p x-h-text.muted x-show="draftMode === 'fill'" x-text="T('$projectName:${tprefix}.messages.fillMonthHint', 'One line is created for every working day (Mon-Fri) of the picked month; days that already have a line are skipped.')"></p>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <template x-for="col in editColumns" :key="col.name">
             <!-- Text and lookup fields span the whole dialog row (long names must be readable while
@@ -580,11 +587,19 @@
               <template x-if="!col.readonly && col.widget === 'CHECKBOX'">
                 <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" :disabled="col.readonly" /></span>
               </template>
-              <template x-if="!col.readonly && col.widget === 'DATE'">
+              <template x-if="!col.readonly && col.widget === 'DATE' && !(draftMode === 'fill' && col.name === fillDateName())">
                 <div x-h-date-picker.table>
                   <input type="text" :disabled="col.readonly" />
                   <button x-h-date-picker-trigger aria-label="Choose date"></button>
                   <div x-h-date-picker-popup x-model="draft[col.name]"></div>
+                </div>
+              </template>
+              <!-- Fill Month: the fill-target date column picks the MONTH - every working day gets a line. -->
+              <template x-if="!col.readonly && col.widget === 'DATE' && draftMode === 'fill' && col.name === fillDateName()">
+                <div x-h-month-picker>
+                  <input type="text" />
+                  <button x-h-month-picker-trigger aria-label="Choose month"></button>
+                  <div x-h-month-picker-popup x-model="draft[col.name]"></div>
                 </div>
               </template>
               <template x-if="!col.readonly && col.widget === 'DATETIME-LOCAL'">
@@ -616,7 +631,7 @@
 #end
         <button x-h-button data-variant="transparent" @click="closeRowDialog()" :disabled="draftSaving" x-text="T('$projectName:${tprefix}.defaults.cancel', 'Cancel')"></button>
         <button x-h-button data-variant="primary" @click="saveDraft()" :disabled="draftSaving">
-          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : T('$projectName:${tprefix}.defaults.add', 'Add')"></span>
+          <span x-show="draftSaving" x-h-spinner></span><span x-text="draftMode === 'edit' ? T('$projectName:${tprefix}.defaults.update', 'Save') : (draftMode === 'fill' ? T('$projectName:${tprefix}.defaults.fillMonth', 'Fill Month') : T('$projectName:${tprefix}.defaults.add', 'Add'))"></span>
         </button>
       </div>
     </div>

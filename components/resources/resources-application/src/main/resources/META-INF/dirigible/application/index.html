@@ -311,6 +311,27 @@
       </div>
     </div>
 
+    <!-- Confirmation for an `endpoint` custom action (a generate / create-from): the POST mutates
+         data the moment it fires, so the user gets an explicit chance to cancel before it runs. -->
+    <div x-h-dialog-overlay :data-open="$store.customActions.confirmOpen">
+      <div x-h-dialog data-size="sm" role="alertdialog">
+        <div x-h-dialog-header>
+          <h2 x-h-dialog-title x-text="($store.customActions.confirmAction && $store.customActions.confirmAction.label) || T('application-core:shell.customActions.confirmTitle', 'Run action')"></h2>
+          <button x-h-dialog-close @click="$store.customActions.cancelConfirm()" aria-label="Close"><i role="img" x-h-lucide data-lucide="x"></i></button>
+        </div>
+        <div x-h-dialog-content>
+          <p x-h-text.muted x-text="T('application-core:shell.customActions.confirmBody', 'Run {{name}} for the selected record? This creates or changes data.', { name: ($store.customActions.confirmAction && $store.customActions.confirmAction.label) || '' })"></p>
+        </div>
+        <div x-h-dialog-footer>
+          <button x-h-button data-variant="transparent" @click="$store.customActions.cancelConfirm()" :disabled="$store.customActions.confirmBusy" x-text="T('application-core:shell.customActions.confirmCancel', 'Cancel')"></button>
+          <button x-h-button data-variant="primary" @click="$store.customActions.confirmRun()" :disabled="$store.customActions.confirmBusy">
+            <span x-show="$store.customActions.confirmBusy" x-h-spinner></span>
+            <span x-text="T('application-core:shell.customActions.confirmRun', 'Run')"></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Act-as (delegated entry) dialog: arm the acting identity and land in the My shell as that
          person. The identity value is the person's mapped username (their e-mail); entitlement is
          enforced server-side. -->

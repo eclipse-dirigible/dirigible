@@ -221,10 +221,13 @@
               <template x-if="!col.readonly && !col.lookup && col.number">
                 <div x-h-input-number><input type="number" step="any" x-model.number="draft[col.name]" /></div>
               </template>
+              <template x-if="!col.readonly && !col.lookup && col.widget === 'CHECKBOX'">
+                <span x-h-checkbox><input type="checkbox" x-model="draft[col.name]" /></span>
+              </template>
               <template x-if="!col.readonly && !col.lookup && col.date">
                 <div x-h-date-picker><input type="text" /><button x-h-date-picker-trigger aria-label="Choose date"></button><div x-h-date-picker-popup x-model="draft[col.name]"></div></div>
               </template>
-              <template x-if="!col.readonly && !col.lookup && !col.date && !col.number">
+              <template x-if="!col.readonly && !col.lookup && !col.date && !col.number && col.widget !== 'CHECKBOX'">
                 <input x-h-input type="text" x-model="draft[col.name]" :pattern="col.pattern" />
               </template>
               <!-- A read-only column (calculated / intent readOnly) is a VALUE, not a control: the

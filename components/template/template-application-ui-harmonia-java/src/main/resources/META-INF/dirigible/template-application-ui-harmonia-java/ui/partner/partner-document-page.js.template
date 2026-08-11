@@ -269,14 +269,17 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 
-    itemColumns() { const d = this.def(); return (d && d.editColumns) || []; },
+    // A sensitive column never renders on the partner surface (neither in the table nor in the
+    // dialog): the partner items controller nulls the value on the wire, so showing the column
+    // would only display a permanently empty field the partner is not meant to see.
+    itemColumns() { const d = this.def(); return ((d && d.editColumns) || []).filter((c) => !c.sensitive); },
     // The read-only items TABLE shows the display columns (major fields - `major: false` hides a
     // field/relation from the table) with their full edit metadata; the dialog keeps itemColumns().
     tableColumns() {
       const d = this.def();
       if (!d) return [];
       const visible = new Set((d.columns || []).map(c => c.name));
-      return (d.editColumns || []).filter(c => visible.has(c.name));
+      return this.itemColumns().filter(c => visible.has(c.name));
     },
 
     displayItem(row, col) {
@@ -288,6 +291,7 @@ document.addEventListener('alpine:init', () => {
       }
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
+      if (col.widget === 'CHECKBOX') return window.T ? (v ? window.T('$projectName:${tprefix}.defaults.yes', 'Yes') : window.T('$projectName:${tprefix}.defaults.no', 'No')) : String(!!v);
       return String(v);
     },
 
