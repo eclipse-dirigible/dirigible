@@ -1,0 +1,47 @@
+{
+  "errors": {
+    "forbidden": "Нямате права да четете това."
+  },
+  "explorer": {
+    "close": "Затвори",
+    "contents": "Съдържание",
+    "copied": "Копирано {{name}}",
+    "copyName": "Копирай името",
+    "datasource": "Източник на данни",
+    "ddl": "DDL",
+    "generateSelect": "Генерирай SELECT",
+    "loading": "Зарежда се...",
+    "noDatasources": "Няма източници на данни",
+    "noDatasourcesHint": "На тази инсталация няма конфигуриран източник на данни.",
+    "noRows": "Няма редове.",
+    "noSchemas": "Няма схеми в този източник на данни.",
+    "refresh": "Опресни",
+    "rowsCapped": "Показани са {{count}} реда - сървърът ограничава резултата, така че може да има още.",
+    "rowsShown": "Показани са {{count}} реда.",
+    "showContents": "Покажи съдържанието",
+    "showDdl": "Покажи DDL",
+    "title": "Изследовател"
+  },
+  "shell": {
+    "nav": {
+      "explorer": "Изследовател",
+      "group": "База данни",
+      "sql": "SQL конзола",
+      "workbench": "Отвори в Workbench"
+    },
+    "title": "База данни"
+  },
+  "sql": {
+    "cancel": "Отказ",
+    "capped": "Сървърът ограничава резултата, така че може да има повече редове от показаните.",
+    "clear": "Изчисти",
+    "confirmBody": "Тази заявка не е четене. Ще бъде изпълнена върху {{datasource}}.",
+    "confirmTitle": "Изпълнение на променяща заявка?",
+    "placeholder": "SELECT * FROM ...   (Ctrl/Cmd+Enter за изпълнение)",
+    "rowsReturned": "Редове: {{count}}",
+    "rowsUpdated": "Променени редове: {{count}}",
+    "run": "Изпълни",
+    "statementExecuted": "Заявката беше изпълнена.",
+    "title": "SQL конзола"
+  }
+}
