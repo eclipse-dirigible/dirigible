@@ -271,14 +271,17 @@ document.addEventListener('alpine:init', () => {
     },
 #end
 
-    itemColumns() { const d = this.def(); return (d && d.editColumns) || []; },
+    // A sensitive column never renders on the personal surface (neither in the table nor in the
+    // dialog): the personal items controller nulls the value on the wire, so showing the column
+    // would only display a permanently empty field the owner is not meant to see.
+    itemColumns() { const d = this.def(); return ((d && d.editColumns) || []).filter((c) => !c.sensitive); },
     // The read-only items TABLE shows the display columns (major fields - `major: false` hides a
     // field/relation from the table) with their full edit metadata; the dialog keeps itemColumns().
     tableColumns() {
       const d = this.def();
       if (!d) return [];
       const visible = new Set((d.columns || []).map(c => c.name));
-      return (d.editColumns || []).filter(c => visible.has(c.name));
+      return this.itemColumns().filter(c => visible.has(c.name));
     },
 
     displayItem(row, col) {
@@ -290,6 +293,7 @@ document.addEventListener('alpine:init', () => {
       }
       if (col.date) return window.HarmoniaFormat ? window.HarmoniaFormat.date(v) : String(v);
       if (col.number) return window.HarmoniaFormat ? window.HarmoniaFormat.number(v) : String(v);
+      if (col.widget === 'CHECKBOX') return window.T ? (v ? window.T('$projectName:${tprefix}.defaults.yes', 'Yes') : window.T('$projectName:${tprefix}.defaults.no', 'No')) : String(!!v);
       return String(v);
     },
 
@@ -323,6 +327,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async saveItem() {
+      if (this.itemMode === 'fill') { await this.fillMonthItems(); return; }
       const d = this.def();
       const body = { ...this.draft };
       for (const key of Object.keys(body)) { if (body[key] === '') body[key] = null; }
@@ -340,6 +345,75 @@ document.addEventListener('alpine:init', () => {
       } catch (e) {
         this.itemsError = (e && e.message) || 'Could not save the line item.';
       }
+    },
+
+    // ----- Fill Month (one dialog fill -> a line per working day) ---------------------------------
+    // Offered only when the line item carries an editable plain DATE column (the fill target).
+    fillDateColumn() {
+      return this.itemColumns().find((c) => c.date && !c.readonly && !c.lookup && c.widget === 'DATE') || null;
+    },
+    fillDateName() { const c = this.fillDateColumn(); return c ? c.name : ''; },
+
+    // The same item dialog, in 'fill' mode: the date column picks the MONTH (seeded with the current
+    // one) and Save creates a line per working day instead of one line.
+    async openFillMonth() {
+      await this.openItem(null);
+      const dateCol = this.fillDateColumn();
+      if (!dateCol) return;
+      this.itemMode = 'fill';
+      const now = new Date();
+      this.draft[dateCol.name] = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    },
+
+    // One POST per working day (Mon-Fri) of the picked month with the dialog's values; days that
+    // already carry a line are skipped, so a partially filled month can be topped up safely.
+    async fillMonthItems() {
+      const d = this.def();
+      const dateCol = this.fillDateColumn();
+      const month = String((dateCol && this.draft[dateCol.name]) || '').slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(month)) {
+        this.itemsError = 'Pick a month to fill.';
+        return;
+      }
+      const taken = new Set((this.items || []).map((r) => this.itemDayOf(r[dateCol.name])).filter(Boolean));
+      const body = { ...this.draft };
+      for (const key of Object.keys(body)) { if (body[key] === '') body[key] = null; }
+      body[d.masterEntityId] = this.id;
+      delete body[d.primaryKey];
+      try {
+        for (const day of this.monthWorkingDays(month)) {
+          if (taken.has(day)) continue;
+          await App.services.api.post(this.itemsApiPath, { ...body, [dateCol.name]: day });
+        }
+        this.itemDialog = false;
+        await this.loadItems();
+        await this.reloadHeaderTotals();
+      } catch (e) {
+        this.itemsError = (e && e.message) || 'Could not fill the month.';
+        await this.loadItems();
+        await this.reloadHeaderTotals();
+      }
+    },
+
+    monthWorkingDays(month) {
+      const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+      const days = [];
+      for (let day = 1, last = new Date(y, m, 0).getDate(); day <= last; day++) {
+        const dow = new Date(y, m - 1, day).getDay();
+        if (dow !== 0 && dow !== 6) days.push(month + '-' + String(day).padStart(2, '0'));
+      }
+      return days;
+    },
+
+    // A stored date arrives as an ISO string, epoch number or java.time array - its YYYY-MM-DD part.
+    itemDayOf(v) {
+      if (v == null || v === '') return '';
+      if (Array.isArray(v)) return v[0] + '-' + String(v[1]).padStart(2, '0') + '-' + String(v[2]).padStart(2, '0');
+      if (typeof v === 'number') {
+        const d = new Date(v < 1e12 ? v * 1000 : v);
+        return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+      }
+      return String(v).slice(0, 10);
     },
 
 #if($documentItemsLayout == "calendar")

@@ -1050,6 +1050,7 @@ document.addEventListener('alpine:init', () => {
     },
 
     async saveDraft() {
+      if (this.draftMode === 'fill') { await this.fillMonthDraft(); return; }
       this.draftSaving = true;
       this.draftError = null;
       try {
@@ -1068,6 +1069,74 @@ document.addEventListener('alpine:init', () => {
       } finally {
         this.draftSaving = false;
       }
+    },
+
+    // ----- Fill Month (one dialog fill -> a line per working day) ---------------------------------
+    // Offered only when the line item carries an editable plain DATE column (the fill target).
+    fillDateColumn() {
+      return this.editColumns.find(c => c.widget === 'DATE' && !c.readonly) || null;
+    },
+    fillDateName() { const c = this.fillDateColumn(); return c ? c.name : ''; },
+
+    // The same line dialog, in 'fill' mode: the fill-target date column picks the MONTH (seeded with
+    // the current one) and Save creates a line per working day instead of one line.
+    openFillDialog() {
+      const col = this.fillDateColumn();
+      if (!col) return;
+      this.openRowDialog(null);
+      if (!this.rowDialogOpen) return;   // openRowDialog refused (preview / items disabled)
+      this.draftMode = 'fill';
+      const now = new Date();
+      this.draft[col.name] = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    },
+
+    // One POST per working day (Mon-Fri) of the picked month with the dialog's values; days that
+    // already carry a line are skipped, so a partially filled month can be topped up safely.
+    async fillMonthDraft() {
+      this.draftSaving = true;
+      this.draftError = null;
+      try {
+        const col = this.fillDateColumn();
+        const month = String((col && this.draft[col.name]) || '').slice(0, 7);
+        if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Pick a month to fill.');
+        const taken = new Set((this.items || []).map(r => this.itemDayOf(r[col.name])).filter(Boolean));
+        const pk = this.itemsDef.primaryKey;
+        for (const day of this.monthWorkingDays(month)) {
+          if (taken.has(day)) continue;
+          const body = this.draftPayload();
+          delete body[pk];
+          body[col.name] = new Date(day + 'T00:00:00Z').toISOString();
+          await App.services.api.post(this.itemsDef.apiPath, body);
+        }
+        this.rowDialogOpen = false; this.draft = {};
+      } catch (e) {
+        this.draftError = App.services.apiErrors.messageFor(e, 'Could not fill the month.');
+      } finally {
+        this.draftSaving = false;
+        await this.loadItems();   // reflect what was created even on a mid-loop failure
+        await this.loadHeader();
+      }
+    },
+
+    monthWorkingDays(month) {
+      const y = Number(month.slice(0, 4)), m = Number(month.slice(5, 7));
+      const days = [];
+      for (let day = 1, last = new Date(y, m, 0).getDate(); day <= last; day++) {
+        const dow = new Date(y, m - 1, day).getDay();
+        if (dow !== 0 && dow !== 6) days.push(month + '-' + String(day).padStart(2, '0'));
+      }
+      return days;
+    },
+
+    // A stored date arrives as an ISO string, epoch number or java.time array - its YYYY-MM-DD part.
+    itemDayOf(v) {
+      if (v == null || v === '') return '';
+      if (Array.isArray(v)) return v[0] + '-' + String(v[1]).padStart(2, '0') + '-' + String(v[2]).padStart(2, '0');
+      if (typeof v === 'number') {
+        const d = new Date(v < 1e12 ? v * 1000 : v);
+        return isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
+      }
+      return String(v).slice(0, 10);
     },
 
     askDeleteRow(row) { if (this.isPreview) return; this.deleteTarget = row; this.deleteOpen = true; },
