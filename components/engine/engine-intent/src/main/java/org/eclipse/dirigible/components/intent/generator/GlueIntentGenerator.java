@@ -231,8 +231,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
             if (days != null) {
                 entry.put("kind", "days");
                 entry.put("dayField", IntentNaming.pascalCase(child.getDayField()));
-                entry.put("fieldAssignments", childAssignments(java.util.Map.of(), child.getDefaults(), rowVar,
-                        temporalKinds(crossModel ? null : byName.get(child.getTo()), target)));
+                entry.put("fieldAssignments",
+                        childAssignments(java.util.Map.of(), child.getDefaults(), rowVar,
+                                temporalKinds(crossModel ? null : byName.get(child.getTo()), target),
+                                relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             } else {
                 entry.put("kind", "entity");
                 String collection = String.valueOf(child.getForEach()
@@ -263,8 +265,10 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                                                            .next();
                 entry.put("matchProperty", IntentNaming.pascalCase(condition.getKey()));
                 entry.put("matchSourceExpression", "entity." + IntentNaming.pascalCase(String.valueOf(condition.getValue())));
-                entry.put("fieldAssignments", childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar,
-                        temporalKinds(crossModel ? null : byName.get(child.getTo()), target)));
+                entry.put("fieldAssignments",
+                        childAssignments(toStringMap(child.getMap()), child.getDefaults(), rowVar,
+                                temporalKinds(crossModel ? null : byName.get(child.getTo()), target),
+                                relationProperties(crossModel ? null : byName.get(child.getTo()), target)));
             }
             entry.put("rowVar", rowVar);
             if (child.getChildren() != null && !child.getChildren()
@@ -740,9 +744,14 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 // line-item columns (quantity/price/amount) are decimal, and a bare int literal does
                 // not convert to the generated BigDecimal field. The item target lives in the SAME
                 // model as the header target, so a cross-model header implies a resolvable item.
+                // A default naming a TO-ONE RELATION of the item target (a required classifier the map
+                // has no source for, e.g. a SalesInvoiceItem's TaxRate) is a foreign-key id, not an
+                // amount - it must stay an integer literal, so the relation names are passed alongside.
                 CrossModelSupport.TargetInfo itemTarget = uses == null ? null : CrossModelSupport.resolve(context, uses, items.getTo());
-                e.put("itemFieldAssignments", childAssignments(items.getMap(), items.getDefaults(), "srcItem",
-                        temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget)));
+                e.put("itemFieldAssignments",
+                        childAssignments(items.getMap(), items.getDefaults(), "srcItem",
+                                temporalKinds(crossModel ? null : byName.get(items.getTo()), itemTarget),
+                                relationProperties(crossModel ? null : byName.get(items.getTo()), itemTarget)));
                 e.put("itemLines", new ArrayList<>());
             } else if (hasItemLines) {
                 // The synthetic lines write into the TARGET document's composition line-items child,
@@ -1653,7 +1662,7 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
      * generated {@code BigDecimal} field.
      */
     private static List<Map<String, Object>> childAssignments(Map<String, String> map, Map<String, String> defaults, String sourceVar,
-            java.util.function.Function<String, String> temporalKinds) {
+            java.util.function.Function<String, String> temporalKinds, java.util.Set<String> relationProperties) {
         Map<String, String> typedDefaults = new LinkedHashMap<>();
         if (defaults != null) {
             typedDefaults.putAll(defaults);
@@ -1665,12 +1674,42 @@ public class GlueIntentGenerator implements IntentTargetGenerator {
                 continue;
             }
             String expression = literalExpression(entry.getValue(), temporalKinds.apply(IntentNaming.pascalCase(entry.getKey())));
-            if (expression.matches("-?\\d+(\\.\\d+)?")) {
+            // A to-one relation default is a foreign-key ID - the generated field is Integer, so the
+            // decimal-column convenience wrap below would not even compile against it.
+            boolean relation = relationProperties != null && relationProperties.contains(IntentNaming.pascalCase(entry.getKey()));
+            if (!relation && expression.matches("-?\\d+(\\.\\d+)?")) {
                 expression = "new java.math.BigDecimal(\"" + expression + "\")";
             }
             list.add(assignment(entry.getKey(), expression));
         }
         return list;
+    }
+
+    /**
+     * The pascal-cased names of the item target's to-one relations - locally from its intent relations,
+     * cross-model from the owner {@code .model}'s widget types (the edm generator gives every to-one FK
+     * the DROPDOWN - or, for the EntityStatus one, DOCUMENT_STATUS - widget, so the owner model carries
+     * the fact without a new attribute).
+     */
+    private static java.util.Set<String> relationProperties(EntityIntent local, CrossModelSupport.TargetInfo target) {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        if (local != null && local.getRelations() != null) {
+            for (RelationIntent relation : local.getRelations()) {
+                boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+                if (toOne && relation.getName() != null) {
+                    names.add(IntentNaming.pascalCase(relation.getName()));
+                }
+            }
+        }
+        if (target != null && target.propertyWidgets() != null) {
+            for (Map.Entry<String, String> widget : target.propertyWidgets()
+                                                          .entrySet()) {
+                if ("DROPDOWN".equals(widget.getValue()) || "DOCUMENT_STATUS".equals(widget.getValue())) {
+                    names.add(widget.getKey());
+                }
+            }
+        }
+        return names;
     }
 
     /**
