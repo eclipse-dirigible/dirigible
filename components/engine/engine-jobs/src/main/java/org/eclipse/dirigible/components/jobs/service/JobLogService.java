@@ -248,8 +248,7 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
      * @param jobName the job name
      */
     public void deleteAllByJobName(String jobName) {
-        // createJobLog() if we want only logs for the current tenant otherwise new JobLog()
-        JobLog filter = new JobLog();
+        JobLog filter = createJobLog();
         if (jobName != null && jobName.startsWith("/")) {
             jobName = jobName.substring(1);
         }
@@ -268,8 +267,7 @@ public class JobLogService extends BaseArtefactService<JobLog, Long> {
      */
     @Transactional(readOnly = true)
     public List<JobLog> findByJob(String name) {
-        // createJobLog() if we want only logs for the current tenant otherwise new JobLog()
-        JobLog filter = new JobLog();
+        JobLog filter = createJobLog();
         if (name != null && name.startsWith("/")) {
             name = name.substring(1);
         }
