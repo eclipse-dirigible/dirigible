@@ -86,7 +86,7 @@
                     });
                 });
 
-                $scope.removeEmail = (id) => $http.delete(`/services/jobs/emailremove/${id}`).then((response) => {
+                $scope.removeEmail = (id) => $http.delete(`/services/jobs/emails/${id}`).then((response) => {
                     getEmails($scope.job);
                 }, (response) => {
                     console.error(response.data);
