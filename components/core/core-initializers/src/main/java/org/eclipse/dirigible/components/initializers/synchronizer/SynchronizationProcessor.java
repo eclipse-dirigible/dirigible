@@ -787,6 +787,11 @@ public class SynchronizationProcessor implements SynchronizationWalkerCallback, 
         Definition definition = new Definition(location, FilenameUtils.getBaseName(file.getFileName()
                                                                                        .toString()),
                 type, content);
+        // change detection may span more than the file's own bytes (e.g. CSVIM + its referenced CSVs)
+        byte[] checksumContent = synchronizer.checksumContent(location, content);
+        if (checksumContent != content) {
+            definition.updateChecksum(checksumContent);
+        }
         // check whether this artefact has been processed in the past already
         Definition maybe = definitionService.findByKey(definition.getKey());
         Map<String, Definition> map = checkSynchronizerMap(synchronizer);

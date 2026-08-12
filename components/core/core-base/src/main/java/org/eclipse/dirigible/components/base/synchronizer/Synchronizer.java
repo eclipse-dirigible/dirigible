@@ -61,6 +61,21 @@ public interface Synchronizer<A extends Artefact, ID> {
     List<A> parse(String location, byte[] content) throws ParseException;
 
     /**
+     * Returns the content whose checksum decides whether the definition at the given location has been
+     * modified. By default the definition file's own bytes. A synchronizer whose artefact imports other
+     * files by reference (e.g. CSVIM referencing CSV files) extends the result with the referenced
+     * files' content, so that editing only a referenced file marks the definition MODIFIED and the
+     * UPDATE flow re-processes it.
+     *
+     * @param location the definition location
+     * @param content the definition file's own content
+     * @return the content to checksum for change detection
+     */
+    default byte[] checksumContent(String location, byte[] content) {
+        return content;
+    }
+
+    /**
      * Retrieve all the processed artefacts by the definition location.
      *
      * @param location the location
