@@ -184,7 +184,7 @@ export class Store {
 	 * @param offset Number of results to skip.
 	 * @returns An array of JavaScript objects.
 	 */
-	public static query(query: string, parameters?: (string | number | boolean | Date | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
+	public static query(query: string, parameters?: (string | number | boolean | Date | null | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
 		let arr: any[] = [];
 		if (parameters == null) {
 			arr = [];
@@ -223,10 +223,12 @@ export class Store {
 			return Store.parseResult(result);
 		}
 
-		// Primitive array
+		// Primitive array; null/undefined are valid values - they bind as SQL NULL
 		if (
 			arr.every(
 				(v) =>
+					v === null ||
+					v === undefined ||
 					typeof v === "string" ||
 					typeof v === "number" ||
 					typeof v === "boolean" ||
@@ -246,7 +248,7 @@ export class Store {
 	 * @param query The entity/table name.
 	 * @returns An array of all JavaScript objects.
 	 */
-	public static queryNative(query: string, parameters?: (string | number | boolean | Date | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
+	public static queryNative(query: string, parameters?: (string | number | boolean | Date | null | TypedQueryParameter | NamedQueryParameter)[], limit: number = 100, offset: number = 0): any[] {
 		let arr: any[] = [];
 		if (parameters == null) {
 			arr = [];
@@ -285,10 +287,12 @@ export class Store {
 			return Store.parseResult(result);
 		}
 
-		// Primitive array
+		// Primitive array; null/undefined are valid values - they bind as SQL NULL
 		if (
 			arr.every(
 				(v) =>
+					v === null ||
+					v === undefined ||
 					typeof v === "string" ||
 					typeof v === "number" ||
 					typeof v === "boolean" ||
