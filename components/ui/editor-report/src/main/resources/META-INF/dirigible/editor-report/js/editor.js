@@ -18,6 +18,12 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	let workspace = '';
 	let contents;
 	$scope.changed = false;
+	// 'structured': the visual builder owns report.query and regenerates it on every model
+	// edit. 'freestyle': the stored SQL is richer than what the builder can reproduce
+	// (expressions, custom joins, quoting), so the query string is the source of truth,
+	// the query-shaping builder sections are hidden and the query is edited directly.
+	$scope.queryMode = 'structured';
+	$scope.queryPanelExpanded = false;
 	$scope.nameErrorMessage = 'Allowed characters include all letters, numbers, \'_\', \'-\', \'.\', \':\' and \'"\'. Maximum length is 255.';
 	$scope.errorMessage = 'An unknown error was encountered. Please see console for more information.';
 	$scope.forms = {
@@ -125,6 +131,11 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 		return report;
 	}
 
+	// angular.toJson drops Angular's $$-prefixed bookkeeping (e.g. the $$hashKey that
+	// ng-repeat stamps on rows) so it never leaks into the saved artefact; the 2-space
+	// indentation matches the intent generator's output.
+	const serializeReport = () => angular.toJson($scope.report, 2);
+
 	const loadFileContents = () => {
 		if (!$scope.state.error) {
 			$scope.state.isBusy = true;
@@ -136,8 +147,12 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 					// Absent means shown on the dashboard - make it explicit so the checkbox binds
 					// cleanly (before the dirty-tracking snapshot below, so this is not a change).
 					if ($scope.report.dashboard === undefined) $scope.report.dashboard = true;
-					contents = JSON.stringify($scope.report, null, 4);
-					$scope.query = $scope.report.query;
+					contents = serializeReport();
+					// Round-trip guard: the builder may only own the query when it can actually
+					// reproduce the stored one. Otherwise (intent-generated or hand-tuned SQL)
+					// the query string is the source of truth and is never regenerated.
+					$scope.queryMode = !$scope.report.query || $scope.report.query === buildQuery($scope.report) ? 'structured' : 'freestyle';
+					$scope.queryPanelExpanded = $scope.queryMode === 'freestyle';
 					$scope.state.isBusy = false;
 				});
 			}, (response) => {
@@ -284,7 +299,7 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 				$scope.state.busyText = 'Saving...';
 				$scope.state.isBusy = true;
 				$scope.state.error = false;
-				saveContents(JSON.stringify($scope.report, null, 4));
+				saveContents(serializeReport());
 			}
 		}
 	};
@@ -329,13 +344,17 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 
 	$scope.$watch('report', () => {
 		if (!$scope.state.isBusy) {
+			// Regenerate before the dirty check so both see the same state. In free-style
+			// mode the stored SQL is authoritative and must never be overwritten.
+			if ($scope.queryMode === 'structured' && $scope.report) {
+				$scope.report.query = buildQuery($scope.report);
+			}
 			if (!$scope.state.error) {
-				const isDirty = contents !== JSON.stringify($scope.report, null, 4);
+				const isDirty = contents !== serializeReport();
 				if ($scope.changed !== isDirty) {
 					$scope.fileChanged();
 				}
 			}
-			$scope.generateQuery();
 		}
 	}, true);
 
@@ -1330,72 +1349,113 @@ angular.module('page', ['blimpKit', 'platformView', 'platformShortcuts', 'Worksp
 	};
 	// End Parameters Section ---------------------------------------------------------------------------------
 
-	$scope.generateQuery = () => {
-		$scope.query = "SELECT ";
-		if ($scope.report.columns) {
-			for (let i = 0; i < $scope.report.columns.length; i++) {
-				if ($scope.report.columns[i].select === true) {
-					if ($scope.report.columns[i].aggregate !== undefined && $scope.report.columns[i].aggregate !== "NONE") {
-						$scope.query += $scope.report.columns[i].aggregate + "(";
+	// Physical identifiers (table and column names) are stored unquoted on the model;
+	// quoting happens on emission, mirroring ReportIntentGenerator.buildQuery(). '*' and
+	// already-quoted values (legacy hand-edited files) pass through untouched.
+	function quoteIdentifier(name) {
+		return !name || name === '*' || name.startsWith('"') ? name : `"${name}"`;
+	}
+
+	// The SELECT/GROUP BY term of a column: a verbatim SQL expression when present
+	// (computed dimensions like date buckets), else the quoted qualified column.
+	function columnTerm(column) {
+		if (column.expression) return column.expression;
+		if (column.name === '*') return '*';
+		return column.table + '.' + quoteIdentifier(column.name);
+	}
+
+	// Rebuild the SQL from the structured model. Emission is aligned token-for-token with
+	// ReportIntentGenerator.buildQuery() so generated reports round-trip unchanged.
+	function buildQuery(report) {
+		let query = 'SELECT ';
+		if (report.columns) {
+			const selectParts = [];
+			for (let i = 0; i < report.columns.length; i++) {
+				const column = report.columns[i];
+				if (column.select === true) {
+					let part = columnTerm(column);
+					if (column.aggregate !== undefined && column.aggregate !== 'NONE') {
+						part = column.aggregate + '(' + part + ')';
 					}
-					$scope.query += $scope.report.columns[i].table + "." + $scope.report.columns[i].name;
-					if ($scope.report.columns[i].aggregate !== undefined && $scope.report.columns[i].aggregate !== "NONE") {
-						$scope.query += ")";
-					}
-					$scope.query += ` as "${$scope.report.columns[i].alias}", `;
+					selectParts.push(`${part} as "${column.alias}"`);
 				}
 			}
+			query += selectParts.join(', ');
 		}
-		if ($scope.query.substring($scope.query.length - 2) === ', ')
-			$scope.query = $scope.query.substring(0, $scope.query.length - 2);
-		if ($scope.report.table && $scope.report.alias)
-			$scope.query += "\nFROM " + $scope.report.table + " as " + $scope.report.alias;
+		if (report.table && report.alias)
+			query += '\nFROM ' + quoteIdentifier(report.table) + ' as ' + report.alias;
 
-		if ($scope.report.joins) {
-			for (let i = 0; i < $scope.report.joins.length; i++) {
-				$scope.query += "\n  " + $scope.report.joins[i].type + " JOIN " + $scope.report.joins[i].name + " " + $scope.report.joins[i].alias + " ON " + $scope.report.joins[i].condition;
+		if (report.joins) {
+			for (let i = 0; i < report.joins.length; i++) {
+				query += '\n' + report.joins[i].type + ' JOIN ' + quoteIdentifier(report.joins[i].name) + ' as ' + report.joins[i].alias + ' ON ' + report.joins[i].condition;
 			}
 		}
 
-		if ($scope.report.conditions) {
-			$scope.query += "\nWHERE ";
-			for (let i = 0; i < $scope.report.conditions.length; i++) {
-				if (i > 0) { $scope.query += ' AND ' }
-				$scope.query += $scope.report.conditions[i].left + " " + $scope.report.conditions[i].operation + " " + $scope.report.conditions[i].right;
+		if (report.conditions && report.conditions.length > 0) {
+			query += '\nWHERE ';
+			for (let i = 0; i < report.conditions.length; i++) {
+				if (i > 0) { query += ' AND ' }
+				query += report.conditions[i].left + ' ' + report.conditions[i].operation + ' ' + report.conditions[i].right;
 			}
 		}
 
-		if ($scope.report.columns) {
-			let g = false;
-			for (let i = 0; i < $scope.report.columns.length; i++) {
-				if ($scope.report.columns[i].grouping === true) {
-					if (!g) {
-						$scope.query += "\nGROUP BY ";
-						g = true;
-					}
-					$scope.query += $scope.report.columns[i].table + "." + $scope.report.columns[i].name + ', ';
+		if (report.columns) {
+			const groupParts = [];
+			for (let i = 0; i < report.columns.length; i++) {
+				if (report.columns[i].grouping === true) {
+					groupParts.push(columnTerm(report.columns[i]));
 				}
 			}
+			if (groupParts.length > 0) query += '\nGROUP BY ' + groupParts.join(', ');
 		}
-		if ($scope.query.substring($scope.query.length - 2) === ', ')
-			$scope.query = $scope.query.substring(0, $scope.query.length - 2);
 
-		if ($scope.report.havings) {
-			$scope.query += "\nHAVING ";
-			for (let i = 0; i < $scope.report.havings.length; i++) {
-				if (i > 0) { $scope.query += ', ' }
-				$scope.query += $scope.report.havings[i].left + " " + $scope.report.havings[i].operation + " " + $scope.report.havings[i].right;
+		if (report.havings && report.havings.length > 0) {
+			query += '\nHAVING ';
+			for (let i = 0; i < report.havings.length; i++) {
+				if (i > 0) { query += ' AND ' }
+				query += report.havings[i].left + ' ' + report.havings[i].operation + ' ' + report.havings[i].right;
 			}
 		}
 
-		if ($scope.report.orderings) {
-			$scope.query += "\nORDER BY ";
-			for (let i = 0; i < $scope.report.orderings.length; i++) {
-				if (i > 0) { $scope.query += ', ' }
-				$scope.query += $scope.report.orderings[i].column + " " + $scope.report.orderings[i].direction;
+		if (report.orderings && report.orderings.length > 0) {
+			query += '\nORDER BY ';
+			for (let i = 0; i < report.orderings.length; i++) {
+				if (i > 0) { query += ', ' }
+				query += report.orderings[i].column + ' ' + report.orderings[i].direction;
 			}
 		}
-		$scope.report.query = $scope.query;
+		return query;
+	}
+
+	// Structured -> free-style is always safe: the current query is kept as-is and simply
+	// stops being regenerated.
+	$scope.switchToFreestyle = () => {
+		$scope.queryMode = 'freestyle';
+		$scope.queryPanelExpanded = true;
+	};
+
+	$scope.convertToStructured = () => {
+		dialogHub.showDialog({
+			title: 'Convert to structured editing?',
+			message: 'The query will be rebuilt from the visual builder. Custom SQL that the builder cannot represent (expressions, joins, filters) will be lost.',
+			buttons: [{
+				id: 'bconv',
+				state: ButtonStates.Emphasized,
+				label: 'Convert',
+			},
+			{
+				id: 'bc',
+				state: ButtonStates.Transparent,
+				label: 'Cancel',
+			}]
+		}).then((buttonId) => {
+			if (buttonId === 'bconv') {
+				$scope.$evalAsync(() => {
+					$scope.queryMode = 'structured';
+					$scope.report.query = buildQuery($scope.report);
+				});
+			}
+		});
 	};
 
 	$scope.dataParameters = ViewParameters.get();
