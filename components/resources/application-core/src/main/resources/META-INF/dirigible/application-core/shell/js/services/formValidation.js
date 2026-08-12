@@ -47,6 +47,12 @@
     for (const [field, fieldRules] of Object.entries(schema)) {
       const value = data[field];
       for (const cfg of fieldRules) {
+        // Presence is `required`'s decision alone: a format/range rule (email, pattern, minLength,
+        // min/max) describes what a value must look like WHEN THERE IS ONE. Applying it to an empty
+        // value turns every optional field carrying a format constraint into a required one by the
+        // back door — a customer with no e-mail could not be saved at all ("Enter a valid email
+        // address." on a blank, non-required Email), and the only way through was to invent one.
+        if (cfg.rule !== 'required' && trim(value) === '') continue;
         if (!applyRule(cfg.rule, value, cfg)) {
           errors[field] = cfg.message;
           break; // first failing rule wins

@@ -496,7 +496,12 @@ public class ${name}Controller {
         }
 #end
 #if($property.widgetPattern && $property.widgetPattern != "")
-        if (entity.${property.name} != null && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
+## A format constraint describes what a value must look like WHEN THERE IS ONE. On an OPTIONAL property
+## a blank string is "no value", so the pattern must not fire on it - otherwise the field is required by
+## the back door (a blank optional Email was rejected, and the only way to save was to invent an
+## address). The Harmonia form already posts '' as null, but a direct REST caller may send ''.
+## A REQUIRED property keeps the strict check: blank is not a legal value there.
+        if (entity.${property.name} != null#if($property.isRequiredProperty != "true") && !entity.${property.name}.toString().isBlank()#end && !entity.${property.name}.toString().matches("${property.widgetPatternJava}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "The value of '${property.name}' does not match the required pattern '${property.widgetPatternJava}'");
         }
 #end
