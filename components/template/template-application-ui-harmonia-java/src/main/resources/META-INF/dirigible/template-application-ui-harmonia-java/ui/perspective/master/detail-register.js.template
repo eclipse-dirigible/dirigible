@@ -88,7 +88,10 @@ App.registerDetail('${masterEntity}', {
 #foreach($property in $properties)
 #if(!$property.dataAutoIncrement && $property.name != $masterEntityId && (!$property.auditType || $property.auditType == "NONE"))
 #if($property.widgetLabel)#set($elabel = $property.widgetLabel)#else#set($elabel = $property.name)#end
-#set($ereadonly = ($property.isCalculatedProperty == "true" || $property.isReadOnlyProperty == "true"))
+## Read-only only when DERIVED - an expression, or an update-time recompute. A field whose only
+## calculated aspect is calculatedActionOnCreate is a server-side DEFAULT (Due, Currency, a tax
+## event date): pre-filled, but the user's pick is respected - it must stay editable (#6696).
+#set($ereadonly = (($property.isCalculatedProperty == "true" && ($property.calculatedPropertyExpressionCreate || $property.calculatedPropertyExpressionUpdate || $property.calculatedActionOnUpdate)) || $property.isReadOnlyProperty == "true"))
 #if($property.widgetType == "DROPDOWN")
     { name: '${property.name}', label: '${elabel}', tkey: '$projectName:${tprefix}.t.${property.dataName}', widget: 'DROPDOWN', required: #if($property.isRequiredProperty == "true")true#{else}false#end, readonly: #if($ereadonly)true#{else}false#end, lookup: { url: '${property.widgetDropdownControllerUrl}', key: '${property.widgetDropDownKey}', text: '${property.widgetDropDownValue}', entity: '${property.relationshipEntityName}', creatable: #if($property.relationshipEntityName && $property.relationshipEntityPerspectiveName != "Settings")true#{else}false#end }#dependsOnMeta($property)#optionsFilterMeta($property)#hierMeta($property)#sensitiveMeta($property)#defaultMeta($property) },
 #else
