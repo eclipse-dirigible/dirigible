@@ -20,7 +20,7 @@ import java.sql.SQLException;
 
 import static org.junit.jupiter.api.Assertions.fail;
 
-class DatabaseMetadataHelperTest extends IntegrationTest {
+class DatabaseMetadataHelperIT extends IntegrationTest {
 
     @Autowired
     private DataSourcesManager datasourcesManager;
