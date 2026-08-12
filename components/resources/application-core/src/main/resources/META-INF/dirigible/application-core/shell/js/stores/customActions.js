@@ -49,6 +49,7 @@ document.addEventListener('alpine:init', () => {
     confirmId: null,
     confirmBusy: false,
     serverUnavailable: false,   // set once the backend is unreachable; stops re-fetching until a reload
+    extraPoints: [],            // extension points added via addProjects (the shared shell's hosted apps)
 
     init() {
       this.load();
@@ -65,11 +66,17 @@ document.addEventListener('alpine:init', () => {
       // (serverUnavailable back to false) and resumes.
       if (this.serverUnavailable) return;
       const project = (window.App && App.config && App.config.projectName) || '';
-      if (!project) return;
-      const point = project + '-custom-action';
+      // The hosting app's own point, plus every point added via addProjects: the SHARED application
+      // shell hosts OTHER apps' views, so it must ask for THEIR `<project>-custom-action` points -
+      // exactly as it adds their i18n namespaces - or contributed actions surface only in each
+      // app's standalone shell and silently vanish from the shared one.
+      const points = new Set(this.extraPoints);
+      if (project) points.add(project + '-custom-action');
+      if (!points.size) return;
       try {
+        const query = [...points].map((p) => 'extensionPoints=' + encodeURIComponent(p)).join('&');
         const data = await App.services.api.get(
-          '/services/js/platform-core/extension-services/views.js?extensionPoints=' + encodeURIComponent(point),
+          '/services/js/platform-core/extension-services/views.js?' + query,
           { baseUrl: '' });
         this.actions = Array.isArray(data) ? data : [];
         this.loaded = true;
@@ -88,6 +95,21 @@ document.addEventListener('alpine:init', () => {
     },
 
     refresh() { return this.load(); },
+
+    // Add hosted apps' custom-action points and re-read the contributions. The shared application
+    // shell calls this with the project names of the perspectives it aggregates (the same list it
+    // feeds AppI18nAddNamespaces); each app's standalone shell never needs it. Idempotent: already
+    // known projects are skipped, and load() always fetches the full accumulated point set, so a
+    // navigation-triggered reload keeps the merged actions instead of dropping back to one app's.
+    addProjects(projects) {
+      const added = [...new Set((projects || [])
+        .filter((p) => p && p !== 'application' && p !== 'application-core')
+        .map((p) => p + '-custom-action'))]
+        .filter((p) => !this.extraPoints.includes(p));
+      if (!added.length) return Promise.resolve();
+      this.extraPoints.push(...added);
+      return this.load();
+    },
 
     // The actions targeted at a given view. `view` is the entity name; the app-scoped extension point
     // (`<project>-custom-action`) already narrows to this app, so entity + type is unambiguous. `type`
