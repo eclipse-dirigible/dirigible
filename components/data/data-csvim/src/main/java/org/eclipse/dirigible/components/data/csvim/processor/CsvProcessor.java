@@ -157,21 +157,24 @@ public class CsvProcessor {
         UpdateBuilder updateBuilder = new UpdateBuilder(SqlFactory.deriveDialect(connection));
         updateBuilder.table(tableMetadata.getName());
 
+        // One name for both the skipped SET column and the WHERE column: the statement then always
+        // carries one placeholder per table column - N-1 SET slots plus the WHERE - which is the shape
+        // both binders rely on. Resolving them separately let a null pkName emit a SET for the key
+        // column too, so a headerless CSV produced N+1 placeholders and could never be bound.
+        String pkColumnName = pkName != null ? pkName
+                : availableTableColumns.get(0)
+                                       .getName();
+
         for (ColumnMetadata columnMetadata : availableTableColumns) {
             if (columnMetadata.getName()
-                              .equals(pkName)) {
+                              .equals(pkColumnName)) {
                 continue;
             }
 
             updateBuilder.set("\"" + columnMetadata.getName() + "\"", "?");
         }
 
-        if (pkName != null) {
-            updateBuilder.where(String.format("%s = ?", pkName));
-        } else {
-            updateBuilder.where(String.format("%s = ?", availableTableColumns.get(0)
-                                                                             .getName()));
-        }
+        updateBuilder.where(String.format("%s = ?", pkColumnName));
 
         try (PreparedStatement preparedStatement = connection.prepareStatement(updateBuilder.generate())) {
             for (CsvRecord next : csvRecords) {
@@ -258,7 +261,10 @@ public class CsvProcessor {
     }
 
     /**
-     * Insert csv without header.
+     * Insert csv without header. Values are matched to columns by position. The statement carries one
+     * placeholder per table column, so a record with fewer fields than the table has columns binds the
+     * uncovered trailing columns as null - the same outcome the header path produces for a column the
+     * CSV does not carry.
      *
      * @param csvRecord the csv record
      * @param tableColumns the table columns
@@ -267,10 +273,11 @@ public class CsvProcessor {
      */
     private void insertCsvWithoutHeader(CsvRecord csvRecord, List<ColumnMetadata> tableColumns, PreparedStatement statement)
             throws SQLException {
-        for (int i = 0; i < csvRecord.getCsvRecord()
-                                     .size(); i++) {
-            String value = csvRecord.getCsvRecord()
-                                    .get(i);
+        CSVRecord existingCsvRecord = csvRecord.getCsvRecord();
+        verifyPositionalRecordFitsTable(csvRecord, tableColumns);
+
+        for (int i = 0; i < tableColumns.size(); i++) {
+            String value = i < existingCsvRecord.size() ? existingCsvRecord.get(i) : null;
             String columnType = tableColumns.get(i)
                                             .getType();
 
@@ -279,7 +286,10 @@ public class CsvProcessor {
     }
 
     /**
-     * Update csv with header.
+     * Update csv with header. The statement built by {@link #update} carries one SET placeholder per
+     * non-primary-key table column followed by the WHERE placeholder, so the primary key is always
+     * bound at the table's column count - never at the CSV record's field count, which is a different
+     * number whenever the CSV does not carry every column of its table.
      *
      * @param csvRecord the csv record
      * @param tableColumns the table columns
@@ -288,8 +298,6 @@ public class CsvProcessor {
      */
     private void updateCsvWithHeader(CsvRecord csvRecord, List<ColumnMetadata> tableColumns, PreparedStatement statement)
             throws SQLException {
-        CSVRecord existingCsvRecord = csvRecord.getCsvRecord();
-
         for (int i = 1; i < tableColumns.size(); i++) {
             String columnName = tableColumns.get(i)
                                             .getName();
@@ -302,13 +310,14 @@ public class CsvProcessor {
 
         String pkColumnType = tableColumns.get(0)
                                           .getType();
-        int lastStatementPlaceholderIndex = existingCsvRecord.size();
 
-        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, csvRecord.getCsvRecordPkValue(), csvRecord.getLocale());
+        setValue(statement, tableColumns.size(), pkColumnType, csvRecord.getCsvRecordPkValue(), csvRecord.getLocale());
     }
 
     /**
-     * Update csv without header.
+     * Update csv without header. Values are matched to columns by position; columns the record does not
+     * reach are bound as null, mirroring the header path, and the primary key is bound at the table's
+     * column count as in {@link #updateCsvWithHeader}.
      *
      * @param csvRecord the csv record
      * @param tableColumns the table columns
@@ -318,8 +327,10 @@ public class CsvProcessor {
     private void updateCsvWithoutHeader(CsvRecord csvRecord, List<ColumnMetadata> tableColumns, PreparedStatement statement)
             throws SQLException {
         CSVRecord existingCsvRecord = csvRecord.getCsvRecord();
-        for (int i = 1; i < existingCsvRecord.size(); i++) {
-            String value = existingCsvRecord.get(i);
+        verifyPositionalRecordFitsTable(csvRecord, tableColumns);
+
+        for (int i = 1; i < tableColumns.size(); i++) {
+            String value = i < existingCsvRecord.size() ? existingCsvRecord.get(i) : null;
             String columnType = tableColumns.get(i)
                                             .getType();
             setPreparedStatementValue(csvRecord.isDistinguishEmptyFromNull(), statement, i, value, columnType, csvRecord.getLocale());
@@ -327,8 +338,28 @@ public class CsvProcessor {
 
         String pkColumnType = tableColumns.get(0)
                                           .getType();
-        int lastStatementPlaceholderIndex = existingCsvRecord.size();
-        setValue(statement, lastStatementPlaceholderIndex, pkColumnType, existingCsvRecord.get(0), csvRecord.getLocale());
+        setValue(statement, tableColumns.size(), pkColumnType, existingCsvRecord.get(0), csvRecord.getLocale());
+    }
+
+    /**
+     * Verifies that a headerless CSV record can be matched to the table by position. Extra fields have
+     * no column to land in, and silently dropping them would import a record that does not say what the
+     * file says.
+     *
+     * @param csvRecord the csv record
+     * @param tableColumns the table columns
+     * @throws SQLException if the record carries more fields than the table has columns
+     */
+    private void verifyPositionalRecordFitsTable(CsvRecord csvRecord, List<ColumnMetadata> tableColumns) throws SQLException {
+        int csvFieldsCount = csvRecord.getCsvRecord()
+                                      .size();
+        if (csvFieldsCount > tableColumns.size()) {
+            throw new SQLException(String.format(
+                    "Headerless CSV record has [%d] fields but table [%s] has [%d] columns. Fields are matched by position, so the record cannot be imported. Add a header row to match by column name instead, or align the file with the table.",
+                    csvFieldsCount, csvRecord.getTableMetadataModel()
+                                             .getName(),
+                    tableColumns.size()));
+        }
     }
 
     /**
