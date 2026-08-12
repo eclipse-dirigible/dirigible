@@ -24,7 +24,7 @@ import java.sql.SQLException;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.fail;
 
-public class CsvProcessorTest extends IntegrationTest {
+public class CsvProcessorIT extends IntegrationTest {
 
     /** The default data source name. */
     @Autowired
