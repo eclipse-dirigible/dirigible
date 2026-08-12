@@ -11,6 +11,8 @@ package org.eclipse.dirigible.components.jobs.endpoint;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
@@ -24,8 +26,10 @@ import jakarta.persistence.EntityManager;
 
 import org.eclipse.dirigible.components.base.endpoint.BaseEndpoint;
 import org.eclipse.dirigible.components.jobs.domain.Job;
+import org.eclipse.dirigible.components.jobs.domain.JobEmail;
 import org.eclipse.dirigible.components.jobs.domain.JobParameter;
 import org.eclipse.dirigible.components.jobs.repository.JobRepository;
+import org.eclipse.dirigible.components.jobs.service.JobEmailService;
 import org.eclipse.dirigible.components.jobs.service.JobService;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +69,10 @@ public class JobEndpointTest {
     /** The job service. */
     @Autowired
     private JobService jobService;
+
+    /** The job email service. */
+    @Autowired
+    private JobEmailService jobEmailService;
 
     /** The job repository. */
     @Autowired
@@ -171,6 +179,28 @@ public class JobEndpointTest {
                .andDo(print());
         // .andExpect(status().is2xxSuccessful());
 
+    }
+
+    /**
+     * Removes a job notification email by id (regression for #6609: DELETE verb + matching {id} path
+     * variable).
+     *
+     * @throws Exception the exception
+     */
+    @Test
+    public void removeJobEmail() throws Exception {
+        jobEmailService.addEmail(testJob.getName(), "admin@example.com");
+        List<JobEmail> emails = jobEmailService.findAllByJobName(testJob.getName());
+        assertEquals(1, emails.size());
+        Long emailId = emails.get(0)
+                             .getId();
+
+        mockMvc.perform(delete("/services/jobs/emails/{id}", emailId).with(csrf()))
+               .andDo(print())
+               .andExpect(status().isOk());
+
+        assertEquals(0, jobEmailService.findAllByJobName(testJob.getName())
+                                       .size());
     }
 
     /**
