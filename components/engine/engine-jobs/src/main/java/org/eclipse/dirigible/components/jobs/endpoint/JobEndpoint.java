@@ -229,7 +229,7 @@ public class JobEndpoint extends BaseEndpoint {
      * @param id the id
      * @return the response entity
      */
-    @DeleteMapping(value = "/emailremove/{id}", produces = "application/json")
+    @DeleteMapping(value = "/emails/{id}", produces = "application/json")
     public ResponseEntity<?> removeJobEmail(@PathVariable("id") Long id) {
 
         jobEmailService.removeEmail(id);
