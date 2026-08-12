@@ -70,7 +70,7 @@ export class Query {
    */
   public static execute(
     sql: string,
-    parameters?: (string | number | boolean | Date | TypedQueryParameter | NamedQueryParameter)[] | string,
+    parameters?: (string | number | boolean | Date | null | TypedQueryParameter | NamedQueryParameter)[] | string,
     datasourceName?: string,
     formatting?: FormattingParameter,
   ): any[] {
@@ -124,10 +124,12 @@ export class Query {
       return JSON.parse(resultset);
     }
 
-    // Primitive array
+    // Primitive array; null/undefined are valid values - they bind as SQL NULL
     if (
       arr.every(
         (v) =>
+          v === null ||
+          v === undefined ||
           typeof v === "string" ||
           typeof v === "number" ||
           typeof v === "boolean" ||
