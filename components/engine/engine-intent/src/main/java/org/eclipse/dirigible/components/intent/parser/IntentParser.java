@@ -1732,6 +1732,9 @@ public final class IntentParser {
                 if (relation.isLeafOnly()) {
                     validateLeafOnly(entity, relation, byName, issues);
                 }
+                if (relation.isCalculated()) {
+                    validateRelationCalculatedAction(entity, relation, issues);
+                }
                 if (relation.isPersonal()) {
                     personalCount++;
                     validatePersonal(entity, relation, byName, issues);
@@ -2002,6 +2005,28 @@ public final class IntentParser {
                             + relation.getTo() + "] - it must not leak into a label");
                 }
             }
+        }
+    }
+
+    /**
+     * A relation's {@code calculatedActionOnCreate}/{@code calculatedActionOnUpdate} assigns the FK
+     * column, so it needs a single FK to assign: a to-one relation that is not a composition parent
+     * (the parent is preset by the layout, never derived) and not an EntityStatus badge (whose value
+     * belongs to the workflow's transitions, not to a create-time default).
+     */
+    private static void validateRelationCalculatedAction(EntityIntent entity, RelationIntent relation, List<String> issues) {
+        String subject = "entity [" + entity.getName() + "] relation [" + relation.getName() + "]";
+        boolean toOne = "manyToOne".equals(relation.getKind()) || "oneToOne".equals(relation.getKind());
+        if (!toOne) {
+            issues.add(subject + " declares a calculated action but only a manyToOne/oneToOne relation has an FK column to assign");
+            return;
+        }
+        if (relation.isComposition()) {
+            issues.add(subject + " is a composition parent (preset by the layout) so it cannot declare a calculated action");
+        }
+        if (relation.isEntityStatus()) {
+            issues.add(subject + " is an EntityStatus (owned by the workflow transitions) so it cannot declare a calculated action"
+                    + " - use init: for its starting value");
         }
     }
 

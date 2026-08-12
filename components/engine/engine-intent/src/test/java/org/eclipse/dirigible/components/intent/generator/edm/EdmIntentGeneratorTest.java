@@ -481,6 +481,61 @@ class EdmIntentGeneratorTest {
                 "major:false keeps a cross-model relation off the list table");
     }
 
+    /**
+     * A to-one relation may derive its FK server-side, the counterpart of the field-level calculated
+     * action: {@code init:} covers a FIXED default (a literal seed id) but never a DERIVED one - a
+     * document's currency read off its company's base currency. The property must carry the same three
+     * keys a calculated field emits, on BOTH the same-model and the cross-model relation builder,
+     * because the DAO template's shared property loop is what turns them into
+     * {@code entity.<Relation> = Beans.get(<class>.class).calculate(entity);}. A relation with no
+     * action must stay untouched - the marker is what makes the template emit the call at all.
+     */
+    @Test
+    void relationCalculatedActionEmitsTheServerSideCallOutOnBothRelationBuilders() {
+        String yaml =
+                """
+                        name: shop
+                        uses:
+                          - { model: currencies }
+                        entities:
+                          - name: Company
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                          - name: Order
+                            imports: |
+                              import custom.shop.OrderCurrencyAction;
+                              import custom.shop.OrderCompanyAction;
+                            fields:
+                              - { name: id, type: integer, primaryKey: true, generated: true }
+                              - { name: name, type: string }
+                            relations:
+                              # cross-model: the FK is derived from another record on create
+                              - { name: Currency, kind: manyToOne, to: Currency, model: currencies, calculatedActionOnCreate: OrderCurrencyAction }
+                              # same-model, and the update slot as well
+                              - { name: Company, kind: manyToOne, to: Company, calculatedActionOnCreate: OrderCompanyAction, calculatedActionOnUpdate: OrderCompanyAction }
+                              - { name: Alternate, kind: manyToOne, to: Company }
+                        """;
+        IntentModel parsed = IntentParser.parse(yaml);
+        Map<String, Object> model = EdmIntentGenerator.buildModelJsonForTest(parsed, "shop");
+        Map<String, Object> order = entityByName(entities(model), "Order");
+
+        Map<String, Object> currency = propertyByName(order, "Currency");
+        assertEquals("true", currency.get("isCalculatedProperty"), "the cross-model FK must be marked calculated");
+        assertEquals("OrderCurrencyAction", currency.get("calculatedActionOnCreate"));
+        assertNull(currency.get("calculatedActionOnUpdate"), "only the create slot was authored");
+        assertEquals("INTEGER", currency.get("dataType"), "it stays an ordinary FK property - that is what the template assigns");
+
+        Map<String, Object> company = propertyByName(order, "Company");
+        assertEquals("true", company.get("isCalculatedProperty"), "the same-model FK must be marked calculated too");
+        assertEquals("OrderCompanyAction", company.get("calculatedActionOnCreate"));
+        assertEquals("OrderCompanyAction", company.get("calculatedActionOnUpdate"));
+
+        Map<String, Object> alternate = propertyByName(order, "Alternate");
+        assertNull(alternate.get("isCalculatedProperty"), "a relation with no action must not be marked calculated");
+        assertNull(alternate.get("calculatedActionOnCreate"));
+    }
+
     @Test
     void documentMasterWithACalendarViewKeepsTheDocumentLayoutAndAddsTheCalendar() {
         // #6547: a calendar/range view is an ADDITIONAL page - it must NOT replace the layout. A document

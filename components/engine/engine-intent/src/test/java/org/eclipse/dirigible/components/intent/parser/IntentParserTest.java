@@ -287,6 +287,60 @@ class IntentParserTest {
                          .isCalculated());
     }
 
+    /**
+     * A calculated action on a to-one RELATION binds onto the model. This is a typed-mapping test on
+     * purpose: the typed mapping is Gson, which drops an unknown key in silence, so before the
+     * attribute existed on {@link org.eclipse.dirigible.components.intent.model.RelationIntent} an
+     * intent could author this and lose it with every pipeline step green.
+     */
+    @Test
+    void calculatedActionOnAToOneRelationParses() {
+        String yaml = """
+                name: shop
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Company, kind: manyToOne, to: Company, calculatedActionOnCreate: OrderCompanyAction }
+                """;
+        IntentModel model = IntentParser.parse(yaml);
+        var relation = model.getEntities()
+                            .get(1)
+                            .getRelations()
+                            .get(0);
+        assertEquals("OrderCompanyAction", relation.getCalculatedActionOnCreate());
+        assertTrue(relation.isCalculated());
+    }
+
+    @Test
+    void calculatedActionOnACollectionRelationIsRejected() {
+        String yaml = """
+                name: shop
+                entities:
+                  - name: Company
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                  - name: Order
+                    fields:
+                      - { name: id, type: integer, primaryKey: true, generated: true }
+                      - { name: name, type: string }
+                    relations:
+                      - { name: Companies, kind: oneToMany, to: Company, calculatedActionOnCreate: OrderCompanyAction }
+                """;
+        IntentValidationException ex = assertThrows(IntentValidationException.class, () -> IntentParser.parse(yaml));
+        assertTrue(ex.getIssues()
+                     .stream()
+                     .anyMatch(i -> i.contains("FK column to assign")),
+                "expected a to-one-only issue, got: " + ex.getIssues());
+    }
+
     /** A shop model with the two canonical Depends-On shapes: a cascade and a scalar auto-populate. */
     private static final String DEPENDS_ON_HEAD = """
             name: shop

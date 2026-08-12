@@ -1230,6 +1230,7 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", keyFieldName(target));
         p.put("widgetDropDownValue", labelFieldName(target));
+        putCalculatedAction(p, relation);
         putLookupColumns(p, relation);
         return p;
     }
@@ -1279,8 +1280,30 @@ public class EdmIntentGenerator implements IntentTargetGenerator {
         p.put("widgetIsMajor", relation.isMajor() ? "true" : "false");
         p.put("widgetDropDownKey", info.keyField());
         p.put("widgetDropDownValue", info.labelField());
+        putCalculatedAction(p, relation);
         putLookupColumns(p, relation);
         return p;
+    }
+
+    /**
+     * Emit a to-one relation's server-side calculated-action call-out, the same three keys the field
+     * branch emits ({@code isCalculatedProperty} plus the create/update action classes). A relation is
+     * already an ordinary property in the {@code .model} - the FK column, typed to the target's key -
+     * so the DAO template's property loop picks this up unchanged and emits
+     * {@code entity.<Relation> = Beans.get(<class>.class).calculate(entity);} against the FK field.
+     * Nothing is emitted when no action is declared.
+     */
+    private static void putCalculatedAction(Map<String, Object> p, RelationIntent relation) {
+        if (!relation.isCalculated()) {
+            return;
+        }
+        p.put("isCalculatedProperty", "true");
+        if (notBlank(relation.getCalculatedActionOnCreate())) {
+            p.put("calculatedActionOnCreate", relation.getCalculatedActionOnCreate());
+        }
+        if (notBlank(relation.getCalculatedActionOnUpdate())) {
+            p.put("calculatedActionOnUpdate", relation.getCalculatedActionOnUpdate());
+        }
     }
 
     /**

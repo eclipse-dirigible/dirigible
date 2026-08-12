@@ -340,6 +340,16 @@ composition is opt-in.
      fully-qualified class name and omit the import.
   3. Use an action only when a neutral expression cannot express it; for sums/totals keep the expression
      so the value previews in the UI.
+  4. **A to-one relation may declare `calculatedActionOnCreate` / `calculatedActionOnUpdate` too**, to
+     derive its FK. Reach for it when a default must be READ OFF ANOTHER RECORD - a document's currency
+     defaulting from its company's base currency - because no other hook does that: `init:` is a literal
+     seed id, `dependsOn` is a UI-only cascade that never fires on a server-side create, and the
+     `setRelationField` process step also takes a literal id. The action returns the FK's Java type
+     (`CalculatedField<Object, Integer>` for the usual integer-keyed target) and the repository assigns
+     it to the FK exactly as for a field. Have it return the current value unchanged when one is already
+     set, so a user's explicit pick always wins. Valid on `manyToOne`/`oneToOne` only - not on a
+     collection, not on a composition parent (preset by the layout), and not on an `EntityStatus` badge
+     (its value belongs to the workflow transitions; use `init:` for the starting status).
 
 **First-class document numbering (`number:` on a string field):**
 `- { name: number, type: string, function: DocumentTitle, number: { series: Sales Invoice, per: Company, stampOn: issue } }`
