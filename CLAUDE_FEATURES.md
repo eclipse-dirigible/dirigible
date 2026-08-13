@@ -680,7 +680,7 @@ native-image -jar build/application/target/dirigible-application-*-executable.ja
 ### 10.6 Tests
 - `tests/tests-framework/` — Selenide / Spring test base classes.
 - `tests/tests-integrations/` — `*IT.java` Selenide-driven UI integration tests with per-test fixture projects under `src/main/resources/<TestName>/`.
-- `tests/ui/tests/sample/` — `SampleProjectRepositoryIT` subclasses that clone `dirigiblelabs/sample-*` repos, publish them, and call `verifyProject()`.
+- `tests/ui/tests/sample/` — `SampleProjectsIT` subclasses that clone a family of `dirigiblelabs/sample-*` repos into one workspace, publish them together, and verify one sample per `@Test`.
 - HTTP-only ITs (faster, headless) extend `IntegrationTest` and call `SynchronizationProcessor.forceProcessSynchronizers()` directly — see `JavaEngineIT`.
 - Surefire (`*Test.java`) = unit. Failsafe (`*IT.java`) = integration. Naming matters.
 - `-D selenide.headless=true` is the headless flag.
